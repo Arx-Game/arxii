@@ -9,12 +9,16 @@ module stays free of I/O side-effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models import FuryConfig, FuryTier
 from world.relationships.helpers import get_relationship_tier
+
+if TYPE_CHECKING:
+    from world.checks.models import CheckType
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,37 @@ def clamp_tier(declared_tier: FuryTier, cap: int) -> FuryTier | None:
     return FuryTier.objects.filter(depth__lte=cap).order_by("-depth").first()
 
 
+def get_fury_config() -> FuryConfig:
+    """Public singleton accessor."""
+    return _config()
+
+
+def _ensure_fury_check_type(trait_name: str) -> CheckType:
+    """Return the CheckType for a fury control-retention check keyed on trait_name.
+
+    Lazy-creates the CheckType + CheckCategory if not present (mirrors
+    fatigue._ensure_endurance_check_type). Requires the trait fixture row to exist.
+    """
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    check_category, _ = CheckCategory.objects.get_or_create(
+        name="Fury",
+        defaults={"description": "Fury control-retention checks", "display_order": 98},
+    )
+    check_type_name = f"fury_control_retention_{trait_name}"
+    check_type, created = CheckType.objects.get_or_create(
+        name=check_type_name,
+        category=check_category,
+        defaults={"description": f"Control-retention check for fury ({trait_name})"},
+    )
+    if created:
+        trait = Trait.objects.filter(name=trait_name, trait_type=TraitType.STAT).first()
+        if trait is not None:
+            CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    return check_type
+
+
 def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     """Assemble a FuryResolution from the given parameters.
 
@@ -88,3 +123,56 @@ def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     grade = getattr(check_result, "success_level", 0)  # noqa: GETATTR_LITERAL
     berserk = 0 if grade >= realized.lucid_grade_floor else realized.berserk_severity
     return FuryResolution(realized, realized.control_penalty, bonus, berserk)
+
+
+def run_fury_for_action(
+    *,
+    character: ObjectDB,
+    fury_commitment: FuryTier | None,
+    fury_anchor: CharacterSheet | None,
+    source_technique=None,
+) -> FuryResolution | None:
+    """Run the control-retention check, assemble the FuryResolution, apply Berserk.
+
+    Single orchestration seam shared by the enhanced-action, cast, and plain-action
+    resolution paths so the check/resolve/apply-Berserk sequence lives in one place.
+
+    Returns None when no fury was declared (``fury_commitment is None``); otherwise
+    returns the FuryResolution. The caller is responsible for feeding
+    ``control_penalty`` / ``intensity_bonus`` into ``use_technique`` (technique paths)
+    and recording ``realized_tier`` as the audit value.
+
+    Args:
+        character: The ObjectDB character invoking fury.
+        fury_commitment: The declared FuryTier, or None for no fury.
+        fury_anchor: The CharacterSheet the rage answers to (bond caps the tier).
+        source_technique: Optional Technique to credit as the Berserk source.
+    """
+    if fury_commitment is None:
+        return None
+
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    cfg = _config()
+    check_type = _ensure_fury_check_type(cfg.check_trait)
+    ease = provocation_ease(character, fury_anchor)
+    target_diff = max(fury_commitment.base_check_difficulty - ease, 0)
+    check = perform_check(character, check_type, target_difficulty=target_diff)
+    fury_res = resolve_fury(
+        character=character, tier=fury_commitment, anchor=fury_anchor, check_result=check
+    )
+
+    if fury_res.berserk_severity > 0:
+        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+        from world.conditions.services import apply_condition  # noqa: PLC0415
+
+        apply_condition(
+            character,
+            ConditionTemplate.get_by_name("Berserk"),
+            severity=fury_res.berserk_severity,
+            duration_rounds=cfg.default_berserk_duration_rounds,
+            source_character=character,
+            source_technique=source_technique,
+        )
+
+    return fury_res

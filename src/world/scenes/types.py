@@ -10,6 +10,7 @@ from world.magic.types import TechniqueUseResult
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
+    from world.magic.models import FuryTier
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Interaction
@@ -54,6 +55,7 @@ class EnhancedSceneActionResult:
     action_key: str
     technique_result: TechniqueUseResult | None = None
     power_ledger: PowerLedger | None = None
+    fury_committed: FuryTier | None = None
 
 
 @dataclass(frozen=True)

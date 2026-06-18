@@ -49,7 +49,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import PendingActionResolution
-    from world.magic.models import Technique
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import FuryTier, Technique
+    from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
     from world.scenes.models import Interaction, Persona, Scene
@@ -73,8 +75,10 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
     difficulty: int,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
-) -> tuple[EnhancedSceneActionResult, PowerLedger | None]:
+) -> tuple[EnhancedSceneActionResult, PowerLedger | None, FuryResolution | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
     Mirrors ``action_services._resolve_enhanced_action`` so anima deduction,
@@ -89,10 +93,11 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             ``resolved_difficulty`` on the ``SceneActionRequest``.
         strain_commitment: Extra anima committed beyond the technique baseline,
             forwarded to ``use_technique`` so anima costs are tallied correctly.
+        fury_commitment: Optional FuryTier the player declared.
+        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
 
-    Returns the ``EnhancedSceneActionResult`` plus the cast-level ``PowerLedger``
-    (BASE + ENVIRONMENT stages) captured from ``use_technique``'s ``resolve_fn``
-    so the caller can surface ward/environment clauses in the OUTCOME pose.
+    Returns the ``EnhancedSceneActionResult``, the cast-level ``PowerLedger``
+    (BASE + ENVIRONMENT stages), and the ``FuryResolution`` (None if no fury).
     """
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
@@ -100,7 +105,16 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     action_template = technique.action_template
     context = ResolutionContext(character=character, target=target)
 
+    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
+
     applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+
+    fury_res = run_fury_for_action(
+        character=character,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
+        source_technique=technique,
+    )
 
     captured: dict[str, PowerLedger] = {}
 
@@ -121,6 +135,8 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
+        control_penalty=fury_res.control_penalty if fury_res else 0,
+        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
@@ -130,8 +146,9 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         action_key=CAST_ACTION_KEY,
         technique_result=technique_result,
         power_ledger=power_ledger,
+        fury_committed=fury_res.realized_tier if fury_res else None,
     )
-    return result, power_ledger
+    return result, power_ledger, fury_res
 
 
 def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; cohesive
@@ -182,6 +199,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     target_persona: Persona | None,
     technique: Technique,
     strain_commitment: int,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     fizzle_note: str | None = None,
 ) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
@@ -198,12 +217,14 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     target = target_persona.character_sheet.character if target_persona is not None else None
     difficulty = derive_cast_difficulty(technique)
 
-    result, power_ledger = _resolve_cast(
+    result, power_ledger, fury_res = _resolve_cast(
         technique=technique,
         character=character,
         target=target,
         difficulty=difficulty,
         strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
         cast_pull=cast_pull,
     )
 
@@ -232,6 +253,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         scene=scene,
         summary_label=f"{technique.name}",
         strain_committed=strain_commitment,
+        fury_committed=fury_res.realized_tier if fury_res else None,
     )
     persist_power_ledger(interaction=action_interaction, ledger=power_ledger)
     request.action_interaction = action_interaction
@@ -333,6 +355,8 @@ def resolve_accepted_cast(
                 target_persona=action_request.target_persona,
                 technique=action_request.technique,
                 strain_commitment=action_request.strain_commitment,
+                fury_commitment=action_request.fury_commitment,
+                fury_anchor=action_request.fury_anchor,
                 cast_pull=pull,
                 fizzle_note=note,
             )
@@ -356,6 +380,8 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
     target_persona: Persona | None = None,
     technique: Technique,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
@@ -366,6 +392,8 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         target_persona: The targeted persona, or None for self/room/no-target.
         technique: The technique being cast (must be castable standalone).
         strain_commitment: Extra anima committed beyond the technique baseline.
+        fury_commitment: Optional FuryTier the player declared.
+        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
         cast_pull: Optional declared thread pull. Charged in-line on the
             immediate path; persisted as a ``SceneCastPullDeclaration`` on the
             benign consent path; rejected on hostile casts (combat pulls go
@@ -413,6 +441,8 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
             target_persona=target_persona,
             technique=technique,
             strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
             cast_pull=cast_pull,
         )
 
@@ -422,6 +452,8 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         target_persona=target_persona,
         technique=technique,
         strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
         cast_pull=cast_pull,
     )
 
@@ -434,6 +466,8 @@ def _create_cast_request(  # noqa: PLR0913
     technique: Technique,
     status: str,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     resolved_at: datetime | None = None,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
@@ -450,6 +484,8 @@ def _create_cast_request(  # noqa: PLR0913
         technique=technique,
         status=status,
         strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
         resolved_at=resolved_at,
     )
 
@@ -505,6 +541,8 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     target_persona: Persona,
     technique: Technique,
     strain_commitment: int,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
@@ -520,6 +558,8 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             technique=technique,
             status=ActionRequestStatus.PENDING,
             strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
         )
         if cast_pull is not None:
             declaration = SceneCastPullDeclaration.objects.create(
@@ -538,6 +578,8 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     target_persona: Persona | None,
     technique: Technique,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
@@ -549,6 +591,8 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             technique=technique,
             status=ActionRequestStatus.PENDING,
             strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
         )
         result, power_ledger, pose = _resolve_and_pose_cast(
             request=request,
@@ -557,6 +601,8 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             target_persona=target_persona,
             technique=technique,
             strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
             cast_pull=cast_pull,
         )
 

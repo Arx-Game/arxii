@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import FuryTier
     from world.scenes.models import SceneRound
 
 DELETION_WINDOW_DAYS = 30
@@ -112,6 +113,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
     strain_committed: int = 0,
+    fury_committed: FuryTier | None = None,
     pose_kind: str = PoseKind.STANDARD,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
@@ -134,6 +136,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         target_personas: Explicit IC targets for thread derivation.
         strain_committed: Strain the initiator actually committed for this
             action. Persisted onto the resulting Interaction for audit.
+        fury_committed: Realized FuryTier post-resolution (null = no fury). Audit field.
         pose_kind: PoseKind classification (Spec C); ENTRY poses open a
             Make-an-Entrance reaction window (#904) at the call site.
 
@@ -147,6 +150,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         scene=scene,
         place=place,
         strain_committed=strain_committed,
+        fury_committed=fury_committed,
         pose_kind=pose_kind,
     )
 
@@ -193,6 +197,7 @@ def create_action_interaction_core(
     scene: Scene | None,
     summary_label: str,
     strain_committed: int = 0,
+    fury_committed: FuryTier | None = None,
 ) -> Interaction:
     """Create one ACTION-mode Interaction for a resolved action/cast.
 
@@ -205,6 +210,7 @@ def create_action_interaction_core(
         content=summary_label,
         mode=InteractionMode.ACTION,
         strain_committed=strain_committed,
+        fury_committed=fury_committed,
     )
 
 
