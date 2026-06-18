@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { NextPrevPagination, StatusFilterBar } from '@/staff/components/listControls';
 import { useSystemErrorList } from '@/staff/queries';
 import type { SubmissionStatus } from '@/staff/types';
 import { STATUS_OPTIONS, statusVariant } from '@/staff/utils';
@@ -23,21 +23,14 @@ export function StaffSystemErrorsPage() {
         occurrence count.
       </p>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {STATUS_OPTIONS.map((opt) => (
-          <Button
-            key={opt.label}
-            variant={statusFilter === opt.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => {
-              setStatusFilter(opt.value);
-              setPage(1);
-            }}
-          >
-            {opt.label}
-          </Button>
-        ))}
-      </div>
+      <StatusFilterBar
+        options={STATUS_OPTIONS}
+        value={statusFilter}
+        onChange={(value) => {
+          setStatusFilter(value);
+          setPage(1);
+        }}
+      />
 
       {isLoading ? (
         <p className="text-muted-foreground">Loading...</p>
@@ -71,27 +64,12 @@ export function StaffSystemErrorsPage() {
             ))}
           </div>
 
-          {data && data.count > 0 && (data.next || data.previous) && (
-            <div className="mt-6 flex items-center justify-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.previous}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">Page {page}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.next}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          <NextPrevPagination
+            page={page}
+            hasPrevious={!!data?.previous}
+            hasNext={!!data?.next}
+            onPageChange={setPage}
+          />
         </>
       )}
     </div>
