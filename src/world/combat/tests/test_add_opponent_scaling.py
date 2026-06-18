@@ -257,6 +257,18 @@ class NonBossTierNoPhasesTest(TestCase):
         )
         self.assertEqual(BossPhase.objects.filter(opponent=opp).count(), 0)
 
+    def test_swarm_max_count_mirrors_initial_count(self) -> None:
+        # Auto-filled swarm: max_swarm_count must mirror the initial swarm_count
+        # so a percentage-remaining display has a denominator.
+        opp = add_opponent(
+            self.encounter,
+            name="Swarm Bodies",
+            tier=OpponentTier.SWARM,
+            threat_pool=self.pool,
+        )
+        self.assertIsNotNone(opp.swarm_count)
+        self.assertEqual(opp.max_swarm_count, opp.swarm_count)
+
 
 class AutoPhasesFalseTest(TestCase):
     """auto_phases=False suppresses BossPhase auto-creation even for BOSS tier."""

@@ -1122,6 +1122,9 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         soak_value=resolved_soak,
         probing_threshold=resolved_probing,
         swarm_count=resolved_swarm,
+        # Bodies-at-start mirrors the initial count so a percentage-remaining
+        # display has a denominator; null for non-swarm tiers (resolved_swarm None).
+        max_swarm_count=resolved_swarm,
         body_toughness=resolved_body_toughness,
         bodies_per_attack=resolved_bodies_per_attack,
         barrier_strength=resolved_barrier_strength,

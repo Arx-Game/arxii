@@ -76,6 +76,12 @@ def compute_party_profile(encounter: CombatEncounter) -> PartyProfile:
         ).values_list("level", flat=True)
     )
 
+    # ``avg_level`` averages only participants who have a primary class level;
+    # ``party_size`` counts all ACTIVE participants. These denominators differ
+    # only for a participant lacking an ``is_primary`` CharacterClassLevel — not
+    # expected in normal play (every PC has a primary class). The skew is bounded
+    # (mis-tunes scaling slightly, never crashes); outlier-aware aggregation is
+    # tracked in #1165.
     party_size = len(sheet_ids)
     avg_level = (sum(levels) / len(levels)) if levels else 0.0
 
