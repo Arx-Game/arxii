@@ -497,7 +497,7 @@ def _endorsee_wears_bound_style(
     one MotifResonanceStyle binding whose style is currently worn.
 
     Mirrors the ``passive_motif_style_bonuses`` walker logic in
-    ``world/mechanics/services.py``: motif → resonances.get(resonance_id=...)
+    ``world/mechanics/services.py``: motif → resonances.get(resonance=resonance)
     → style_assignments.all() → binding.style → equipped_items.item_styles_for.
     """
     from world.magic.models.motifs import Motif, MotifResonance  # noqa: PLC0415

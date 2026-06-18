@@ -1,1 +1,1 @@
-0020_alter_fashionstyle_in_vogue_styles
+0019_fashionstyle_in_vogue_styles

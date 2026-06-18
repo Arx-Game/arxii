@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name="in_vogue_styles",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="Aesthetic styles (vocabulary words) that are currently fashionable in this style.",
+                help_text="Aesthetic styles (vocabulary words) that are currently fashionable.",
                 related_name="vogue_in",
                 to="items.style",
             ),

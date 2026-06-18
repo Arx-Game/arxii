@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0007_remove_characteristicvalue_characteristic_and_more"),
         ("evennia_extensions", "0002_roomprofile_tenant_persona"),
-        ("items", "0020_alter_fashionstyle_in_vogue_styles"),
+        ("items", "0019_fashionstyle_in_vogue_styles"),
         ("magic", "0032_motifresonancestyle"),
         ("projects", "0002_alter_project_kind"),
         ("scenes", "0023_sceneactiondeclaration"),
