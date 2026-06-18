@@ -164,3 +164,48 @@ class ChallengeActionNoSheetTests(django.test.TestCase):
             result.success,
             msg="Expected challenge to fail without actor CharacterSheet",
         )
+
+
+class ChallengeActionNoActiveTenureTests(django.test.TestCase):
+    """challenge at a target with a CharacterSheet+RosterEntry but NO active tenure.
+
+    Regression guard for the crash where ``_consent_blocked`` called
+    ``_tenure_blocks_actor(None, ...)`` → ``AttributeError: 'NoneType' object
+    has no attribute 'social_consent_preference'``.
+
+    Expected: the action succeeds (no tenure → no preference → allow) and a
+    PENDING DuelChallenge is created.
+    """
+
+    def setUp(self) -> None:
+        self.room = _make_room("TenurelessArena")
+        self.actor, self.actor_sheet = _make_pc("TenureActor", self.room)
+
+        # Target has a sheet + RosterEntry but no RosterTenure at all.
+        target_char = CharacterFactory(db_key="TenurelessTarget", location=self.room)
+        self.target_sheet = CharacterSheetFactory(character=target_char)
+        RosterEntryFactory(character_sheet=self.target_sheet)
+        # Deliberately skip RosterTenureFactory — entry.current_tenure is None.
+        self.target = target_char
+
+    def test_challenge_target_no_tenure_does_not_crash(self) -> None:
+        """No active tenure must not raise AttributeError — should succeed."""
+        from actions.registry import get_action
+
+        result = get_action("challenge").run(self.actor, target=self.target)
+
+        self.assertTrue(
+            result.success,
+            msg=(
+                f"Expected challenge to succeed when target has no active tenure; "
+                f"got: {result.message}"
+            ),
+        )
+        self.assertTrue(
+            DuelChallenge.objects.filter(
+                challenger_sheet=self.actor_sheet,
+                challenged_sheet=self.target_sheet,
+                status=DuelChallengeStatus.PENDING,
+            ).exists(),
+            "Expected a PENDING DuelChallenge to be created",
+        )
