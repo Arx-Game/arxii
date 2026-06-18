@@ -178,6 +178,12 @@ else:
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
+# GitHub issue filing (#1164) — staff can file a public issue from a player bug
+# report or an auto-captured error. Repo + token are env-configured; an empty
+# token disables the feature (the API surfaces it as unavailable rather than 500ing).
+GITHUB_ISSUE_REPO = env("GITHUB_ISSUE_REPO", default="Arx-Game/arxii")
+GITHUB_ISSUE_TOKEN = env("GITHUB_ISSUE_TOKEN", default=env("GH_TOKEN", default=""))
+
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",

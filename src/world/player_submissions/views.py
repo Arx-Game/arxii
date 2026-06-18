@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import builtins
+from http import HTTPMethod
 from typing import Any
 
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, serializers
+from rest_framework import mixins, serializers, status
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from world.player_submissions.filters import (
@@ -16,6 +20,7 @@ from world.player_submissions.filters import (
     PlayerReportFilter,
     SystemErrorReportFilter,
 )
+from world.player_submissions.github_issues import GitHubIssueError, file_issue_for_report
 from world.player_submissions.models import (
     BugReport,
     PlayerFeedback,
@@ -25,6 +30,7 @@ from world.player_submissions.models import (
 from world.player_submissions.serializers import (
     BugReportCreateSerializer,
     BugReportDetailSerializer,
+    FileIssueInputSerializer,
     PlayerFeedbackCreateSerializer,
     PlayerFeedbackDetailSerializer,
     PlayerReportCreateSerializer,
@@ -32,6 +38,41 @@ from world.player_submissions.serializers import (
     SystemErrorReportDetailSerializer,
 )
 from world.stories.pagination import StandardResultsSetPagination
+
+# Labels applied to filed issues, per source. Player bugs and captured errors both
+# land in the dev bug backlog; the second tag distinguishes their origin.
+_BUG_ISSUE_LABELS = ["bug", "player-report"]
+_ERROR_ISSUE_LABELS = ["bug", "auto-captured"]
+
+
+def _issue_payload(report: BugReport | SystemErrorReport) -> dict[str, object]:
+    return {
+        "github_issue_number": report.github_issue_number,
+        "github_issue_url": report.github_issue_url,
+    }
+
+
+def _file_issue(viewset: GenericViewSet, request: Request, *, labels: list[str]) -> Response:
+    """Shared body for the staff ``file-issue`` action on both report viewsets.
+
+    Idempotent: a report already linked to an issue returns that issue untouched. The
+    staff-edited (already redacted) title + body are filed as-is.
+    """
+    report = viewset.get_object()
+    if report.github_issue_url:
+        return Response(_issue_payload(report), status=status.HTTP_200_OK)
+    serializer = FileIssueInputSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        file_issue_for_report(
+            report,
+            title=serializer.validated_data["title"],
+            body=serializer.validated_data["body"],
+            labels=labels,
+        )
+    except GitHubIssueError as exc:
+        return Response({"detail": exc.user_message}, status=status.HTTP_502_BAD_GATEWAY)
+    return Response(_issue_payload(report), status=status.HTTP_201_CREATED)
 
 
 def _resolve_location_id(character_id: int) -> int | None:
@@ -124,6 +165,11 @@ class BugReportViewSet(
             location_id=location_id,
         )
 
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="file-issue")
+    def file_issue(self, request: Request, pk: str | None = None) -> Response:
+        """Staff-only: file a public GitHub issue from this bug report (#1164)."""
+        return _file_issue(self, request, labels=_BUG_ISSUE_LABELS)
+
 
 class SystemErrorReportViewSet(
     _SubmissionViewSetMixin,
@@ -145,6 +191,11 @@ class SystemErrorReportViewSet(
     ).order_by("-last_seen")
     filterset_class = SystemErrorReportFilter
     serializer_class = SystemErrorReportDetailSerializer
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="file-issue")
+    def file_issue(self, request: Request, pk: str | None = None) -> Response:
+        """Staff-only: file a public GitHub issue from this captured error (#1164)."""
+        return _file_issue(self, request, labels=_ERROR_ISSUE_LABELS)
 
 
 class PlayerReportViewSet(

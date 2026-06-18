@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
+from world.player_submissions.github_issues import (
+    issue_draft_for_bug,
+    issue_draft_for_error,
+)
 from world.player_submissions.models import (
     BugReport,
     PlayerFeedback,
@@ -125,6 +131,7 @@ class BugReportDetailSerializer(serializers.ModelSerializer):
         source="reporter_persona.name",
         read_only=True,
     )
+    issue_draft = serializers.SerializerMethodField()
 
     class Meta:
         model = BugReport
@@ -138,8 +145,21 @@ class BugReportDetailSerializer(serializers.ModelSerializer):
             "location",
             "created_at",
             "status",
+            "github_issue_number",
+            "github_issue_url",
+            "issue_draft",
         ]
-        read_only_fields = ["id", "reporter_account", "created_at"]
+        read_only_fields = [
+            "id",
+            "reporter_account",
+            "created_at",
+            "github_issue_number",
+            "github_issue_url",
+        ]
+
+    def get_issue_draft(self, obj: BugReport) -> dict:
+        """The redacted, staff-editable draft for the File GitHub issue dialog."""
+        return asdict(issue_draft_for_bug(obj))
 
 
 class PlayerReportCreateSerializer(serializers.ModelSerializer):
@@ -236,6 +256,7 @@ class SystemErrorReportDetailSerializer(serializers.ModelSerializer):
     """
 
     actor_persona_name = serializers.SerializerMethodField()
+    issue_draft = serializers.SerializerMethodField()
 
     class Meta:
         model = SystemErrorReport
@@ -252,6 +273,9 @@ class SystemErrorReportDetailSerializer(serializers.ModelSerializer):
             "first_seen",
             "last_seen",
             "status",
+            "github_issue_number",
+            "github_issue_url",
+            "issue_draft",
         ]
         read_only_fields = [
             "id",
@@ -264,8 +288,25 @@ class SystemErrorReportDetailSerializer(serializers.ModelSerializer):
             "occurrence_count",
             "first_seen",
             "last_seen",
+            "github_issue_number",
+            "github_issue_url",
         ]
 
     def get_actor_persona_name(self, obj: SystemErrorReport) -> str | None:
         """The acting persona's name, or ``None`` — actor_persona is nullable."""
         return obj.actor_persona.name if obj.actor_persona_id is not None else None
+
+    def get_issue_draft(self, obj: SystemErrorReport) -> dict:
+        """The redacted, staff-editable draft for the File GitHub issue dialog."""
+        return asdict(issue_draft_for_error(obj))
+
+
+class FileIssueInputSerializer(serializers.Serializer):
+    """Staff-approved title + body to file as a GitHub issue (#1164).
+
+    The frontend submits the final, staff-edited text — already redacted/curated — so the
+    service trusts it and only POSTs to GitHub.
+    """
+
+    title = serializers.CharField(max_length=256)
+    body = serializers.CharField()

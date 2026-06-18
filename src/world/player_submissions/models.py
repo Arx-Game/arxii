@@ -81,6 +81,15 @@ class BugReport(SharedMemoryModel):
         default=SubmissionStatus.OPEN,
         db_index=True,
     )
+    github_issue_number = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="GitHub issue number, once staff have filed one from this report (#1164).",
+    )
+    github_issue_url = models.URLField(
+        blank=True,
+        help_text="Link to the filed GitHub issue (empty until filed).",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -220,6 +229,15 @@ class SystemErrorReport(SharedMemoryModel):
         choices=SubmissionStatus.choices,
         default=SubmissionStatus.OPEN,
         db_index=True,
+    )
+    github_issue_number = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="GitHub issue number, once staff have filed one from this report (#1164).",
+    )
+    github_issue_url = models.URLField(
+        blank=True,
+        help_text="Link to the filed GitHub issue (empty until filed).",
     )
 
     class Meta:
