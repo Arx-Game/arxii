@@ -2565,7 +2565,23 @@ def resolve_npc_attack(
                 ),
             )
 
-    result: CheckResult = perform_check_fn(character, check_type)
+    # Route the defensive check through the shared modifier seam so it honors
+    # every character-side source — fashion (perception-relative, scene-derived),
+    # covenant-role / equipment-walk, persistent CharacterModifiers, and
+    # conditions — exactly as the offense roll does (#750, #512). The perceiving
+    # society is derived from the encounter's scene; ``collect_check_modifiers``
+    # self-limits (a fashion bonus only lands when ``check_type`` has a scoped
+    # modifier_target and the scene's society has a matching in-vogue style).
+    breakdown = collect_check_modifiers(
+        participant.character_sheet,
+        check_type,
+        scene=participant.encounter.scene,
+    )
+    result: CheckResult = perform_check_fn(
+        character,
+        check_type,
+        extra_modifiers=breakdown.total,
+    )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
     base_damage = opponent_action.threat_entry.base_damage
