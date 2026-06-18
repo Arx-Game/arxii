@@ -268,6 +268,7 @@ class CombatTechniqueResolver:
         breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
+            scene=self.participant.encounter.scene,
             extra_contributions=extra_contributions,
         )
         extra_modifiers = breakdown.total
@@ -491,6 +492,7 @@ class CombatTechniqueResolver:
         pen_breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             pen_check_type,
+            scene=self.participant.encounter.scene,
         )
         pen_result = perform_check(
             caster,
@@ -2772,6 +2774,7 @@ def _resolve_flee(
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         config.check_type,
+        scene=encounter.scene,
         extra_contributions=extra_contributions,
     )
 
@@ -3434,7 +3437,7 @@ def _apply_aftermath_rules(
     for participant in affected:
         sheet = participant.character_sheet
         character = sheet.character
-        breakdown = collect_check_modifiers(sheet, rule.check_type)
+        breakdown = collect_check_modifiers(sheet, rule.check_type, scene=encounter.scene)
         pending = select_consequence(
             character,
             rule.check_type,
