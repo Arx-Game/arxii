@@ -168,7 +168,7 @@ class StyleFacetCoexistenceTests(TestCase):
         self._invalidate()
         facet_part = passive_facet_bonuses(self.sheet, self.target_r)
         style_part = passive_motif_style_bonuses(self.sheet, self.target_r)
-        total = equipment_walk_total(self.char.character_sheet, self.target_r)
+        total = equipment_walk_total(self.sheet, self.target_r)
 
         self.assertGreater(facet_part, 0, "Facet contribution must be positive.")
         self.assertGreater(style_part, 0, "Style contribution must be positive.")
