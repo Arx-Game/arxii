@@ -1034,10 +1034,14 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     - persona: reuses persona's character ObjectDB. Never ephemeral.
     - neither: creates a new CombatNPC OD scoped to this encounter. Ephemeral.
 
-    When any stat field is None, the scaling formula fills it in via
-    ``compute_opponent_stat_block(tier, encounter)``.  Explicitly-passed values
-    always win over the formula.  Pass ``auto_phases=False`` to skip automatic
-    ``BossPhase`` creation for BOSS-tier opponents.
+    When ``max_health`` is omitted (the opt-in signal), the scaling formula
+    fills in every omitted stat field via
+    ``compute_opponent_stat_block(tier, encounter)``.  Passing ``max_health``
+    selects manual mode: the formula is never called and other omitted stats
+    keep their legacy defaults (e.g. ``soak_value`` → 0).  Explicitly-passed
+    values always win over the formula.  Pass ``auto_phases=False`` to skip
+    automatic ``BossPhase`` creation for BOSS-tier opponents (manual mode also
+    creates no phases, since no block is computed).
     """
     from evennia.utils.create import create_object  # noqa: PLC0415
 

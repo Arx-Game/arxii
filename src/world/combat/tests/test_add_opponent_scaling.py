@@ -320,3 +320,5 @@ class ExistingCallerCompatibilityTest(TestCase):
         self.assertEqual(opp.max_health, 500)
         self.assertEqual(opp.soak_value, 80)
         self.assertEqual(opp.probing_threshold, 50)
+        # Manual mode (max_health provided) computes no block → no auto phases.
+        self.assertEqual(BossPhase.objects.filter(opponent=opp).count(), 0)
