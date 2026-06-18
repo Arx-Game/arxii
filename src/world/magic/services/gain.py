@@ -66,7 +66,7 @@ from django.db import transaction
 
 if TYPE_CHECKING:
     from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
-    from world.magic.models.endorsement import EntryFlourishRecord
+    from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -87,7 +87,7 @@ from world.magic.types import (
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
-from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
 
@@ -467,6 +467,153 @@ def create_scene_entry_endorsement(
         cfg.scene_entry_grant,
         source=GainSource.SCENE_ENTRY,
         scene_entry_endorsement=endorsement,
+    )
+    return endorsement
+
+
+def _endorser_can_see_scene(
+    endorser_account: AccountDB | None,
+    scene: Scene,
+) -> bool:
+    """True if the endorser's account has read access to the scene log.
+
+    Awareness gate for style-presentation endorsements (broader than co-presence):
+    - PUBLIC scene: any account (including non-participants) can read the log.
+    - PRIVATE / EPHEMERAL scene: only current scene participants.
+    - No account (untenured sheet): cannot see non-public scenes.
+    """
+    if scene.privacy_mode == ScenePrivacyMode.PUBLIC:
+        return True
+    if endorser_account is None:
+        return False
+    return SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists()
+
+
+def _endorsee_wears_bound_style(
+    endorsee_sheet: CharacterSheet,
+    resonance: Resonance,
+) -> bool:
+    """True if endorsee has a MotifResonance for ``resonance`` with at least
+    one MotifResonanceStyle binding whose style is currently worn.
+
+    Mirrors the ``passive_motif_style_bonuses`` walker logic in
+    ``world/mechanics/services.py``: motif → resonances.get(resonance_id=...)
+    → style_assignments.all() → binding.style → equipped_items.item_styles_for.
+    """
+    from world.magic.models.motifs import Motif, MotifResonance  # noqa: PLC0415
+
+    try:
+        motif = endorsee_sheet.motif
+    except Motif.DoesNotExist:
+        return False
+
+    try:
+        mr = motif.resonances.get(resonance=resonance)
+    except MotifResonance.DoesNotExist:
+        return False
+
+    char = endorsee_sheet.character
+    if not hasattr(char, "equipped_items"):
+        return False
+
+    for binding in mr.style_assignments.all():
+        if char.equipped_items.item_styles_for(binding.style):
+            return True
+    return False
+
+
+@transaction.atomic
+def create_style_presentation_endorsement(
+    endorser_sheet: CharacterSheet,
+    endorsee_sheet: CharacterSheet,
+    scene: Scene,
+    resonance: Resonance,
+) -> StylePresentationEndorsement:
+    """Validate, persist, and fire a style-presentation resonance grant (#1152).
+
+    Awareness-gated (not co-presence-gated) sibling of
+    ``create_scene_entry_endorsement``. The endorser must be able to read the
+    scene log; the endorsee must be wearing an item whose Style is bound to
+    ``resonance`` in their Motif. No entry-pose requirement.
+
+    Preconditions (raises EndorsementValidationError on failure):
+    1. Endorser not protagonism-locked.
+    2. Endorsee not protagonism-locked.
+    3. Endorser != endorsee (no self-endorsement).
+    4. Endorser's account != endorsee's account (no alt-endorsement).
+    5. Endorser can see the scene (SceneParticipation OR PUBLIC scene).
+    6. Endorsee has claimed this resonance (CharacterResonance row exists).
+    7. Endorsee currently wears an item bound to ``resonance`` via MotifResonanceStyle.
+    8. No duplicate (endorser × endorsee × scene) row.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.models.endorsement import StylePresentationEndorsement  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    if endorser_sheet.is_protagonism_locked:
+        msg = "Endorser is locked from protagonism and cannot endorse style presentations"
+        raise EndorsementValidationError(msg)
+    if endorsee_sheet.is_protagonism_locked:
+        msg = (
+            "Endorsee is locked from protagonism and cannot receive style-presentation endorsements"
+        )
+        raise EndorsementValidationError(msg)
+
+    if endorser_sheet == endorsee_sheet:
+        msg = "Cannot endorse your own style presentation"
+        raise EndorsementValidationError(msg)
+
+    endorser_account = account_for_sheet(endorser_sheet)
+    endorsee_account = account_for_sheet(endorsee_sheet)
+    if (
+        endorser_account is not None
+        and endorsee_account is not None
+        and endorser_account == endorsee_account
+    ):
+        msg = "Cannot endorse an alt character"
+        raise EndorsementValidationError(msg)
+
+    if not _endorser_can_see_scene(endorser_account, scene):
+        msg = "Endorser cannot view this scene"
+        raise EndorsementValidationError(msg)
+
+    if not CharacterResonance.objects.filter(
+        character_sheet=endorsee_sheet, resonance=resonance
+    ).exists():
+        msg = "Endorsee has not claimed this resonance"
+        raise EndorsementValidationError(msg)
+
+    if not _endorsee_wears_bound_style(endorsee_sheet, resonance):
+        msg = "Endorsee is not wearing an item bound to this resonance via their Motif"
+        raise EndorsementValidationError(msg)
+
+    if StylePresentationEndorsement.objects.filter(
+        endorser_sheet=endorser_sheet,
+        endorsee_sheet=endorsee_sheet,
+        scene=scene,
+    ).exists():
+        msg = "Already endorsed this style presentation"
+        raise EndorsementValidationError(msg)
+
+    cfg = get_resonance_gain_config()
+    try:
+        _persona_snapshot = endorsee_sheet.primary_persona
+    except Persona.DoesNotExist:
+        _persona_snapshot = None
+    endorsement = StylePresentationEndorsement.objects.create(
+        endorser_sheet=endorser_sheet,
+        endorsee_sheet=endorsee_sheet,
+        scene=scene,
+        resonance=resonance,
+        persona_snapshot=_persona_snapshot,
+        granted_amount=cfg.style_presentation_grant,
+    )
+    grant_resonance(
+        endorsee_sheet,
+        resonance,
+        cfg.style_presentation_grant,
+        source=GainSource.STYLE_PRESENTATION,
+        style_presentation_endorsement=endorsement,
     )
     return endorsement
 
