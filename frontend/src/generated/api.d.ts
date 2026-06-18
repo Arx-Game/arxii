@@ -2399,6 +2399,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/opponent-defaults/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Preview the scaling formula output for a given tier (GM action).
+     *
+     *     Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+     *     and ``stakes_message`` so the GM can see both the stat budget and
+     *     whether the stakes gate would block a real add_opponent call.
+     *
+     *     Query params:
+     *         tier: An ``OpponentTier`` value (required).
+     *
+     *     Returns:
+     *         200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+     *         for the stakes gate — preview must explain the gate, not block).
+     *         400 when ``tier`` is missing or not a valid ``OpponentTier``.
+     */
+    get: operations['combat_opponent_defaults_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/pause/': {
     parameters: {
       query?: never;
@@ -25915,6 +25946,28 @@ export interface operations {
     };
   };
   combat_my_action_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_opponent_defaults_retrieve: {
     parameters: {
       query?: never;
       header?: never;

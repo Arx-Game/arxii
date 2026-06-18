@@ -3443,6 +3443,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/opponent-defaults/:
+    get:
+      operationId: combat_opponent_defaults_retrieve
+      description: |-
+        Preview the scaling formula output for a given tier (GM action).
+
+        Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+        and ``stakes_message`` so the GM can see both the stat budget and
+        whether the stakes gate would block a real add_opponent call.
+
+        Query params:
+            tier: An ``OpponentTier`` value (required).
+
+        Returns:
+            200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+            for the stakes gate — preview must explain the gate, not block).
+            400 when ``tier`` is missing or not a valid ``OpponentTier``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/pause/:
     post:
       operationId: combat_pause_create
