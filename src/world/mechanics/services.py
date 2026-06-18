@@ -22,6 +22,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     Resonance,
+    StylePresentationEndorsement,
     TechniqueCapabilityGrant,
     ThreadPullEffect,
 )
@@ -350,6 +351,24 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
     bonus = Decimal(config.base_magnitude) * coverage * quality_aggregate
     if covered == len(bound):
         bonus *= Decimal(str(config.full_combination_bonus))
+    # Perception-breadth amplification: distinct STYLE_PRESENTATION endorsers for this
+    # resonance scale the bonus from factor=1 (0 endorsers) to factor=perception_multiplier
+    # (n >= perception_breadth_cap). Computed in a single aggregate query — no N+1.
+    cap = config.perception_breadth_cap
+    if cap > 0:
+        n = (
+            StylePresentationEndorsement.objects.filter(
+                endorsee_sheet=sheet,
+                resonance_id=target.target_resonance_id,
+            )
+            .values("endorser_sheet")
+            .distinct()
+            .count()
+        )
+        factor = Decimal(1) + (Decimal(str(config.perception_multiplier)) - Decimal(1)) * (
+            Decimal(min(n, cap)) / Decimal(cap)
+        )
+        bonus *= factor
     return int(bonus)
 
 
