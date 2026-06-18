@@ -124,6 +124,14 @@ class CombatEncounter(SharedMemoryModel):
         related_name="encounters",
         help_text="Authored escalation ramp; null = this encounter does not escalate (#872).",
     )
+    duel_winner = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duels_won",
+        help_text="Recorded duel victor; null while ongoing or for an abandoned/mutual stop.",
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":

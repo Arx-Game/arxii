@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     CombatManeuver,
     DuelChallengeStatus,
@@ -26,6 +27,20 @@ class DuelEnumTests(TestCase):
         spar = CombatEncounterFactory(risk_level=RiskLevel.MODERATE)
         self.assertTrue(lethal.is_lethal)
         self.assertFalse(spar.is_lethal)
+
+
+class DuelWinnerFieldTests(TestCase):
+    def test_fresh_encounter_has_no_duel_winner(self):
+        enc = CombatEncounterFactory()
+        self.assertIsNone(enc.duel_winner)
+
+    def test_duel_winner_accepts_character_sheet(self):
+        sheet = CharacterSheetFactory()
+        enc = CombatEncounterFactory()
+        enc.duel_winner = sheet
+        enc.save(update_fields=["duel_winner"])
+        enc.refresh_from_db()
+        self.assertEqual(enc.duel_winner_id, sheet.pk)
 
 
 class DuelMirrorOpponentTests(TestCase):
