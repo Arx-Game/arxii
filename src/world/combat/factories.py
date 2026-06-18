@@ -714,6 +714,41 @@ class DuelChallengeFactory(factory_django.DjangoModelFactory):
         return create_object("typeclasses.rooms.Room", key="Duel Challenge Room", nohome=True)
 
 
+class PvpDuelFactory:
+    """Compose a symmetric PvP duel encounter in one call.
+
+    Not a DjangoModelFactory (the duel setup is a service, not a single model).
+    Wraps ``create_pvp_duel`` for use in tests and seed paths.
+
+    Usage::
+
+        duel = PvpDuelFactory.create(challenger_sheet=a, challenged_sheet=b, room=room)
+        # duel is a CombatEncounter in DECLARING status.
+    """
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        challenger_sheet: object | None = None,
+        challenged_sheet: object | None = None,
+        room: object | None = None,
+        risk_level: str = RiskLevel.MODERATE,
+    ) -> CombatEncounter:
+        from evennia import create_object
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.duels import create_pvp_duel
+
+        if challenger_sheet is None:
+            challenger_sheet = CharacterSheetFactory()
+        if challenged_sheet is None:
+            challenged_sheet = CharacterSheetFactory()
+        if room is None:
+            room = create_object("typeclasses.rooms.Room", key="Duel Room", nohome=True)
+        return create_pvp_duel(challenger_sheet, challenged_sheet, room, risk_level=risk_level)
+
+
 class EscalationCurveFactory(factory_django.DjangoModelFactory):
     """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
 
