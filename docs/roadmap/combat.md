@@ -699,8 +699,17 @@ integration test suite.
 - **Positioning / zone-aware POV filtering** — clash visibility (who can see the meter,
   which contributions are shown to which players) depends on the positioning/zones model
   that is not yet settled. See `docs/plans/2026-05-21-positioning-zones-design-notes.md`.
-- **Fury lever** — the deliberate control-lowering / rage escalation alternative to Strain
-  (§11 of spec) is reserved and deferred. Strain is the only escalation lever for v1.
+- **Fury lever** — **DONE** (#567): the control-lowering / rage escalation lever, Strain's
+  sibling. A player declares a `FuryTier` + a `fury_anchor` (a bonded harmed entity); bond
+  strength (`get_relationship_tier`) caps the tier and scales an intensity bonus. Fury lowers
+  runtime control via a `control_penalty` param on `use_technique` (feeding the existing
+  mishap + anima-cost paths) in exchange for intensity riding the existing
+  `power_intensity_bonus` — no fatigue of its own. A provocation-scaled control-retention
+  check (Composure/Willpower, per `FuryConfig`) decides lucid-vs-Berserk; lost control applies
+  a Berserk `ConditionTemplate` (severity by tier, decays over rounds). Audited on
+  `Interaction.fury_committed` + the `CommittingDeclaration` mixin (clash + non-clash). Fury is
+  restricted to technique casts. The "Restore to Sense" ally-recovery action is authored +
+  effect-tested but its live player dispatch is deferred (social-action dispatch gap — #1172).
 - **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
   clash visibility UI is a follow-up.
 
