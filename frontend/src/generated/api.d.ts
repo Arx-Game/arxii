@@ -9667,6 +9667,23 @@ export interface paths {
     patch: operations['player_submissions_bug_reports_partial_update'];
     trace?: never;
   };
+  '/api/player-submissions/bug-reports/{id}/file-issue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Staff-only: file a public GitHub issue from this bug report (#1164). */
+    post: operations['player_submissions_bug_reports_file_issue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/player-submissions/feedback/': {
     parameters: {
       query?: never;
@@ -9863,6 +9880,23 @@ export interface paths {
      *     is no create action here, so all actions resolve to IsAdminUser).
      */
     patch: operations['player_submissions_system_errors_partial_update'];
+    trace?: never;
+  };
+  '/api/player-submissions/system-errors/{id}/file-issue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Staff-only: file a public GitHub issue from this captured error (#1164). */
+    post: operations['player_submissions_system_errors_file_issue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/player-trust/': {
@@ -13019,6 +13053,17 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
       status?: components['schemas']['StatusD66Enum'];
+      /** @description GitHub issue number, once staff have filed one from this report (#1164). */
+      readonly github_issue_number: number | null;
+      /**
+       * Format: uri
+       * @description Link to the filed GitHub issue (empty until filed).
+       */
+      readonly github_issue_url: string;
+      /** @description The redacted, staff-editable draft for the File GitHub issue dialog. */
+      readonly issue_draft: {
+        [key: string]: unknown;
+      };
     };
     BugReportDetailRequest: {
       reporter_persona: number;
@@ -22312,6 +22357,17 @@ export interface components {
       /** Format: date-time */
       readonly last_seen: string;
       status?: components['schemas']['StatusD66Enum'];
+      /** @description GitHub issue number, once staff have filed one from this report (#1164). */
+      readonly github_issue_number: number | null;
+      /**
+       * Format: uri
+       * @description Link to the filed GitHub issue (empty until filed).
+       */
+      readonly github_issue_url: string;
+      /** @description The redacted, staff-editable draft for the File GitHub issue dialog. */
+      readonly issue_draft: {
+        [key: string]: unknown;
+      };
     };
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
@@ -37044,6 +37100,32 @@ export interface operations {
       };
     };
   };
+  player_submissions_bug_reports_file_issue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bug report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BugReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BugReportDetail'];
+        };
+      };
+    };
+  };
   player_submissions_feedback_list: {
     parameters: {
       query?: {
@@ -37397,6 +37479,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedSystemErrorReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SystemErrorReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_system_errors_file_issue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this System Error Report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SystemErrorReportDetailRequest'];
       };
     };
     responses: {

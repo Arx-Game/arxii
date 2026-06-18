@@ -39,10 +39,18 @@ import {
   getSystemErrorList,
   getSystemErrorDetail,
   updateSystemErrorStatus,
+  fileBugReportIssue,
+  fileSystemErrorIssue,
   getGMApplicationList,
   getGMApplicationDetail,
   updateGMApplication,
 } from './api';
+
+interface FileIssueArgs {
+  id: number;
+  title: string;
+  body: string;
+}
 
 export const staffKeys = {
   all: ['staff'] as const,
@@ -226,6 +234,16 @@ export function useUpdateBugReportStatus() {
   });
 }
 
+export function useFileBugReportIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title, body }: FileIssueArgs) => fileBugReportIssue(id, title, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
 // =============================================================================
 // Player Report Hooks
 // =============================================================================
@@ -280,6 +298,16 @@ export function useUpdateSystemErrorStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: SubmissionStatus }) =>
       updateSystemErrorStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+export function useFileSystemErrorIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title, body }: FileIssueArgs) => fileSystemErrorIssue(id, title, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },

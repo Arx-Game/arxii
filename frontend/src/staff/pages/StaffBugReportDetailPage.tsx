@@ -1,27 +1,23 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useBugReportDetail, useUpdateBugReportStatus } from '@/staff/queries';
+import { ReportDetailActions } from '@/staff/components/ReportDetailActions';
+import {
+  useBugReportDetail,
+  useFileBugReportIssue,
+  useUpdateBugReportStatus,
+} from '@/staff/queries';
 
 export function StaffBugReportDetailPage() {
-  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const reportId = id ? parseInt(id, 10) : undefined;
   const { data: report, isLoading } = useBugReportDetail(reportId);
   const updateStatus = useUpdateBugReportStatus();
+  const fileIssue = useFileBugReportIssue();
 
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!report) return <p className="p-8 text-muted-foreground">Bug report not found.</p>;
-
-  function handleStatusChange(status: 'reviewed' | 'dismissed') {
-    if (!reportId) return;
-    updateStatus.mutate(
-      { id: reportId, status },
-      { onSuccess: () => navigate('/staff/bug-reports') }
-    );
-  }
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -54,20 +50,12 @@ export function StaffBugReportDetailPage() {
         </CardContent>
       </Card>
 
-      {report.status === 'open' && (
-        <div className="flex gap-2">
-          <Button disabled={updateStatus.isPending} onClick={() => handleStatusChange('reviewed')}>
-            Mark Reviewed
-          </Button>
-          <Button
-            variant="outline"
-            disabled={updateStatus.isPending}
-            onClick={() => handleStatusChange('dismissed')}
-          >
-            Dismiss
-          </Button>
-        </div>
-      )}
+      <ReportDetailActions
+        report={report}
+        updateStatus={updateStatus}
+        fileIssue={fileIssue}
+        listPath="/staff/bug-reports"
+      />
     </div>
   );
 }

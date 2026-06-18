@@ -39,6 +39,13 @@ export interface PlayerFeedback {
   status: string;
 }
 
+// A redacted, staff-editable draft for the "File GitHub issue" dialog (#1164).
+export interface IssueDraft {
+  title: string;
+  body: string;
+  stub_body: string;
+}
+
 // Bug report detail from /api/player_submissions/bug-reports/{id}/
 export interface BugReport {
   id: number;
@@ -50,6 +57,9 @@ export interface BugReport {
   location: number | null;
   created_at: string;
   status: string;
+  github_issue_number: number | null;
+  github_issue_url: string;
+  issue_draft: IssueDraft;
 }
 
 // Player report detail from /api/player_submissions/player-reports/{id}/
@@ -89,6 +99,15 @@ export interface SystemErrorReport {
   first_seen: string;
   last_seen: string;
   status: string;
+  github_issue_number: number | null;
+  github_issue_url: string;
+  issue_draft: IssueDraft;
+}
+
+// Response from the file-issue action.
+export interface FiledIssue {
+  github_issue_number: number | null;
+  github_issue_url: string;
 }
 
 // Account history response from /api/staff_inbox/accounts/{id}/history/
