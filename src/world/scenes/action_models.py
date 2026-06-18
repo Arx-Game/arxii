@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -14,6 +16,9 @@ from world.scenes.action_constants import (
     CastPullTier,
     DifficultyChoice,
 )
+
+if TYPE_CHECKING:
+    from world.scenes.models import Persona
 
 _PERSONA_MODEL = "scenes.Persona"
 
@@ -67,6 +72,12 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         blank=True,
         related_name="delivery_scoped_action_requests",
         help_text="Explicit WHISPER audience (#903). Empty = the action target alone.",
+    )
+    target_personas = models.ManyToManyField(
+        _PERSONA_MODEL,
+        through="SceneActionTarget",
+        related_name="+",
+        blank=True,
     )
     effort_level = models.CharField(
         max_length=20,
@@ -220,6 +231,55 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
     def is_standalone_cast(self) -> bool:
         """A technique cast with no enhanced base action (derived, not stored)."""
         return bool(self.technique_id) and not self.action_template_id and not self.action_key
+
+    @property
+    def single_target(self) -> Persona | None:
+        """The primary target persona (sugar over the denormalized FK)."""
+        return self.target_persona
+
+
+class SceneActionTarget(SharedMemoryModel):
+    """One additional (non-primary) target of a multi-target action request.
+
+    The primary target stays on ``SceneActionRequest.target_persona``; these rows
+    carry the additional targets, each with its own consent + result so they
+    resolve independently and never block one another.
+    """
+
+    action_request = models.ForeignKey(
+        "scenes.SceneActionRequest",
+        on_delete=models.CASCADE,
+        related_name="additional_targets",
+    )
+    target_persona = models.ForeignKey(
+        _PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="action_target_rows",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ActionRequestStatus.choices,
+        default=ActionRequestStatus.PENDING,
+        db_index=True,
+    )
+    result_interaction = models.OneToOneField(
+        "scenes.Interaction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    resolved_difficulty = models.PositiveIntegerField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["action_request_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["action_request", "target_persona"],
+                name="uniq_action_target",
+            ),
+        ]
 
 
 class SceneCastPullDeclaration(SharedMemoryModel):
