@@ -5,7 +5,12 @@ from factory import django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.player_submissions.constants import SubmissionStatus
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 from world.scenes.factories import PersonaFactory
 
 
@@ -41,3 +46,14 @@ class PlayerReportFactory(factory_django.DjangoModelFactory):
     asked_to_stop = False
     blocked_or_muted = False
     status = SubmissionStatus.OPEN
+
+
+class SystemErrorReportFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SystemErrorReport
+
+    signature = factory.Sequence(lambda n: f"sig-{n}")
+    label = "test.hook"
+    exception_type = "ValueError"
+    message = "boom"
+    traceback = "Traceback (most recent call last): ..."

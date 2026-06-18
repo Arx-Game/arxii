@@ -1356,10 +1356,20 @@ Cross-references:
   coherence walker `passive_motif_style_bonuses` wired into `equipment_walk_total`
   → `get_modifier_total()`, tuned via `AestheticAxisConfig` singleton
   (`world/mechanics`). Admin authoring surface included.
-  **Phase B** (#1151) — crafter style-adaptation surface + `FashionStyle`/`Style`
-  vogue unification — remains open.
-  **Phase C** (#1152) — perception payoff (social/scene bonuses for style coherence)
-  — remains open.
+  **Phase B shipped** (`#1151`): graded `craft_attach_style` crafter service
+  (`StyleCraftResult` dataclass; quality-tier-gated success/partial/fail with
+  stamped `ItemStyle`); `CraftAttachStyleView` REST endpoint; `FashionStyle.in_vogue_styles`
+  M2M unifying `FashionStyle` vogue vocabulary with the `Style` primitive (replaces
+  former `in_vogue_facets` as the canonical "currently fashionable" list); dilution-only
+  composition invariant — unbound styles worn by a character are inert (no penalty,
+  no coverage). Migration `0019_fashionstyle_in_vogue_styles` carries this field.
+  **Phase C shipped** (`#1152`): `STYLE_PRESENTATION` gain source added to
+  `GainSource`; `StylePresentationEndorsement` model (awareness-gated: endorser must
+  perceive endorsee's coherence via `CharacterAwarenessEntry`); `source_style_presentation_endorsement`
+  typed FK on `ResonanceGrant`; `create_style_presentation_endorsement` service with full
+  precondition guard; perception-breadth amplification on the coherence walker —
+  `AestheticAxisConfig.perception_multiplier` and `perception_breadth_cap` let
+  observers' admiration scale coherence bonus magnitude.
   **Important design intent:** flamboyant fashion (battle lingerie on a Sword
   warrior, paladin getup, evil-sorceress robes) should be a *strong* mechanical
   axis — this is intentional, not flavor garnish.

@@ -278,3 +278,96 @@ class ClashResolution(models.TextChoices):
     NPC_MARGINAL = "NPC_MARGINAL", "NPC Marginal"
     NPC_DECISIVE = "NPC_DECISIVE", "NPC Decisive"
     ABANDONED = "ABANDONED", "Abandoned"
+
+
+# ---------------------------------------------------------------------------
+# Encounter scaling defaults (#566)
+#
+# These dicts seed OpponentTierTemplate, RiskScalingModifier, and
+# StakesLevelRequirement via seed_scaling_defaults() in factories.py.
+# All values are tunable by staff through admin; these are the authored
+# starting points.
+# ---------------------------------------------------------------------------
+
+# Per-tier stat defaults.  SWARM uses count/body mechanics; base_health is 0
+# because individual bodies have toughness, not a single HP pool.
+DEFAULT_TIER_TEMPLATES: dict[str, dict] = {
+    OpponentTier.SWARM: {
+        "base_health": 0,
+        "base_soak": 0,
+        "base_probing_threshold": None,
+        "base_swarm_count": 20,
+        "body_toughness": 5,
+        "bodies_per_attack": 4,
+        "barrier_strength": None,
+        "boss_phase_count": 1,
+    },
+    OpponentTier.MOOK: {
+        "base_health": 30,
+        "base_soak": 0,
+        "base_probing_threshold": None,
+        "base_swarm_count": None,
+        "body_toughness": None,
+        "bodies_per_attack": None,
+        "barrier_strength": None,
+        "boss_phase_count": 1,
+    },
+    OpponentTier.ELITE: {
+        "base_health": 80,
+        "base_soak": 3,
+        "base_probing_threshold": None,
+        "base_swarm_count": None,
+        "body_toughness": None,
+        "bodies_per_attack": None,
+        "barrier_strength": None,
+        "boss_phase_count": 1,
+    },
+    OpponentTier.BOSS: {
+        "base_health": 300,
+        "base_soak": 8,
+        "base_probing_threshold": 5,
+        "base_swarm_count": None,
+        "body_toughness": None,
+        "bodies_per_attack": None,
+        "barrier_strength": None,  # authored per-fight
+        "boss_phase_count": 3,
+    },
+    OpponentTier.HERO_KILLER: {
+        "base_health": 9999,
+        "base_soak": 50,
+        "base_probing_threshold": 30,
+        "base_swarm_count": None,
+        "body_toughness": None,
+        "bodies_per_attack": None,
+        "barrier_strength": None,
+        "boss_phase_count": 1,
+    },
+}
+
+# Risk multipliers: how much to scale stat budgets up/down by encounter danger.
+DEFAULT_RISK_MULTIPLIERS: dict[str, str] = {
+    RiskLevel.LOW: "0.70",
+    RiskLevel.MODERATE: "1.00",
+    RiskLevel.HIGH: "1.30",
+    RiskLevel.EXTREME: "1.60",
+    RiskLevel.LETHAL: "2.00",
+}
+
+# Stakes requirements: minimum party level + GM trust to run at that scope.
+# TrustLevel values must be imported at runtime by callers (avoid circular
+# import; world.stories.types is not imported here).
+#
+# Format: stakes_level → {"minimum_party_average_level": int, "minimum_gm_trust_level": int}
+# TrustLevel int values: UNTRUSTED=0, BASIC=1, INTERMEDIATE=2, ADVANCED=3, EXPERT=4
+DEFAULT_STAKES_REQUIREMENTS: dict[str, dict] = {
+    StakesLevel.LOCAL: {"minimum_party_average_level": 0, "minimum_gm_trust_level": 0},
+    StakesLevel.REGIONAL: {"minimum_party_average_level": 5, "minimum_gm_trust_level": 1},
+    StakesLevel.NATIONAL: {"minimum_party_average_level": 10, "minimum_gm_trust_level": 2},
+    StakesLevel.CONTINENTAL: {"minimum_party_average_level": 15, "minimum_gm_trust_level": 3},
+    StakesLevel.WORLD: {"minimum_party_average_level": 20, "minimum_gm_trust_level": 4},
+}
+
+# EncounterScalingConfig singleton defaults.
+SCALING_CONFIG_BASELINE_PARTY_SIZE: int = 4
+SCALING_CONFIG_PER_EXTRA_MEMBER_PCT: str = "0.15"
+SCALING_CONFIG_PER_AVG_LEVEL_PCT: str = "0.05"

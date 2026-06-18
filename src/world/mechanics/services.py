@@ -22,6 +22,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     Resonance,
+    StylePresentationEndorsement,
     TechniqueCapabilityGrant,
     ThreadPullEffect,
 )
@@ -301,6 +302,17 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
     scales with coverage (fraction of bound styles worn) × quality aggregate. When all
     bound styles are worn the ``full_combination_bonus`` multiplier is applied.
 
+    **Composition rule — style × facet coexistence:** An item that carries both an
+    ``ItemStyle`` and an ``ItemFacet`` contributes to this walker (style coherence)
+    AND to ``passive_facet_bonuses`` (facet resonance) simultaneously. The two walkers
+    are independent; their results are summed by ``equipment_walk_total``.
+
+    **Dilution-only rule — unbound styles are inert:** The walker iterates only the
+    character's ``MotifResonanceStyle`` bindings for ``target``'s resonance. A worn
+    ``ItemStyle`` that does not appear in those bindings is completely invisible to this
+    walker — it neither increases coverage nor applies any penalty. Characters may freely
+    wear items tagged with unrelated styles without degrading their coherence bonus.
+
     Args:
         sheet: CharacterSheet instance.
         target: The ModifierTarget to aggregate the style coherence bonus for.
@@ -339,6 +351,24 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
     bonus = Decimal(config.base_magnitude) * coverage * quality_aggregate
     if covered == len(bound):
         bonus *= Decimal(str(config.full_combination_bonus))
+    # Perception-breadth amplification: distinct STYLE_PRESENTATION endorsers for this
+    # resonance scale the bonus from factor=1 (0 endorsers) to factor=perception_multiplier
+    # (n >= perception_breadth_cap). Computed in a single aggregate query — no N+1.
+    cap = config.perception_breadth_cap
+    if cap > 0:
+        n = (
+            StylePresentationEndorsement.objects.filter(
+                endorsee_sheet=sheet,
+                resonance_id=target.target_resonance_id,
+            )
+            .values("endorser_sheet")
+            .distinct()
+            .count()
+        )
+        factor = Decimal(1) + (Decimal(str(config.perception_multiplier)) - Decimal(1)) * (
+            Decimal(min(n, cap)) / Decimal(cap)
+        )
+        bonus *= factor
     return int(bonus)
 
 
@@ -430,6 +460,10 @@ def fashion_outfit_bonus(sheet: object, target: ModifierTarget, society: object)
     for facet in style.in_vogue_facets.all():
         match_value += Decimal(FASHION_MATCH_BASE) * worn_quality_aggregate(
             char.equipped_items.item_facets_for(facet)
+        )
+    for s in style.in_vogue_styles.all():
+        match_value += Decimal(FASHION_MATCH_BASE) * worn_quality_aggregate(
+            char.equipped_items.item_styles_for(s)
         )
     return int(match_value * Decimal(str(bonus.weight)))
 

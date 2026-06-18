@@ -6,9 +6,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("magic", "0032_motifresonancestyle"),
-    ]
+    dependencies = [("magic", "0034_style_presentation_grant")]
 
     operations = [
         migrations.CreateModel(

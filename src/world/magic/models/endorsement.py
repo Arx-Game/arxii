@@ -171,6 +171,43 @@ class PresentationEndorsement(EndorsementBase):
         return f"PresentationEndorsement({self.endorser_sheet_id}->{self.presentation_id})"
 
 
+class StylePresentationEndorsement(EndorsementBase):
+    """Scene-level endorsement of a character's style presentation (#1152).
+
+    Grants resonance immediately at creation, one per (endorser, endorsee, scene)
+    pair. Mirrors ``SceneEntryEndorsement`` but fires on style evaluation rather
+    than scene entry.
+    """
+
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="style_presentation_endorsements",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+    )
+    granted_amount = models.PositiveIntegerField(
+        help_text="Captured from config at creation.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["endorser_sheet", "endorsee_sheet", "scene"],
+                name="unique_style_presentation_per_pair_per_scene",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"StylePresentationEndorsement("
+            f"{self.endorser_sheet_id}->{self.endorsee_sheet_id}"
+            f"@{self.scene_id})"
+        )
+
+
 class EntryFlourishRecord(SharedMemoryModel):
     """Actor-side record of a successful entry flourish (Entrance action).
 

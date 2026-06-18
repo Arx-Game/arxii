@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.clues.constants import ClueResolution, ClueTargetKind
 from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
-
-logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -289,5 +286,7 @@ def _notify_clue_found(roster_entry: RosterEntry, clue: Clue) -> None:
             category=NarrativeCategory.HAPPENSTANCE,
             ooc_note=f"Surfaced by a clue trigger (clue #{clue.pk}).",
         )
-    except Exception:
-        logger.exception("Failed to notify %s that clue #%s was found", roster_entry, clue.pk)
+    except Exception as exc:  # noqa: BLE001 — best-effort notify; capture, don't propagate
+        from world.player_submissions.services import report_error  # noqa: PLC0415
+
+        report_error(exc, label="clue_found_notification")

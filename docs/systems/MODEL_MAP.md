@@ -1,5 +1,3 @@
-/workspaces/arxii/.claude/worktrees/feat+1054-transition-tests/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
-  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -327,6 +325,8 @@
   - resonance_grants <- magic.ResonanceGrant
   - fame_reaction_lines <- societies.FameReactionLine
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
+  - hidden_clues <- clues.RoomClue
+  - clue_triggers <- clues.ClueTrigger
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -554,6 +554,34 @@
 - `validate_permit_site(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int') -> 'ValidationResult' — Validate a permit can be used at this site for this size.`
 
 
+## world.captivity
+
+### Captivity
+**Foreign Keys:**
+  - captive -> character_sheets.CharacterSheet [FK]
+  - cell -> instances.InstancedRoom [FK] (nullable)
+  - captor_organization -> societies.Organization [FK] (nullable)
+  - ransom_contract -> currency.Contract [FK] (nullable)
+  - rescue_template -> missions.MissionTemplate [FK] (nullable)
+**Pointed to by:**
+  - rescue_clues <- clues.Clue
+
+### CaptivityConfig
+**Foreign Keys:**
+  - captive_template -> missions.MissionTemplate [FK] (nullable)
+  - rescue_template -> missions.MissionTemplate [FK] (nullable)
+
+### Service Functions
+- `capture_character(*, captive: 'CharacterSheet', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell: 'InstancedRoom | None' = None, group_key: 'str | None' = None, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'Captivity' — Take one character into a cell and record the captivity.`
+- `capture_party(*, captives: 'Iterable[CharacterSheet]', captor_organization: 'Organization | None' = None, return_location: 'ObjectDB | None' = None, offscreen_loss_allowed: 'bool' = False, cell_name: 'str | None' = None, cell_description: 'str | None' = None) -> 'list[Captivity]' — Capture several characters into one shared cell (the default).`
+- `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None — Mark room completed, relocate occupants, delete if no history.`
+- `escape_captivity(captive: 'CharacterSheet') -> 'bool' — Free a captive by their own hand (#931 Phase 4) — the escape loop's verb.`
+- `rescue_captive(captive: 'CharacterSheet') -> 'bool' — Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
+- `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' — End a captivity and free the captive.`
+- `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' — Resolve one capture's loops + cell flavor: per-capture override, else default.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '') -> evennia.objects.models.ObjectDB — Create a temporary instanced room and its lifecycle record.`
+
+
 ## world.character_creation
 
 ### CGPointBudget
@@ -617,7 +645,7 @@
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' — Add a message comment to an application.`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' — Approve an application and finalize the character.`
-- `calculate_weight(height_inches: int, build: world.forms.models.Build) -> int — Calculate weight in pounds from height and build.`
+- `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' — Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' — Claim a submitted application for staff review.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
@@ -662,7 +690,6 @@
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
-  - characteristic_values <- character_sheets.CharacterSheetValue
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
@@ -679,12 +706,14 @@
   - anima_ritual_participations <- magic.AnimaRitualPerformance
   - resonances <- magic.CharacterResonance
   - affinity_totals <- magic.CharacterAffinityTotal
+  - dramatic_moment_tags <- magic.DramaticMomentTag
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
   - sceneentryendorsement_given <- magic.SceneEntryEndorsement
   - sceneentryendorsement_received <- magic.SceneEntryEndorsement
   - presentationendorsement_given <- magic.PresentationEndorsement
   - presentationendorsement_received <- magic.PresentationEndorsement
+  - entry_flourish_records <- magic.EntryFlourishRecord
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
   - founded_sanctums <- magic.SanctumDetails
@@ -737,21 +766,6 @@
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - detected_traps <- room_features.Trap
-
-### Characteristic
-**Pointed to by:**
-  - values <- character_sheets.CharacteristicValue
-
-### CharacteristicValue
-**Foreign Keys:**
-  - characteristic -> character_sheets.Characteristic [FK]
-**Pointed to by:**
-  - character_sheets <- character_sheets.CharacterSheetValue
-
-### CharacterSheetValue
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - characteristic_value -> character_sheets.CharacteristicValue [FK]
 
 ### Gender
 **Pointed to by:**
@@ -847,6 +861,8 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - legend_source_type -> societies.LegendSourceType [FK] (nullable)
   - capture_captor_organization -> societies.Organization [FK] (nullable)
+  - capture_captive_template -> missions.MissionTemplate [FK] (nullable)
+  - capture_rescue_template -> missions.MissionTemplate [FK] (nullable)
 
 ### Service Functions
 - `cast(typ, val) — Cast a value to a type.`
@@ -900,6 +916,49 @@
   - aspect -> classes.Aspect [FK]
 
 
+## world.clues
+
+### Clue
+**Foreign Keys:**
+  - target_codex_entry -> codex.CodexEntry [FK] (nullable)
+  - target_mission -> missions.MissionTemplate [FK] (nullable)
+  - target_captivity -> captivity.Captivity [FK] (nullable)
+**Pointed to by:**
+  - held_by <- clues.CharacterClue
+  - research_projects <- clues.ResearchProjectDetails
+  - room_placements <- clues.RoomClue
+  - trigger_placements <- clues.ClueTrigger
+
+### CharacterClue
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [FK]
+  - clue -> clues.Clue [FK]
+
+### ResearchProjectDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - clue -> clues.Clue [FK]
+
+### RoomClue
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - clue -> clues.Clue [FK]
+
+### ClueTrigger
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - clue -> clues.Clue [FK]
+
+### Service Functions
+- `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' — Record that a character has found a clue (idempotent).`
+- `clear_rescue_clues(captivity: 'Captivity') -> 'None' — Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
+- `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' — AUTOMATIC resolution — grant a clue's target to the character on the spot.`
+- `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' — Grant clues triggered passively by entering ``room`` (#1160).`
+- `plant_rescue_clue(captivity: 'Captivity', room_profile: 'RoomProfile', *, name: 'str', description: 'str', detect_difficulty: 'int' = 0) -> 'RoomClue' — Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).`
+- `search_room(character: 'ObjectDB', room_profile: 'RoomProfile', search_check_type: 'CheckType') -> 'list[Clue]' — Search a room: roll ``search_check_type`` against each hidden clue's difficulty.`
+- `target_already_known(clue: 'Clue', roster_entry: 'RosterEntry') -> 'bool' — Whether the character already has what this clue points at.`
+
+
 ## world.codex
 
 ### CodexCategory
@@ -928,12 +987,12 @@
   - progression_milestones <- magic.MagicProgressionMilestone
   - unlocks <- codex.CodexEntry
   - character_knowledge <- codex.CharacterCodexKnowledge
-  - clues <- codex.CodexClue
   - teaching_offers <- codex.CodexTeachingOffer
   - beginnings_grants <- codex.BeginningsCodexGrant
   - path_grants <- codex.PathCodexGrant
   - distinction_grants <- codex.DistinctionCodexGrant
   - tradition_grants <- codex.TraditionCodexGrant
+  - clues <- clues.Clue
   - consequence_effects <- checks.ConsequenceEffect
   - mantle_level_gates <- items.MantleLevelDefinition
 
@@ -942,17 +1001,6 @@
   - roster_entry -> roster.RosterEntry [FK]
   - entry -> codex.CodexEntry [FK]
   - learned_from -> roster.RosterTenure [FK] (nullable)
-
-### CodexClue
-**Foreign Keys:**
-  - entry -> codex.CodexEntry [FK]
-**Pointed to by:**
-  - character_knowledge <- codex.CharacterClueKnowledge
-
-### CharacterClueKnowledge
-**Foreign Keys:**
-  - roster_entry -> roster.RosterEntry [FK]
-  - clue -> codex.CodexClue [FK]
 
 ### CodexTeachingOffer
 **Foreign Keys:**
@@ -1163,7 +1211,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x767432dc5400>, default_factory=<dataclasses._MISSING_TYPE object at 0x767432dc5400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x767432dc5400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x758839f3d550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1433,8 +1481,10 @@
   - corruption_twist_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
   - character_resonances <- magic.CharacterResonance
+  - dramatic_moment_types <- magic.DramaticMomentType
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
+  - entry_flourish_records <- magic.EntryFlourishRecord
   - resonancegrant_set <- magic.ResonanceGrant
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
@@ -1627,6 +1677,21 @@
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
 
+### DramaticMomentType
+**Foreign Keys:**
+  - resonance -> magic.Resonance [FK]
+**Pointed to by:**
+  - tags <- magic.DramaticMomentTag
+
+### DramaticMomentTag
+**Foreign Keys:**
+  - moment_type -> magic.DramaticMomentType [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - tagged_by -> accounts.AccountDB [FK]
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
 ### PoseEndorsement
 **Foreign Keys:**
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
@@ -1655,6 +1720,14 @@
   - persona_snapshot -> scenes.Persona [FK] (nullable)
   - presentation -> items.FashionPresentation [FK]
 
+### EntryFlourishRecord
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
 ### ResonanceGainConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
@@ -1670,6 +1743,8 @@
   - outfit_item_facet -> items.ItemFacet [FK] (nullable)
   - source_sanctum_details -> magic.SanctumDetails [FK] (nullable)
   - source_project -> projects.Project [FK] (nullable)
+  - source_entry_flourish -> magic.EntryFlourishRecord [FK] (nullable)
+  - source_dramatic_moment -> magic.DramaticMomentTag [FK] (nullable)
 
 ### BeginningsRitualGrant
 **Foreign Keys:**
@@ -1726,11 +1801,17 @@
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
   - facet_assignments <- magic.MotifResonanceAssociation
+  - style_assignments <- magic.MotifResonanceStyle
 
 ### MotifResonanceAssociation
 **Foreign Keys:**
   - motif_resonance -> magic.MotifResonance [FK]
   - facet -> magic.Facet [FK]
+
+### MotifResonanceStyle
+**Foreign Keys:**
+  - motif_resonance -> magic.MotifResonance [FK]
+  - style -> items.Style [FK]
 
 ### LevelPowerConfig
 
@@ -1950,7 +2031,7 @@
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -2161,6 +2242,8 @@
   - consequence_pool -> actions.ConsequencePool [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 
+### AestheticAxisConfig
+
 ### CharacterEngagement
 **Foreign Keys:**
   - character -> objects.ObjectDB [OneToOne]
@@ -2176,6 +2259,7 @@
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' — Delete the character's engagement iff it matches type AND source.`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget') -> 'int' — Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' — Perception-relative outfit bonus vs. a society's current fashion (#513).`
+- `get_aesthetic_config() -> 'AestheticAxisConfig' — Lazy-create and return the singleton aesthetic-axis config (pk=1).`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
@@ -2184,9 +2268,11 @@
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
+- `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the coherence bonus from worn styles bound to the character's Motif (Spec D §5.3).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 wires authored values.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+- `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
 
 ## world.missions
@@ -2199,6 +2285,7 @@
 **Foreign Keys:**
   - created_in_era -> stories.Era [FK] (nullable)
 **Pointed to by:**
+  - clues <- clues.Clue
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
   - givers <- missions.MissionGiver
@@ -2256,6 +2343,7 @@
   - source_beat -> stories.Beat [FK] (nullable)
   - source_offer -> npc_services.NPCServiceOffer [FK] (nullable)
   - accepted_as_persona -> scenes.Persona [FK] (nullable)
+  - rescue_target -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - participants <- missions.MissionParticipant
   - snapshots <- missions.MissionNodeSnapshot
@@ -2426,7 +2514,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x767432dc5400>, default_factory=<dataclasses._MISSING_TYPE object at 0x767432dc5400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x767432dc5400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x758839f3d550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -2642,6 +2730,7 @@
 
 ### Project
 **Foreign Keys:**
+  - research_details -> clues.ResearchProjectDetails [OneToOne] (nullable)
   - resulting_building -> buildings.Building [OneToOne] (nullable)
   - building_construction_details -> buildings.BuildingConstructionDetails [OneToOne] (nullable)
   - resulting_building_project_instance -> buildings.BuildingProjectInstance [OneToOne] (nullable)
@@ -2835,7 +2924,7 @@
   - aggregatebeatcontribution_set <- stories.AggregateBeatContribution
   - beatcompletion_set <- stories.BeatCompletion
   - codex_knowledge <- codex.CharacterCodexKnowledge
-  - clue_knowledge <- codex.CharacterClueKnowledge
+  - clues_held <- clues.CharacterClue
   - invites <- gm.GMRosterInvite
 
 ### TenureDisplaySettings
@@ -2859,6 +2948,7 @@
 ### RosterTenure
 **Foreign Keys:**
   - display_settings -> roster.TenureDisplaySettings [OneToOne] (nullable)
+  - social_consent_preference -> consent.SocialConsentPreference [OneToOne] (nullable)
   - player_data -> evennia_extensions.PlayerData [FK]
   - roster_entry -> roster.RosterEntry [FK]
   - approved_by -> evennia_extensions.PlayerData [FK] (nullable)
@@ -2873,6 +2963,8 @@
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
+  - social_consent_whitelist_owned <- consent.SocialConsentWhitelist
+  - social_consent_whitelist_allowed <- consent.SocialConsentWhitelist
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
@@ -2890,7 +2982,9 @@
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - dramatic_moment_tags <- magic.DramaticMomentTag
   - entry_endorsements <- magic.SceneEntryEndorsement
+  - entry_flourish_records <- magic.EntryFlourishRecord
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
@@ -2948,6 +3042,9 @@
   - window_reactions <- scenes.WindowReaction
   - table_bulletin_posts <- stories.TableBulletinPost
   - table_bulletin_replies <- stories.TableBulletinReply
+  - trait_descriptors <- forms.PersonaTraitDescriptor
+  - appearance_changes <- forms.AppearanceChangeLog
+  - appearance_changes_made <- forms.AppearanceChangeLog
   - organization_memberships <- societies.OrganizationMembership
   - society_reputations <- societies.SocietyReputation
   - organization_reputations <- societies.OrganizationReputation
@@ -3175,13 +3272,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x76742ed0b2e0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7588360d7990>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x76742ed0b2e0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7588360d7990>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -3344,6 +3441,7 @@
 
 ### PhilosophicalArchetype
 **Pointed to by:**
+  - dramatic_moment_types <- magic.DramaticMomentType
   - legend_entries <- societies.LegendEntry
   - mission_awards <- missions.MissionRenownAward
 

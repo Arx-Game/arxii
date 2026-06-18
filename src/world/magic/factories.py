@@ -1470,6 +1470,24 @@ class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     granted_amount = 4
 
 
+class StylePresentationEndorsementFactory(factory.django.DjangoModelFactory):
+    """Factory for StylePresentationEndorsement (#1152).
+
+    Use this for model-layer tests. For service-layer tests (which validate
+    motif-alignment and awareness gates), drive ``create_style_presentation_endorsement``
+    directly.
+    """
+
+    class Meta:
+        model = "magic.StylePresentationEndorsement"
+
+    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    scene = factory.SubFactory("world.scenes.factories.SceneFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    granted_amount = 4
+
+
 class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "magic.PresentationEndorsement"

@@ -2399,6 +2399,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/opponent-defaults/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Preview the scaling formula output for a given tier (GM action).
+     *
+     *     Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+     *     and ``stakes_message`` so the GM can see both the stat budget and
+     *     whether the stakes gate would block a real add_opponent call.
+     *
+     *     Query params:
+     *         tier: An ``OpponentTier`` value (required).
+     *
+     *     Returns:
+     *         200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+     *         for the stakes gate — preview must explain the gate, not block).
+     *         400 when ``tier`` is missing or not a valid ``OpponentTier``.
+     */
+    get: operations['combat_opponent_defaults_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/pause/': {
     parameters: {
       query?: never;
@@ -5437,6 +5468,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/item-styles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Roll the crafting check and (on success) attach the style. */
+    post: operations['items_item_styles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/outfit-slots/': {
     parameters: {
       query?: never;
@@ -7323,6 +7371,58 @@ export interface paths {
     put?: never;
     /** @description Validate offer + dispatch resolve; return result payload. */
     post: operations['magic_soul_tether_stage_advance_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/style-presentation-endorsements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Create + retrieve — style-presentation endorsements are immutable (#1152).
+     *
+     *     Grant fires immediately at creation time — no weekly settlement step.
+     *     Retrieve is exposed so the detail URL is registered, which means DELETE
+     *     returns 405 (Method Not Allowed) rather than 404 (not found).
+     *
+     *     POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+     *     GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+     */
+    post: operations['magic_style_presentation_endorsements_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/style-presentation-endorsements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Create + retrieve — style-presentation endorsements are immutable (#1152).
+     *
+     *     Grant fires immediately at creation time — no weekly settlement step.
+     *     Retrieve is exposed so the detail URL is registered, which means DELETE
+     *     returns 405 (Method Not Allowed) rather than 404 (not found).
+     *
+     *     POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+     *     GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+     */
+    get: operations['magic_style_presentation_endorsements_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -15934,6 +16034,26 @@ export interface components {
       /** @description Whether this item is currently open. */
       readonly is_open: boolean;
     };
+    /** @description Read serializer for ItemStyle (GET list/detail). */
+    ItemStyleRead: {
+      readonly id: number;
+      readonly item_instance: number;
+      readonly style: number;
+      readonly applied_by_account: number | null;
+      readonly attachment_quality_tier: number;
+      /** Format: date-time */
+      readonly applied_at: string;
+    };
+    /**
+     * @description Write serializer for ItemStyle (POST create) — input validation only.
+     *
+     *     The viewset drives the crafting service directly; this serializer parses
+     *     and validates the ``item_instance`` and ``style`` foreign keys.
+     */
+    ItemStyleWriteRequest: {
+      item_instance: number;
+      style: number;
+    };
     /** @description Detail serializer for ItemTemplate with slots and interactions. */
     ItemTemplateDetail: {
       readonly id: number;
@@ -17078,6 +17198,26 @@ export interface components {
        */
       readonly thumbnail_media_url: string | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+    };
+    /**
+     * @description Read-only response serializer for the opponent-defaults preview endpoint.
+     *
+     *     Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+     *     stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+     *     drf-spectacular emits the correct component instead of inferring the
+     *     viewset's default ``EncounterDetail`` schema.
+     */
+    OpponentDefaultsResponse: {
+      max_health: number;
+      soak_value: number;
+      probing_threshold: number | null;
+      swarm_count: number | null;
+      body_toughness: number | null;
+      bodies_per_attack: number | null;
+      barrier_strength: number | null;
+      phases: components['schemas']['PhaseSpec'][];
+      stakes_ok: boolean;
+      stakes_message: string;
     };
     /**
      * @description Read serializer for combat opponents.
@@ -19992,6 +20132,14 @@ export interface components {
      * @enum {string}
      */
     PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
+    /** @description Read-only serializer for a single PhaseSpec dataclass (boss phase budget). */
+    PhaseSpec: {
+      phase_number: number;
+      /** Format: double */
+      health_trigger_percentage: number | null;
+      soak_value: number;
+      probing_threshold: number | null;
+    };
     Place: {
       readonly id: number;
       name: string;
@@ -20747,6 +20895,7 @@ export interface components {
        *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
        *     * `ENTRY_FLOURISH` - Entry flourishing
        *     * `DRAMATIC_MOMENT` - Dramatic moment
+       *     * `STYLE_PRESENTATION` - Style presentation
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -21525,6 +21674,7 @@ export interface components {
      *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
      *     * `ENTRY_FLOURISH` - Entry flourishing
      *     * `DRAMATIC_MOMENT` - Dramatic moment
+     *     * `STYLE_PRESENTATION` - Style presentation
      * @enum {string}
      */
     SourceEnum:
@@ -21538,7 +21688,8 @@ export interface components {
       | 'PROJECT_CONTRIBUTION'
       | 'SANCTUM_DISSOLUTION_RECOVERY'
       | 'ENTRY_FLOURISH'
-      | 'DRAMATIC_MOMENT';
+      | 'DRAMATIC_MOMENT'
+      | 'STYLE_PRESENTATION';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -21948,6 +22099,57 @@ export interface components {
     StrainAvailability: {
       readonly cap: number;
       readonly default: number;
+    };
+    /** @description Response for a style-craft attempt: rolled outcome + resolved tier + the row. */
+    StyleCraftResult: {
+      attached: boolean;
+      readonly outcome_name: string | null;
+      readonly success_level: number | null;
+      quality_tier: components['schemas']['QualityTier'] | null;
+      item_style: components['schemas']['ItemStyleRead'] | null;
+    };
+    /**
+     * @description Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+     *
+     *     Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+     *     request body. The ``endorser_sheet`` is resolved from the requesting account
+     *     in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+     *     injected via ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+     *     reversal deferred to ResonanceGrantReversal).
+     */
+    StylePresentationEndorsement: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly endorser_sheet: number;
+      /** @description The character this sheet belongs to */
+      endorsee_sheet: number;
+      scene: number;
+      resonance: number;
+      /** @description Endorsee's persona at endorsement time — masquerade audit. */
+      readonly persona_snapshot: number | null;
+      /** @description Captured from config at creation. */
+      readonly granted_amount: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+     *
+     *     Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+     *     request body. The ``endorser_sheet`` is resolved from the requesting account
+     *     in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+     *     injected via ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+     *     reversal deferred to ResonanceGrantReversal).
+     */
+    StylePresentationEndorsementRequest: {
+      /** @description The character this sheet belongs to */
+      endorsee_sheet: number;
+      scene: number;
+      resonance: number;
     };
     /**
      * @description * `swords` - Swords
@@ -25932,6 +26134,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_opponent_defaults_retrieve: {
+    parameters: {
+      query: {
+        tier: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OpponentDefaultsResponse'];
         };
       };
     };
@@ -30094,6 +30320,29 @@ export interface operations {
       };
     };
   };
+  items_item_styles_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ItemStyleWriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StyleCraftResult'];
+        };
+      };
+    };
+  };
   items_outfit_slots_list: {
     parameters: {
       query: {
@@ -31663,6 +31912,7 @@ export interface operations {
          *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
          *     * `ENTRY_FLOURISH` - Entry flourishing
          *     * `DRAMATIC_MOMENT` - Dramatic moment
+         *     * `STYLE_PRESENTATION` - Style presentation
          */
         source?:
           | 'DRAMATIC_MOMENT'
@@ -31675,7 +31925,8 @@ export interface operations {
           | 'SANCTUM_OWNER_BONUS'
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
-          | 'STAFF_GRANT';
+          | 'STAFF_GRANT'
+          | 'STYLE_PRESENTATION';
       };
       header?: never;
       path?: never;
@@ -32467,6 +32718,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_style_presentation_endorsements_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StylePresentationEndorsementRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StylePresentationEndorsement'];
+        };
+      };
+    };
+  };
+  magic_style_presentation_endorsements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this style presentation endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StylePresentationEndorsement'];
+        };
       };
     };
   };

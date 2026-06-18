@@ -20,6 +20,7 @@ from world.items.models import (
     InteractionType,
     ItemFacet,
     ItemInstance,
+    ItemStyle,
     ItemTemplate,
     Outfit,
     OutfitSlot,
@@ -27,7 +28,7 @@ from world.items.models import (
     TemplateInteraction,
     TemplateSlot,
 )
-from world.items.types import FacetCraftResult
+from world.items.types import FacetCraftResult, StyleCraftResult
 from world.magic.models.endorsement import PresentationEndorsement
 
 
@@ -153,6 +154,55 @@ class FacetCraftResultSerializer(serializers.Serializer):
         return obj.outcome.name if obj.outcome else None
 
     def get_success_level(self, obj: FacetCraftResult) -> int | None:
+        return obj.outcome.success_level if obj.outcome else None
+
+
+class ItemStyleReadSerializer(serializers.ModelSerializer):
+    """Read serializer for ItemStyle (GET list/detail)."""
+
+    class Meta:
+        model = ItemStyle
+        fields = [
+            "id",
+            "item_instance",
+            "style",
+            "applied_by_account",
+            "attachment_quality_tier",
+            "applied_at",
+        ]
+        read_only_fields = fields
+
+
+class ItemStyleWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for ItemStyle (POST create) — input validation only.
+
+    The viewset drives the crafting service directly; this serializer parses
+    and validates the ``item_instance`` and ``style`` foreign keys.
+    """
+
+    class Meta:
+        model = ItemStyle
+        fields = ["item_instance", "style"]
+        # DRF auto-injects a UniqueTogetherValidator from
+        # UniqueConstraint(item_instance, style); suppress it so the
+        # StyleAlreadyAttached exception in the service raises a user-message
+        # error instead of DRF's generic "must make a unique set" message.
+        validators: list = []
+
+
+class StyleCraftResultSerializer(serializers.Serializer):
+    """Response for a style-craft attempt: rolled outcome + resolved tier + the row."""
+
+    attached = serializers.BooleanField()
+    outcome_name = serializers.SerializerMethodField()
+    success_level = serializers.SerializerMethodField()
+    quality_tier = QualityTierSerializer(allow_null=True)
+    item_style = ItemStyleReadSerializer(allow_null=True)
+
+    def get_outcome_name(self, obj: StyleCraftResult) -> str | None:
+        return obj.outcome.name if obj.outcome else None
+
+    def get_success_level(self, obj: StyleCraftResult) -> int | None:
         return obj.outcome.success_level if obj.outcome else None
 
 
