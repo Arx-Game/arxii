@@ -67,9 +67,11 @@ class StyleFacetCoexistenceTests(TestCase):
         # Shared quality tier — unit multipliers (1.0 × 1.0).
         cls.quality = QualityTierFactory(name="CoexistCommon", stat_multiplier="1.00")
 
-        # Resonance R + ModifierTarget linked to it.
+        # Resonance R + ModifierTarget linked to it. The category MUST be named
+        # "resonance" (an EQUIPMENT_RELEVANT_CATEGORIES member) or equipment_walk_total
+        # gates the whole walk to 0; ModifierCategoryFactory get-or-creates by name.
         cls.resonance = ResonanceFactory()
-        cls.resonance_category = ModifierCategoryFactory(name="resonance_coexist")
+        cls.resonance_category = ModifierCategoryFactory(name="resonance")
         cls.target_r = ModifierTargetFactory(
             name="CoexistTargetR",
             category=cls.resonance_category,
