@@ -10,7 +10,12 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
-from actions.definitions.duels import ChallengeAction
+from actions.definitions.duels import (
+    AcceptChallengeAction,
+    ChallengeAction,
+    DeclineChallengeAction,
+    WithdrawChallengeAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -84,6 +89,9 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     PassRoundAction(),
     ForceResolveRoundAction(),
     ChallengeAction(),
+    AcceptChallengeAction(),
+    DeclineChallengeAction(),
+    WithdrawChallengeAction(),
     intimidate,
     persuade,
     deceive,

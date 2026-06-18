@@ -1,14 +1,22 @@
-"""Tests for the challenge action (Task 10).
+"""Tests for the challenge / accept / decline / withdraw actions (Tasks 10, 11).
 
 Tests are built using setUp (not setUpTestData) because CharacterFactory creates
 Evennia ObjectDB instances (DbHolder — not deepcopyable, which breaks setUpTestData).
 
-Scenarios covered:
+Scenarios covered (Task 10 — challenge):
   (a) Consenting co-located target → PENDING DuelChallenge created, success result.
   (b) Target whose SocialConsentPreference blocks all social actions → blocked, no challenge.
   (c) Self-challenge → rejected, no challenge.
   (d) Target in a different room → rejected, no challenge.
   (e) Actor has no CharacterSheet → rejected, no challenge.
+
+Scenarios covered (Task 11 — accept / decline / withdraw):
+  (f) Challenged PC accepts → ACCEPTED challenge, CombatEncounter created + linked.
+  (g) Challenged PC declines → DECLINED challenge, no encounter.
+  (h) Challenger withdraws → WITHDRAWN challenge, no encounter.
+  (i) Only the challenged PC may accept/decline (challenger is rejected).
+  (j) Only the challenger may withdraw (challenged is rejected).
+  (k) Non-PENDING challenge cannot be accepted/declined/withdrawn.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ import django.test
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import DuelChallengeStatus
+from world.combat.factories import DuelChallengeFactory
 from world.combat.models import DuelChallenge
 from world.consent.factories import SocialConsentPreferenceFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -209,3 +218,191 @@ class ChallengeActionNoActiveTenureTests(django.test.TestCase):
             ).exists(),
             "Expected a PENDING DuelChallenge to be created",
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 11: accept / decline / withdraw
+# ---------------------------------------------------------------------------
+
+
+class AcceptChallengeActionTests(django.test.TestCase):
+    """accept action: challenged PC accepts → ACCEPTED challenge + CombatEncounter."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("AcceptArena")
+        self.challenger, self.challenger_sheet = _make_pc("Challenger", self.room)
+        self.challenged, self.challenged_sheet = _make_pc("Challenged", self.room)
+        self.challenge = DuelChallengeFactory(
+            challenger_sheet=self.challenger_sheet,
+            challenged_sheet=self.challenged_sheet,
+            room=self.room,
+        )
+
+    def test_accept_sets_status_accepted(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("accept").run(self.challenged)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.ACCEPTED)
+
+    def test_accept_sets_resolved_at(self) -> None:
+        from actions.registry import get_action
+
+        get_action("accept").run(self.challenged)
+
+        self.challenge.refresh_from_db()
+        self.assertIsNotNone(self.challenge.resolved_at)
+
+    def test_accept_creates_and_links_encounter(self) -> None:
+        from actions.registry import get_action
+        from world.combat.constants import EncounterType
+
+        result = get_action("accept").run(self.challenged)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.challenge.refresh_from_db()
+        self.assertIsNotNone(self.challenge.resulting_encounter_id)
+        enc = self.challenge.resulting_encounter
+        self.assertEqual(enc.encounter_type, EncounterType.DUEL)
+        self.assertIn("encounter_id", result.data)
+
+    def test_only_challenged_may_accept(self) -> None:
+        """The challenger cannot accept their own challenge."""
+        from actions.registry import get_action
+
+        result = get_action("accept").run(self.challenger)
+
+        self.assertFalse(result.success)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.PENDING)
+
+    def test_non_pending_challenge_cannot_be_accepted(self) -> None:
+        """Accepting an already-DECLINED challenge fails."""
+        from actions.registry import get_action
+
+        self.challenge.status = DuelChallengeStatus.DECLINED
+        self.challenge.save(update_fields=["status"])
+
+        result = get_action("accept").run(self.challenged)
+
+        self.assertFalse(result.success)
+
+
+class DeclineChallengeActionTests(django.test.TestCase):
+    """decline action: challenged PC declines → DECLINED challenge, no encounter."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("DeclineArena")
+        self.challenger, self.challenger_sheet = _make_pc("Decliner_C", self.room)
+        self.challenged, self.challenged_sheet = _make_pc("Decliner_D", self.room)
+        self.challenge = DuelChallengeFactory(
+            challenger_sheet=self.challenger_sheet,
+            challenged_sheet=self.challenged_sheet,
+            room=self.room,
+        )
+
+    def test_decline_sets_status_declined(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("decline").run(self.challenged)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.DECLINED)
+
+    def test_decline_sets_resolved_at(self) -> None:
+        from actions.registry import get_action
+
+        get_action("decline").run(self.challenged)
+
+        self.challenge.refresh_from_db()
+        self.assertIsNotNone(self.challenge.resolved_at)
+
+    def test_decline_creates_no_encounter(self) -> None:
+        from actions.registry import get_action
+
+        get_action("decline").run(self.challenged)
+
+        self.challenge.refresh_from_db()
+        self.assertIsNone(self.challenge.resulting_encounter_id)
+
+    def test_only_challenged_may_decline(self) -> None:
+        """The challenger cannot decline their own challenge."""
+        from actions.registry import get_action
+
+        result = get_action("decline").run(self.challenger)
+
+        self.assertFalse(result.success)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.PENDING)
+
+    def test_non_pending_challenge_cannot_be_declined(self) -> None:
+        from actions.registry import get_action
+
+        self.challenge.status = DuelChallengeStatus.ACCEPTED
+        self.challenge.save(update_fields=["status"])
+
+        result = get_action("decline").run(self.challenged)
+
+        self.assertFalse(result.success)
+
+
+class WithdrawChallengeActionTests(django.test.TestCase):
+    """withdraw action: challenger rescinds → WITHDRAWN challenge, no encounter."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("WithdrawArena")
+        self.challenger, self.challenger_sheet = _make_pc("Withdrawer_C", self.room)
+        self.challenged, self.challenged_sheet = _make_pc("Withdrawer_D", self.room)
+        self.challenge = DuelChallengeFactory(
+            challenger_sheet=self.challenger_sheet,
+            challenged_sheet=self.challenged_sheet,
+            room=self.room,
+        )
+
+    def test_withdraw_sets_status_withdrawn(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("withdraw").run(self.challenger)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.WITHDRAWN)
+
+    def test_withdraw_sets_resolved_at(self) -> None:
+        from actions.registry import get_action
+
+        get_action("withdraw").run(self.challenger)
+
+        self.challenge.refresh_from_db()
+        self.assertIsNotNone(self.challenge.resolved_at)
+
+    def test_withdraw_creates_no_encounter(self) -> None:
+        from actions.registry import get_action
+
+        get_action("withdraw").run(self.challenger)
+
+        self.challenge.refresh_from_db()
+        self.assertIsNone(self.challenge.resulting_encounter_id)
+
+    def test_only_challenger_may_withdraw(self) -> None:
+        """The challenged PC cannot withdraw a challenge they received."""
+        from actions.registry import get_action
+
+        result = get_action("withdraw").run(self.challenged)
+
+        self.assertFalse(result.success)
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.PENDING)
+
+    def test_non_pending_challenge_cannot_be_withdrawn(self) -> None:
+        from actions.registry import get_action
+
+        self.challenge.status = DuelChallengeStatus.DECLINED
+        self.challenge.save(update_fields=["status"])
+
+        result = get_action("withdraw").run(self.challenger)
+
+        self.assertFalse(result.success)

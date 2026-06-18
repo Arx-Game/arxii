@@ -15,9 +15,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
 from world.combat.constants import (
+    DuelChallengeStatus,
     EncounterOutcome,
     EncounterStatus,
     EncounterType,
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import DuelChallenge
 
 
 _PVP_PARTICIPANT_COUNT = 2  # two PC participants = PvP
@@ -311,3 +314,96 @@ def yield_duel(participant: CombatParticipant) -> CombatEncounter:
 
     # Lethal yield: the NPC wins; no PC duel_winner.
     return _complete_duel(encounter, winner_sheet=None, outcome=EncounterOutcome.DEFEAT)
+
+
+# ---------------------------------------------------------------------------
+# Challenge transition services (Task 11)
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def accept_challenge(challenge: DuelChallenge) -> CombatEncounter:
+    """Accept a PENDING duel challenge.
+
+    Creates a PvP duel encounter (via ``create_pvp_duel``), links it to the
+    challenge, transitions status to ACCEPTED, and stamps ``resolved_at``.
+
+    Args:
+        challenge: A DuelChallenge in PENDING status.
+
+    Returns:
+        The newly created CombatEncounter in DECLARING status.
+
+    Raises:
+        ValueError: If ``challenge.status`` is not PENDING.
+    """
+    if challenge.status != DuelChallengeStatus.PENDING:
+        msg = f"Cannot accept a challenge in status {challenge.status!r}; must be PENDING."
+        raise ValueError(msg)
+
+    encounter = create_pvp_duel(
+        challenge.challenger_sheet,
+        challenge.challenged_sheet,
+        challenge.room,
+    )
+
+    challenge.status = DuelChallengeStatus.ACCEPTED
+    challenge.resolved_at = timezone.now()
+    challenge.resulting_encounter = encounter
+    challenge.save(update_fields=["status", "resolved_at", "resulting_encounter"])
+
+    return encounter
+
+
+@transaction.atomic
+def decline_challenge(challenge: DuelChallenge) -> DuelChallenge:
+    """Decline a PENDING duel challenge.
+
+    Transitions the challenge to DECLINED and stamps ``resolved_at``.
+    No encounter is created.
+
+    Args:
+        challenge: A DuelChallenge in PENDING status.
+
+    Returns:
+        The updated DuelChallenge instance.
+
+    Raises:
+        ValueError: If ``challenge.status`` is not PENDING.
+    """
+    if challenge.status != DuelChallengeStatus.PENDING:
+        msg = f"Cannot decline a challenge in status {challenge.status!r}; must be PENDING."
+        raise ValueError(msg)
+
+    challenge.status = DuelChallengeStatus.DECLINED
+    challenge.resolved_at = timezone.now()
+    challenge.save(update_fields=["status", "resolved_at"])
+
+    return challenge
+
+
+@transaction.atomic
+def withdraw_challenge(challenge: DuelChallenge) -> DuelChallenge:
+    """Withdraw a PENDING duel challenge (challenger rescinds).
+
+    Transitions the challenge to WITHDRAWN and stamps ``resolved_at``.
+    No encounter is created.
+
+    Args:
+        challenge: A DuelChallenge in PENDING status.
+
+    Returns:
+        The updated DuelChallenge instance.
+
+    Raises:
+        ValueError: If ``challenge.status`` is not PENDING.
+    """
+    if challenge.status != DuelChallengeStatus.PENDING:
+        msg = f"Cannot withdraw a challenge in status {challenge.status!r}; must be PENDING."
+        raise ValueError(msg)
+
+    challenge.status = DuelChallengeStatus.WITHDRAWN
+    challenge.resolved_at = timezone.now()
+    challenge.save(update_fields=["status", "resolved_at"])
+
+    return challenge

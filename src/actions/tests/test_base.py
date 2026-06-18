@@ -177,6 +177,9 @@ class ActionRegistryTests(TestCase):
             "perform",
             "entrance",
             "challenge",
+            "accept",
+            "decline",
+            "withdraw",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -1,7 +1,10 @@
 """Duel actions — PC-vs-PC challenge dispatch (#568).
 
-Exposes a single ``ChallengeAction`` that issues a duel challenge to another
-character in the same room, subject to the social-consent gate.
+Exposes:
+- ``ChallengeAction``: issues a duel challenge to another character in the same room.
+- ``AcceptChallengeAction``: challenged PC accepts a PENDING challenge.
+- ``DeclineChallengeAction``: challenged PC declines a PENDING challenge.
+- ``WithdrawChallengeAction``: challenger rescinds a PENDING challenge.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import DuelChallenge
 
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
@@ -161,3 +165,182 @@ class ChallengeAction(Action):
 
 # Module-level singleton — registered in actions/registry.py
 challenge = ChallengeAction()
+
+
+def _pending_challenge_for_challenged(actor: ObjectDB) -> DuelChallenge | None:
+    """Return the PENDING DuelChallenge where *actor* is the challenged PC, or None."""
+    from world.combat.constants import DuelChallengeStatus  # noqa: PLC0415
+    from world.combat.models import DuelChallenge  # noqa: PLC0415
+
+    actor_sheet = _sheet(actor)
+    if actor_sheet is None:
+        return None
+    return DuelChallenge.objects.filter(
+        challenged_sheet=actor_sheet,
+        status=DuelChallengeStatus.PENDING,
+    ).first()
+
+
+def _pending_challenge_for_challenger(actor: ObjectDB) -> DuelChallenge | None:
+    """Return the PENDING DuelChallenge where *actor* is the challenger PC, or None."""
+    from world.combat.constants import DuelChallengeStatus  # noqa: PLC0415
+    from world.combat.models import DuelChallenge  # noqa: PLC0415
+
+    actor_sheet = _sheet(actor)
+    if actor_sheet is None:
+        return None
+    return DuelChallenge.objects.filter(
+        challenger_sheet=actor_sheet,
+        status=DuelChallengeStatus.PENDING,
+    ).first()
+
+
+@dataclass
+class AcceptChallengeAction(Action):
+    """Accept a PENDING duel challenge directed at this PC.
+
+    Only the *challenged* PC may accept.  Resolves the actor's PENDING incoming
+    challenge, creates a CombatEncounter, and returns the encounter ID.
+    """
+
+    key: str = "accept"
+    name: str = "Accept Duel"
+    icon: str = "check"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        actor_sheet = _sheet(actor)
+        if actor_sheet is None:
+            return ActionResult(
+                success=False,
+                message="You must be a real character to accept a duel challenge.",
+            )
+
+        challenge = _pending_challenge_for_challenged(actor)
+        if challenge is None:
+            return ActionResult(
+                success=False,
+                message="You have no pending duel challenge to accept.",
+            )
+
+        from world.combat.duels import accept_challenge  # noqa: PLC0415
+
+        try:
+            encounter = accept_challenge(challenge)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        return ActionResult(
+            success=True,
+            message="You accept the duel challenge.",
+            data={"challenge_id": challenge.pk, "encounter_id": encounter.pk},
+        )
+
+
+@dataclass
+class DeclineChallengeAction(Action):
+    """Decline a PENDING duel challenge directed at this PC.
+
+    Only the *challenged* PC may decline.  No encounter is created.
+    """
+
+    key: str = "decline"
+    name: str = "Decline Duel"
+    icon: str = "x"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        actor_sheet = _sheet(actor)
+        if actor_sheet is None:
+            return ActionResult(
+                success=False,
+                message="You must be a real character to decline a duel challenge.",
+            )
+
+        challenge = _pending_challenge_for_challenged(actor)
+        if challenge is None:
+            return ActionResult(
+                success=False,
+                message="You have no pending duel challenge to decline.",
+            )
+
+        from world.combat.duels import decline_challenge  # noqa: PLC0415
+
+        try:
+            decline_challenge(challenge)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        return ActionResult(
+            success=True,
+            message="You decline the duel challenge.",
+            data={"challenge_id": challenge.pk},
+        )
+
+
+@dataclass
+class WithdrawChallengeAction(Action):
+    """Withdraw a PENDING duel challenge this PC issued.
+
+    Only the *challenger* may withdraw.  No encounter is created.
+    """
+
+    key: str = "withdraw"
+    name: str = "Withdraw Challenge"
+    icon: str = "undo"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        actor_sheet = _sheet(actor)
+        if actor_sheet is None:
+            return ActionResult(
+                success=False,
+                message="You must be a real character to withdraw a duel challenge.",
+            )
+
+        challenge = _pending_challenge_for_challenger(actor)
+        if challenge is None:
+            return ActionResult(
+                success=False,
+                message="You have no pending duel challenge to withdraw.",
+            )
+
+        from world.combat.duels import withdraw_challenge  # noqa: PLC0415
+
+        try:
+            withdraw_challenge(challenge)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        return ActionResult(
+            success=True,
+            message="You withdraw your duel challenge.",
+            data={"challenge_id": challenge.pk},
+        )
+
+
+# Module-level singletons — registered in actions/registry.py
+accept = AcceptChallengeAction()
+decline = DeclineChallengeAction()
+withdraw = WithdrawChallengeAction()
