@@ -2809,3 +2809,65 @@ class FuryConfigFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("pk",)
 
     pk = 1
+
+
+# =============================================================================
+# Berserk condition factory (Task 7 — #567)
+# =============================================================================
+
+# Canonical name for the uncontrolled-rage condition applied by the Fury lever.
+BERSERK_CONDITION_NAME = "Berserk"
+
+
+class _BerserkConditionTemplateFactory:
+    """Callable helper that seeds the Berserk ConditionTemplate per #567 §Task 7.
+
+    Not a DjangoModelFactory — this is a composition helper. Callers invoke
+    ``BerserkConditionTemplateFactory()`` to get the seeded ConditionTemplate.
+
+    The template:
+      - name="Berserk", DurationType.ROUNDS, default_duration_value=3
+        (mirrors FuryConfig.default_berserk_duration_rounds)
+      - has_progression=True with one ConditionStage (Uncontrolled Rage,
+        stage_order=1, rounds_to_next=None → final/only stage)
+      - is_stackable=False, can_be_dispelled=False (a condition the caster
+        cannot readily shake; must ride out the fury)
+
+    Idempotent: uses django_get_or_create on name + get_or_create on the stage.
+    """
+
+    def __call__(self):
+        from world.conditions.constants import DurationType
+        from world.conditions.models import ConditionStage
+
+        template = ConditionTemplateFactory(
+            name=BERSERK_CONDITION_NAME,
+            description=(
+                "The caster has lost control of their fury. They act on primal rage, "
+                "unable to distinguish friend from foe."
+            ),
+            default_duration_type=DurationType.ROUNDS,
+            default_duration_value=3,
+            has_progression=True,
+            is_stackable=False,
+            can_be_dispelled=False,
+        )
+
+        ConditionStage.objects.get_or_create(
+            condition=template,
+            stage_order=1,
+            defaults={
+                "name": "Uncontrolled Rage",
+                "description": (
+                    "The caster is consumed by uncontrolled rage, lashing out at any "
+                    "target within reach."
+                ),
+                "rounds_to_next": None,  # final (only) stage
+                "severity_multiplier": "1.00",
+            },
+        )
+
+        return template
+
+
+BerserkConditionTemplateFactory = _BerserkConditionTemplateFactory()
