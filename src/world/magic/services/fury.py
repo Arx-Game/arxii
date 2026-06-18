@@ -68,25 +68,22 @@ def resolve_fury(*, character, tier, anchor, check_result) -> FuryResolution:
     """Assemble a FuryResolution from the given parameters.
 
     Args:
-        character: The ObjectDB character invoking fury (may be None in tests).
+        character: The ObjectDB character invoking fury.
         tier: The FuryTier the player declared.
-        anchor: The CharacterSheet fury anchor (may be None in tests).
+        anchor: The CharacterSheet fury anchor (nullable FK — None means unavailable).
         check_result: A CheckResult-like object with ``success_level`` int;
             None is treated as success_level=0.
 
-    When character and anchor are both provided, the declared tier is clamped
-    to the bond-derived provocation cap. When either is None (e.g. in unit
-    tests) the tier is used as-is without clamping.
+    The declared tier is always clamped to the bond-derived provocation cap.
+    ``provocation_cap`` returns 0 when character or anchor is None, so a null
+    anchor naturally yields FuryResolution(None, 0, 0, 0) without special-casing.
     """
-    if character is not None and anchor is not None:
-        cap = provocation_cap(character, anchor)
-        realized = clamp_tier(tier, cap) if cap else None
-        if realized is None:
-            return FuryResolution(None, 0, 0, 0)
-    else:
-        realized = tier
-        cap = 0
+    cap = provocation_cap(character, anchor)
+    realized = clamp_tier(tier, cap)
+    if realized is None:
+        return FuryResolution(None, 0, 0, 0)
     cfg = _config()
+    # Mirrors StrainConfig singleton read in world/fatigue/services.py.
     bonus = realized.intensity_bonus * (100 + cfg.bonus_scale_per_cap_point * cap) // 100
     grade = getattr(check_result, "success_level", 0)  # noqa: GETATTR_LITERAL
     berserk = 0 if grade >= realized.lucid_grade_floor else realized.berserk_severity
