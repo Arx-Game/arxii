@@ -260,6 +260,7 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
 
 class ConsentResponseSerializer(serializers.Serializer):
     decision = serializers.ChoiceField(choices=ConsentDecision.choices)
+    target_persona_id = serializers.IntegerField(required=False)
 
 
 class StepResultSerializer(serializers.Serializer):

@@ -26,6 +26,7 @@ from world.scenes.action_models import (
 from world.scenes.factories import (
     PlaceFactory,
     SceneActionRequestFactory,
+    SceneActionTargetFactory,
     SceneFactory,
 )
 from world.scenes.tests.cast_test_helpers import (
@@ -801,3 +802,138 @@ class CastableTechniquesEndpointTestCase(APITestCase):
         entry = next(t for t in response.data if t["id"] == technique.pk)
         for field in ("id", "name", "anima_cost", "tier", "intensity", "control", "hostile"):
             assert field in entry, f"Field {field!r} missing from castable-technique entry"
+
+
+class PerTargetRespondTestCase(APITestCase):
+    """Tests for per-target consent via POST /api/action-requests/{id}/respond/ (#572 Task 5)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # Initiator account + persona
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
+
+        # Primary target account + persona
+        cls.target_account = AccountFactory()
+        cls.target_character = CharacterFactory()
+        cls.target_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.target_character
+        )
+        cls.target_player_data = PlayerDataFactory(account=cls.target_account)
+        cls.target_tenure = RosterTenureFactory(
+            player_data=cls.target_player_data,
+            roster_entry=cls.target_roster_entry,
+        )
+        cls.target_identity = CharacterSheetFactory(character=cls.target_character)
+        cls.target_persona = cls.target_identity.primary_persona
+
+        # Additional target account + persona
+        cls.extra_account = AccountFactory()
+        cls.extra_character = CharacterFactory()
+        cls.extra_roster_entry = RosterEntryFactory(character_sheet__character=cls.extra_character)
+        cls.extra_player_data = PlayerDataFactory(account=cls.extra_account)
+        cls.extra_tenure = RosterTenureFactory(
+            player_data=cls.extra_player_data,
+            roster_entry=cls.extra_roster_entry,
+        )
+        cls.extra_identity = CharacterSheetFactory(character=cls.extra_character)
+        cls.extra_persona = cls.extra_identity.primary_persona
+
+        cls.scene = SceneFactory()
+
+    def _make_request_with_additional(self) -> tuple:
+        """Create a SceneActionRequest + a SceneActionTarget row for extra_persona."""
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.persona,
+            target_persona=self.target_persona,
+            action_key="persuade",
+        )
+        action_target = SceneActionTargetFactory(
+            action_request=action_request,
+            target_persona=self.extra_persona,
+        )
+        return action_request, action_target
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_resolves_that_row(self, mock_respond: MagicMock) -> None:
+        """POSTing target_persona_id with accept calls respond_to_action_target on that row."""
+        mock_respond.return_value = _make_enhanced_result("persuade")
+        action_request, action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        mock_respond.assert_called_once_with(
+            action_target=action_target, decision=ConsentDecision.ACCEPT
+        )
+        # Response carries the row's id and action_request_id
+        assert response.data["action_target_id"] == action_target.pk
+        assert response.data["action_request_id"] == action_request.pk
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_primary_request_untouched(self, mock_respond: MagicMock) -> None:
+        """Responding to an additional target row leaves the primary request PENDING."""
+        mock_respond.return_value = None
+        action_request, _action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        self.client.post(
+            url,
+            {"decision": ConsentDecision.DENY, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        action_request.refresh_from_db()
+        assert action_request.status == ActionRequestStatus.PENDING
+
+    def test_unknown_target_persona_id_returns_404(self) -> None:
+        """A target_persona_id with no matching SceneActionTarget row → 404."""
+        action_request, _ = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": 999999},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_wrong_account_cannot_respond_for_another_persona_returns_403(self) -> None:
+        """Requester who does not control that persona → 403."""
+        action_request, _ = self._make_request_with_additional()
+        # target_account controls target_persona, NOT extra_persona
+        self.client.force_authenticate(user=self.target_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @patch("world.scenes.action_views.respond_to_action_request")
+    def test_absent_target_persona_id_uses_primary_path(self, mock_respond: MagicMock) -> None:
+        """Omitting target_persona_id falls through to the original primary-target branch."""
+        mock_respond.return_value = _make_enhanced_result("persuade")
+        action_request, _ = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.target_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        mock_respond.assert_called_once()
