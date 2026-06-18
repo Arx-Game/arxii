@@ -27,6 +27,7 @@ from world.scenes.factories import (
     SceneActionTargetFactory,
     SceneFactory,
 )
+from world.scenes.models import InteractionTargetPersona
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -509,6 +510,51 @@ class TestRespondToActionTarget(TestCase):
         self.assertIsNotNone(row.result_interaction)
         self.assertEqual(other.status, ActionRequestStatus.PENDING)
         self.assertIsNotNone(result)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_interaction_references_additional_target_persona(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """The result_interaction for an additional target names THAT target, not the primary.
+
+        Regression guard: _create_result_interaction previously always read
+        action_request.target_persona (the primary), so every additional-target
+        resolution silently created an interaction naming the WRONG persona.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        # request.target_persona is the PRIMARY target (set by the factory).
+        primary_persona = request.target_persona
+        # row.target_persona is the ADDITIONAL target — a distinct persona.
+        row = SceneActionTargetFactory(action_request=request)
+        additional_persona = row.target_persona
+        # Sanity: they must actually be different personas.
+        self.assertNotEqual(primary_persona.pk, additional_persona.pk)
+
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+        row.refresh_from_db()
+
+        self.assertIsNotNone(row.result_interaction)
+        interaction = row.result_interaction
+
+        # The InteractionTargetPersona through-table must point at the ADDITIONAL
+        # target, NOT the primary.
+        target_pks = list(
+            InteractionTargetPersona.objects.filter(interaction=interaction).values_list(
+                "persona_id", flat=True
+            )
+        )
+        self.assertIn(
+            additional_persona.pk,
+            target_pks,
+            "Additional-target persona must appear in InteractionTargetPersona",
+        )
+        self.assertNotIn(
+            primary_persona.pk,
+            target_pks,
+            "Primary persona must NOT appear in the additional-target's interaction",
+        )
 
     def test_respond_to_action_target_deny_marks_denied_no_interaction(self) -> None:
         """Denying an action target sets DENIED status and leaves result_interaction null."""

@@ -344,6 +344,7 @@ def _resolve_action_against_persona(
         action_request=action_request,
         result=result,
         strain_committed=action_request.strain_commitment,
+        target_persona=target_persona,
     )
     return result, result_interaction, difficulty
 
@@ -611,6 +612,7 @@ def _create_result_interaction(
     action_request: SceneActionRequest,
     result: EnhancedSceneActionResult,
     strain_committed: int = 0,
+    target_persona: Persona | None = None,
 ) -> Interaction | None:
     """Create an interaction recording the result of a scene action.
 
@@ -619,6 +621,10 @@ def _create_result_interaction(
         result: The resolution outcome (including optional technique result).
         strain_committed: Strain the initiator actually committed; recorded on
             the resulting Interaction for canonical audit.
+        target_persona: Override the target persona for the interaction. When
+            None, falls back to ``action_request.target_persona`` (the primary
+            target). Pass explicitly when resolving an additional target so the
+            interaction names the correct persona rather than the primary one.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -626,9 +632,9 @@ def _create_result_interaction(
     status_word = "Success" if success else "Failure"
     outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
-    target_persona = action_request.target_persona
+    effective_target = target_persona or action_request.target_persona
 
-    if target_persona is None:
+    if effective_target is None:
         # Area action (e.g. a telling to the room): no target, optional pose
         # text echoed above the outcome.
         content = _area_outcome_content(
@@ -642,12 +648,12 @@ def _create_result_interaction(
         content = _targeted_outcome_content(
             action_request=action_request,
             result=result,
-            target_name=target_persona.name,
+            target_name=effective_target.name,
             status_word=status_word,
             outcome_name=outcome_name,
         )
-        receivers = [target_persona]
-        target_personas = [target_persona]
+        receivers = [effective_target]
+        target_personas = [effective_target]
 
     mode, place, interaction_receivers = _route_delivery(action_request, receivers)
 
