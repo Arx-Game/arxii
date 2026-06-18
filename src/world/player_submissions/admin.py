@@ -2,7 +2,22 @@
 
 from django.contrib import admin
 
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
+
+
+@admin.register(SystemErrorReport)
+class SystemErrorReportAdmin(admin.ModelAdmin):
+    """Auto-captured runtime errors (#1164) — the staff queue's system-error lane."""
+
+    list_display = ["exception_type", "label", "occurrence_count", "last_seen", "status"]
+    list_filter = ["status", "exception_type", "last_seen"]
+    search_fields = ["label", "exception_type", "message", "traceback"]
+    readonly_fields = ["signature", "traceback", "first_seen", "last_seen", "occurrence_count"]
 
 
 @admin.register(PlayerFeedback)

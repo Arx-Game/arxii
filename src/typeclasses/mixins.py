@@ -1,5 +1,4 @@
 import contextlib
-import logging
 from typing import TYPE_CHECKING, Self, Union
 
 from django.utils.functional import cached_property
@@ -10,8 +9,6 @@ from flows.trigger_handler import TriggerHandler
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_GENDER = "neutral"
 
@@ -135,18 +132,19 @@ class ObjectParent:
             location=location,
         )
 
-        # Trigger-based mission dispatch (#729): an ENVIRONMENTAL_DETAIL giver
-        # bound to this object may hand the examiner a mission. The cheap
-        # giver lookup short-circuits for ordinary objects. Best-effort — an
-        # optional mission hook must never break a look.
-        try:
-            from world.missions.services.trigger_dispatch import (
-                maybe_dispatch_on_examine,
-            )
+        # Mission ENVIRONMENTAL_DETAIL dispatch (#729) on examine. run_safely (#1164):
+        # a failure is captured + the examiner told, never breaking the look. The cheap
+        # giver lookup short-circuits ordinary objects.
+        from world.missions.services.trigger_dispatch import (
+            maybe_dispatch_on_examine,
+        )
+        from world.player_submissions.services import run_safely
 
-            maybe_dispatch_on_examine(observer, self)
-        except Exception:
-            logger.exception("Mission dispatch failed on examine")
+        run_safely(
+            "mission_dispatch_on_examine",
+            lambda: maybe_dispatch_on_examine(observer, self),
+            actor=observer,
+        )
         return True
 
     def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:

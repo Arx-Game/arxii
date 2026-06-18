@@ -180,3 +180,52 @@ class PlayerReport(SharedMemoryModel):
                 name="player_report_reporter_not_reported",
             ),
         ]
+
+
+class SystemErrorReport(SharedMemoryModel):
+    """An auto-captured runtime error — the system filing its own report (#1164).
+
+    Best-effort hooks (and other caught failures) report here via
+    ``player_submissions.services.report_error``, so a real fault (a DB/connection error, a
+    bug) reaches staff with a traceback instead of vanishing into the logs. Deduplicated by
+    ``signature``: a recurring error is one row with an ``occurrence_count``, not spam.
+    Reviewed in the staff inbox alongside player BugReports (``SubmissionCategory.SYSTEM_ERROR``).
+    """
+
+    signature = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text="Dedup hash (exception type + originating in-app frame).",
+    )
+    label = models.CharField(
+        max_length=200,
+        help_text="Where it happened (the hook / context label).",
+    )
+    exception_type = models.CharField(max_length=200)
+    message = models.TextField(blank=True, help_text="The exception's message.")
+    traceback = models.TextField(help_text="Full formatted traceback of the first occurrence.")
+    actor_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The persona acting when first captured, if any.",
+    )
+    occurrence_count = models.PositiveIntegerField(default=1)
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_seen = models.DateTimeField(auto_now=True, db_index=True)
+    status = models.CharField(
+        max_length=20,
+        choices=SubmissionStatus.choices,
+        default=SubmissionStatus.OPEN,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-last_seen"]
+        verbose_name = "System Error Report"
+        verbose_name_plural = "System Error Reports"
+
+    def __str__(self) -> str:
+        return f"{self.exception_type} in {self.label} (x{self.occurrence_count})"

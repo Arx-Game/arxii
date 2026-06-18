@@ -23,3 +23,4 @@ class SubmissionCategory(models.TextChoices):
     PLAYER_REPORT = "player_report", "Player Report"
     CHARACTER_APPLICATION = "character_application", "Character Application"
     GM_APPLICATION = "gm_application", "GM Application"
+    SYSTEM_ERROR = "system_error", "System Error"  # auto-captured runtime errors (#1164)
