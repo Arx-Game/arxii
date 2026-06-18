@@ -289,17 +289,15 @@ def respond_to_action_request(
     return None
 
 
-def _resolve_standard_action(
+def _resolve_action_against_persona(
     action_request: SceneActionRequest,
-) -> EnhancedSceneActionResult:
-    """Resolve an enhanced or plain action request inside a transaction.
+    target_persona: Persona,
+) -> tuple[EnhancedSceneActionResult, Interaction | None]:
+    """Resolve ``action_request`` against ONE persona.
 
-    Covers the two non-cast branches of ``respond_to_action_request``:
-    - Plain action (no technique): ``start_action_resolution`` directly.
-    - Technique-enhanced action: ``_resolve_enhanced_action`` wrapping use_technique.
-
-    Sets status=RESOLVED, resolved_at, resolved_difficulty, and result_interaction
-    on the request before returning.
+    Status bookkeeping is the caller's job (request.status for the primary,
+    SceneActionTarget.status for additional targets), so this helper never
+    writes a status field.
 
     Raises:
         ValueError: If the request has no action_template set.
@@ -307,53 +305,63 @@ def _resolve_standard_action(
     difficulty = DIFFICULTY_VALUES.get(
         action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
+    action_template = action_request.action_template
+    if action_template is None:
+        msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
+        raise ValueError(msg)
 
+    character = action_request.initiator_persona.character_sheet.character
+    target_character = target_persona.character_sheet.character
+    context = ResolutionContext(character=character, target=target_character)
+
+    if action_request.technique is not None:
+        result = _resolve_enhanced_action(
+            character=character,
+            technique=action_request.technique,
+            action_template=action_template,
+            action_key=action_request.action_key,
+            difficulty=difficulty,
+            context=context,
+            strain_commitment=action_request.strain_commitment,
+        )
+    else:
+        action_resolution = start_action_resolution(
+            character=character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+        )
+        result = EnhancedSceneActionResult(
+            action_resolution=action_resolution,
+            action_key=action_request.action_key,
+        )
+
+    result_interaction = _create_result_interaction(
+        action_request=action_request,
+        result=result,
+        strain_committed=action_request.strain_commitment,
+    )
+    return result, result_interaction
+
+
+def _resolve_standard_action(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult:
+    """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
-        action_template = action_request.action_template
-        if action_template is None:
-            msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
-            raise ValueError(msg)
-
-        character = action_request.initiator_persona.character_sheet.character
-        target_character = action_request.target_persona.character_sheet.character
-        context = ResolutionContext(character=character, target=target_character)
-
-        if action_request.technique is not None:
-            result = _resolve_enhanced_action(
-                character=character,
-                technique=action_request.technique,
-                action_template=action_template,
-                action_key=action_request.action_key,
-                difficulty=difficulty,
-                context=context,
-                strain_commitment=action_request.strain_commitment,
-            )
-        else:
-            action_resolution = start_action_resolution(
-                character=character,
-                template=action_template,
-                target_difficulty=difficulty,
-                context=context,
-            )
-            result = EnhancedSceneActionResult(
-                action_resolution=action_resolution,
-                action_key=action_request.action_key,
-            )
-
+        result, result_interaction = _resolve_action_against_persona(
+            action_request, action_request.target_persona
+        )
+        difficulty = DIFFICULTY_VALUES.get(
+            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
         action_request.resolved_difficulty = difficulty
         action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
-
-        result_interaction = _create_result_interaction(
-            action_request=action_request,
-            result=result,
-            strain_committed=action_request.strain_commitment,
-        )
         if result_interaction is not None:
             action_request.result_interaction = result_interaction
             action_request.save(update_fields=["result_interaction"])
-
     return result
 
 
