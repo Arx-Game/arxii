@@ -3,7 +3,12 @@
 import django_filters
 
 from world.player_submissions.constants import SubmissionStatus
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 
 
 class PlayerFeedbackFilter(django_filters.FilterSet):
@@ -64,3 +69,26 @@ class PlayerReportFilter(django_filters.FilterSet):
     class Meta:
         model = PlayerReport
         fields = ["status", "reported_persona"]
+
+
+class SystemErrorReportFilter(django_filters.FilterSet):
+    status = django_filters.ChoiceFilter(
+        field_name="status",
+        choices=SubmissionStatus.choices,
+    )
+    exception_type = django_filters.CharFilter(
+        field_name="exception_type",
+        lookup_expr="icontains",
+    )
+    last_seen_after = django_filters.DateTimeFilter(
+        field_name="last_seen",
+        lookup_expr="gte",
+    )
+    last_seen_before = django_filters.DateTimeFilter(
+        field_name="last_seen",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = SystemErrorReport
+        fields = ["status", "exception_type"]

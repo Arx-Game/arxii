@@ -9,12 +9,19 @@ from evennia_extensions.factories import (
     RoomProfileFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.player_submissions.constants import SubmissionStatus
 from world.player_submissions.factories import (
     BugReportFactory,
     PlayerFeedbackFactory,
     PlayerReportFactory,
+    SystemErrorReportFactory,
 )
-from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.player_submissions.models import (
+    BugReport,
+    PlayerFeedback,
+    PlayerReport,
+    SystemErrorReport,
+)
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 
@@ -388,6 +395,95 @@ class BugReportPermissionTest(TestCase):
         client.force_authenticate(user=self.staff)
         response = client.get("/api/player-submissions/bug-reports/")
         self.assertEqual(response.status_code, 200)
+
+
+class SystemErrorReportViewSetTest(TestCase):
+    """Staff triage of auto-captured errors: list, inspect, status-update; no create."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="errstaff", is_staff=True)
+        cls.regular = AccountFactory(username="errregular")
+        cls.report = SystemErrorReportFactory(occurrence_count=3)
+
+    def test_staff_can_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.get("/api/player-submissions/system-errors/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_regular_user_cannot_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.get("/api/player-submissions/system-errors/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_unauthenticated_cannot_list(self) -> None:
+        client = APIClient()
+        response = client.get("/api/player-submissions/system-errors/")
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_staff_detail_exposes_traceback_and_count(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.get(
+            f"/api/player-submissions/system-errors/{self.report.pk}/",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["exception_type"], "ValueError")
+        self.assertEqual(response.data["occurrence_count"], 3)
+        self.assertIn("Traceback", response.data["traceback"])
+        # actor_persona is nullable — a captured error need not have one.
+        self.assertIsNone(response.data["actor_persona_name"])
+
+    def test_staff_can_update_status(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.patch(
+            f"/api/player-submissions/system-errors/{self.report.pk}/",
+            {"status": SubmissionStatus.REVIEWED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.status, SubmissionStatus.REVIEWED)
+
+    def test_captured_fields_are_read_only(self) -> None:
+        """A PATCH cannot rewrite the system-authored contents — only status."""
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.patch(
+            f"/api/player-submissions/system-errors/{self.report.pk}/",
+            {"exception_type": "Tampered", "occurrence_count": 999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.exception_type, "ValueError")
+        self.assertEqual(self.report.occurrence_count, 3)
+
+    def test_regular_user_cannot_update(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.patch(
+            f"/api/player-submissions/system-errors/{self.report.pk}/",
+            {"status": SubmissionStatus.REVIEWED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_no_create_action(self) -> None:
+        """The system authors these — POST is not a registered action."""
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.post(
+            "/api/player-submissions/system-errors/",
+            {"label": "x", "exception_type": "y", "traceback": "z"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(SystemErrorReport.objects.count(), 1)
 
 
 class PlayerFeedbackListQueryCountTest(TestCase):
