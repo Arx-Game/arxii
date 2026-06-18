@@ -137,6 +137,20 @@ def _make_single_action_mock() -> MagicMock:
     return mock
 
 
+def _make_self_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = SELF."""
+    mock = MagicMock()
+    mock.target_type = TargetType.SELF
+    return mock
+
+
+def _make_filtered_group_action_mock() -> MagicMock:
+    """Return a mock action object with target_type = FILTERED_GROUP."""
+    mock = MagicMock()
+    mock.target_type = TargetType.FILTERED_GROUP
+    return mock
+
+
 class MultiTargetDispatchTestCase(APITestCase):
     """Tests for multi-target dispatch via target_persona_ids (#572 Task 4)."""
 
@@ -303,6 +317,49 @@ class MultiTargetDispatchTestCase(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["action_key"] == "intimidate"
         assert response.data["status"] == ActionRequestStatus.PENDING
+
+    @patch("world.scenes.action_views.get_action")
+    def test_self_action_rejects_any_target_ids(self, mock_get_action: MagicMock) -> None:
+        """A SELF action with any target_persona_ids returns 400."""
+        mock_get_action.return_value = _make_self_action_mock()
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [self.target_persona.pk],
+            "action_key": "self_action",
+        }
+        response = self.client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona_ids" in response.data
+
+    @patch("world.scenes.action_services._auto_resolve_npc_targets")
+    @patch("world.scenes.action_views.get_action")
+    def test_filtered_group_requires_at_least_one_id(
+        self, mock_get_action: MagicMock, mock_auto_resolve: MagicMock
+    ) -> None:
+        """A FILTERED_GROUP action with no ids returns 400; with a list it succeeds."""
+        mock_get_action.return_value = _make_filtered_group_action_mock()
+
+        # No ids → 400.
+        data_empty = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [],
+            "action_key": "group_action",
+        }
+        response_empty = self.client.post(self.url, data_empty, format="json")
+        assert response_empty.status_code == status.HTTP_400_BAD_REQUEST
+        assert "target_persona_ids" in response_empty.data
+
+        # Providing ids → 201.
+        data_with_ids = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona_ids": [self.target_persona.pk, self.extra_persona.pk],
+            "action_key": "group_action",
+        }
+        response_ok = self.client.post(self.url, data_with_ids, format="json")
+        assert response_ok.status_code == status.HTTP_201_CREATED, response_ok.data
 
 
 class PlaceViewSetTestCase(APITestCase):
