@@ -1,9 +1,8 @@
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileGithubIssueDialog } from '@/staff/components/FileGithubIssueDialog';
+import { ReportDetailActions } from '@/staff/components/ReportDetailActions';
 import {
   useBugReportDetail,
   useFileBugReportIssue,
@@ -60,32 +59,17 @@ export function StaffBugReportDetailPage() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap gap-2">
-        {report.status === 'open' && (
-          <>
-            <Button
-              disabled={updateStatus.isPending}
-              onClick={() => handleStatusChange('reviewed')}
-            >
-              Mark Reviewed
-            </Button>
-            <Button
-              variant="outline"
-              disabled={updateStatus.isPending}
-              onClick={() => handleStatusChange('dismissed')}
-            >
-              Dismiss
-            </Button>
-          </>
-        )}
-        <FileGithubIssueDialog
-          issueUrl={report.github_issue_url}
-          issueNumber={report.github_issue_number}
-          draft={report.issue_draft}
-          isPending={fileIssue.isPending}
-          onSubmit={(title, body) => fileIssue.mutateAsync({ id: report.id, title, body })}
-        />
-      </div>
+      <ReportDetailActions
+        status={report.status}
+        isUpdating={updateStatus.isPending}
+        onReview={() => handleStatusChange('reviewed')}
+        onDismiss={() => handleStatusChange('dismissed')}
+        issueUrl={report.github_issue_url}
+        issueNumber={report.github_issue_number}
+        issueDraft={report.issue_draft}
+        isFiling={fileIssue.isPending}
+        onFileIssue={(title, body) => fileIssue.mutateAsync({ id: report.id, title, body })}
+      />
     </div>
   );
 }
