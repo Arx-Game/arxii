@@ -190,7 +190,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
-    def respond(self, request: Request, pk: int | None = None) -> Response:
+    def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
         """Respond to a pending action request (accept/deny).
 
         When ``target_persona_id`` is present in the payload the caller is
@@ -226,7 +226,13 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                     {"detail": "You do not control the targeted persona."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            result = respond_to_action_target(action_target=action_target, decision=decision)
+            try:
+                result = respond_to_action_target(action_target=action_target, decision=decision)
+            except ValueError:
+                return Response(
+                    {"detail": "Unable to process this action request."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             action_target.refresh_from_db()
             response_data: dict = {
                 "action_target_id": action_target.pk,

@@ -994,3 +994,18 @@ class PerTargetRespondTestCase(APITestCase):
         )
         assert response.status_code == status.HTTP_200_OK, response.data
         mock_respond.assert_called_once()
+
+    @patch("world.scenes.action_views.respond_to_action_target")
+    def test_per_target_accept_value_error_returns_400(self, mock_respond: MagicMock) -> None:
+        """A ValueError from respond_to_action_target (e.g. no action_template) returns 400."""
+        mock_respond.side_effect = ValueError("Cannot resolve action: no ActionTemplate set.")
+        action_request, _action_target = self._make_request_with_additional()
+        self.client.force_authenticate(user=self.extra_account)
+        url = reverse("sceneactionrequest-respond", kwargs={"pk": action_request.pk})
+        response = self.client.post(
+            url,
+            {"decision": ConsentDecision.ACCEPT, "target_persona_id": self.extra_persona.pk},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "Unable to process this action request."

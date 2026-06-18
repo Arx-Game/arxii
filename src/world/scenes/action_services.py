@@ -457,6 +457,9 @@ def respond_to_action_target(
                 update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
             )
             _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
+            # Resolver invocation is intentionally omitted here: no multi-target resolvers
+            # exist yet (#572). When they do, wire get_resolver(action_key)(action_request, result)
+            # in this block analogous to respond_to_action_request.
         return result
     return None
 
