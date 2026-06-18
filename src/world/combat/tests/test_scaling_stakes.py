@@ -108,8 +108,8 @@ class ValidateStakesRequirementPartyLevelGateTest(TestCase):
     def test_error_mentions_actual_level(self):
         with self.assertRaises(StakesRequirementError) as ctx:
             validate_stakes_requirement(self.encounter, self.account)
-        # user_message should mention the required level somewhere
-        self.assertTrue(ctx.exception.user_message)
+        # message should name the actual party level clause, not just be non-empty
+        self.assertIn("Party average level", ctx.exception.user_message)
 
 
 class ValidateStakesRequirementGMTrustGateTest(TestCase):

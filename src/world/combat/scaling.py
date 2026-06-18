@@ -245,7 +245,7 @@ def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountD
     Raises:
         StakesRequirementError: When the party level or GM trust gate is unmet.
     """
-    if getattr(gm_account, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if gm_account.is_staff:
         return
 
     req = StakesLevelRequirement.objects.filter(stakes_level=encounter.stakes_level).first()
@@ -266,10 +266,11 @@ def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountD
         gm_trust = TrustLevel.UNTRUSTED
 
     if gm_trust < req.minimum_gm_trust_level:
-        trust_display = TrustLevel(req.minimum_gm_trust_level).label
+        required_display = TrustLevel(req.minimum_gm_trust_level).label
+        actual_display = TrustLevel(gm_trust).label
         msg = (
-            f"GM trust level {gm_trust} is below the required "
-            f"{req.minimum_gm_trust_level} ({trust_display}) "
+            f"GM trust level {gm_trust} ({actual_display}) is below the required "
+            f"{req.minimum_gm_trust_level} ({required_display}) "
             f"for {encounter.stakes_level} stakes."
         )
         raise StakesRequirementError(msg, user_message=msg)
