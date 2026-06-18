@@ -46,6 +46,10 @@ class ResonanceGainConfig(SharedMemoryModel):
             "successful entry flourish (Entrance action with resonance declared)."
         ),
     )
+    style_presentation_grant = models.PositiveIntegerField(
+        default=4,
+        help_text="Flat grant per style-presentation endorsement (#1152).",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

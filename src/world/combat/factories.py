@@ -1,10 +1,18 @@
 """FactoryBoy factories for combat models."""
 
+from decimal import Decimal
+
 import factory
 from factory import django as factory_django
 
 from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
+    DEFAULT_RISK_MULTIPLIERS,
+    DEFAULT_STAKES_REQUIREMENTS,
+    DEFAULT_TIER_TEMPLATES,
+    SCALING_CONFIG_BASELINE_PARTY_SIZE,
+    SCALING_CONFIG_PER_AVG_LEVEL_PCT,
+    SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
     ClashActionSlot,
     ClashFlavor,
@@ -17,6 +25,7 @@ from world.combat.constants import (
     PaceMode,
     ParticipantStatus,
     RiskLevel,
+    StakesLevel,
     TargetingMode,
     TargetSelection,
 )
@@ -37,7 +46,11 @@ from world.combat.models import (
     ComboSlot,
     DuelChallenge,
     EncounterAftermathRule,
+    EncounterScalingConfig,
     EscalationCurve,
+    OpponentTierTemplate,
+    RiskScalingModifier,
+    StakesLevelRequirement,
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
@@ -438,6 +451,109 @@ class EncounterAftermathRuleFactory(factory_django.DjangoModelFactory):
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_difficulty = 25
     consequence_pool = None
+
+
+# =============================================================================
+# Encounter scaling factories (#566)
+# =============================================================================
+
+
+class OpponentTierTemplateFactory(factory_django.DjangoModelFactory):
+    """Factory for OpponentTierTemplate (one row per tier)."""
+
+    class Meta:
+        model = OpponentTierTemplate
+        django_get_or_create = ("tier",)
+
+    tier = OpponentTier.MOOK
+    base_health = 30
+    base_soak = 0
+    base_probing_threshold = None
+    base_swarm_count = None
+    body_toughness = None
+    bodies_per_attack = None
+    barrier_strength = None
+    boss_phase_count = 1
+
+
+class RiskScalingModifierFactory(factory_django.DjangoModelFactory):
+    """Factory for RiskScalingModifier (one row per risk level)."""
+
+    class Meta:
+        model = RiskScalingModifier
+        django_get_or_create = ("risk_level",)
+
+    risk_level = RiskLevel.MODERATE
+    multiplier = Decimal("1.00")
+
+
+class StakesLevelRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for StakesLevelRequirement (one row per stakes level)."""
+
+    class Meta:
+        model = StakesLevelRequirement
+        django_get_or_create = ("stakes_level",)
+
+    stakes_level = StakesLevel.LOCAL
+    minimum_party_average_level = 0
+    minimum_gm_trust_level = 0  # TrustLevel.UNTRUSTED = 0
+
+
+class EncounterScalingConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for EncounterScalingConfig singleton (pk=1)."""
+
+    class Meta:
+        model = EncounterScalingConfig
+        django_get_or_create = ("pk",)
+
+    pk = 1
+    baseline_party_size = SCALING_CONFIG_BASELINE_PARTY_SIZE
+    per_extra_member_pct = Decimal(SCALING_CONFIG_PER_EXTRA_MEMBER_PCT)
+    per_avg_level_pct = Decimal(SCALING_CONFIG_PER_AVG_LEVEL_PCT)
+    updated_by = None
+
+
+def seed_scaling_defaults() -> EncounterScalingConfig:
+    """Seed all four encounter-scaling config tables with authored defaults (#566).
+
+    Idempotent on row identity (one row per enum value / the pk=1 singleton),
+    but NOT edit-preserving: it uses update_or_create at every layer, so
+    re-running RESETS every row to the authored defaults, overwriting any staff
+    edits. This is intentional for pre-launch seeding from authored constants;
+    do not call it where staff tuning must survive.
+
+    Creates/updates:
+    - One OpponentTierTemplate per OpponentTier (5 rows)
+    - One RiskScalingModifier per RiskLevel (5 rows)
+    - One StakesLevelRequirement per StakesLevel (5 rows)
+    - EncounterScalingConfig pk=1 singleton
+
+    Returns the EncounterScalingConfig singleton.
+    """
+    for tier, stats in DEFAULT_TIER_TEMPLATES.items():
+        OpponentTierTemplate.objects.update_or_create(tier=tier, defaults=stats)
+
+    for risk_level, multiplier in DEFAULT_RISK_MULTIPLIERS.items():
+        RiskScalingModifier.objects.update_or_create(
+            risk_level=risk_level,
+            defaults={"multiplier": Decimal(multiplier)},
+        )
+
+    for stakes_level, reqs in DEFAULT_STAKES_REQUIREMENTS.items():
+        StakesLevelRequirement.objects.update_or_create(
+            stakes_level=stakes_level,
+            defaults=reqs,
+        )
+
+    config, _ = EncounterScalingConfig.objects.update_or_create(
+        pk=1,
+        defaults={
+            "baseline_party_size": SCALING_CONFIG_BASELINE_PARTY_SIZE,
+            "per_extra_member_pct": Decimal(SCALING_CONFIG_PER_EXTRA_MEMBER_PCT),
+            "per_avg_level_pct": Decimal(SCALING_CONFIG_PER_AVG_LEVEL_PCT),
+        },
+    )
+    return config
 
 
 # =============================================================================

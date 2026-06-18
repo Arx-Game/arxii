@@ -1016,11 +1016,16 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     *,
     name: str,
     tier: str,
-    max_health: int,
     threat_pool: ThreatPool | None,
+    max_health: int | None = None,
     description: str = "",
-    soak_value: int = 0,
+    soak_value: int | None = None,
     probing_threshold: int | None = None,
+    swarm_count: int | None = None,
+    body_toughness: int | None = None,
+    bodies_per_attack: int | None = None,
+    barrier_strength: int | None = None,
+    auto_phases: bool = True,
     persona: Persona | None = None,
     existing_objectdb: ObjectDB | None = None,
 ) -> CombatOpponent:
@@ -1029,11 +1034,62 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     - existing_objectdb: pre-existing OD (PvP, named NPC w/o persona). Never ephemeral.
     - persona: reuses persona's character ObjectDB. Never ephemeral.
     - neither: creates a new CombatNPC OD scoped to this encounter. Ephemeral.
+
+    When ``max_health`` is omitted (the opt-in signal), the scaling formula
+    fills in every omitted stat field via
+    ``compute_opponent_stat_block(tier, encounter)``.  Passing ``max_health``
+    selects manual mode: the formula is never called and other omitted stats
+    keep their legacy defaults (e.g. ``soak_value`` → 0).  Explicitly-passed
+    values always win over the formula.  Pass ``auto_phases=False`` to skip
+    automatic ``BossPhase`` creation for BOSS-tier opponents (manual mode also
+    creates no phases, since no block is computed).
     """
     from evennia.utils.create import create_object  # noqa: PLC0415
 
     from typeclasses.characters import Character  # noqa: PLC0415
+    from world.combat.scaling import compute_opponent_stat_block  # noqa: PLC0415
     from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    # --- Resolve scaling block when max_health is omitted ---
+    # The formula is triggered by an absent max_health — the primary signal that
+    # the caller wants auto-scaling.  Callers that pass max_health explicitly are
+    # in "manual mode": any unspecified secondary stats fall back to their
+    # pre-scaling defaults (soak=0, probing=None, etc.), preserving backward
+    # compatibility for existing call sites that never seeded OpponentTierTemplate.
+    block = compute_opponent_stat_block(tier, encounter) if max_health is None else None
+
+    resolved_max_health: int = max_health if max_health is not None else block.max_health
+    resolved_soak: int
+    resolved_probing: int | None
+    resolved_swarm: int | None
+    resolved_body_toughness: int | None
+    resolved_bodies_per_attack: int | None
+    resolved_barrier_strength: int | None
+
+    if block is not None:
+        # Auto-scaling mode: fill every omitted field from the formula.
+        resolved_soak = soak_value if soak_value is not None else block.soak_value
+        resolved_probing = (
+            probing_threshold if probing_threshold is not None else block.probing_threshold
+        )
+        resolved_swarm = swarm_count if swarm_count is not None else block.swarm_count
+        resolved_body_toughness = (
+            body_toughness if body_toughness is not None else block.body_toughness
+        )
+        resolved_bodies_per_attack = (
+            bodies_per_attack if bodies_per_attack is not None else block.bodies_per_attack
+        )
+        resolved_barrier_strength = (
+            barrier_strength if barrier_strength is not None else block.barrier_strength
+        )
+    else:
+        # Manual mode: caller provided max_health; apply legacy defaults for unspecified fields.
+        resolved_soak = soak_value if soak_value is not None else 0
+        resolved_probing = probing_threshold
+        resolved_swarm = swarm_count
+        resolved_body_toughness = body_toughness
+        resolved_bodies_per_attack = bodies_per_attack
+        resolved_barrier_strength = barrier_strength
 
     if existing_objectdb is not None and not isinstance(existing_objectdb, Character):
         msg = (
@@ -1060,18 +1116,42 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         encounter=encounter,
         name=name,
         tier=tier,
-        max_health=max_health,
-        health=max_health,
+        max_health=resolved_max_health,
+        health=resolved_max_health,
         threat_pool=threat_pool,
         description=description,
-        soak_value=soak_value,
-        probing_threshold=probing_threshold,
+        soak_value=resolved_soak,
+        probing_threshold=resolved_probing,
+        swarm_count=resolved_swarm,
+        # Bodies-at-start mirrors the initial count so a percentage-remaining
+        # display has a denominator; null for non-swarm tiers (resolved_swarm None).
+        max_swarm_count=resolved_swarm,
+        body_toughness=resolved_body_toughness,
+        bodies_per_attack=resolved_bodies_per_attack,
+        barrier_strength=resolved_barrier_strength,
         persona=persona,
         objectdb=objectdb,
         objectdb_is_ephemeral=is_ephemeral,
     )
     opp.full_clean()
     opp.save()
+
+    # --- Auto-generate BossPhase rows from the computed block ---
+    if tier == OpponentTier.BOSS and auto_phases and block is not None and block.phases:
+        BossPhase.objects.bulk_create(
+            [
+                BossPhase(
+                    opponent=opp,
+                    phase_number=spec.phase_number,
+                    health_trigger_percentage=spec.health_trigger_percentage,
+                    soak_value=spec.soak_value,
+                    probing_threshold=spec.probing_threshold,
+                    threat_pool=None,
+                )
+                for spec in block.phases
+            ]
+        )
+
     return opp
 
 

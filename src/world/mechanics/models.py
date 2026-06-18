@@ -1187,6 +1187,18 @@ class AestheticAxisConfig(SharedMemoryModel):
             "e.g. 1.50 = 50 %% bonus on top of the summed base magnitudes."
         ),
     )
+    perception_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("2.00"),
+        help_text="Max coherence amplification at full perception breadth.",
+    )
+    perception_breadth_cap = models.PositiveSmallIntegerField(
+        default=5,
+        help_text=(
+            "Distinct STYLE_PRESENTATION endorsers at which perception amplification saturates."
+        ),
+    )
 
     def __str__(self) -> str:
         return "AestheticAxisConfig"  # noqa: STRING_LITERAL - display literal, not an identifier

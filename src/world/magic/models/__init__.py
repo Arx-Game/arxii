@@ -71,6 +71,7 @@ from world.magic.models.endorsement import (
     PoseEndorsement,
     PresentationEndorsement,
     SceneEntryEndorsement,
+    StylePresentationEndorsement,
 )
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
@@ -267,6 +268,8 @@ __all__ = [
     "SineatingPendingOffer",
     "SoulTetherRescue",
     "SoulfrayConfig",
+    # endorsement (Spec C style presentation — #1152)
+    "StylePresentationEndorsement",
     "Technique",
     "TechniqueAppliedCondition",
     # technique builder config (#537)

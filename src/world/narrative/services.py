@@ -156,8 +156,10 @@ def broadcast_gemit(
 
         for session in SESSION_HANDLER.get_sessions():
             session.msg(text=(formatted, {}), type="gemit")
-    except Exception:  # noqa: BLE001, S110
-        pass
+    except Exception as exc:  # noqa: BLE001 — best-effort broadcast; capture, don't propagate
+        from world.player_submissions.services import report_error  # noqa: PLC0415
+
+        report_error(exc, label="gemit_broadcast")
     return gemit
 
 

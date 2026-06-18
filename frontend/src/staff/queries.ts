@@ -21,6 +21,7 @@ import type {
   PlayerReport,
   SubmissionCategory,
   SubmissionStatus,
+  SystemErrorReport,
 } from './types';
 import {
   getStaffInbox,
@@ -35,6 +36,9 @@ import {
   getPlayerReportDetail,
   updatePlayerReportStatus,
   getOpenSubmissionCount,
+  getSystemErrorList,
+  getSystemErrorDetail,
+  updateSystemErrorStatus,
   getGMApplicationList,
   getGMApplicationDetail,
   updateGMApplication,
@@ -57,6 +61,9 @@ export const staffKeys = {
   playerReports: (status?: string, page?: number) =>
     [...staffKeys.all, 'player-reports', status, page] as const,
   playerReportDetail: (id: number) => [...staffKeys.all, 'player-report-detail', id] as const,
+  systemErrors: (status?: string, page?: number) =>
+    [...staffKeys.all, 'system-errors', status, page] as const,
+  systemErrorDetail: (id: number) => [...staffKeys.all, 'system-error-detail', id] as const,
   accountHistory: (id: number) => [...staffKeys.all, 'account-history', id] as const,
   gmApplications: (status?: string, page?: number) =>
     [...staffKeys.all, 'gm-applications', status, page] as const,
@@ -243,6 +250,36 @@ export function useUpdatePlayerReportStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: SubmissionStatus }) =>
       updatePlayerReportStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+// =============================================================================
+// System Error Report Hooks (#1164)
+// =============================================================================
+
+export function useSystemErrorList(status?: SubmissionStatus, page?: number) {
+  return useQuery<PaginatedResponse<SystemErrorReport>>({
+    queryKey: staffKeys.systemErrors(status, page),
+    queryFn: () => getSystemErrorList(status, page),
+  });
+}
+
+export function useSystemErrorDetail(id: number | undefined) {
+  return useQuery<SystemErrorReport>({
+    queryKey: staffKeys.systemErrorDetail(id!),
+    queryFn: () => getSystemErrorDetail(id!),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateSystemErrorStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: number; status: SubmissionStatus }) =>
+      updateSystemErrorStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },

@@ -322,36 +322,41 @@ class Character(ObjectParent, DefaultCharacter):
             )
             emit_event(EventName.MOVED, payload, location=self.location)
 
-            # Trigger-based mission dispatch (#729): a ROOM_TRIGGER giver bound
-            # to the destination may hand this character a mission. The cheap
-            # "is this a trigger room?" query short-circuits for ordinary rooms.
-            # Best-effort — an optional mission hook must never break movement.
-            with contextlib.suppress(Exception):
-                from world.missions.services.trigger_dispatch import (
-                    maybe_dispatch_on_enter,
-                )
+            # Optional side-effects of arriving — mission ROOM_TRIGGER dispatch (#729),
+            # trap detection (#1051), fame reactions (#881), passive clue triggers (#1160).
+            # Each is wrapped by run_safely (#1164): a failure never breaks the move, but it
+            # is captured as a SystemErrorReport and the player is told — not silently
+            # swallowed. The cheap room-bound query in each short-circuits ordinary rooms.
+            from world.clues.services import maybe_grant_clue_triggers
+            from world.missions.services.trigger_dispatch import (
+                maybe_dispatch_on_enter,
+            )
+            from world.player_submissions.services import run_safely
+            from world.room_features.trap_services import (
+                check_room_traps_on_entry,
+            )
+            from world.societies.fame_reactions import maybe_emit_fame_reaction
 
-                maybe_dispatch_on_enter(self, self.location)
-
-            # Dramatic traps (#1051): an armed trap the entrant has not yet
-            # resolved runs its detection check on arrival. Same room-bound
-            # rationale as mission dispatch — the cheap ``traps`` query short-
-            # circuits ordinary rooms. Best-effort — never break movement.
-            with contextlib.suppress(Exception):
-                from world.room_features.trap_services import (
-                    check_room_traps_on_entry,
-                )
-
-                check_room_traps_on_entry(self, self.location)
-
-            # Fame reactions (#881): a room with authored FameReactionLine
-            # rows may react to a notable arrival — bystanders see the
-            # observer line, the arriver their own register. Optional
-            # flavor; best-effort, never breaks movement.
-            with contextlib.suppress(Exception):
-                from world.societies.fame_reactions import maybe_emit_fame_reaction
-
-                maybe_emit_fame_reaction(self, self.location)
+            run_safely(
+                "mission_trigger_on_enter",
+                lambda: maybe_dispatch_on_enter(self, self.location),
+                actor=self,
+            )
+            run_safely(
+                "trap_detection_on_enter",
+                lambda: check_room_traps_on_entry(self, self.location),
+                actor=self,
+            )
+            run_safely(
+                "fame_reaction_on_enter",
+                lambda: maybe_emit_fame_reaction(self, self.location),
+                actor=self,
+            )
+            run_safely(
+                "clue_trigger_on_enter",
+                lambda: maybe_grant_clue_triggers(self, self.location),
+                actor=self,
+            )
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.

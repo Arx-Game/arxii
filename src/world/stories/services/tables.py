@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-
 from django.db import transaction
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -183,7 +181,7 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
     else:
         return  # Unknown kind — ignore.
 
-    with contextlib.suppress(Exception):  # notification is best-effort; don't block the offer
+    try:  # notification is best-effort; don't block the offer, but log a real failure
         send_narrative_message(
             recipients=[character_sheet],
             body=body,
@@ -191,3 +189,7 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
             sender_account=sender,
             related_story=story,
         )
+    except Exception as exc:  # noqa: BLE001 — best-effort notify; capture, don't propagate
+        from world.player_submissions.services import report_error  # noqa: PLC0415
+
+        report_error(exc, label="story_offer_notification")

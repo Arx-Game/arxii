@@ -18,7 +18,6 @@ room-bound giver), wrapped so a dispatch hiccup never breaks movement/look.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, cast
 
 from django.db.models import Q
@@ -146,10 +145,14 @@ def _write_cooldown(
 
 def _announce(character: ObjectDB, template: MissionTemplate) -> None:
     """Tell the player a mission hook found them (best-effort; never fatal)."""
-    with contextlib.suppress(Exception):
+    try:
         send_narrative_message(
             recipients=[character.sheet_data],
             body=f"Something here pulls you toward a task — {template.name}.",
             category=NarrativeCategory.HAPPENSTANCE,
             ooc_note=f"Surfaced by a trigger giver (template #{template.pk}).",
         )
+    except Exception as exc:  # noqa: BLE001 — best-effort notify; capture, don't propagate
+        from world.player_submissions.services import report_error  # noqa: PLC0415
+
+        report_error(exc, label="mission_trigger_announce")

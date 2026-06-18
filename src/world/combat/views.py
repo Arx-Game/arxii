@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from http import HTTPMethod
+from typing import cast
 
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from evennia.accounts.models import AccountDB
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -18,7 +21,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ClashStatus, EncounterStatus, ParticipantStatus
+from world.combat.constants import ClashStatus, EncounterStatus, OpponentTier, ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
 from world.combat.models import (
     Clash,
@@ -43,6 +46,8 @@ from world.combat.serializers import (
     EncounterDetailSerializer,
     EncounterListSerializer,
     JoinEncounterSerializer,
+    OpponentDefaultsResponseSerializer,
+    OpponentStatBlockSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
     UpgradeComboSerializer,
@@ -313,7 +318,10 @@ class CombatEncounterViewSet(ModelViewSet):
     def add_opponent(self, request: Request, pk: int | None = None) -> Response:
         """Add an NPC opponent to the encounter (GM action)."""
         encounter = self.get_object()
-        serializer = AddOpponentSerializer(data=request.data)
+        serializer = AddOpponentSerializer(
+            data=request.data,
+            context={"encounter": encounter, "request": request},
+        )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
@@ -321,7 +329,7 @@ class CombatEncounterViewSet(ModelViewSet):
             encounter,
             name=data["name"],
             tier=data["tier"],
-            max_health=data["max_health"],
+            max_health=data.get("max_health"),
             threat_pool=pool,
             description=data.get("description", ""),
             soak_value=data.get("soak_value", 0),
@@ -330,6 +338,68 @@ class CombatEncounterViewSet(ModelViewSet):
         # Update cached opponent list in-place
         encounter.opponents_cached.append(new_opponent)
         return self._serialize_encounter(request, encounter)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("tier", str, OpenApiParameter.QUERY, required=True),
+        ],
+        responses=OpponentDefaultsResponseSerializer,
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="opponent-defaults",
+        permission_classes=[IsAuthenticated, IsEncounterGMOrStaff],
+    )
+    def opponent_defaults(self, request: Request, pk: int | None = None) -> Response:
+        """Preview the scaling formula output for a given tier (GM action).
+
+        Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+        and ``stakes_message`` so the GM can see both the stat budget and
+        whether the stakes gate would block a real add_opponent call.
+
+        Query params:
+            tier: An ``OpponentTier`` value (required).
+
+        Returns:
+            200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+            for the stakes gate — preview must explain the gate, not block).
+            400 when ``tier`` is missing or not a valid ``OpponentTier``.
+        """
+        from world.combat.scaling import (  # noqa: PLC0415
+            StakesRequirementError,
+            compute_opponent_stat_block,
+            validate_stakes_requirement,
+        )
+
+        # Resolve the object first so non-GMs get 403 before tier validation.
+        encounter = self.get_object()
+
+        tier = request.query_params.get("tier")  # noqa: USE_FILTERSET
+        valid_tiers = {choice[0] for choice in OpponentTier.choices}
+        if not tier or tier not in valid_tiers:
+            return Response(
+                {"tier": f"Must be one of: {', '.join(sorted(valid_tiers))}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        block = compute_opponent_stat_block(tier, encounter)
+
+        stakes_ok: bool
+        stakes_message: str
+        try:
+            validate_stakes_requirement(encounter, cast(AccountDB, request.user))
+            stakes_ok = True
+            stakes_message = ""
+        except StakesRequirementError as exc:
+            stakes_ok = False
+            stakes_message = exc.user_message
+
+        data = {
+            **OpponentStatBlockSerializer(block).data,
+            "stakes_ok": stakes_ok,
+            "stakes_message": stakes_message,
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def pause(self, request: Request, pk: int | None = None) -> Response:

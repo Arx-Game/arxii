@@ -142,3 +142,97 @@ class FashionOutfitBonusHappyPathTests(TestCase):
         """Case 5: FashionStyleBonus row for queried target doesn't exist → 0."""
         result = fashion_outfit_bonus(self.sheet, self.other_target, self.society)
         self.assertEqual(result, 0)
+
+
+class FashionOutfitBonusVogueStylesTests(TestCase):
+    """Cases 6-7: in_vogue_styles M2M — worn ItemStyle(S) contributes when S is in vogue."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            FashionStyleBonusFactory,
+            FashionStyleFactory,
+            ItemInstanceFactory,
+            ItemStyleFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            StyleFactory,
+            TemplateSlotFactory,
+        )
+        from world.mechanics.factories import ModifierTargetFactory
+        from world.societies.factories import SocietyFactory
+
+        # Quality tier with stat_multiplier = 1.0 (unit multiplier).
+        cls.quality = QualityTierFactory(name="StyleCommon", stat_multiplier=1.0)
+
+        # Style that IS in vogue and one that is NOT.
+        cls.style_in = StyleFactory(name="VogueStyleIn")
+        cls.style_out = StyleFactory(name="VogueStyleOut")
+
+        # Item template + slot for equipment.
+        cls.template = ItemTemplateFactory(name="VogueStyleTestItem")
+        TemplateSlotFactory(
+            template=cls.template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        # Item instance carrying style_in.
+        cls.item = ItemInstanceFactory(template=cls.template, quality_tier=cls.quality)
+        cls.item_style = ItemStyleFactory(
+            item_instance=cls.item,
+            style=cls.style_in,
+            attachment_quality_tier=cls.quality,
+        )
+
+        # Character wearing the item.
+        cls.character = CharacterFactory(db_key="VogueStyleChar")
+        cls.equipped = EquippedItemFactory(
+            character=cls.character,
+            item_instance=cls.item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        class _SheetStub:
+            character = cls.character
+
+        cls.sheet = _SheetStub()
+
+        # FashionStyle with style_in in vogue_styles, weight=1.
+        cls.target = ModifierTargetFactory(name="VogueStyleTarget")
+        cls.fashion_style = FashionStyleFactory(name="VogueStyleCurrentStyle")
+        cls.fashion_style.in_vogue_styles.add(cls.style_in)
+        cls.bonus = FashionStyleBonusFactory(
+            fashion_style=cls.fashion_style, target=cls.target, weight=1
+        )
+        cls.society = SocietyFactory(
+            name="VogueStyleSociety", current_fashion_style=cls.fashion_style
+        )
+
+        # Separate society/style with NO in_vogue_styles (baseline = 0).
+        cls.empty_fashion_style = FashionStyleFactory(name="VogueStyleEmpty")
+        cls.empty_target = ModifierTargetFactory(name="VogueStyleEmptyTarget")
+        FashionStyleBonusFactory(
+            fashion_style=cls.empty_fashion_style, target=cls.empty_target, weight=1
+        )
+        cls.empty_society = SocietyFactory(
+            name="VogueStyleEmptySociety", current_fashion_style=cls.empty_fashion_style
+        )
+
+    def test_worn_in_vogue_style_raises_bonus_above_zero(self) -> None:
+        """Case 6: wearing in-vogue style_in yields bonus > 0."""
+        result = fashion_outfit_bonus(self.sheet, self.target, self.society)
+        self.assertGreater(result, 0)
+
+    def test_worn_in_vogue_style_equals_base_with_unit_multipliers(self) -> None:
+        """Case 6b: item_mult=1.0, attach_mult=1.0, weight=1 → exactly FASHION_MATCH_BASE."""
+        result = fashion_outfit_bonus(self.sheet, self.target, self.society)
+        self.assertEqual(result, FASHION_MATCH_BASE)
+
+    def test_no_in_vogue_styles_returns_zero(self) -> None:
+        """Case 7: FashionStyle has no in_vogue_styles; same wearer → 0."""
+        result = fashion_outfit_bonus(self.sheet, self.empty_target, self.empty_society)
+        self.assertEqual(result, 0)

@@ -3443,6 +3443,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/opponent-defaults/:
+    get:
+      operationId: combat_opponent_defaults_retrieve
+      description: |-
+        Preview the scaling formula output for a given tier (GM action).
+
+        Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+        and ``stakes_message`` so the GM can see both the stat budget and
+        whether the stakes gate would block a real add_opponent call.
+
+        Query params:
+            tier: An ``OpponentTier`` value (required).
+
+        Returns:
+            200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+            for the stakes gate — preview must explain the gate, not block).
+            400 when ``tier`` is missing or not a valid ``OpponentTier``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      - in: query
+        name: tier
+        schema:
+          type: string
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpponentDefaultsResponse'
+          description: ''
   /api/combat/{id}/pause/:
     post:
       operationId: combat_pause_create
@@ -8368,6 +8408,27 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/items/item-styles/:
+    post:
+      operationId: items_item_styles_create
+      description: Roll the crafting check and (on success) attach the style.
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemStyleWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleCraftResult'
+          description: ''
   /api/items/outfit-slots/:
     get:
       operationId: items_outfit_slots_list
@@ -10163,6 +10224,7 @@ paths:
           - SANCTUM_WEAVING
           - SCENE_ENTRY
           - STAFF_GRANT
+          - STYLE_PRESENTATION
         description: |-
           Discriminator. Identifies which source_* FK is populated.
 
@@ -10177,6 +10239,7 @@ paths:
           * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
           * `ENTRY_FLOURISH` - Entry flourishing
           * `DRAMATIC_MOMENT` - Dramatic moment
+          * `STYLE_PRESENTATION` - Style presentation
       tags:
       - magic
       security:
@@ -11109,6 +11172,65 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/magic/style-presentation-endorsements/:
+    post:
+      operationId: magic_style_presentation_endorsements_create
+      description: |-
+        Create + retrieve — style-presentation endorsements are immutable (#1152).
+
+        Grant fires immediately at creation time — no weekly settlement step.
+        Retrieve is exposed so the detail URL is registered, which means DELETE
+        returns 405 (Method Not Allowed) rather than 404 (not found).
+
+        POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+        GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StylePresentationEndorsementRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StylePresentationEndorsement'
+          description: ''
+  /api/magic/style-presentation-endorsements/{id}/:
+    get:
+      operationId: magic_style_presentation_endorsements_retrieve
+      description: |-
+        Create + retrieve — style-presentation endorsements are immutable (#1152).
+
+        Grant fires immediately at creation time — no weekly settlement step.
+        Retrieve is exposed so the detail URL is registered, which means DELETE
+        returns 405 (Method Not Allowed) rather than 404 (not found).
+
+        POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+        GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this style presentation endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StylePresentationEndorsement'
+          description: ''
   /api/magic/styles/:
     get:
       operationId: magic_styles_list
@@ -16307,6 +16429,158 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerReportDetail'
+          description: ''
+  /api/player-submissions/system-errors/:
+    get:
+      operationId: player_submissions_system_errors_list
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: query
+        name: exception_type
+        schema:
+          type: string
+      - in: query
+        name: last_seen_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: last_seen_before
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - dismissed
+          - open
+          - reviewed
+        description: |-
+          * `open` - Open
+          * `reviewed` - Reviewed
+          * `dismissed` - Dismissed
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSystemErrorReportDetailList'
+          description: ''
+  /api/player-submissions/system-errors/{id}/:
+    get:
+      operationId: player_submissions_system_errors_retrieve
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
+    put:
+      operationId: player_submissions_system_errors_update
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemErrorReportDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
+    patch:
+      operationId: player_submissions_system_errors_partial_update
+      description: |-
+        Staff triage of auto-captured runtime errors (#1164).
+
+        No create action — the system authors these via ``services.report_error``. Staff list,
+        inspect (traceback + occurrence count), and move them OPEN -> REVIEWED / DISMISSED.
+        Admin-only on every action (the mixin grants create to authenticated users, but there
+        is no create action here, so all actions resolve to IsAdminUser).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSystemErrorReportDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
           description: ''
   /api/player-trust/:
     get:
@@ -28700,6 +28974,52 @@ components:
       - quality_tier
       - quantity
       - template
+    ItemStyleRead:
+      type: object
+      description: Read serializer for ItemStyle (GET list/detail).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        item_instance:
+          type: integer
+          readOnly: true
+        style:
+          type: integer
+          readOnly: true
+        applied_by_account:
+          type: integer
+          readOnly: true
+          nullable: true
+        attachment_quality_tier:
+          type: integer
+          readOnly: true
+        applied_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - applied_at
+      - applied_by_account
+      - attachment_quality_tier
+      - id
+      - item_instance
+      - style
+    ItemStyleWriteRequest:
+      type: object
+      description: |-
+        Write serializer for ItemStyle (POST create) — input validation only.
+
+        The viewset drives the crafting service directly; this serializer parses
+        and validates the ``item_instance`` and ``style`` foreign keys.
+      properties:
+        item_instance:
+          type: integer
+        style:
+          type: integer
+      required:
+      - item_instance
+      - style
     ItemTemplateDetail:
       type: object
       description: Detail serializer for ItemTemplate with slots and interactions.
@@ -30955,6 +31275,54 @@ components:
       - thumbnail_media_url
       - thumbnail_url
       - tier
+    OpponentDefaultsResponse:
+      type: object
+      description: |-
+        Read-only response serializer for the opponent-defaults preview endpoint.
+
+        Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+        stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+        drf-spectacular emits the correct component instead of inferring the
+        viewset's default ``EncounterDetail`` schema.
+      properties:
+        max_health:
+          type: integer
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+        swarm_count:
+          type: integer
+          nullable: true
+        body_toughness:
+          type: integer
+          nullable: true
+        bodies_per_attack:
+          type: integer
+          nullable: true
+        barrier_strength:
+          type: integer
+          nullable: true
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhaseSpec'
+        stakes_ok:
+          type: boolean
+        stakes_message:
+          type: string
+      required:
+      - barrier_strength
+      - bodies_per_attack
+      - body_toughness
+      - max_health
+      - phases
+      - probing_threshold
+      - soak_value
+      - stakes_message
+      - stakes_ok
+      - swarm_count
     OpponentRequest:
       type: object
       description: |-
@@ -33345,6 +33713,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryParticipation'
+    PaginatedSystemErrorReportDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemErrorReportDetail'
     PaginatedTableBulletinPostList:
       type: object
       required:
@@ -35074,6 +35465,17 @@ components:
           description: Story owner has explicitly trusted this player for this story
         is_active:
           type: boolean
+    PatchedSystemErrorReportDetailRequest:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
     PatchedTechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -35862,6 +36264,27 @@ components:
         * `day` - Day
         * `dusk` - Dusk
         * `night` - Night
+    PhaseSpec:
+      type: object
+      description: Read-only serializer for a single PhaseSpec dataclass (boss phase
+        budget).
+      properties:
+        phase_number:
+          type: integer
+        health_trigger_percentage:
+          type: number
+          format: double
+          nullable: true
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+      required:
+      - health_trigger_percentage
+      - phase_number
+      - probing_threshold
+      - soak_value
     Place:
       type: object
       properties:
@@ -37475,6 +37898,7 @@ components:
             * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
             * `ENTRY_FLOURISH` - Entry flourishing
             * `DRAMATIC_MOMENT` - Dramatic moment
+            * `STYLE_PRESENTATION` - Style presentation
         granted_at:
           type: string
           format: date-time
@@ -39096,6 +39520,7 @@ components:
       - SANCTUM_DISSOLUTION_RECOVERY
       - ENTRY_FLOURISH
       - DRAMATIC_MOMENT
+      - STYLE_PRESENTATION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -39109,6 +39534,7 @@ components:
         * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
         * `ENTRY_FLOURISH` - Entry flourishing
         * `DRAMATIC_MOMENT` - Dramatic moment
+        * `STYLE_PRESENTATION` - Style presentation
     Specialization:
       type: object
       description: Serializer for Specialization model.
@@ -39957,6 +40383,108 @@ components:
       required:
       - cap
       - default
+    StyleCraftResult:
+      type: object
+      description: 'Response for a style-craft attempt: rolled outcome + resolved
+        tier + the row.'
+      properties:
+        attached:
+          type: boolean
+        outcome_name:
+          type: string
+          nullable: true
+          readOnly: true
+        success_level:
+          type: integer
+          nullable: true
+          readOnly: true
+        quality_tier:
+          allOf:
+          - $ref: '#/components/schemas/QualityTier'
+          nullable: true
+        item_style:
+          allOf:
+          - $ref: '#/components/schemas/ItemStyleRead'
+          nullable: true
+      required:
+      - attached
+      - item_style
+      - outcome_name
+      - quality_tier
+      - success_level
+    StylePresentationEndorsement:
+      type: object
+      description: |-
+        Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+
+        Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+        request body. The ``endorser_sheet`` is resolved from the requesting account
+        in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+        injected via ``serializer.save(endorser_sheet=sheet)``.
+
+        Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+        reversal deferred to ResonanceGrantReversal).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        endorser_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        endorsee_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+        resonance:
+          type: integer
+        persona_snapshot:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Endorsee's persona at endorsement time — masquerade audit.
+        granted_amount:
+          type: integer
+          readOnly: true
+          description: Captured from config at creation.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - endorsee_sheet
+      - endorser_sheet
+      - granted_amount
+      - id
+      - persona_snapshot
+      - resonance
+      - scene
+    StylePresentationEndorsementRequest:
+      type: object
+      description: |-
+        Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+
+        Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+        request body. The ``endorser_sheet`` is resolved from the requesting account
+        in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+        injected via ``serializer.save(endorser_sheet=sheet)``.
+
+        Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+        reversal deferred to ResonanceGrantReversal).
+      properties:
+        endorsee_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+        resonance:
+          type: integer
+      required:
+      - endorsee_sheet
+      - resonance
+      - scene
     SuitEnum:
       enum:
       - swords
@@ -39969,6 +40497,83 @@ components:
         * `cups` - Cups
         * `wands` - Wands
         * `coins` - Coins
+    SystemErrorReportDetail:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        signature:
+          type: string
+          readOnly: true
+          description: Dedup hash (exception type + originating in-app frame).
+        label:
+          type: string
+          readOnly: true
+          description: Where it happened (the hook / context label).
+        exception_type:
+          type: string
+          readOnly: true
+        message:
+          type: string
+          readOnly: true
+          description: The exception's message.
+        traceback:
+          type: string
+          readOnly: true
+          description: Full formatted traceback of the first occurrence.
+        actor_persona:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The persona acting when first captured, if any.
+        actor_persona_name:
+          type: string
+          nullable: true
+          description: The acting persona's name, or ``None`` — actor_persona is nullable.
+          readOnly: true
+        occurrence_count:
+          type: integer
+          readOnly: true
+        first_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        last_seen:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+      required:
+      - actor_persona
+      - actor_persona_name
+      - exception_type
+      - first_seen
+      - id
+      - label
+      - last_seen
+      - message
+      - occurrence_count
+      - signature
+      - traceback
+    SystemErrorReportDetailRequest:
+      type: object
+      description: |-
+        Staff read + status-update view of an auto-captured error (#1164).
+
+        Everything is read-only except ``status`` — the report is system-authored, so staff
+        only triage it (OPEN -> REVIEWED / DISMISSED), never edit its captured contents. The
+        same serializer drives retrieve and update, matching the BugReport pattern.
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
     TableBulletinPost:
       type: object
       description: |-

@@ -75,6 +75,18 @@ export function StaffHubPage() {
             </CardContent>
           </Card>
         </Link>
+        <Link to="/staff/system-errors">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>System Errors</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Triage auto-captured runtime errors with tracebacks and occurrence counts.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
         <Link to="/staff/applications">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>

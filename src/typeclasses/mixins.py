@@ -132,16 +132,19 @@ class ObjectParent:
             location=location,
         )
 
-        # Trigger-based mission dispatch (#729): an ENVIRONMENTAL_DETAIL giver
-        # bound to this object may hand the examiner a mission. The cheap
-        # giver lookup short-circuits for ordinary objects. Best-effort — an
-        # optional mission hook must never break a look.
-        with contextlib.suppress(Exception):
-            from world.missions.services.trigger_dispatch import (
-                maybe_dispatch_on_examine,
-            )
+        # Mission ENVIRONMENTAL_DETAIL dispatch (#729) on examine. run_safely (#1164):
+        # a failure is captured + the examiner told, never breaking the look. The cheap
+        # giver lookup short-circuits ordinary objects.
+        from world.missions.services.trigger_dispatch import (
+            maybe_dispatch_on_examine,
+        )
+        from world.player_submissions.services import run_safely
 
-            maybe_dispatch_on_examine(observer, self)
+        run_safely(
+            "mission_dispatch_on_examine",
+            lambda: maybe_dispatch_on_examine(observer, self),
+            actor=observer,
+        )
         return True
 
     def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:
@@ -183,7 +186,6 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
         display = obj.ranking_display
     except (AttributeError, RankingDisplay.DoesNotExist):
         return None
-    import contextlib
 
     # #981: gate the board on the looker's ACTIVE face (the telnet mirror of
     # RankingDisplayViewSet) so examining a board while wearing an alt's face is

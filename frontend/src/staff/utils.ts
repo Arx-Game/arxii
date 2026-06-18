@@ -12,6 +12,8 @@ export function detailPath(item: InboxItem): string {
       return `/staff/applications/${item.source_pk}`;
     case 'gm_application':
       return `/staff/gm-applications/${item.source_pk}`;
+    case 'system_error':
+      return `/staff/system-errors/${item.source_pk}`;
   }
 }
 

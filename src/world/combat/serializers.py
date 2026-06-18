@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema_field
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from actions.errors import ActionDispatchError
@@ -1094,12 +1095,67 @@ class CoverSerializer(serializers.Serializer):
     ally_participant_id = serializers.IntegerField(min_value=1)
 
 
+class PhaseSpecSerializer(serializers.Serializer):
+    """Read-only serializer for a single PhaseSpec dataclass (boss phase budget)."""
+
+    phase_number = serializers.IntegerField()
+    health_trigger_percentage = serializers.FloatField(allow_null=True)
+    soak_value = serializers.IntegerField()
+    probing_threshold = serializers.IntegerField(allow_null=True)
+
+
+class OpponentStatBlockSerializer(serializers.Serializer):
+    """Read-only serializer for the OpponentStatBlock dataclass.
+
+    All fields are derived from the scaling formula — never writable.
+    The ``phases`` list is non-empty only for BOSS tier.
+    """
+
+    max_health = serializers.IntegerField()
+    soak_value = serializers.IntegerField()
+    probing_threshold = serializers.IntegerField(allow_null=True)
+    swarm_count = serializers.IntegerField(allow_null=True)
+    body_toughness = serializers.IntegerField(allow_null=True)
+    bodies_per_attack = serializers.IntegerField(allow_null=True)
+    barrier_strength = serializers.IntegerField(allow_null=True)
+    phases = PhaseSpecSerializer(many=True)
+
+
+class OpponentDefaultsResponseSerializer(serializers.Serializer):
+    """Read-only response serializer for the opponent-defaults preview endpoint.
+
+    Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+    stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+    drf-spectacular emits the correct component instead of inferring the
+    viewset's default ``EncounterDetail`` schema.
+    """
+
+    max_health = serializers.IntegerField()
+    soak_value = serializers.IntegerField()
+    probing_threshold = serializers.IntegerField(allow_null=True)
+    swarm_count = serializers.IntegerField(allow_null=True)
+    body_toughness = serializers.IntegerField(allow_null=True)
+    bodies_per_attack = serializers.IntegerField(allow_null=True)
+    barrier_strength = serializers.IntegerField(allow_null=True)
+    phases = PhaseSpecSerializer(many=True)
+    stakes_ok = serializers.BooleanField()
+    stakes_message = serializers.CharField(allow_blank=True)
+
+
 class AddOpponentSerializer(serializers.Serializer):
-    """Write serializer for adding an opponent to an encounter."""
+    """Write serializer for adding an opponent to an encounter.
+
+    ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+    formula fills every stat field automatically (Task 5 auto-fill mode).
+    All other stat fields are optional overrides.
+
+    Expects ``encounter`` and ``request`` in serializer context (provided by the
+    view) so that ``validate()`` can run the stakes gate.
+    """
 
     name = serializers.CharField(max_length=200)
     tier = serializers.ChoiceField(choices=OpponentTier.choices)
-    max_health = serializers.IntegerField(min_value=1)
+    max_health = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     threat_pool_id = serializers.IntegerField()
     description = serializers.CharField(required=False, default="")
     soak_value = serializers.IntegerField(required=False, default=0)
@@ -1107,6 +1163,22 @@ class AddOpponentSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+    def validate(self, attrs: dict) -> dict:
+        """Run stakes requirement gate for the encounter + requesting user."""
+        from world.combat.scaling import (  # noqa: PLC0415
+            StakesRequirementError,
+            validate_stakes_requirement,
+        )
+
+        encounter = self.context.get("encounter")
+        request = self.context.get("request")
+        if encounter is not None and request is not None:
+            try:
+                validate_stakes_requirement(encounter, cast(AccountDB, request.user))
+            except StakesRequirementError as exc:
+                raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
+        return attrs
 
 
 class DeclareClashContributionSerializer(serializers.Serializer):

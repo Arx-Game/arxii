@@ -11,6 +11,7 @@ from world.player_submissions.factories import (
     BugReportFactory,
     PlayerFeedbackFactory,
     PlayerReportFactory,
+    SystemErrorReportFactory,
 )
 from world.player_submissions.models import PlayerFeedback
 from world.staff_inbox.services import get_staff_inbox
@@ -52,6 +53,27 @@ class StaffInboxAggregatorTest(TestCase):
         items = get_staff_inbox(categories=[SubmissionCategory.PLAYER_REPORT])
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].source_pk, pr.pk)
+
+
+class StaffInboxSystemErrorTest(TestCase):
+    def test_open_system_error_appears_in_inbox(self) -> None:
+        err = SystemErrorReportFactory(occurrence_count=5)
+        items = get_staff_inbox(categories=[SubmissionCategory.SYSTEM_ERROR])
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].source_pk, err.pk)
+        self.assertEqual(items[0].source_type, SubmissionCategory.SYSTEM_ERROR)
+        # The occurrence count is the triage signal carried in the summary.
+        self.assertIn("×5", items[0].reporter_summary)
+
+    def test_non_open_system_error_excluded(self) -> None:
+        err = SystemErrorReportFactory(status=SubmissionStatus.DISMISSED)
+        items = get_staff_inbox(categories=[SubmissionCategory.SYSTEM_ERROR])
+        self.assertFalse(any(i.source_pk == err.pk for i in items))
+
+    def test_system_error_excluded_by_other_category(self) -> None:
+        SystemErrorReportFactory()
+        items = get_staff_inbox(categories=[SubmissionCategory.BUG_REPORT])
+        self.assertFalse(any(i.source_type == SubmissionCategory.SYSTEM_ERROR for i in items))
 
 
 class StaffInboxGMApplicationTest(TestCase):

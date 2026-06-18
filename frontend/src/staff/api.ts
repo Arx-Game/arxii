@@ -14,6 +14,7 @@ import type {
   PlayerReport,
   SubmissionCategory,
   SubmissionStatus,
+  SystemErrorReport,
 } from './types';
 
 const INBOX_URL = '/api/staff-inbox';
@@ -180,6 +181,45 @@ export async function updatePlayerReportStatus(
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error('Failed to update player report status');
+  return res.json();
+}
+
+// =============================================================================
+// System Error Reports (auto-captured, #1164)
+// =============================================================================
+
+export async function getSystemErrorList(
+  status?: SubmissionStatus,
+  page?: number
+): Promise<PaginatedResponse<SystemErrorReport>> {
+  const params = new URLSearchParams();
+  if (status) {
+    params.append('status', status);
+  }
+  if (page != null) {
+    params.append('page', page.toString());
+  }
+  const qs = params.toString();
+  const res = await apiFetch(`${SUBMISSIONS_URL}/system-errors/${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error('Failed to load system error list');
+  return res.json();
+}
+
+export async function getSystemErrorDetail(id: number): Promise<SystemErrorReport> {
+  const res = await apiFetch(`${SUBMISSIONS_URL}/system-errors/${id}/`);
+  if (!res.ok) throw new Error('Failed to load system error detail');
+  return res.json();
+}
+
+export async function updateSystemErrorStatus(
+  id: number,
+  status: SubmissionStatus
+): Promise<SystemErrorReport> {
+  const res = await apiFetch(`${SUBMISSIONS_URL}/system-errors/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error('Failed to update system error status');
   return res.json();
 }
 
