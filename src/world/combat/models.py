@@ -18,6 +18,9 @@ from world.combat.constants import (
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
     FLEE_COVER_BONUS,
+    SCALING_CONFIG_BASELINE_PARTY_SIZE,
+    SCALING_CONFIG_PER_AVG_LEVEL_PCT,
+    SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
     ActionCategory,
     ClashActionSlot,
     ClashFlavor,
@@ -41,6 +44,7 @@ from world.combat.constants import (
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
+from world.stories.types import TrustLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
@@ -1452,6 +1456,149 @@ class EncounterAftermathRule(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"AftermathRule({self.outcome} @ {self.risk_level})"
+
+
+# =============================================================================
+# Encounter scaling config models (#566)
+# =============================================================================
+
+
+class OpponentTierTemplate(SharedMemoryModel):
+    """Authored baseline stats for each OpponentTier (#566).
+
+    One row per tier (unique constraint). The scaling formula multiplies these
+    values by the active RiskScalingModifier and party-size/level adjustments
+    from EncounterScalingConfig. Null optional fields mean the stat is unused
+    for that tier (e.g. swarm mechanics are off for MOOK/ELITE/BOSS).
+    """
+
+    tier = models.CharField(max_length=20, choices=OpponentTier.choices, unique=True)
+    base_health = models.PositiveIntegerField(
+        help_text="Base HP budget before scaling.",
+    )
+    base_soak = models.PositiveIntegerField(
+        default=0,
+        help_text="Base flat soak value.",
+    )
+    base_probing_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Probing threshold; null = tier does not use probing.",
+    )
+    base_swarm_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Number of swarm bodies; null = tier is not a swarm.",
+    )
+    body_toughness = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="HP per individual swarm body; null = tier is not a swarm.",
+    )
+    bodies_per_attack = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Bodies lost per outgoing swarm attack; null = tier is not a swarm.",
+    )
+    barrier_strength = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Ward barrier strength; null = authored per-fight, not template-driven.",
+    )
+    boss_phase_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Number of boss phases; 1 = single-phase (non-boss tiers).",
+    )
+
+    class Meta:
+        ordering = ["tier"]
+
+    def __str__(self) -> str:
+        return f"OpponentTierTemplate({self.tier})"
+
+
+class RiskScalingModifier(SharedMemoryModel):
+    """Authored multiplier per RiskLevel for the scaling formula (#566).
+
+    One row per risk level (unique constraint). A multiplier of 1.00 is
+    baseline; values below 1 reduce scaled stats, values above 1 increase them.
+    """
+
+    risk_level = models.CharField(max_length=20, choices=RiskLevel.choices, unique=True)
+    multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text="Scaling multiplier applied to opponent stat budgets at this risk.",
+    )
+
+    class Meta:
+        ordering = ["risk_level"]
+
+    def __str__(self) -> str:
+        return f"RiskScalingModifier({self.risk_level}: ×{self.multiplier})"
+
+
+class StakesLevelRequirement(SharedMemoryModel):
+    """Authored access requirements per StakesLevel (#566).
+
+    One row per stakes level (unique constraint). The minimum_party_average_level
+    and minimum_gm_trust_level gate which GMs can run which stakes-level encounters.
+    """
+
+    stakes_level = models.CharField(max_length=20, choices=StakesLevel.choices, unique=True)
+    minimum_party_average_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Minimum average character level across the party.",
+    )
+    minimum_gm_trust_level = models.IntegerField(
+        choices=TrustLevel.choices,
+        default=TrustLevel.UNTRUSTED,
+        help_text="Minimum GM trust level required to run this stakes level.",
+    )
+
+    class Meta:
+        ordering = ["stakes_level"]
+
+    def __str__(self) -> str:
+        return f"StakesLevelRequirement({self.stakes_level})"
+
+
+class EncounterScalingConfig(SharedMemoryModel):
+    """Singleton (pk=1): global scaling parameters for encounter budgets (#566).
+
+    Seeded by seed_scaling_defaults() in factories.py. Services use get(pk=1)
+    and let DoesNotExist propagate loudly (mirrors FleeConfig's no-fabrication
+    rule). Updated via Django admin.
+    """
+
+    baseline_party_size = models.PositiveIntegerField(
+        default=SCALING_CONFIG_BASELINE_PARTY_SIZE,
+        help_text="Party size at which no per-member adjustment is applied.",
+    )
+    per_extra_member_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(SCALING_CONFIG_PER_EXTRA_MEMBER_PCT),
+        help_text="Fractional budget increase per party member above baseline.",
+    )
+    per_avg_level_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(SCALING_CONFIG_PER_AVG_LEVEL_PCT),
+        help_text="Fractional budget increase per point of average party level.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="encounter_scaling_config_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"EncounterScalingConfig(pk={self.pk})"
 
 
 # =============================================================================

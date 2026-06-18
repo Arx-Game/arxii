@@ -2399,6 +2399,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/opponent-defaults/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Preview the scaling formula output for a given tier (GM action).
+     *
+     *     Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+     *     and ``stakes_message`` so the GM can see both the stat budget and
+     *     whether the stakes gate would block a real add_opponent call.
+     *
+     *     Query params:
+     *         tier: An ``OpponentTier`` value (required).
+     *
+     *     Returns:
+     *         200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+     *         for the stakes gate — preview must explain the gate, not block).
+     *         400 when ``tier`` is missing or not a valid ``OpponentTier``.
+     */
+    get: operations['combat_opponent_defaults_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/pause/': {
     parameters: {
       query?: never;
@@ -17169,6 +17200,26 @@ export interface components {
       readonly current_position: components['schemas']['PositionSummary'] | null;
     };
     /**
+     * @description Read-only response serializer for the opponent-defaults preview endpoint.
+     *
+     *     Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+     *     stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+     *     drf-spectacular emits the correct component instead of inferring the
+     *     viewset's default ``EncounterDetail`` schema.
+     */
+    OpponentDefaultsResponse: {
+      max_health: number;
+      soak_value: number;
+      probing_threshold: number | null;
+      swarm_count: number | null;
+      body_toughness: number | null;
+      bodies_per_attack: number | null;
+      barrier_strength: number | null;
+      phases: components['schemas']['PhaseSpec'][];
+      stakes_ok: boolean;
+      stakes_message: string;
+    };
+    /**
      * @description Read serializer for combat opponents.
      *
      *     Soak value and probing threshold are GM-only — players discover
@@ -20081,6 +20132,14 @@ export interface components {
      * @enum {string}
      */
     PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
+    /** @description Read-only serializer for a single PhaseSpec dataclass (boss phase budget). */
+    PhaseSpec: {
+      phase_number: number;
+      /** Format: double */
+      health_trigger_percentage: number | null;
+      soak_value: number;
+      probing_threshold: number | null;
+    };
     Place: {
       readonly id: number;
       name: string;
@@ -26075,6 +26134,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_opponent_defaults_retrieve: {
+    parameters: {
+      query: {
+        tier: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OpponentDefaultsResponse'];
         };
       };
     };

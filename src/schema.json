@@ -3443,6 +3443,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/opponent-defaults/:
+    get:
+      operationId: combat_opponent_defaults_retrieve
+      description: |-
+        Preview the scaling formula output for a given tier (GM action).
+
+        Returns the computed OpponentStatBlock fields alongside ``stakes_ok``
+        and ``stakes_message`` so the GM can see both the stat budget and
+        whether the stakes gate would block a real add_opponent call.
+
+        Query params:
+            tier: An ``OpponentTier`` value (required).
+
+        Returns:
+            200 with block fields + ``stakes_ok`` + ``stakes_message`` (never 400
+            for the stakes gate — preview must explain the gate, not block).
+            400 when ``tier`` is missing or not a valid ``OpponentTier``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      - in: query
+        name: tier
+        schema:
+          type: string
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpponentDefaultsResponse'
+          description: ''
   /api/combat/{id}/pause/:
     post:
       operationId: combat_pause_create
@@ -31038,6 +31078,54 @@ components:
       - thumbnail_media_url
       - thumbnail_url
       - tier
+    OpponentDefaultsResponse:
+      type: object
+      description: |-
+        Read-only response serializer for the opponent-defaults preview endpoint.
+
+        Contains all ``OpponentStatBlock`` scalar fields + ``phases`` + the two
+        stakes-gate advisory fields.  Used only for ``@extend_schema`` so that
+        drf-spectacular emits the correct component instead of inferring the
+        viewset's default ``EncounterDetail`` schema.
+      properties:
+        max_health:
+          type: integer
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+        swarm_count:
+          type: integer
+          nullable: true
+        body_toughness:
+          type: integer
+          nullable: true
+        bodies_per_attack:
+          type: integer
+          nullable: true
+        barrier_strength:
+          type: integer
+          nullable: true
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhaseSpec'
+        stakes_ok:
+          type: boolean
+        stakes_message:
+          type: string
+      required:
+      - barrier_strength
+      - bodies_per_attack
+      - body_toughness
+      - max_health
+      - phases
+      - probing_threshold
+      - soak_value
+      - stakes_message
+      - stakes_ok
+      - swarm_count
     OpponentRequest:
       type: object
       description: |-
@@ -35945,6 +36033,27 @@ components:
         * `day` - Day
         * `dusk` - Dusk
         * `night` - Night
+    PhaseSpec:
+      type: object
+      description: Read-only serializer for a single PhaseSpec dataclass (boss phase
+        budget).
+      properties:
+        phase_number:
+          type: integer
+        health_trigger_percentage:
+          type: number
+          format: double
+          nullable: true
+        soak_value:
+          type: integer
+        probing_threshold:
+          type: integer
+          nullable: true
+      required:
+      - health_trigger_percentage
+      - phase_number
+      - probing_threshold
+      - soak_value
     Place:
       type: object
       properties:
