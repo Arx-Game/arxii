@@ -30,7 +30,8 @@ if TYPE_CHECKING:
 
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
-    from world.magic.models import Technique
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import FuryTier, Technique
     from world.magic.types.pull import CastPullDeclaration
     from world.scenes.place_models import Place
 
@@ -114,6 +115,8 @@ def create_action_request(  # noqa: PLR0913
     technique: Technique | None = None,
     ritual_id: int | None = None,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
 ) -> SceneActionRequest:
@@ -143,6 +146,8 @@ def create_action_request(  # noqa: PLR0913
             initiator commits to this action. Persisted via the
             CommittingDeclaration mixin and consumed downstream when the
             interaction is recorded.
+        fury_commitment: Optional FuryTier the initiator declares for this action.
+        fury_anchor: CharacterSheet of the anchor character whose bond caps the tier.
         delivery: Explicit audience-routing override (#903). Blank defers to
             the template's default_delivery at resolution time.
         delivery_receivers: Explicit WHISPER audience. Empty/None = the
@@ -185,6 +190,8 @@ def create_action_request(  # noqa: PLR0913
         status=ActionRequestStatus.PENDING,
         technique=technique,
         strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
         delivery=delivery,
         **snapshot_kwargs,
     )
@@ -327,8 +334,14 @@ def _resolve_standard_action(
                 difficulty=difficulty,
                 context=context,
                 strain_commitment=action_request.strain_commitment,
+                fury_commitment=action_request.fury_commitment,
+                fury_anchor=action_request.fury_anchor,
             )
         else:
+            # Plain (non-technique) actions do not use the fury lever; fury is a
+            # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
+            # inside use_technique). The serializer rejects fury_commitment_id on
+            # plain actions, so fury_commitment is always None here.
             action_resolution = start_action_resolution(
                 character=character,
                 template=action_template,
@@ -338,6 +351,7 @@ def _resolve_standard_action(
             result = EnhancedSceneActionResult(
                 action_resolution=action_resolution,
                 action_key=action_request.action_key,
+                fury_committed=None,
             )
 
         action_request.status = ActionRequestStatus.RESOLVED
@@ -349,6 +363,7 @@ def _resolve_standard_action(
             action_request=action_request,
             result=result,
             strain_committed=action_request.strain_commitment,
+            fury_committed=result.fury_committed,
         )
         if result_interaction is not None:
             action_request.result_interaction = result_interaction
@@ -393,6 +408,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     difficulty: int,
     context: ResolutionContext,
     strain_commitment: int = 0,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
 ) -> EnhancedSceneActionResult:
     """Resolve a technique-enhanced social action via use_technique().
@@ -411,14 +428,24 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         strain_commitment: Optional extra anima the caster commits beyond the
             technique's baseline cost. Forwarded to use_technique so the cost
             calculation accounts for the strain.
+        fury_commitment: Optional FuryTier the player declared.
+        fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
 
     Returns:
         EnhancedSceneActionResult with both action_resolution and technique_result.
     """
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
+    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
     applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
+
+    fury_res = run_fury_for_action(
+        character=character,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
+        source_technique=technique,
+    )
 
     technique_result = use_technique(
         character=character,
@@ -433,6 +460,8 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
+        control_penalty=fury_res.control_penalty if fury_res else 0,
+        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
     )
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
@@ -440,6 +469,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         action_resolution=resolution_result,
         action_key=action_key,
         technique_result=technique_result,
+        fury_committed=fury_res.realized_tier if fury_res else None,
     )
 
 
@@ -530,6 +560,7 @@ def _create_result_interaction(
     action_request: SceneActionRequest,
     result: EnhancedSceneActionResult,
     strain_committed: int = 0,
+    fury_committed: FuryTier | None = None,
 ) -> Interaction | None:
     """Create an interaction recording the result of a scene action.
 
@@ -538,6 +569,7 @@ def _create_result_interaction(
         result: The resolution outcome (including optional technique result).
         strain_committed: Strain the initiator actually committed; recorded on
             the resulting Interaction for canonical audit.
+        fury_committed: Realized FuryTier post-resolution; recorded for audit.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -579,6 +611,7 @@ def _create_result_interaction(
         receivers=interaction_receivers,
         target_personas=target_personas,
         strain_committed=strain_committed,
+        fury_committed=fury_committed,
     )
     if mode == InteractionMode.MUTTER:
         # #905: the room heard a fragment — and the fragment is public

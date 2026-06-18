@@ -150,6 +150,55 @@ class EntranceAction(_SocialTemplateAction):
             )
 
 
+class RestoreSenseAction(_SocialTemplateAction):
+    key = "restore_sense"
+    name = "Restore to Sense"
+    description = "Talk a berserk ally down through force of personality and connection."
+    icon = "heart-pulse"
+    template_name = "Restore to Sense"
+    category = "social"
+
+    def execute(self, actor: ObjectDB, context: ActionContext, **kwargs) -> ActionResult:
+        from actions.effects.registry import apply_effects  # noqa: PLC0415
+        from actions.models import ActionEnhancement, ActionTemplate  # noqa: PLC0415
+        from actions.services import start_action_resolution  # noqa: PLC0415
+        from actions.types import (  # noqa: PLC0415
+            ActionContext as _ActionContext,
+            ActionResult as _ActionResult,
+        )
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+        from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+        # Build an ActionContext for the effect dispatch (RemoveConditionOnCheckConfig).
+        sdm = SceneDataManager()
+        sdm.initialize_state_for_object(actor)
+        target = kwargs.get("target")
+        effect_ctx = _ActionContext(
+            action=self,  # type: ignore[arg-type]
+            actor=actor,
+            target=target,
+            kwargs=kwargs,
+            scene_data=sdm,
+            result=_ActionResult(success=True),
+        )
+
+        # Dispatch all ActionEnhancements wired to "restore_sense".
+        # The factory seeds a RemoveConditionOnCheckConfig on one of these enhancements;
+        # apply_effects dispatches it to handle_remove_condition_on_check.
+        for enh in ActionEnhancement.objects.filter(base_action_key="restore_sense"):
+            apply_effects(enh, effect_ctx)
+
+        # Run the standard social template resolution (check + consequence pool).
+        template = ActionTemplate.objects.get(name=self.template_name)
+        resolution_ctx = ResolutionContext(action_context=context)
+        return start_action_resolution(
+            character=actor,
+            template=template,
+            target_difficulty=0,
+            context=resolution_ctx,
+        )
+
+
 # Module-level singletons — registered in actions/registry.py
 intimidate = IntimidateAction()
 persuade = PersuadeAction()
@@ -157,3 +206,4 @@ deceive = DeceiveAction()
 flirt = FlirtAction()
 perform = PerformAction()
 entrance = EntranceAction()
+restore_sense = RestoreSenseAction()

@@ -11,6 +11,86 @@ from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, C
 from world.scenes.action_models import SceneActionRequest
 
 
+def _cap_fury_by_provocation(attrs: dict) -> dict:
+    """Reject a fury_commitment that exceeds the initiator's provocation cap,
+    or reject if the caster already has the Berserk condition.
+
+    Mirrors _cap_strain_by_anima for the fury lever.
+    """
+    from world.magic.models import FuryTier  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    fury_commitment_id = attrs.get("fury_commitment_id")
+    if not fury_commitment_id:
+        return attrs
+
+    # Fury is a technique-cast-only lever: reject if no technique is declared.
+    # (SceneActionRequestCreateSerializer exposes technique_id; TechniqueCastCreateSerializer
+    # always has technique_id — so the guard is the same for both callers.)
+    if not attrs.get("technique_id"):
+        raise serializers.ValidationError(
+            {"fury_commitment_id": "Fury can only be declared on technique-enhanced actions."}
+        )
+
+    fury_anchor_id = attrs.get("fury_anchor_id")
+    if not fury_anchor_id:
+        raise serializers.ValidationError(
+            {"fury_anchor_id": "fury_anchor is required when fury_commitment is declared."}
+        )
+
+    try:
+        tier = FuryTier.objects.get(pk=fury_commitment_id)
+    except FuryTier.DoesNotExist:
+        raise serializers.ValidationError({"fury_commitment_id": "Unknown FuryTier."}) from None
+
+    initiator_persona_id = attrs["initiator_persona"]
+    try:
+        persona = Persona.objects.select_related("character_sheet__character").get(
+            pk=initiator_persona_id
+        )
+    except Persona.DoesNotExist:
+        raise serializers.ValidationError(
+            {"fury_commitment_id": "Initiator persona not found."}
+        ) from None
+
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        anchor_sheet = CharacterSheet.objects.get(pk=fury_anchor_id)
+    except CharacterSheet.DoesNotExist:
+        raise serializers.ValidationError(
+            {"fury_anchor_id": "Anchor character sheet not found."}
+        ) from None
+
+    character = persona.character_sheet.character
+
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
+
+    try:
+        berserk_template = ConditionTemplate.get_by_name("Berserk")
+        if has_condition(character, berserk_template):
+            raise serializers.ValidationError(
+                {"fury_commitment_id": "Cannot declare fury while already Berserk."}
+            )
+    except ConditionTemplate.DoesNotExist:
+        pass
+
+    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+
+    cap = provocation_cap(character, anchor_sheet)
+    if cap < tier.depth:
+        raise serializers.ValidationError(
+            {
+                "fury_commitment_id": (
+                    f"Fury tier depth ({tier.depth}) exceeds provocation cap ({cap})."
+                )
+            }
+        )
+
+    return attrs
+
+
 def _cap_strain_by_anima(attrs: dict) -> dict:
     """Reject a strain_commitment that exceeds the initiator's available anima.
 
@@ -124,11 +204,14 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     technique_id = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+    fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     pull = CastPullRequestSerializer(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
-        """Cap strain by anima; resolve + validate a declared pull (#854)."""
+        """Cap strain by anima; cap fury by provocation; validate pull (#854)."""
         attrs = _cap_strain_by_anima(attrs)
+        attrs = _cap_fury_by_provocation(attrs)
         if attrs.get("pull"):
             attrs = _validate_cast_pull(attrs)
         return attrs
@@ -223,6 +306,8 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     difficulty_choice = serializers.CharField(max_length=20, required=False)
     technique_id = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
+    fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     delivery = serializers.ChoiceField(
         choices=ActionDelivery.choices, required=False, allow_blank=True, default=""
     )
@@ -231,12 +316,13 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs: dict) -> dict:
-        """Cap strain_commitment by the initiator's available anima.
+        """Cap strain_commitment by anima; cap fury by provocation cap.
 
         Validation lives in the serializer (not the view) per the
         validation-in-serializer rule; see ``_cap_strain_by_anima``.
         """
-        return _cap_strain_by_anima(attrs)
+        attrs = _cap_strain_by_anima(attrs)
+        return _cap_fury_by_provocation(attrs)
 
 
 class ConsentResponseSerializer(serializers.Serializer):

@@ -17,14 +17,19 @@ CREATE TABLE scenes_interaction (
     mode             varchar(20) NOT NULL,
     visibility       varchar(20) NOT NULL,
     pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
-    vote_count       integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
-    strain_committed integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
-    "timestamp"      timestamptz NOT NULL,
-    persona_id       bigint NOT NULL REFERENCES scenes_persona (id)
+    vote_count            integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
+    strain_committed      integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
+    -- NOTE: fury_committed_id is intentionally absent here -- see the matching
+    -- note in partition_interaction_forward.sql. It is a post-partition column
+    -- (FK to magic.FuryTier, added by scenes/0024). On reverse, the column was
+    -- already dropped before this migration runs back, so re-adding it is not
+    -- this SQL's job. See POST_PARTITION_COLUMNS in check_partition_sql_drift.py
+    "timestamp"           timestamptz NOT NULL,
+    persona_id            bigint NOT NULL REFERENCES scenes_persona (id)
         ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,
-    scene_id         bigint REFERENCES scenes_scene (id)
+    scene_id              bigint REFERENCES scenes_scene (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
-    place_id         bigint REFERENCES scenes_place (id)
+    place_id              bigint REFERENCES scenes_place (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
