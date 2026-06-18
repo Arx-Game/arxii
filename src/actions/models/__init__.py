@@ -7,6 +7,7 @@ from actions.models.effect_configs import (
     BaseEffectConfig,
     ConditionOnCheckConfig,
     ModifyKwargsConfig,
+    RemoveConditionOnCheckConfig,
 )
 from actions.models.enhancement import ActionEnhancement
 
@@ -20,4 +21,5 @@ __all__ = [
     "ConsequencePool",
     "ConsequencePoolEntry",
     "ModifyKwargsConfig",
+    "RemoveConditionOnCheckConfig",
 ]

@@ -1,4 +1,4 @@
-"""Handler for ConditionOnCheckConfig effects."""
+"""Handlers for condition-related effect configs."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 
 from actions.effects.base import apply_immunity_on_fail, resolve_target_difficulty
 from world.checks.services import perform_check
-from world.conditions.services import apply_condition, has_condition
+from world.conditions.services import apply_condition, has_condition, remove_condition
 
 if TYPE_CHECKING:
-    from actions.models import ConditionOnCheckConfig
+    from actions.models import ConditionOnCheckConfig, RemoveConditionOnCheckConfig
     from actions.types import ActionContext
 
 
@@ -57,3 +57,32 @@ def handle_condition_on_check(context: ActionContext, config: ConditionOnCheckCo
             config.immunity_condition,
             config.immunity_duration,
         )
+
+
+def handle_remove_condition_on_check(
+    context: ActionContext, config: RemoveConditionOnCheckConfig
+) -> None:
+    """Remove a condition from the target, gated by a check roll.
+
+    Steps:
+    1. Skip if no target
+    2. Resolve target difficulty from resistance_check_type or fixed value
+    3. Roll attacker's check_type vs resolved difficulty
+    4. On success: remove condition (graceful no-op if target lacks it)
+    """
+    if context.target is None:
+        return
+
+    # Resolve difficulty
+    target_difficulty = resolve_target_difficulty(
+        context.target,
+        config.resistance_check_type,
+        config.target_difficulty,
+    )
+
+    # Roll
+    result = perform_check(context.actor, config.check_type, target_difficulty=target_difficulty)
+
+    # Remove condition on success; remove_condition returns False if absent (graceful)
+    if result.success_level > 0:
+        remove_condition(context.target, config.condition)
