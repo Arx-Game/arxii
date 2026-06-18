@@ -116,13 +116,39 @@ Bosses (and to a lesser degree Elites) use the soak/probing/combo system:
 - Landing a combo can advance the boss to the next **phase** (different stage of the fight)
 - This creates the escalating tension loop: probe → combo → phase shift → harder patterns
 
-### Encounter Scaling (future — GM tooling, not core combat)
+### Encounter Scaling (backend engine + tuning SHIPPED — #566)
 Difficulty is hybrid: base from story context, adjusted by party composition. GMs mostly
 pick a tier (Swarm/Mook/Elite/Boss), name it, describe it, and the system fills in
 appropriate defaults based on party strength and story risk level. GMs have limited control
 over exact difficulty — the system handles most of it to ensure consistency across GMs.
 C-style consequence pools are better suited for abstract mission challenges (e.g., assassinate
 an NPC at a bar) where concrete NPC objects aren't needed.
+
+**SHIPPED (#566) — scaling engine + GM tuning surface (React builder deferred):**
+- **Authored config tables** (`world/combat/models.py`, all mirroring `FleeTierModifier`/
+  `FleeConfig`): `OpponentTierTemplate` (per `OpponentTier`: base health/soak/probing,
+  swarm defaults, barrier, boss phase count — **closes the Mook/Elite stat-default
+  differentiation deferred from #875**); `RiskScalingModifier` (per `RiskLevel` multiplier);
+  `StakesLevelRequirement` (per `StakesLevel` gate); `EncounterScalingConfig` (pk=1 singleton:
+  party-scaling coefficients). All staff-tunable in Django admin; defaults supplied by
+  `seed_scaling_defaults()` in factories (double as test setup + seed data, applied by the
+  planned startup-page mechanism).
+- **Scaling formula** (`world/combat/scaling.py`): `compute_opponent_stat_block(tier, encounter)`
+  returns a frozen `OpponentStatBlock` (+ generated boss `PhaseSpec`s). `max_health` scales by
+  `risk_mult × party_mult`, soak by risk, swarm count by party; HERO_KILLER returns its
+  template base **unscaled** (unbeatable sentinel). **Difficulty keys off party size + average
+  primary character level ONLY** — never threads/relationships/covenants/facets/fashion, so
+  thread-rich parties are simply stronger, not matched by tougher enemies (invariant test).
+- **Stakes is a gate, not a stat multiplier:** `validate_stakes_requirement(encounter, gm)`
+  enforces a per-stakes minimum party average level + minimum GM trust, **reusing the existing
+  `stories` trust system** (`PlayerTrust.gm_trust_level`, `TrustLevel`) — no new GM-auth concept.
+- **Wiring + API:** `add_opponent` auto-fills omitted stats (and boss phases) from the formula
+  when `max_health` is omitted (explicit values always win); read-only
+  `GET /api/combat/{id}/opponent-defaults/?tier=…` previews the computed block + a non-blocking
+  stakes verdict; `AddOpponentSerializer` enforces the stakes gate on create.
+- **Deferred (follow-ups):** React GM encounter-builder page; outlier-aware scaling +
+  sidekick/mentor roles for level-mismatched parties (**#1165**); stakes→reward-severity
+  routing; rich per-phase boss authoring beyond auto-generated default phases.
 
 ### Health Pool and Damage
 Health is separate from fatigue — fatigue degrades effectiveness, health degrades survival.
@@ -257,7 +283,8 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   DEFEATED, `_classify_encounter_outcome` forbids VICTORY while one is present, so
   the only resolution is fleeing (FLED via the existing flee pipeline). A derived
   `CombatEncounter.forced_escape` property drives a "you must run" banner in the
-  combat UI. Mook/Elite stat-default differentiation stays deferred to #566.
+  combat UI. Mook/Elite stat-default differentiation **shipped in #566** (per-tier
+  `OpponentTierTemplate` rows feed the scaling formula — see Encounter Scaling above).
 - ~~**Encounter aftermath**~~ **DONE (#876):** completion runs through a single
   `complete_encounter` seam: a typed `EncounterOutcome`
   (victory/defeat/fled/abandoned, classified at completion) + `completed_at` on
