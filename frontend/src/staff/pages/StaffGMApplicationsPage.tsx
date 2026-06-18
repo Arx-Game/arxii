@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { NextPrevPagination, StatusFilterBar } from '@/staff/components/listControls';
 import { useGMApplicationList } from '@/staff/queries';
 import type { GMApplicationStatus } from '@/staff/types';
 
@@ -40,14 +40,21 @@ export function StaffGMApplicationsPage() {
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">GM Applications</h1>
 
-      <StatusFilterBar
-        options={GM_STATUS_OPTIONS}
-        value={statusFilter}
-        onChange={(value) => {
-          setStatusFilter(value);
-          setPage(1);
-        }}
-      />
+      <div className="mb-6 flex flex-wrap gap-2">
+        {GM_STATUS_OPTIONS.map((opt) => (
+          <Button
+            key={opt.label}
+            variant={statusFilter === opt.value ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => {
+              setStatusFilter(opt.value);
+              setPage(1);
+            }}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
 
       {isLoading ? (
         <p className="text-muted-foreground">Loading...</p>
@@ -78,12 +85,27 @@ export function StaffGMApplicationsPage() {
             ))}
           </div>
 
-          <NextPrevPagination
-            page={page}
-            hasPrevious={!!data?.previous}
-            hasNext={!!data?.next}
-            onPageChange={setPage}
-          />
+          {data && data.count > 0 && (data.next || data.previous) && (
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!data.previous}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!data.next}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>
