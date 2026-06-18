@@ -42,6 +42,7 @@ from world.magic.views import (
     SoulTetherDissolveView,
     SoulTetherRescueView,
     StageAdvanceRespondView,
+    StylePresentationEndorsementViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadHubSummaryView,
@@ -97,6 +98,11 @@ router.register(
     "scene-entry-endorsements",
     SceneEntryEndorsementViewSet,
     basename="scene-entry-endorsement",
+)
+router.register(
+    "style-presentation-endorsements",
+    StylePresentationEndorsementViewSet,
+    basename="style-presentation-endorsement",
 )
 router.register(
     "resonance-grants",

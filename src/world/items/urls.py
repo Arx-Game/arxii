@@ -9,6 +9,7 @@ from world.items.views import (
     InteractionTypeViewSet,
     ItemFacetViewSet,
     ItemInstanceViewSet,
+    ItemStyleCraftViewSet,
     ItemTemplateViewSet,
     OutfitSlotViewSet,
     OutfitViewSet,
@@ -22,6 +23,7 @@ router.register("quality-tiers", QualityTierViewSet, basename="quality-tier")
 router.register("interaction-types", InteractionTypeViewSet, basename="interaction-type")
 router.register("templates", ItemTemplateViewSet, basename="item-template")
 router.register("item-facets", ItemFacetViewSet, basename="item-facet")
+router.register("item-styles", ItemStyleCraftViewSet, basename="item-style")
 router.register("equipped-items", EquippedItemViewSet, basename="equipped-item")
 router.register("inventory", ItemInstanceViewSet, basename="item-instance")
 router.register("outfits", OutfitViewSet, basename="outfit")

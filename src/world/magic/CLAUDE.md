@@ -125,6 +125,18 @@ binding on the character's motif, checks which equipped items carry that style
 `ModifierTarget`. The bonus magnitude and per-resonance cap come from the
 `AestheticAxisConfig` singleton (`world/mechanics`, lazy-created by `get_aesthetic_config()`).
 
+Two composition invariants are tested in `mechanics/tests/test_aesthetic_composition.py`:
+
+- **Style × Facet coexistence:** An item carrying both an `ItemStyle` and an `ItemFacet`
+  contributes to `passive_motif_style_bonuses` (style coherence) AND `passive_facet_bonuses`
+  (facet resonance) independently and simultaneously. The two walkers operate on disjoint
+  data paths and their results are summed by `equipment_walk_total`.
+
+- **Dilution-only (unbound styles are inert):** The walker iterates only the character's
+  `MotifResonanceStyle` bindings for the target resonance. Any worn `ItemStyle` not present
+  in those bindings is invisible to the walker — it adds no coverage and applies no penalty.
+  Characters may wear items tagged with arbitrary styles without degrading their coherence bonus.
+
 **Admin authoring surface:** Standalone `MotifResonanceAdmin` (in `world/magic/admin.py`)
 with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on `ItemInstance`.
 

@@ -8368,6 +8368,27 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/items/item-styles/:
+    post:
+      operationId: items_item_styles_create
+      description: Roll the crafting check and (on success) attach the style.
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemStyleWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleCraftResult'
+          description: ''
   /api/items/outfit-slots/:
     get:
       operationId: items_outfit_slots_list
@@ -10163,6 +10184,7 @@ paths:
           - SANCTUM_WEAVING
           - SCENE_ENTRY
           - STAFF_GRANT
+          - STYLE_PRESENTATION
         description: |-
           Discriminator. Identifies which source_* FK is populated.
 
@@ -10177,6 +10199,7 @@ paths:
           * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
           * `ENTRY_FLOURISH` - Entry flourishing
           * `DRAMATIC_MOMENT` - Dramatic moment
+          * `STYLE_PRESENTATION` - Style presentation
       tags:
       - magic
       security:
@@ -11109,6 +11132,65 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/magic/style-presentation-endorsements/:
+    post:
+      operationId: magic_style_presentation_endorsements_create
+      description: |-
+        Create + retrieve — style-presentation endorsements are immutable (#1152).
+
+        Grant fires immediately at creation time — no weekly settlement step.
+        Retrieve is exposed so the detail URL is registered, which means DELETE
+        returns 405 (Method Not Allowed) rather than 404 (not found).
+
+        POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+        GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StylePresentationEndorsementRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StylePresentationEndorsement'
+          description: ''
+  /api/magic/style-presentation-endorsements/{id}/:
+    get:
+      operationId: magic_style_presentation_endorsements_retrieve
+      description: |-
+        Create + retrieve — style-presentation endorsements are immutable (#1152).
+
+        Grant fires immediately at creation time — no weekly settlement step.
+        Retrieve is exposed so the detail URL is registered, which means DELETE
+        returns 405 (Method Not Allowed) rather than 404 (not found).
+
+        POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+        GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this style presentation endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StylePresentationEndorsement'
+          description: ''
   /api/magic/styles/:
     get:
       operationId: magic_styles_list
@@ -28660,6 +28742,52 @@ components:
       - quality_tier
       - quantity
       - template
+    ItemStyleRead:
+      type: object
+      description: Read serializer for ItemStyle (GET list/detail).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        item_instance:
+          type: integer
+          readOnly: true
+        style:
+          type: integer
+          readOnly: true
+        applied_by_account:
+          type: integer
+          readOnly: true
+          nullable: true
+        attachment_quality_tier:
+          type: integer
+          readOnly: true
+        applied_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - applied_at
+      - applied_by_account
+      - attachment_quality_tier
+      - id
+      - item_instance
+      - style
+    ItemStyleWriteRequest:
+      type: object
+      description: |-
+        Write serializer for ItemStyle (POST create) — input validation only.
+
+        The viewset drives the crafting service directly; this serializer parses
+        and validates the ``item_instance`` and ``style`` foreign keys.
+      properties:
+        item_instance:
+          type: integer
+        style:
+          type: integer
+      required:
+      - item_instance
+      - style
     ItemTemplateDetail:
       type: object
       description: Detail serializer for ItemTemplate with slots and interactions.
@@ -37430,6 +37558,7 @@ components:
             * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
             * `ENTRY_FLOURISH` - Entry flourishing
             * `DRAMATIC_MOMENT` - Dramatic moment
+            * `STYLE_PRESENTATION` - Style presentation
         granted_at:
           type: string
           format: date-time
@@ -39051,6 +39180,7 @@ components:
       - SANCTUM_DISSOLUTION_RECOVERY
       - ENTRY_FLOURISH
       - DRAMATIC_MOMENT
+      - STYLE_PRESENTATION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -39064,6 +39194,7 @@ components:
         * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
         * `ENTRY_FLOURISH` - Entry flourishing
         * `DRAMATIC_MOMENT` - Dramatic moment
+        * `STYLE_PRESENTATION` - Style presentation
     Specialization:
       type: object
       description: Serializer for Specialization model.
@@ -39912,6 +40043,108 @@ components:
       required:
       - cap
       - default
+    StyleCraftResult:
+      type: object
+      description: 'Response for a style-craft attempt: rolled outcome + resolved
+        tier + the row.'
+      properties:
+        attached:
+          type: boolean
+        outcome_name:
+          type: string
+          nullable: true
+          readOnly: true
+        success_level:
+          type: integer
+          nullable: true
+          readOnly: true
+        quality_tier:
+          allOf:
+          - $ref: '#/components/schemas/QualityTier'
+          nullable: true
+        item_style:
+          allOf:
+          - $ref: '#/components/schemas/ItemStyleRead'
+          nullable: true
+      required:
+      - attached
+      - item_style
+      - outcome_name
+      - quality_tier
+      - success_level
+    StylePresentationEndorsement:
+      type: object
+      description: |-
+        Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+
+        Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+        request body. The ``endorser_sheet`` is resolved from the requesting account
+        in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+        injected via ``serializer.save(endorser_sheet=sheet)``.
+
+        Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+        reversal deferred to ResonanceGrantReversal).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        endorser_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        endorsee_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+        resonance:
+          type: integer
+        persona_snapshot:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Endorsee's persona at endorsement time — masquerade audit.
+        granted_amount:
+          type: integer
+          readOnly: true
+          description: Captured from config at creation.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - endorsee_sheet
+      - endorser_sheet
+      - granted_amount
+      - id
+      - persona_snapshot
+      - resonance
+      - scene
+    StylePresentationEndorsementRequest:
+      type: object
+      description: |-
+        Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+
+        Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+        request body. The ``endorser_sheet`` is resolved from the requesting account
+        in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+        injected via ``serializer.save(endorser_sheet=sheet)``.
+
+        Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+        reversal deferred to ResonanceGrantReversal).
+      properties:
+        endorsee_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+        resonance:
+          type: integer
+      required:
+      - endorsee_sheet
+      - resonance
+      - scene
     SuitEnum:
       enum:
       - swords

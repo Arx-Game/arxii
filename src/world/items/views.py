@@ -32,6 +32,8 @@ from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     ItemError,
+    StyleAlreadyAttached,
+    StyleCapacityExceeded,
 )
 from world.items.filters import (
     FashionPresentationFilter,
@@ -62,6 +64,7 @@ from world.items.serializers import (
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
     ItemInstanceReadSerializer,
+    ItemStyleWriteSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
     OutfitReadSerializer,
@@ -71,12 +74,13 @@ from world.items.serializers import (
     OutfitWriteSerializer,
     PresentationEndorsementSerializer,
     QualityTierSerializer,
+    StyleCraftResultSerializer,
     UseItemResultSerializer,
     UseItemSerializer,
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
-from world.items.services.crafting import craft_attach_facet
+from world.items.services.crafting import craft_attach_facet, craft_attach_style
 from world.items.services.facets import remove_facet_from_item
 from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
@@ -134,6 +138,30 @@ class ItemFacetWritePermission(PlayerOrStaffPermission):
         self, request: Request, view: APIView, obj: ItemFacet
     ) -> bool:
         return _user_holds_item(cast(AccountDB, request.user), obj.item_instance)
+
+
+class ItemStyleWritePermission(PlayerOrStaffPermission):
+    """Allow style-attach only if the user owns the item_instance, or is staff."""
+
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
+        # POST: check the item_instance the request is targeting.
+        if request.method == "POST":
+            instance_pk = request.data.get("item_instance")
+            if instance_pk is None:
+                return True
+            user = cast(AccountDB, request.user)
+            return ItemInstance.objects.filter(
+                pk=instance_pk,
+                holder_character_sheet_id__in=RosterEntry.objects.for_account(user).values(
+                    "character_sheet_id"
+                ),
+            ).exists()
+        return True
+
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: object
+    ) -> bool:
+        return True
 
 
 class ItemTemplatePagination(PageNumberPagination):
@@ -1206,3 +1234,37 @@ class FashionJudgementViewSet(
         endorsement = serializer.save(judge=judge)
         read = PresentationEndorsementSerializer(endorsement)
         return Response(read.data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["items"])
+class ItemStyleCraftViewSet(viewsets.ViewSet):
+    """ViewSet for style crafting: POST rolls the check and attaches a Style to an item.
+
+    Mirrors ``ItemFacetViewSet.create`` — validates ``item_instance`` + ``style``
+    ownership, calls ``craft_attach_style``, and returns 201 on attach or 200 on
+    a failed roll.
+    """
+
+    http_method_names = ["post", "head", "options"]
+    permission_classes = [ItemStyleWritePermission]
+    serializer_class = StyleCraftResultSerializer
+
+    @extend_schema(request=ItemStyleWriteSerializer, responses=StyleCraftResultSerializer)
+    def create(self, request: Request) -> Response:
+        """Roll the crafting check and (on success) attach the style."""
+        serializer = ItemStyleWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        item_instance = serializer.validated_data["item_instance"]
+        style = serializer.validated_data["style"]
+        crafter_character = item_instance.holder_character_sheet.character
+        try:
+            result = craft_attach_style(
+                crafter_account=cast(AccountDB, request.user),
+                crafter_character=crafter_character,
+                item_instance=item_instance,
+                style=style,
+            )
+        except (StyleAlreadyAttached, StyleCapacityExceeded, CraftingNotConfigured) as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        status_code = 201 if result.attached else 200
+        return Response(StyleCraftResultSerializer(result).data, status=status_code)

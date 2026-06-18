@@ -40,6 +40,7 @@ from world.magic.models import (
     Restriction,
     Ritual,
     SceneEntryEndorsement,
+    StylePresentationEndorsement,
     Technique,
     TechniqueStyle,
     Thread,
@@ -1432,6 +1433,59 @@ class SceneEntryEndorsementSerializer(serializers.ModelSerializer):
         resonance = validated_data["resonance"]
         try:
             return create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+# =============================================================================
+# Magical-Aesthetic Axis Phase C — StylePresentationEndorsement (Task C3, #1152)
+# =============================================================================
+
+
+class StylePresentationEndorsementSerializer(serializers.ModelSerializer):
+    """Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
+
+    Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+    request body. The ``endorser_sheet`` is resolved from the requesting account
+    in the view (``StylePresentationEndorsementViewSet.perform_create``) and
+    injected via ``serializer.save(endorser_sheet=sheet)``.
+
+    Mirrors ``SceneEntryEndorsementSerializer`` — no DELETE (grant fires immediately;
+    reversal deferred to ResonanceGrantReversal).
+    """
+
+    class Meta:
+        model = StylePresentationEndorsement
+        fields = [
+            "id",
+            "endorser_sheet",
+            "endorsee_sheet",
+            "scene",
+            "resonance",
+            "persona_snapshot",
+            "granted_amount",
+            "created_at",
+        ]
+        read_only_fields = [
+            "endorser_sheet",
+            "persona_snapshot",
+            "granted_amount",
+            "created_at",
+        ]
+
+    def create(self, validated_data: dict) -> StylePresentationEndorsement:
+        """Delegate to ``create_style_presentation_endorsement``; surface errors as 400."""
+        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
+        from world.magic.services.gain import create_style_presentation_endorsement  # noqa: PLC0415
+
+        endorser_sheet = validated_data.pop("endorser_sheet")
+        endorsee_sheet = validated_data["endorsee_sheet"]
+        scene = validated_data["scene"]
+        resonance = validated_data["resonance"]
+        try:
+            return create_style_presentation_endorsement(
+                endorser_sheet, endorsee_sheet, scene, resonance
+            )
         except EndorsementValidationError as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 

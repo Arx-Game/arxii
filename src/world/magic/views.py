@@ -71,6 +71,7 @@ from world.magic.models import (
     Restriction,
     Ritual,
     SceneEntryEndorsement,
+    StylePresentationEndorsement,
     Technique,
     TechniqueStyle,
     Thread,
@@ -109,6 +110,7 @@ from world.magic.serializers import (
     RitualSessionDraftSerializer,
     RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
+    StylePresentationEndorsementSerializer,
     TechniqueDesignSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -1101,6 +1103,40 @@ class SceneEntryEndorsementViewSet(
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer: SceneEntryEndorsementSerializer) -> None:
+        """Resolve the endorser sheet from the requesting account and save."""
+        serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
+
+
+# =============================================================================
+# Magical-Aesthetic Axis Phase C — StylePresentationEndorsement (Task C3, #1152)
+# =============================================================================
+
+
+class StylePresentationEndorsementViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+):
+    """Create + retrieve — style-presentation endorsements are immutable (#1152).
+
+    Grant fires immediately at creation time — no weekly settlement step.
+    Retrieve is exposed so the detail URL is registered, which means DELETE
+    returns 405 (Method Not Allowed) rather than 404 (not found).
+
+    POST /api/magic/style-presentation-endorsements/ — create an endorsement.
+    GET  /api/magic/style-presentation-endorsements/<pk>/ — retrieve an endorsement.
+    """
+
+    queryset = StylePresentationEndorsement.objects.select_related(
+        "endorser_sheet",
+        "endorsee_sheet",
+        "scene",
+        "resonance",
+    )
+    serializer_class = StylePresentationEndorsementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer: StylePresentationEndorsementSerializer) -> None:
         """Resolve the endorser sheet from the requesting account and save."""
         serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
 

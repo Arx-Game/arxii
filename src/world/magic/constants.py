@@ -164,6 +164,8 @@ class GainSource(models.TextChoices):
     # #544/#545 — social action flourishing and staff-tagged dramatic moments
     ENTRY_FLOURISH = "ENTRY_FLOURISH", "Entry flourishing"
     DRAMATIC_MOMENT = "DRAMATIC_MOMENT", "Dramatic moment"
+    # #1152 — style presentation endorsement gain
+    STYLE_PRESENTATION = "STYLE_PRESENTATION", "Style presentation"
 
 
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).
