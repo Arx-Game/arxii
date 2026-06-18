@@ -428,13 +428,14 @@ def get_runtime_technique_stats(
     )
 
 
-def calculate_effective_anima_cost(
+def calculate_effective_anima_cost(  # noqa: PLR0913
     *,
     base_cost: int,
     runtime_intensity: int,
     runtime_control: int,
     current_anima: int,
     strain_commitment: int = 0,
+    lethal: bool = True,
 ) -> AnimaCostResult:
     """Calculate effective anima cost using the delta formula.
 
@@ -444,9 +445,16 @@ def calculate_effective_anima_cost(
     before strain; strain then raises the effective cost (and potential deficit) above it.
 
     deficit = max(effective_cost - current_anima, 0)
+
+    ``lethal`` defaults to ``True`` so existing callers are unaffected. In a NON-LETHAL
+    encounter (``lethal=False``) the effective cost is clamped to the caster's available
+    anima, so the deficit is always ``0`` (no overburn / life-force draw). This mirrors
+    the clamp in ``deduct_anima`` so the surfaced cost and the actual deduction agree.
     """
     control_delta = runtime_control - runtime_intensity
     effective_cost = max(base_cost - control_delta, 0) + max(strain_commitment, 0)
+    if not lethal:
+        effective_cost = min(effective_cost, current_anima)
     deficit = max(effective_cost - current_anima, 0)
 
     return AnimaCostResult(
@@ -513,17 +521,22 @@ def _resolve_check_result(
     return None
 
 
-def _accumulate_soulfray(
+def _accumulate_soulfray(  # noqa: PLR0913
     *,
     character: ObjectDB,
     anima: CharacterAnima,
     deficit: int,
     soulfray_config: SoulfrayConfig | None,
     check_result: CheckResult | None,
+    lethal: bool = True,
 ) -> SoulfrayResult | None:
     """Step 7: accumulate Soulfray severity and apply stage consequences.
 
     No-op (returns ``None``) when Soulfray is unconfigured or severity is non-positive.
+
+    ``lethal`` defaults to ``True``. When ``False`` (non-lethal encounter) the accrued
+    severity is bounded below the first death-risk stage and the stage consequence pool
+    never fires a ``character_loss`` consequence.
     """
     if not soulfray_config:
         return None
@@ -533,6 +546,7 @@ def _accumulate_soulfray(
         max_anima=anima.maximum,
         deficit=deficit,
         config=soulfray_config,
+        lethal=lethal,
     )
     if soulfray_severity <= 0:
         return None
@@ -541,6 +555,7 @@ def _accumulate_soulfray(
         soulfray_severity=soulfray_severity,
         soulfray_config=soulfray_config,
         technique_check_result=check_result,
+        lethal=lethal,
     )
 
 
@@ -695,6 +710,7 @@ def use_technique(  # noqa: PLR0913
     applicable_threads: Sequence[ApplicableThread] | None = None,
     cast_pull: CastPullDeclaration | None = None,
     power_intensity_bonus: int = 0,
+    lethal: bool = True,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -707,6 +723,13 @@ def use_technique(  # noqa: PLR0913
     (not anima cost); used by clash strain→power to let strain commitment raise the
     cast's effective power without changing the anima the caster pays. Defaults to
     ``0`` so every existing caller is unaffected. Negative values are clamped to 0.
+
+    ``lethal`` defaults to ``True`` so every existing caller keeps the live magical
+    fatigue path. In a NON-LETHAL encounter (``lethal=False``) the cast cannot push
+    fatigue into dangerous territory: anima cost is clamped to available anima (no
+    overburn / life-force draw), accrued Soulfray severity is bounded below the first
+    death-risk stage, and the Soulfray stage consequence pool never rolls a
+    ``character_loss`` consequence.
 
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
@@ -726,6 +749,7 @@ def use_technique(  # noqa: PLR0913
         runtime_control=stats.control,
         current_anima=anima.current,
         strain_commitment=strain_commitment,
+        lethal=lethal,
     )
 
     # Step 3: Safety checkpoint (Soulfray stage-driven)
@@ -804,7 +828,7 @@ def use_technique(  # noqa: PLR0913
             )
 
     # Step 4: Deduct anima
-    deficit = deduct_anima(character, cost.effective_cost)
+    deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
 
     # Steps 5 + 6: Resolution
     resolution_result = resolve_fn(power=effective_power, ledger=effective_ledger)
@@ -819,6 +843,7 @@ def use_technique(  # noqa: PLR0913
         deficit=deficit,
         soulfray_config=SoulfrayConfig.objects.first(),
         check_result=effective_check_result,
+        lethal=lethal,
     )
 
     # Step 8: Mishap rider

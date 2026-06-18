@@ -750,6 +750,7 @@ def resolve_combat_technique(
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
         targets=targets,
+        lethal=encounter.is_lethal,
     )
 
     return _build_combat_result(technique_use_result, resolver)
