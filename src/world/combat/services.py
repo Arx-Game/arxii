@@ -2778,6 +2778,15 @@ def _resolve_pc_action(
     if action.maneuver == CombatManeuver.FLEE:
         return _resolve_flee(participant, action)
 
+    # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
+    # _resolve_duel_completion is a no-op afterwards because the encounter is now
+    # COMPLETED (yield_duel routes through complete_encounter).
+    if action.maneuver == CombatManeuver.YIELD:
+        from world.combat.duels import yield_duel  # noqa: PLC0415
+
+        yield_duel(participant)
+        return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     technique = action.focused_action
@@ -3890,7 +3899,26 @@ def resolve_round(
     result.phase_transitions = _check_boss_transitions(encounter)
 
     # --- Check encounter completion ---
-    if _check_encounter_completion(encounter):
+    # A DUEL may have already been completed mid-round by a YIELD maneuver
+    # (yield_duel routes through complete_encounter). Re-fetch status to avoid
+    # double-completing or flipping a COMPLETED duel back to BETWEEN_ROUNDS.
+    enc.refresh_from_db(fields=["status"])
+    if enc.status == EncounterStatus.COMPLETED:
+        result.encounter_completed = True
+    elif enc.encounter_type == EncounterType.DUEL:
+        # Duels have their own end conditions (mirror DEFEATED → winner; lethal
+        # opponent DEFEATED / PC down). resolve_duel_end completes via the shared
+        # seam and returns the encounter, or None if the duel is still ongoing.
+        from world.combat.duels import resolve_duel_end  # noqa: PLC0415
+
+        enc.round_started_at = None
+        enc.save(update_fields=["round_started_at"])
+        if resolve_duel_end(enc) is not None:
+            result.encounter_completed = True
+        else:
+            enc.status = EncounterStatus.BETWEEN_ROUNDS
+            enc.save(update_fields=["status"])
+    elif _check_encounter_completion(encounter):
         result.encounter_completed = True
         enc.round_started_at = None
         enc.save(update_fields=["round_started_at"])

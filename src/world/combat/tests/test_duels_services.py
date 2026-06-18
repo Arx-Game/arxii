@@ -4,8 +4,20 @@ from django.test import TestCase
 from evennia import create_object
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterType, OpponentTier, RiskLevel
-from world.combat.duels import create_lethal_duel, create_pvp_duel
+from world.combat.constants import (
+    EncounterOutcome,
+    EncounterStatus,
+    EncounterType,
+    OpponentStatus,
+    OpponentTier,
+    RiskLevel,
+)
+from world.combat.duels import (
+    create_lethal_duel,
+    create_pvp_duel,
+    resolve_duel_end,
+    yield_duel,
+)
 from world.combat.factories import ThreatPoolFactory
 
 
@@ -184,3 +196,144 @@ class CreateLethalDuelTests(TestCase):
         )
         opp = enc.opponents.get()
         self.assertEqual(opp.tier, OpponentTier.HERO_KILLER)
+
+
+class ResolveDuelEndTests(TestCase):
+    """Task 7: resolve_duel_end + yield_duel end conditions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.a = CharacterSheetFactory()
+        cls.b = CharacterSheetFactory()
+        cls.pc_sheet = CharacterSheetFactory()
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="Duel End Room", nohome=True)
+        self.opponent_kwargs = {
+            "name": "Dueling Master",
+            "max_health": 200,
+            "threat_pool": self.threat_pool,
+            "soak_value": 50,
+        }
+
+    # --- PvP: mirror DEFEATED -------------------------------------------------
+
+    def test_mirror_defeat_sets_duel_winner_and_completes(self):
+        """A DEFEATED mirror_B → B loses → A wins, encounter COMPLETED + VICTORY."""
+        enc = create_pvp_duel(self.a, self.b, self.room)
+        mirror_b = enc.opponents.get(mirrors_participant__character_sheet=self.b)
+        mirror_b.status = OpponentStatus.DEFEATED
+        mirror_b.save(update_fields=["status"])
+
+        returned = resolve_duel_end(enc)
+        enc.refresh_from_db()
+
+        self.assertIsNotNone(returned)
+        self.assertEqual(enc.duel_winner_id, self.a.pk)
+        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
+        self.assertIsNotNone(enc.completed_at)
+
+    def test_ongoing_pvp_duel_returns_none(self):
+        """No DEFEATED mirror → duel ongoing → None, not completed."""
+        enc = create_pvp_duel(self.a, self.b, self.room)
+        self.assertIsNone(resolve_duel_end(enc))
+        enc.refresh_from_db()
+        self.assertNotEqual(enc.status, EncounterStatus.COMPLETED)
+
+    def test_already_completed_pvp_not_recompleted(self):
+        """A second resolve_duel_end on a COMPLETED duel is a no-op (no double-complete)."""
+        enc = create_pvp_duel(self.a, self.b, self.room)
+        mirror_b = enc.opponents.get(mirrors_participant__character_sheet=self.b)
+        mirror_b.status = OpponentStatus.DEFEATED
+        mirror_b.save(update_fields=["status"])
+        resolve_duel_end(enc)
+        enc.refresh_from_db()
+        first_completed_at = enc.completed_at
+
+        # Force the other mirror defeated too; a re-run must NOT re-complete.
+        self.assertIsNone(resolve_duel_end(enc))
+        enc.refresh_from_db()
+        self.assertEqual(enc.completed_at, first_completed_at)
+        self.assertEqual(enc.duel_winner_id, self.a.pk)
+
+    # --- PvP: yield -----------------------------------------------------------
+
+    def test_yield_makes_other_duelist_winner(self):
+        """The yielding participant loses; the other becomes duel_winner."""
+        enc = create_pvp_duel(self.a, self.b, self.room)
+        p_a = enc.participants.get(character_sheet=self.a)
+
+        yield_duel(p_a)
+        enc.refresh_from_db()
+
+        self.assertEqual(enc.duel_winner_id, self.b.pk)
+        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
+        self.assertIsNotNone(enc.completed_at)
+
+    # --- Lethal PC-vs-NPC -----------------------------------------------------
+
+    def test_lethal_opponent_defeated_pc_wins(self):
+        """DEFEATED real opponent → PC wins, COMPLETED + VICTORY."""
+        enc = create_lethal_duel(self.pc_sheet, self.opponent_kwargs, self.room)
+        opp = enc.opponents.get()
+        opp.status = OpponentStatus.DEFEATED
+        opp.save(update_fields=["status"])
+
+        returned = resolve_duel_end(enc)
+        enc.refresh_from_db()
+
+        self.assertIsNotNone(returned)
+        self.assertEqual(enc.duel_winner_id, self.pc_sheet.pk)
+        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
+
+    def test_lethal_pc_down_npc_wins_no_winner(self):
+        """PC cannot act (dead) → NPC wins, duel_winner stays null, DEFEAT."""
+        from world.vitals.constants import CharacterLifeState
+        from world.vitals.factories import CharacterVitalsFactory
+
+        enc = create_lethal_duel(self.pc_sheet, self.opponent_kwargs, self.room)
+        CharacterVitalsFactory(character_sheet=self.pc_sheet, life_state=CharacterLifeState.DEAD)
+
+        returned = resolve_duel_end(enc)
+        enc.refresh_from_db()
+
+        self.assertIsNotNone(returned)
+        self.assertIsNone(enc.duel_winner_id)
+        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.outcome, EncounterOutcome.DEFEAT)
+
+    def test_lethal_ongoing_returns_none(self):
+        """PC can act and opponent alive → ongoing → None."""
+        enc = create_lethal_duel(self.pc_sheet, self.opponent_kwargs, self.room)
+        self.assertIsNone(resolve_duel_end(enc))
+        enc.refresh_from_db()
+        self.assertNotEqual(enc.status, EncounterStatus.COMPLETED)
+
+    def test_lethal_yield_npc_wins_no_winner(self):
+        """Lethal yield: NPC wins, duel_winner null, DEFEAT."""
+        enc = create_lethal_duel(self.pc_sheet, self.opponent_kwargs, self.room)
+        p = enc.participants.get()
+
+        yield_duel(p)
+        enc.refresh_from_db()
+
+        self.assertIsNone(enc.duel_winner_id)
+        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.outcome, EncounterOutcome.DEFEAT)
+
+    # --- Non-duel guard -------------------------------------------------------
+
+    def test_non_duel_encounter_returns_none(self):
+        """resolve_duel_end only acts on DUEL encounters."""
+        from world.combat.models import CombatEncounter
+
+        enc = CombatEncounter.objects.create(
+            encounter_type=EncounterType.PARTY_COMBAT,
+            room=self.room,
+            status=EncounterStatus.BETWEEN_ROUNDS,
+        )
+        self.assertIsNone(resolve_duel_end(enc))

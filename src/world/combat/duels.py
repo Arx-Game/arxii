@@ -17,9 +17,22 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
-from world.combat.constants import EncounterStatus, EncounterType, OpponentTier, RiskLevel
+from world.combat.constants import (
+    EncounterOutcome,
+    EncounterStatus,
+    EncounterType,
+    OpponentStatus,
+    OpponentTier,
+    RiskLevel,
+)
 from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
-from world.combat.services import acknowledge_encounter_risk, add_opponent, add_participant
+from world.combat.services import (
+    acknowledge_encounter_risk,
+    add_opponent,
+    add_participant,
+    complete_encounter,
+)
+from world.vitals.services import can_act
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -158,3 +171,121 @@ def create_lethal_duel(
     add_opponent(enc, **kwargs)
 
     return enc
+
+
+# ---------------------------------------------------------------------------
+# Duel-end resolution (Task 7)
+# ---------------------------------------------------------------------------
+
+
+def _complete_duel(
+    encounter: CombatEncounter,
+    *,
+    winner_sheet: CharacterSheet | None,
+    outcome: EncounterOutcome,
+) -> CombatEncounter:
+    """Record the duel victor and route through the shared completion seam.
+
+    ``duel_winner`` is persisted first so it is durable before
+    ``complete_encounter`` flips status / fires aftermath / cleans up. The shared
+    seam owns ``status=COMPLETED``, ``completed_at``, ``outcome``, broadcast, and
+    cleanup — duels do not reimplement that tail.
+    """
+    encounter.duel_winner = winner_sheet
+    encounter.save(update_fields=["duel_winner"])
+    complete_encounter(encounter, outcome=outcome)
+    return encounter
+
+
+def resolve_duel_end(  # noqa: PLR0911 - distinct duel end conditions read clearest as guards
+    encounter: CombatEncounter,
+) -> CombatEncounter | None:
+    """Complete a DUEL encounter if an end condition is met; else return None.
+
+    Only acts on ``EncounterType.DUEL`` encounters that are not already COMPLETED.
+
+    PvP (mirror surfaces present): a mirror ``CombatOpponent`` IS that PC's body.
+    If a mirror is ``DEFEATED`` its mirrored participant is the LOSER and the OTHER
+    participant is the WINNER (``duel_winner`` → winner's sheet, VICTORY).
+
+    Lethal PC-vs-NPC (real, non-mirror opponent): if the opponent is ``DEFEATED``
+    the PC wins (VICTORY); if the PC participant is down (``not can_act``) the NPC
+    wins (``duel_winner`` stays null, DEFEAT). A still-fighting PC and a still-alive
+    opponent means the duel is ongoing → None.
+
+    Returns the completed encounter, or None if the duel has not ended.
+    """
+    if encounter.encounter_type != EncounterType.DUEL:
+        return None
+    if encounter.status == EncounterStatus.COMPLETED:
+        return None
+
+    mirrors = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter, mirrors_participant__isnull=False
+        ).select_related("mirrors_participant__character_sheet")
+    )
+
+    if mirrors:
+        # PvP: a DEFEATED mirror means its mirrored participant lost.
+        defeated_mirror = next((m for m in mirrors if m.status == OpponentStatus.DEFEATED), None)
+        if defeated_mirror is None:
+            return None
+        loser = defeated_mirror.mirrors_participant
+        winner = (
+            CombatParticipant.objects.filter(encounter=encounter)
+            .exclude(pk=loser.pk)
+            .select_related("character_sheet")
+            .first()
+        )
+        winner_sheet = winner.character_sheet if winner is not None else None
+        return _complete_duel(
+            encounter, winner_sheet=winner_sheet, outcome=EncounterOutcome.VICTORY
+        )
+
+    # Lethal PC-vs-NPC: one real opponent, one PC participant.
+    real_opponent = CombatOpponent.objects.filter(
+        encounter=encounter, mirrors_participant__isnull=True
+    ).first()
+    pc = (
+        CombatParticipant.objects.filter(encounter=encounter)
+        .select_related("character_sheet__character")
+        .first()
+    )
+
+    if real_opponent is not None and real_opponent.status == OpponentStatus.DEFEATED:
+        winner_sheet = pc.character_sheet if pc is not None else None
+        return _complete_duel(
+            encounter, winner_sheet=winner_sheet, outcome=EncounterOutcome.VICTORY
+        )
+
+    if pc is not None and not can_act(pc.character_sheet):
+        # PC is down → NPC wins; no PC duel_winner.
+        return _complete_duel(encounter, winner_sheet=None, outcome=EncounterOutcome.DEFEAT)
+
+    return None
+
+
+def yield_duel(participant: CombatParticipant) -> CombatEncounter:
+    """Yield the duel — the yielding participant LOSES.
+
+    PvP: the OTHER participant becomes ``duel_winner`` (VICTORY for them). Lethal
+    PC-vs-NPC: the NPC wins, so ``duel_winner`` stays null and the outcome is
+    DEFEAT. Routes through the shared completion seam.
+    """
+    encounter = participant.encounter
+
+    other = (
+        CombatParticipant.objects.filter(encounter=encounter)
+        .exclude(pk=participant.pk)
+        .select_related("character_sheet")
+        .first()
+    )
+    if other is not None:
+        # PvP yield: the other duelist wins.
+        return _complete_duel(
+            encounter, winner_sheet=other.character_sheet, outcome=EncounterOutcome.VICTORY
+        )
+
+    # Lethal yield: the NPC wins; no PC duel_winner.
+    return _complete_duel(encounter, winner_sheet=None, outcome=EncounterOutcome.DEFEAT)
