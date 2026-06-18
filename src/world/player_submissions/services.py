@@ -14,7 +14,6 @@ import logging
 import traceback as traceback_module
 from typing import TYPE_CHECKING, cast
 
-from django.db.models import F
 from django.utils import timezone
 
 from world.player_submissions.models import SystemErrorReport
@@ -63,7 +62,7 @@ def report_error(exc: BaseException, *, label: str, actor: ObjectDB | None = Non
     try:
         tb_text = "".join(traceback_module.format_exception(type(exc), exc, exc.__traceback__))
         signature = _signature(exc, label)
-        _, created = SystemErrorReport.objects.get_or_create(
+        report, created = SystemErrorReport.objects.get_or_create(
             signature=signature,
             defaults={
                 "label": label[:200],
@@ -74,10 +73,12 @@ def report_error(exc: BaseException, *, label: str, actor: ObjectDB | None = Non
             },
         )
         if not created:
-            SystemErrorReport.objects.filter(signature=signature).update(
-                occurrence_count=F("occurrence_count") + 1,
-                last_seen=timezone.now(),
-            )
+            # Read-modify-write via save() (not F()+update()) so the cached
+            # SharedMemoryModel instance stays in sync — an F-expression .update()
+            # leaves later reads of this row stale (idmapper).
+            report.occurrence_count += 1
+            report.last_seen = timezone.now()
+            report.save(update_fields=["occurrence_count", "last_seen"])
     except Exception:
         logger.exception("Failed to record SystemErrorReport for %s", label)
 
