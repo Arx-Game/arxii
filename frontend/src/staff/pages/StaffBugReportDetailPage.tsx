@@ -3,7 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useBugReportDetail, useUpdateBugReportStatus } from '@/staff/queries';
+import { FileGithubIssueDialog } from '@/staff/components/FileGithubIssueDialog';
+import {
+  useBugReportDetail,
+  useFileBugReportIssue,
+  useUpdateBugReportStatus,
+} from '@/staff/queries';
 
 export function StaffBugReportDetailPage() {
   const navigate = useNavigate();
@@ -11,6 +16,7 @@ export function StaffBugReportDetailPage() {
   const reportId = id ? parseInt(id, 10) : undefined;
   const { data: report, isLoading } = useBugReportDetail(reportId);
   const updateStatus = useUpdateBugReportStatus();
+  const fileIssue = useFileBugReportIssue();
 
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!report) return <p className="p-8 text-muted-foreground">Bug report not found.</p>;
@@ -54,20 +60,32 @@ export function StaffBugReportDetailPage() {
         </CardContent>
       </Card>
 
-      {report.status === 'open' && (
-        <div className="flex gap-2">
-          <Button disabled={updateStatus.isPending} onClick={() => handleStatusChange('reviewed')}>
-            Mark Reviewed
-          </Button>
-          <Button
-            variant="outline"
-            disabled={updateStatus.isPending}
-            onClick={() => handleStatusChange('dismissed')}
-          >
-            Dismiss
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {report.status === 'open' && (
+          <>
+            <Button
+              disabled={updateStatus.isPending}
+              onClick={() => handleStatusChange('reviewed')}
+            >
+              Mark Reviewed
+            </Button>
+            <Button
+              variant="outline"
+              disabled={updateStatus.isPending}
+              onClick={() => handleStatusChange('dismissed')}
+            >
+              Dismiss
+            </Button>
+          </>
+        )}
+        <FileGithubIssueDialog
+          issueUrl={report.github_issue_url}
+          issueNumber={report.github_issue_number}
+          draft={report.issue_draft}
+          isPending={fileIssue.isPending}
+          onSubmit={(title, body) => fileIssue.mutateAsync({ id: report.id, title, body })}
+        />
+      </div>
     </div>
   );
 }

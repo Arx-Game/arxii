@@ -16086,6 +16086,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/BugReportDetail'
           description: ''
+  /api/player-submissions/bug-reports/{id}/file-issue/:
+    post:
+      operationId: player_submissions_bug_reports_file_issue_create
+      description: 'Staff-only: file a public GitHub issue from this bug report (#1164).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bug report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BugReportDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BugReportDetail'
+          description: ''
   /api/player-submissions/feedback/:
     get:
       operationId: player_submissions_feedback_list
@@ -16573,6 +16601,34 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PatchedSystemErrorReportDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorReportDetail'
+          description: ''
+  /api/player-submissions/system-errors/{id}/file-issue/:
+    post:
+      operationId: player_submissions_system_errors_file_issue_create
+      description: 'Staff-only: file a public GitHub issue from this captured error
+        (#1164).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this System Error Report.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemErrorReportDetailRequest'
       security:
       - cookieAuth: []
       responses:
@@ -22149,10 +22205,30 @@ components:
           readOnly: true
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+        github_issue_number:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: GitHub issue number, once staff have filed one from this report
+            (#1164).
+        github_issue_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the filed GitHub issue (empty until filed).
+        issue_draft:
+          type: object
+          additionalProperties: {}
+          description: The redacted, staff-editable draft for the File GitHub issue
+            dialog.
+          readOnly: true
       required:
       - created_at
       - description
+      - github_issue_number
+      - github_issue_url
       - id
+      - issue_draft
       - reporter_account
       - reporter_account_username
       - reporter_persona
@@ -40506,12 +40582,32 @@ components:
           readOnly: true
         status:
           $ref: '#/components/schemas/StatusD66Enum'
+        github_issue_number:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: GitHub issue number, once staff have filed one from this report
+            (#1164).
+        github_issue_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: Link to the filed GitHub issue (empty until filed).
+        issue_draft:
+          type: object
+          additionalProperties: {}
+          description: The redacted, staff-editable draft for the File GitHub issue
+            dialog.
+          readOnly: true
       required:
       - actor_persona
       - actor_persona_name
       - exception_type
       - first_seen
+      - github_issue_number
+      - github_issue_url
       - id
+      - issue_draft
       - label
       - last_seen
       - message

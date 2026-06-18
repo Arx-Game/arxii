@@ -9,6 +9,7 @@ import type {
   BugReport,
   GMApplication,
   GMApplicationStatus,
+  FiledIssue,
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
@@ -143,6 +144,28 @@ export async function updateBugReportStatus(
   });
   if (!res.ok) throw new Error('Failed to update bug report status');
   return res.json();
+}
+
+// Staff-only: file a public GitHub issue from a report (#1164). title/body are the
+// staff-edited, already-redacted text.
+async function fileIssue(path: string, title: string, body: string): Promise<FiledIssue> {
+  const res = await apiFetch(path, {
+    method: 'POST',
+    body: JSON.stringify({ title, body }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail ?? 'Failed to file GitHub issue');
+  }
+  return res.json();
+}
+
+export function fileBugReportIssue(id: number, title: string, body: string): Promise<FiledIssue> {
+  return fileIssue(`${SUBMISSIONS_URL}/bug-reports/${id}/file-issue/`, title, body);
+}
+
+export function fileSystemErrorIssue(id: number, title: string, body: string): Promise<FiledIssue> {
+  return fileIssue(`${SUBMISSIONS_URL}/system-errors/${id}/file-issue/`, title, body);
 }
 
 // =============================================================================
