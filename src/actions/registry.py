@@ -15,6 +15,7 @@ from actions.definitions.duels import (
     ChallengeAction,
     DeclineChallengeAction,
     WithdrawChallengeAction,
+    YieldAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.investigation import SearchAction
@@ -92,6 +93,7 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     AcceptChallengeAction(),
     DeclineChallengeAction(),
     WithdrawChallengeAction(),
+    YieldAction(),
     intimidate,
     persuade,
     deceive,

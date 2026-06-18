@@ -1,4 +1,4 @@
-"""Tests for the challenge / accept / decline / withdraw actions (Tasks 10, 11).
+"""Tests for the challenge / accept / decline / withdraw / yield actions (Tasks 10, 11, 12).
 
 Tests are built using setUp (not setUpTestData) because CharacterFactory creates
 Evennia ObjectDB instances (DbHolder — not deepcopyable, which breaks setUpTestData).
@@ -17,6 +17,11 @@ Scenarios covered (Task 11 — accept / decline / withdraw):
   (i) Only the challenged PC may accept/decline (challenger is rejected).
   (j) Only the challenger may withdraw (challenged is rejected).
   (k) Non-PENDING challenge cannot be accepted/declined/withdrawn.
+
+Scenarios covered (Task 12 — yield):
+  (l) Participant in active DUEL yields → encounter COMPLETED, other duelist is duel_winner.
+  (m) Actor not in any duel → clean failure ("You are not in a duel.").
+  (n) Actor has no CharacterSheet → clean failure.
 """
 
 from __future__ import annotations
@@ -25,7 +30,8 @@ import django.test
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import DuelChallengeStatus
+from world.combat.constants import DuelChallengeStatus, EncounterStatus
+from world.combat.duels import create_pvp_duel
 from world.combat.factories import DuelChallengeFactory
 from world.combat.models import DuelChallenge
 from world.consent.factories import SocialConsentPreferenceFactory
@@ -404,5 +410,78 @@ class WithdrawChallengeActionTests(django.test.TestCase):
         self.challenge.save(update_fields=["status"])
 
         result = get_action("withdraw").run(self.challenger)
+
+        self.assertFalse(result.success)
+
+
+# ---------------------------------------------------------------------------
+# Task 12: yield
+# ---------------------------------------------------------------------------
+
+
+class YieldActionActiveDuelTests(django.test.TestCase):
+    """yield action: participant in an active DUEL concedes → COMPLETED, other wins."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("YieldArena")
+        self.challenger, self.challenger_sheet = _make_pc("YieldChallenger", self.room)
+        self.challenged, self.challenged_sheet = _make_pc("YieldChallenged", self.room)
+        # Create an active DUEL encounter using the real service.
+        self.encounter = create_pvp_duel(self.challenger_sheet, self.challenged_sheet, self.room)
+
+    def test_yield_completes_duel_encounter(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("yield").run(self.challenger)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.status, EncounterStatus.COMPLETED)
+
+    def test_yield_makes_other_duelist_duel_winner(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("yield").run(self.challenger)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.duel_winner_id, self.challenged_sheet.pk)
+
+    def test_yield_result_includes_encounter_id(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("yield").run(self.challenger)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.assertIn("encounter_id", result.data)
+
+
+class YieldActionNotInDuelTests(django.test.TestCase):
+    """yield action: actor not in any active duel → clean failure."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("NoYieldRoom")
+        self.actor, self.actor_sheet = _make_pc("NotInDuel", self.room)
+
+    def test_yield_not_in_duel_fails_cleanly(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("yield").run(self.actor)
+
+        self.assertFalse(result.success)
+        self.assertIn("not in a duel", result.message.lower())
+
+
+class YieldActionNoSheetTests(django.test.TestCase):
+    """yield action: actor has no CharacterSheet → clean failure."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("NoSheetYieldRoom")
+        self.actor = CharacterFactory(db_key="NoSheetYielder", location=self.room)
+
+    def test_yield_no_sheet_fails_cleanly(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("yield").run(self.actor)
 
         self.assertFalse(result.success)

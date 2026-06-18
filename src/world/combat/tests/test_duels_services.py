@@ -337,3 +337,49 @@ class ResolveDuelEndTests(TestCase):
             status=EncounterStatus.BETWEEN_ROUNDS,
         )
         self.assertIsNone(resolve_duel_end(enc))
+
+
+class YieldManeuverNonDuelGuardTests(TestCase):
+    """Task 7 gap: YIELD maneuver in _resolve_pc_action must be gated to DUEL only.
+
+    A YIELD maneuver declared in a non-DUEL encounter (e.g. PARTY_COMBAT) must NOT
+    call yield_duel / complete the encounter.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.pc_sheet = CharacterSheetFactory()
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="NonDuelRoom", nohome=True)
+
+    def test_yield_maneuver_outside_duel_does_not_complete_encounter(self):
+        """YIELD in a PARTY_COMBAT encounter must not trigger duel completion."""
+        from world.combat.constants import CombatManeuver
+        from world.combat.factories import CombatEncounterFactory, CombatRoundActionFactory
+        from world.combat.models import CombatParticipant
+        from world.combat.services import _resolve_pc_action
+
+        enc = CombatEncounterFactory(
+            encounter_type=EncounterType.PARTY_COMBAT,
+            room=self.room,
+            status=EncounterStatus.BETWEEN_ROUNDS,
+        )
+        participant = CombatParticipant.objects.create(
+            encounter=enc,
+            character_sheet=self.pc_sheet,
+        )
+        action = CombatRoundActionFactory(
+            participant=participant,
+            maneuver=CombatManeuver.YIELD,
+        )
+
+        # Call the private resolver directly.  Should NOT raise, should NOT complete enc.
+        _resolve_pc_action(participant, action)
+
+        enc.refresh_from_db()
+        self.assertNotEqual(
+            enc.status,
+            EncounterStatus.COMPLETED,
+            "YIELD maneuver in a non-DUEL encounter must not complete the encounter",
+        )

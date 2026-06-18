@@ -180,6 +180,7 @@ class ActionRegistryTests(TestCase):
             "accept",
             "decline",
             "withdraw",
+            "yield",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

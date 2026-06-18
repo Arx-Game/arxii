@@ -344,3 +344,76 @@ class WithdrawChallengeAction(Action):
 accept = AcceptChallengeAction()
 decline = DeclineChallengeAction()
 withdraw = WithdrawChallengeAction()
+
+
+def _active_duel_participant(actor: ObjectDB) -> object | None:
+    """Return the ACTIVE CombatParticipant for *actor* in an active DUEL, or None.
+
+    "Active DUEL" means an encounter with encounter_type==DUEL and status not COMPLETED.
+    """
+    from world.combat.constants import EncounterStatus, EncounterType  # noqa: PLC0415
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    actor_sheet = _sheet(actor)
+    if actor_sheet is None:
+        return None
+    return (
+        CombatParticipant.objects.filter(
+            character_sheet=actor_sheet,
+            encounter__encounter_type=EncounterType.DUEL,
+        )
+        .exclude(encounter__status=EncounterStatus.COMPLETED)
+        .select_related("encounter")
+        .first()
+    )
+
+
+@dataclass
+class YieldAction(Action):
+    """Concede an active DUEL — the yielding PC loses immediately.
+
+    Finds the actor's active CombatParticipant in a non-COMPLETED DUEL encounter
+    and calls ``yield_duel``, which records the other duelist as winner and
+    completes the encounter via the shared seam.
+    """
+
+    key: str = "yield"
+    name: str = "Yield"
+    icon: str = "flag"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        actor_sheet = _sheet(actor)
+        if actor_sheet is None:
+            return ActionResult(
+                success=False,
+                message="You must be a real character to yield a duel.",
+            )
+
+        participant = _active_duel_participant(actor)
+        if participant is None:
+            return ActionResult(
+                success=False,
+                message="You are not in a duel.",
+            )
+
+        from world.combat.duels import yield_duel  # noqa: PLC0415
+
+        encounter = yield_duel(participant)
+
+        return ActionResult(
+            success=True,
+            message="You yield the duel.",
+            data={"encounter_id": encounter.pk},
+        )
+
+
+# Module-level singleton — registered in actions/registry.py
+yield_action = YieldAction()

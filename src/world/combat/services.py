@@ -2788,7 +2788,12 @@ def _resolve_pc_action(
     # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
     # _resolve_duel_completion is a no-op afterwards because the encounter is now
     # COMPLETED (yield_duel routes through complete_encounter).
-    if action.maneuver == CombatManeuver.YIELD:
+    # Guard: only valid in a DUEL encounter — a YIELD in any other encounter type
+    # is a no-op (treated like a passives-only round, same as COVER).
+    if (
+        action.maneuver == CombatManeuver.YIELD
+        and participant.encounter.encounter_type == EncounterType.DUEL
+    ):
         from world.combat.duels import yield_duel  # noqa: PLC0415
 
         yield_duel(participant)
