@@ -267,6 +267,10 @@ class SceneActionTarget(SharedMemoryModel):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
+        # Interaction is partitioned; a FK referencing it cannot use the plain
+        # PK on PostgreSQL. Mirror SceneActionRequest's interaction FKs and skip
+        # the DB-level constraint (the ORM relation still works).
+        db_constraint=False,
         related_name="+",
     )
     resolved_difficulty = models.PositiveIntegerField(null=True, blank=True)
