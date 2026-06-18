@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
+    from world.stories.models import Story
 
 MINIMUM_FOUNDERS = 2
 _COVENANT_NAME_UNIQUE_MARKER = "name"  # substring in DB integrity error for name uniqueness
@@ -61,13 +62,14 @@ def _invalidate_role_caches(character_sheet: CharacterSheet) -> None:
 
 
 @transaction.atomic
-def create_covenant(
+def create_covenant(  # noqa: PLR0913
     *,
     name: str,
     covenant_type: str,
     sworn_objective: str,
     founders: Sequence[CovenantFounder],
     battle_binding: str = "",
+    campaign_story: Story | None = None,
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
 
@@ -83,10 +85,11 @@ def create_covenant(
     if len(set(sheet_pks)) != len(sheet_pks):
         raise DuplicateFounderError
 
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
     from world.covenants.exceptions import (  # noqa: PLC0415
         BattleBindingNotAllowedError,
         BattleBindingRequiredError,
+        CampaignStoryNotAllowedError,
     )
 
     if covenant_type == CovenantType.BATTLE:
@@ -95,11 +98,15 @@ def create_covenant(
     elif battle_binding:
         raise BattleBindingNotAllowedError
 
+    if campaign_story is not None and battle_binding != BattleBinding.CAMPAIGN:
+        raise CampaignStoryNotAllowedError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
         battle_binding=battle_binding,
+        campaign_story=campaign_story,
     )
     for founder in founders:
         CharacterCovenantRole.objects.create(
