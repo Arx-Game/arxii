@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0023_sceneactiondeclaration"),
+        ("scenes", "0024_interaction_fury_committed_and_more"),
     ]
 
     operations = [
