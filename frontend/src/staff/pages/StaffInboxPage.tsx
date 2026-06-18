@@ -33,6 +33,11 @@ const CATEGORY_OPTIONS: { label: string; value: SubmissionCategory; color: strin
     value: 'gm_application',
     color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   },
+  {
+    label: 'System Errors',
+    value: 'system_error',
+    color: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
+  },
 ];
 
 const STORAGE_KEY = 'staff-inbox-muted-categories';
