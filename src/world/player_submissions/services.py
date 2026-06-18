@@ -103,12 +103,19 @@ def _signature(exc: BaseException, label: str) -> str:
 
 
 def _persona_for(actor: ObjectDB | None) -> object | None:
-    """Best-effort presented persona for the actor, or ``None``."""
+    """Best-effort presented persona for the actor, or ``None``.
+
+    Returns ``None`` unless the resolver yields a genuine ``Persona`` — the FK assignment
+    is otherwise the one thing that can make capture itself fail, so it must never trust
+    a non-``Persona`` (e.g. a test mock) through to ``actor_persona``.
+    """
     if actor is None:
         return None
     try:
+        from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.services import persona_for_character  # noqa: PLC0415
 
-        return persona_for_character(cast("Character", actor))
+        persona = persona_for_character(cast("Character", actor))
     except Exception:  # noqa: BLE001 — persona resolution is best-effort context only
         return None
+    return persona if isinstance(persona, Persona) else None
