@@ -16,8 +16,17 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_resolvers import _RESOLVER_REGISTRY, register_resolver
-from world.scenes.action_services import create_action_request, respond_to_action_request
-from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
+from world.scenes.action_services import (
+    create_action_request,
+    respond_to_action_request,
+    respond_to_action_target,
+)
+from world.scenes.factories import (
+    PersonaFactory,
+    SceneActionRequestFactory,
+    SceneActionTargetFactory,
+    SceneFactory,
+)
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -446,3 +455,95 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         assert request.snapshot_resonance is None
         assert request.snapshot_check_type is None
         assert request.snapshot_target_difficulty is None
+
+
+class TestRespondToActionTarget(TestCase):
+    """Tests for the per-additional-target consent + resolution service."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request_with_template(self) -> "SceneActionRequest":
+        """Build a SceneActionRequest that has an action_template set (needed to resolve)."""
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_accept_resolves_only_that_row(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accepting an action target resolves only that row; sibling stays PENDING."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        row = SceneActionTargetFactory(action_request=request)
+        other = SceneActionTargetFactory(action_request=request)
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        row.refresh_from_db()
+        other.refresh_from_db()
+
+        self.assertEqual(row.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(row.result_interaction)
+        self.assertEqual(other.status, ActionRequestStatus.PENDING)
+        self.assertIsNotNone(result)
+
+    def test_respond_to_action_target_deny_marks_denied_no_interaction(self) -> None:
+        """Denying an action target sets DENIED status and leaves result_interaction null."""
+        row = SceneActionTargetFactory()
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.DENY)
+
+        row.refresh_from_db()
+
+        self.assertEqual(row.status, ActionRequestStatus.DENIED)
+        self.assertIsNone(row.result_interaction)
+        self.assertIsNone(result)
+
+    def test_respond_to_action_target_non_pending_returns_none(self) -> None:
+        """Calling on a non-PENDING row is a no-op (idempotent guard)."""
+        row = SceneActionTargetFactory(status=ActionRequestStatus.RESOLVED)
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        self.assertIsNone(result)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_respond_to_action_target_accept_sets_resolved_fields(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accept path writes status, resolved_at, resolved_difficulty on the row."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_request_with_template()
+        row = SceneActionTargetFactory(action_request=request)
+
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        row.refresh_from_db()
+        self.assertEqual(row.status, ActionRequestStatus.RESOLVED)
+        self.assertIsNotNone(row.resolved_at)
+        self.assertIsNotNone(row.resolved_difficulty)
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])

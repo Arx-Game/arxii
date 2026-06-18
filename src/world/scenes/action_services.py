@@ -18,7 +18,7 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
@@ -292,12 +292,16 @@ def respond_to_action_request(
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
-) -> tuple[EnhancedSceneActionResult, Interaction | None]:
+) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
     Status bookkeeping is the caller's job (request.status for the primary,
     SceneActionTarget.status for additional targets), so this helper never
     writes a status field.
+
+    Returns:
+        (result, result_interaction, difficulty) — difficulty is returned so
+        callers can persist ``resolved_difficulty`` without recomputing.
 
     Raises:
         ValueError: If the request has no action_template set.
@@ -341,7 +345,7 @@ def _resolve_action_against_persona(
         result=result,
         strain_committed=action_request.strain_commitment,
     )
-    return result, result_interaction
+    return result, result_interaction, difficulty
 
 
 def _resolve_standard_action(
@@ -349,11 +353,8 @@ def _resolve_standard_action(
 ) -> EnhancedSceneActionResult:
     """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
-        result, result_interaction = _resolve_action_against_persona(
+        result, result_interaction, difficulty = _resolve_action_against_persona(
             action_request, action_request.target_persona
-        )
-        difficulty = DIFFICULTY_VALUES.get(
-            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -365,17 +366,17 @@ def _resolve_standard_action(
     return result
 
 
-def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
-    """Award kudos to the target for accepting an action request.
+def _award_acceptance_kudos_for_persona(
+    action_request: SceneActionRequest,
+    persona: Persona,
+) -> None:
+    """Award kudos to ``persona`` for accepting an action request.
 
-    Skips the award when the target persona is absent (standalone casts allow
-    no-target) or when the target's character has no linked account (NPC personas
+    Skips when the persona's character has no linked account (NPC personas
     and established/temporary personas without an account are valid; the kudos
     award only applies to real player accounts).
     """
-    if action_request.target_persona is None:
-        return
-    target_character = action_request.target_persona.character_sheet.character
+    target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
         return
@@ -390,6 +391,78 @@ def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
         description=f"Engaged with action request from {initiator_name}",
         awarded_by=initiator_account,
     )
+
+
+def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
+    """Award kudos to the primary target for accepting an action request.
+
+    Skips the award when the target persona is absent (standalone casts allow
+    no-target). Delegates the per-persona kudos rule to
+    ``_award_acceptance_kudos_for_persona``.
+    """
+    if action_request.target_persona is None:
+        return
+    _award_acceptance_kudos_for_persona(action_request, action_request.target_persona)
+
+
+def _persona_is_npc(persona: Persona) -> bool:
+    """True when the persona has no controlling player account (NPC)."""
+    return persona.character_sheet.character.db_account is None
+
+
+def respond_to_action_target(
+    *,
+    action_target: SceneActionTarget,
+    decision: str,
+) -> EnhancedSceneActionResult | None:
+    """Consent + resolution for ONE additional target row. Never touches siblings.
+
+    Args:
+        action_target: The SceneActionTarget row to resolve.
+        decision: ConsentDecision value (ACCEPT or DENY).
+
+    Returns:
+        EnhancedSceneActionResult if accepted and resolved. None if denied, already
+        resolved, or any other non-PENDING/non-ACCEPT state.
+    """
+    if action_target.status != ActionRequestStatus.PENDING:
+        return None
+    if decision == ConsentDecision.DENY:
+        action_target.status = ActionRequestStatus.DENIED
+        action_target.resolved_at = timezone.now()
+        action_target.save(update_fields=["status", "resolved_at"])
+        return None
+    if decision == ConsentDecision.ACCEPT:
+        action_request = action_target.action_request
+        with transaction.atomic():
+            result, result_interaction, difficulty = _resolve_action_against_persona(
+                action_request, action_target.target_persona
+            )
+            action_target.status = ActionRequestStatus.RESOLVED
+            action_target.resolved_at = timezone.now()
+            action_target.resolved_difficulty = difficulty
+            action_target.result_interaction = result_interaction
+            action_target.save(
+                update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
+            )
+            _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
+        return result
+    return None
+
+
+def _auto_resolve_npc_targets(action_request: SceneActionRequest) -> None:
+    """Resolve NPC targets immediately at dispatch; PC targets stay PENDING.
+
+    The primary target (if present and NPC) is resolved via
+    ``respond_to_action_request``; each NPC additional-target row is resolved
+    via ``respond_to_action_target``. PC targets are left in PENDING status.
+    """
+    primary = action_request.target_persona
+    if primary is not None and _persona_is_npc(primary):
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+    for row in action_request.additional_targets.filter(status=ActionRequestStatus.PENDING):
+        if _persona_is_npc(row.target_persona):
+            respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
 
 
 def _resolve_enhanced_action(  # noqa: PLR0913
