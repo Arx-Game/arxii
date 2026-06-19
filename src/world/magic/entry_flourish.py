@@ -10,9 +10,15 @@ reaction window (which is peer-only).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.scenes.models import Scene
 
 
 class PendingEntryFlourishOffer(SharedMemoryModel):
@@ -43,6 +49,30 @@ class PendingEntryFlourishOffer(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"PendingEntryFlourishOffer(sheet={self.character_sheet_id}, scene={self.scene_id})"
+
+
+def maybe_create_entry_flourish_offer(
+    character: ObjectDB, scene: Scene | None
+) -> PendingEntryFlourishOffer | None:
+    """Create/refresh the entrant's pending flourish offer, or None if not applicable."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+    from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
+
+    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        return None
+    if (
+        scene is not None
+        and EntryFlourishRecord.objects.filter(character_sheet=sheet, scene=scene).exists()
+    ):
+        return None  # already flourished this scene
+    if not CharacterResonance.objects.filter(character_sheet=sheet).exists():
+        return None  # nothing claimed to broadcast
+    offer, _ = PendingEntryFlourishOffer.objects.update_or_create(
+        character_sheet=sheet, defaults={"scene": scene}
+    )
+    return offer
 
 
 @dataclass

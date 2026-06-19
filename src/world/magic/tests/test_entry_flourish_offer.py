@@ -2,9 +2,40 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.entry_flourish import PendingEntryFlourishOffer
-from world.magic.factories import EntryFlourishRecordFactory
+from world.magic.entry_flourish import PendingEntryFlourishOffer, maybe_create_entry_flourish_offer
+from world.magic.factories import CharacterResonanceFactory, EntryFlourishRecordFactory
 from world.scenes.factories import SceneFactory
+
+
+class MaybeCreateOfferTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.claimed = CharacterResonanceFactory(character_sheet=cls.sheet)
+        cls.scene = SceneFactory()
+
+    def _character(self):
+        return self.sheet.character
+
+    def test_creates_offer_when_claimed_resonances_exist(self):
+        offer = maybe_create_entry_flourish_offer(self._character(), self.scene)
+        self.assertIsNotNone(offer)
+        self.assertEqual(offer.scene_id, self.scene.pk)
+
+    def test_idempotent_one_per_character(self):
+        maybe_create_entry_flourish_offer(self._character(), self.scene)
+        maybe_create_entry_flourish_offer(self._character(), self.scene)
+        self.assertEqual(
+            PendingEntryFlourishOffer.objects.filter(character_sheet=self.sheet).count(), 1
+        )
+
+    def test_no_offer_when_already_flourished_this_scene(self):
+        EntryFlourishRecordFactory(character_sheet=self.sheet, scene=self.scene, granted_amount=10)
+        self.assertIsNone(maybe_create_entry_flourish_offer(self._character(), self.scene))
+
+    def test_no_offer_when_no_claimed_resonances(self):
+        bare = CharacterSheetFactory()
+        self.assertIsNone(maybe_create_entry_flourish_offer(bare.character, self.scene))
 
 
 class PendingEntryFlourishOfferModelTest(TestCase):
