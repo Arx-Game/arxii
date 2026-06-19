@@ -417,6 +417,14 @@ class RoomProfile(SharedMemoryModel):
             "rolls up to the room's building owner."
         ),
     )
+    default_blueprint = models.ForeignKey(
+        "areas.PositionBlueprint",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rooms_defaulting",
+        help_text="Default terrain layout applied when this room initialises a position grid.",
+    )
 
     class Meta:
         verbose_name = "Room Profile"

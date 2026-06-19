@@ -41,3 +41,19 @@ class RoomProfileFactoryAppliesKwargsTests(TestCase):
         profile = RoomProfileFactory(is_outdoor=True)
         profile.refresh_from_db()
         self.assertTrue(profile.is_outdoor)
+
+
+class RoomProfileDefaultBlueprintTests(TestCase):
+    """Tests for RoomProfile.default_blueprint FK (Task 3 / #1017)."""
+
+    def test_room_profile_default_blueprint_set_null(self) -> None:
+        from world.areas.positioning.models import PositionBlueprint
+
+        bp = PositionBlueprint.objects.create(name="Default Hall")
+        rp = RoomProfileFactory(default_blueprint=bp)
+        bp.delete()
+        # SharedMemoryModel idmapper holds the old instance in memory;
+        # flush_from_cache() evicts it so refresh_from_db() re-reads from the DB.
+        rp.flush_from_cache()
+        rp.refresh_from_db()
+        self.assertIsNone(rp.default_blueprint_id)
