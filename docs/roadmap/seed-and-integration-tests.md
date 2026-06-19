@@ -148,6 +148,7 @@ These three can run in parallel with the mechanical seeding work.
 | **3.6** — Add non-overwrite regression test: edit a seeded row via factory, re-run seed, verify edit is preserved. | Guarantee against accidental data loss. |
 | **3.7** — Add a README section to project README explaining the clone-and-seed flow. | New contributors / clone hosts have onboarding docs. |
 | **3.8** — Optional: extract per-cluster seed regression tests so each cluster's seed function is independently verified to not crash. | Catches regressions in seed orchestration when models change. |
+| ✅ **3.9** — Check-resolution spine + playable slice (#651). `src/world/seeds/checks.py` `seed_check_resolution_tables()` seeds the rows `perform_check` needs to turn a roll into a real `CheckOutcome` — STAT/SKILL `PointConversionRange` (1 pt/level over 1-100), the four-rung `CheckRank` ladder (0/10/25/50), the four-outcome catalog, and the five `ResultChart` rows (rank-diff −2…+2) with their per-roll `ResultChartOutcome` bands — all via `get_or_create` on natural keys (idempotent). Values promoted verbatim from `CheckSystemSetupFactory` and the checks/traits test setup (Phase B #1221 makes them tunable). Registered as the `"checks"` cluster in `CLUSTER_SEEDERS`. `test_playable_slice.py` proves a fresh `seed_dev_database()` resolves a factory character's check (against the seeded `flee` CheckType) to a real non-null `CheckOutcome`. | A fresh seeded DB resolves a real check to a real outcome — the check-resolution spine is provably playable. |
 
 ### Phase 3 not in scope
 

@@ -27,10 +27,17 @@ def _seed_combat() -> None:
     seed_flee_check()
 
 
+def _seed_checks() -> None:
+    from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
+
+    seed_check_resolution_tables()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
+    "checks": _seed_checks,
 }
 
 
@@ -39,5 +46,6 @@ def seeded_models() -> list[type[Model]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.traits.models import ResultChart  # noqa: PLC0415
 
-    return [Affinity, Resonance, ItemTemplate, CheckType]
+    return [Affinity, Resonance, ItemTemplate, CheckType, ResultChart]
