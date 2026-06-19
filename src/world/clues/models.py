@@ -240,3 +240,48 @@ class ClueTrigger(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.clue.name} triggers in {self.room_profile}"
+
+
+class ItemClueTrigger(SharedMemoryModel):
+    """A clue granted passively on acquiring an item of a given kind — no search (#1160).
+
+    The item-anchored counterpart to ``ClueTrigger`` (which fires on room entry): when a
+    character acquires an item whose template carries an active trigger, is eligible (the
+    predicate passes), and has not already held the clue, the clue is granted automatically
+    ("acquiring an item your past-life soul is tied to"). Anchored on the item *kind*
+    (``ItemTemplate``), so any instance of that kind fires it; some clue-bearing kinds will
+    effectively spawn once, which is fine. Which kinds carry which clues under which predicate
+    is staff-editable data (placeholder magnitudes deferred to a later author pass per #1143).
+    """
+
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        on_delete=models.CASCADE,
+        related_name="clue_triggers",
+    )
+    clue = models.ForeignKey(
+        Clue,
+        on_delete=models.CASCADE,
+        related_name="item_trigger_placements",
+    )
+    eligibility_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Predicate precondition for the passive grant (identity / resonance / org, via "
+            "world.predicates). Empty {} = fires for anyone who acquires the item. Same shape "
+            "as ClueTrigger.eligibility_rule."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this trigger currently fires on acquisition.",
+    )
+
+    class Meta:
+        ordering = ["item_template", "clue"]
+        verbose_name = "Item Clue Trigger"
+        verbose_name_plural = "Item Clue Triggers"
+
+    def __str__(self) -> str:
+        return f"{self.clue.name} triggers on acquiring {self.item_template}"

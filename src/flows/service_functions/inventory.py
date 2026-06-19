@@ -28,6 +28,30 @@ from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
 
 
+def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -> None:
+    """Fire passive item-acquisition clue triggers for ``acquirer`` after commit (#1160).
+
+    Scheduled with ``transaction.on_commit`` so the transfer is durable first and a trigger
+    hiccup can never roll it back; wrapped in ``run_safely`` so a failure is captured for
+    staff (not swallowed) without surfacing as a broken give/pick-up. The clue service's own
+    cheap "any triggers for this kind?" query short-circuits ordinary items.
+    """
+    character_obj = acquirer.obj
+    instance = item.instance
+
+    def _run() -> None:
+        from world.clues.services import maybe_grant_item_acquisition_clues  # noqa: PLC0415
+        from world.player_submissions.services import run_safely  # noqa: PLC0415
+
+        run_safely(
+            "item_acquisition_clue_triggers",
+            lambda: maybe_grant_item_acquisition_clues(character_obj, instance),
+            actor=character_obj,
+        )
+
+    transaction.on_commit(_run)
+
+
 @transaction.atomic
 def pick_up(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` from its current location into ``character``'s possession.
@@ -58,6 +82,7 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
         and hasattr(previous_location, "carried_items")
     ):
         previous_location.carried_items.invalidate()
+    _fire_item_acquisition_triggers(character, item)
 
 
 @transaction.atomic
@@ -129,6 +154,7 @@ def give(
     )
     giver.obj.carried_items.invalidate()
     recipient.obj.carried_items.invalidate()
+    _fire_item_acquisition_triggers(recipient, item)
 
 
 @transaction.atomic

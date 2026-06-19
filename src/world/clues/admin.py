@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
+from world.clues.models import (
+    CharacterClue,
+    Clue,
+    ClueTrigger,
+    ItemClueTrigger,
+    RoomClue,
+)
 
 
 @admin.register(Clue)
@@ -41,3 +47,12 @@ class ClueTriggerAdmin(admin.ModelAdmin):
     list_display = ["clue", "room_profile", "is_active"]
     list_filter = ["is_active", "clue__target_kind"]
     search_fields = ["clue__name"]
+
+
+@admin.register(ItemClueTrigger)
+class ItemClueTriggerAdmin(admin.ModelAdmin):
+    """Authoring surface for passive item-acquisition clue triggers (data, not code)."""
+
+    list_display = ["clue", "item_template", "is_active"]
+    list_filter = ["is_active", "clue__target_kind"]
+    search_fields = ["clue__name", "item_template__name"]

@@ -28,11 +28,18 @@ A `Clue` is a pointer defined by three orthogonal things:
   the declarative cost on the `Action` base) and calls `search_room`, which rolls the
   seeded **Search** CheckType (Perception+Investigation) against each hidden clue's
   difficulty and acquires the ones spotted.
-- **Trigger (passive):** `ClueTrigger` anchors a clue to a room; `maybe_grant_clue_triggers`
+- **Trigger (passive, room):** `ClueTrigger` anchors a clue to a room; `maybe_grant_clue_triggers`
   fires from `Character.at_post_move` (alongside the mission ROOM_TRIGGER dispatch) and
   grants eligible, not-yet-held clues with no roll — the world reveals it because of who you
   are / where you are. The player is told via the clue's authored description
   (`send_narrative_message`).
+- **Trigger (passive, item):** `ItemClueTrigger` anchors a clue to an item **kind**
+  (`items.ItemTemplate`); `maybe_grant_item_acquisition_clues` fires from the inventory
+  give/pick-up chokepoint (`_fire_item_acquisition_triggers`, scheduled `on_commit` +
+  `run_safely` so a hiccup never breaks the transfer) when a character acquires an instance of
+  that kind — "acquiring an item your past-life soul is tied to". Same eligible/not-yet-held
+  semantics as the room trigger (the two share `_grant_triggered_clues`). Player-facing
+  acquisition only (`give` / `pick_up`); reward/factory-created items are a deferred follow-up.
 
 ## Resolution paths
 
@@ -53,9 +60,38 @@ is layered"):
 
 - **Capability / skill** — the detect (Search) check, against `detect_difficulty`.
 - **Access** — an `eligibility_rule` predicate (`JSONField`, same shape as
-  `MissionTemplate.visibility_rule`) on `RoomClue` / `ClueTrigger`. Empty `{}` = open to
-  anyone (the clue default, unlike missions' default-locked); a rule restricts on identity /
-  org / resonance / species via `world.predicates`.
+  `MissionTemplate.visibility_rule`) on `RoomClue` / `ClueTrigger` / `ItemClueTrigger`. Empty
+  `{}` = open to anyone (the clue default, unlike missions' default-locked); a rule restricts
+  on identity / org / resonance / species via `world.predicates`.
+
+### Authoring "who is eligible" — convention
+
+Gate on existing predicate leaves; **do not add a bespoke leaf per concept.** Pick the leaf by
+the fact's lifetime:
+
+| Fact | Leaf | Note |
+|---|---|---|
+| Permanent identity — "umbral noble", "old soul", (a permanent) "sineater" | `has_distinction` | by Distinction slug; Distinctions already model nobility ("Noble Blood" + variants) and Old Soul |
+| Live, lifecycle-bound state — "currently soul-tethered" | `has_condition` | by `ConditionTemplate.name` |
+| Magic alignment / attunement | `has_resonance` / `min_resonance_level` | |
+| Org / society standing | `is_member_of_*` / `min_org_rank` | |
+
+Compose with `{"op": "AND"|"OR"|"NOT", "of": [ … ]}`. Example — *clue for an umbral noble who is
+a sineater and has an old soul*:
+
+```json
+{"op": "AND", "of": [
+  {"leaf": "has_distinction", "params": {"slug": "noble-blood-umbral"}},
+  {"leaf": "has_distinction", "params": {"slug": "sineater"}},
+  {"leaf": "has_distinction", "params": {"slug": "old-soul"}}
+]}
+```
+
+A new "kind of person/magic" = a **Distinction row (data) + author the rule**, never new code.
+The `eligibility_rule` is marker-agnostic, so a subsystem owner can choose distinction-vs-condition
+for their own state (e.g. how a sineater is marked is TehomCD's call) without touching the
+predicate or clue layers. The only foreseen new leaf — `min_distinction_rank` (rank-thresholded
+gates; `has_distinction` checks slug presence only) — is deferred until a rank gate is authored.
 
 ## Rescue-as-clue (#931)
 
