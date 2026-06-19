@@ -1,15 +1,21 @@
-"""Tests for _mint_crossing_deed wired into cross_threshold (#953).
+"""Tests for _mint_crossing_deed wired into cross_threshold and
+resolve_audere_majora_offer (#953).
 
-Three cases:
+Four cases:
   1. Happy path: mint + attribution + witnesses.
   2. No primary persona → no-op (legend_entry stays None).
   3. scene=None → deed minted, zero PersonaDeedKnowledge rows.
+  4. End-to-end: resolve_audere_majora_offer accept mints deed via the real entry point.
 """
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.audere_majora import AudereMajoraCrossing, cross_threshold
+from world.magic.audere_majora import (
+    AudereMajoraCrossing,
+    cross_threshold,
+    resolve_audere_majora_offer,
+)
 from world.magic.factories import wire_audere_power_multipliers
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.scenes.constants import PersonaType
@@ -214,3 +220,33 @@ class MintCrossingDeedNoSceneTests(TestCase):
         entry = receipt.legend_entry
         witness_count = PersonaDeedKnowledge.objects.filter(deed=entry).count()
         self.assertEqual(witness_count, 0)
+
+
+class ResolveOfferAcceptMintsDeedException2ETests(TestCase):
+    """resolve_audere_majora_offer accept end-to-end: deed minted and attributed to crosser."""
+
+    @classmethod
+    def setUpTestData(cls):
+        wire_audere_power_multipliers()
+
+        (
+            cls.character,
+            cls.sheet,
+            cls.threshold,
+            cls.prospect_path,
+            cls.chosen_path,
+            cls.offer,
+        ) = build_crossing_world(boundary_level=34, suffix="_deed_e2e")
+        _set_deed_risk(cls.threshold)
+
+    def test_resolve_accept_mints_deed_end_to_end(self):
+        result = resolve_audere_majora_offer(
+            self.offer.pk,
+            accept=True,
+            path_id=self.chosen_path.pk,
+            declaration_text="I cross the threshold.",
+        )
+        self.assertTrue(result.accepted)
+        receipt = AudereMajoraCrossing.objects.get(character_sheet=self.sheet)
+        self.assertIsNotNone(receipt.legend_entry)
+        self.assertEqual(receipt.legend_entry.persona, self.sheet.primary_persona)
