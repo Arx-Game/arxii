@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react';
-import { Hand, Package, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { Hand, Package, Sparkles, Trash2, Users, X, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
@@ -31,8 +31,9 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useFacets } from '@/character-creation/queries';
-import type { ItemInstance } from '../types';
+import type { ItemInstance, UseItemResult } from '../types';
 import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
+import { useUseItem } from '../hooks/useUseItem';
 import { AttachFacetDialog } from './AttachFacetDialog';
 
 interface ItemDetailPanelProps {
@@ -42,6 +43,8 @@ interface ItemDetailPanelProps {
   facetLabels?: string[];
   /** True when the parent has determined this item is currently equipped. */
   isEquipped?: boolean;
+  /** Character id — required for the Use mutation; optional so existing tests compile. */
+  characterId?: number;
 
   // Sheet state
   open: boolean;
@@ -60,6 +63,7 @@ export function ItemDetailPanel({
   // facetLabels accepted for backward-compat; live data replaces it internally.
   facetLabels: _facetLabels = [],
   isEquipped = false,
+  characterId,
   open,
   onOpenChange,
   onWear,
@@ -90,6 +94,7 @@ export function ItemDetailPanel({
               facetsQuery={facetsQuery}
               tiersQuery={tiersQuery}
               isEquipped={isEquipped}
+              characterId={characterId}
               onWear={onWear}
               onRemove={onRemove}
               onDrop={onDrop}
@@ -141,6 +146,7 @@ interface ItemContentProps {
   facetsQuery: { data?: FacetRecord[] };
   tiersQuery: { data?: QualityTierRecord[] };
   isEquipped: boolean;
+  characterId?: number;
   onWear?: (itemId: number) => void;
   onRemove?: (itemId: number) => void;
   onDrop?: (itemId: number) => void;
@@ -155,6 +161,7 @@ function ItemContent({
   facetsQuery,
   tiersQuery,
   isEquipped,
+  characterId,
   onWear,
   onRemove,
   onDrop,
@@ -168,6 +175,20 @@ function ItemContent({
   const initial = item.display_name.trim().charAt(0).toUpperCase() || '?';
 
   const removeMutation = useRemoveItemFacet(item.id);
+
+  // characterId is optional on the panel; ?? -1 mirrors useInventory's sentinel.
+  // Use is only rendered when item.is_usable, and real renders always supply characterId.
+  const useMutation = useUseItem(characterId ?? -1);
+  const [useResult, setUseResult] = useState<UseItemResult | null>(null);
+  const isConsumable = item.template?.is_consumable ?? false;
+  const useDisabled = useMutation.isPending || (isConsumable && item.charges <= 0);
+
+  function handleUse() {
+    useMutation.mutate(item.id, {
+      onSuccess: (result) => setUseResult(result),
+      onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to use item.'),
+    });
+  }
 
   const liveFacets = itemFacetsQuery.data ?? [];
   const facetMap = new Map<number, FacetRecord>((facetsQuery.data ?? []).map((f) => [f.id, f]));
@@ -280,8 +301,38 @@ function ItemContent({
         )}
       </div>
 
+      {useResult && (
+        <div
+          data-testid="use-result"
+          className="mx-4 mb-2 rounded-md border bg-muted/40 p-3 text-sm text-foreground"
+        >
+          {isConsumable
+            ? useResult.destroyed
+              ? 'Consumed — last charge spent.'
+              : `Used — ${useResult.charges_remaining} charge(s) remaining.`
+            : 'Used.'}
+          {useResult.applied_effect_count > 0 && (
+            <span className="ml-1 text-muted-foreground">
+              {useResult.applied_effect_count} effect(s) applied.
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="mt-auto border-t bg-muted/30 p-4">
         <div className="flex flex-wrap items-center gap-2">
+          {item.is_usable && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleUse}
+              disabled={useDisabled}
+              title={isConsumable && item.charges <= 0 ? 'No uses left' : undefined}
+            >
+              <Zap className="mr-1.5 h-3.5 w-3.5" />
+              Use
+            </Button>
+          )}
           {isEquipped ? (
             <Button size="sm" variant="default" onClick={() => onRemove?.(item.id)}>
               Remove

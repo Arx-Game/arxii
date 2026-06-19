@@ -17,6 +17,8 @@ vi.mock('../../hooks/useItemFacets', () => ({
   useRemoveItemFacet: vi.fn(),
 }));
 
+vi.mock('../../hooks/useUseItem', () => ({ useUseItem: vi.fn() }));
+
 vi.mock('@/character-creation/queries', () => ({
   useFacets: vi.fn(),
 }));
@@ -47,12 +49,18 @@ vi.mock('sonner', () => ({
 
 import * as itemFacetsHooks from '../../hooks/useItemFacets';
 import * as characterCreationQueries from '@/character-creation/queries';
+import { useUseItem } from '../../hooks/useUseItem';
 
 // ---------------------------------------------------------------------------
 // Default mock setup helpers
 // ---------------------------------------------------------------------------
 
 function setupDefaultMocks() {
+  vi.mocked(useUseItem).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useUseItem>);
+
   vi.mocked(itemFacetsHooks.useItemFacets).mockReturnValue({
     data: [],
     isLoading: false,
@@ -130,6 +138,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     quantity: 1,
     charges: 0,
     is_open: false,
+    is_usable: false,
     ...overrides,
   };
 }
@@ -298,6 +307,47 @@ describe('ItemDetailPanel', () => {
     render(<ItemDetailPanel item={makeItem()} open={true} onOpenChange={vi.fn()} />);
 
     expect(screen.getByText('Facet #99')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Use button
+  // -------------------------------------------------------------------------
+
+  it('hides the Use button when the item is not usable', () => {
+    render(
+      <ItemDetailPanel
+        item={makeItem({ is_usable: false })}
+        characterId={1}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /^use$/i })).toBeNull();
+  });
+
+  it('disables Use for a depleted consumable', () => {
+    const item = makeItem({
+      is_usable: true,
+      charges: 0,
+      template: { ...makeItem().template, is_consumable: true },
+    });
+    render(<ItemDetailPanel item={item} characterId={1} open onOpenChange={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /^use$/i })).toBeDisabled();
+  });
+
+  it('calls the use mutation with the item id when Use is clicked', () => {
+    const mutate = vi.fn();
+    vi.mocked(useUseItem).mockReturnValue({ mutate, isPending: false } as unknown as ReturnType<
+      typeof useUseItem
+    >);
+    const item = makeItem({
+      is_usable: true,
+      charges: 3,
+      template: { ...makeItem().template, is_consumable: true },
+    });
+    render(<ItemDetailPanel item={item} characterId={1} open onOpenChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(mutate).toHaveBeenCalledWith(item.id, expect.any(Object));
   });
 
   it('calls removeMutation.mutate when remove button is clicked', () => {

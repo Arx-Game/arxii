@@ -39,6 +39,7 @@ function makeItem(id: number, name: string, color = '#4ade80'): ItemInstance {
     quantity: 1,
     charges: 0,
     is_open: false,
+    is_usable: false,
   };
 }
 

@@ -271,6 +271,7 @@ export function WardrobePage() {
           if (!open) setDetailItem(null);
         }}
         isEquipped={detailItem ? equippedItemIds.has(detailItem.id) : false}
+        characterId={characterId}
       />
 
       <SaveOutfitDialog
