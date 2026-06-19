@@ -116,3 +116,31 @@ class PositionEdgeCleanTests(TestCase):
         edge.position_b_id = endpoints[1].pk
         with self.assertRaises(ValidationError):
             edge.clean()
+
+
+class ElevationAnchorTests(TestCase):
+    """Position.elevation_anchor self-FK and PositionKind.CHASM."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia import create_object
+
+        cls.room = create_object("typeclasses.rooms.Room", key="ElevRoom1", nohome=True)
+
+    def test_chasm_kind_exists(self) -> None:
+        self.assertEqual(PositionKind.CHASM, "chasm")
+
+    def test_elevation_anchor_links_below(self) -> None:
+        ground = Position.objects.create(room=self.room, name="ledge", kind=PositionKind.PRIMARY)
+        aloft = Position.objects.create(
+            room=self.room,
+            name="above ledge",
+            kind=PositionKind.AERIAL,
+            elevation_anchor=ground,
+        )
+        self.assertEqual(aloft.elevation_anchor_id, ground.pk)
+        self.assertIn(aloft, ground.elevated_over.all())
+
+    def test_elevation_anchor_nullable_for_ground(self) -> None:
+        ground = Position.objects.create(room=self.room, name="floor", kind=PositionKind.PRIMARY)
+        self.assertIsNone(ground.elevation_anchor_id)
