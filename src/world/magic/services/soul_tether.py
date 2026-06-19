@@ -436,10 +436,17 @@ def dissolve_soul_tether(
                 condition__name="Soul Tether Active",
             ).delete()
 
+            # Invalidate the Sinner's in-memory TriggerHandler so the
+            # cascade-deleted Trigger rows leave the cache on commit (#964).
+            trigger_handler = getattr(sinner_sheet.character, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+            if trigger_handler is not None:
+                trigger_handler.invalidate()
+
     # NOTE: lifetime_helped on CharacterResonance persists (§13 — permanent record).
     # NOTE: TetherStrain ConditionInstance on the Sineater persists (decays naturally).
     # NOTE: Sineating and SoulTetherRescue audit rows persist (immutable history).
-    # NOTE: Trigger rows are cascade-deleted with ConditionInstance; no manual cleanup needed.
+    # NOTE: Trigger rows are cascade-deleted with ConditionInstance; invalidate() above
+    #       drops them from the in-memory cache on commit.
     # TODO: Phase 15 — emit SOUL_TETHER_DISSOLVED reactive event when event infrastructure
     #   supports cross-character location resolution.
 

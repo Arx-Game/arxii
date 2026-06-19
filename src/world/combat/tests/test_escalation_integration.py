@@ -274,7 +274,10 @@ class BondedSpikeRealDamagePathTests(TestCase):
         self.assertEqual(engagement_a.intensity_modifier, 0)
 
         # The real escalating round start installs the room spike triggers.
-        begin_declaration_phase(self.encounter)
+        # The handler invalidates on commit (#964), so run the on_commit
+        # callbacks here to drop the stale cache before the dispatch below.
+        with self.captureOnCommitCallbacks(execute=True):
+            begin_declaration_phase(self.encounter)
         for name in ESCALATION_SPIKE_TRIGGER_NAMES:
             self.assertTrue(
                 Trigger.objects.filter(
