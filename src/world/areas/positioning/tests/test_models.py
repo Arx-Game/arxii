@@ -108,14 +108,11 @@ class PositionEdgeCleanTests(TestCase):
         edge.clean()  # must not raise
 
     def test_clean_raises_for_cross_room_edge(self) -> None:
-        # pos_a (room1) < pos_c (room2) by pk — ordering fine, but different rooms
-        if self.pos_a.pk < self.pos_c.pk:
-            a, b = self.pos_a, self.pos_c
-        else:
-            a, b = self.pos_c, self.pos_a
-        # Force position_a to room1-node and position_b to room2-node for cross-room check
-        edge = PositionEdge(position_a=a, position_b=b)
-        edge.position_a_id = a.pk
-        edge.position_b_id = b.pk
+        # Endpoints are in different rooms; full_clean must raise regardless of which is
+        # position_a. Explicitly order by pk to ensure deterministic assignment.
+        endpoints = sorted([self.pos_a, self.pos_c], key=lambda p: p.pk)
+        edge = PositionEdge(position_a=endpoints[0], position_b=endpoints[1])
+        edge.position_a_id = endpoints[0].pk
+        edge.position_b_id = endpoints[1].pk
         with self.assertRaises(ValidationError):
             edge.clean()
