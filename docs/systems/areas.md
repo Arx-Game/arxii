@@ -141,7 +141,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
-| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-FK, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to |
+| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-referential FK → `Position`, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to (**omitted from `MODEL_MAP.md`** — the auto-generation tool skips self-referential FKs) |
 | `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
 
@@ -290,8 +290,8 @@ to a follow-up tied to the round/turn framework (#520).
 
 **Gated-edge crossing and `MOVE_TO_POSITION`:**
 
-A gated `PositionEdge` (`gating_challenge` IS NOT NULL and `is_active=True`) blocks
-`move_to_position` for normal traversal.  Players who approach via a `ChallengeApproach`
+A gated `PositionEdge` (`gating_challenge` IS NOT NULL, and its `gating_challenge.is_active`
+is True on the `ChallengeInstance`) blocks `move_to_position` for normal traversal.  Players who approach via a `ChallengeApproach`
 using `PERSONAL` resolution mode cross the gate for themselves only (the
 `ChallengeInstance` remains active for other characters).  A `MOVE_TO_POSITION` /
 `GATING_FAR_SIDE` `ConsequenceEffect` on the approach's consequence pool executes

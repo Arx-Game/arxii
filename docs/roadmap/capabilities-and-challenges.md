@@ -448,7 +448,7 @@ resolve entirely within the actor's current room at apply time; no FK to a per-r
 
 | EffectType | Handler | What it does |
 |------------|---------|--------------|
-| `CREATE_POSITION` | `_create_position` | Create a new `Position` (kind defaults to FEATURE); optionally connect it to the actor's current position (`position_connect_from_actor`) and move a target into it (`position_place_occupant`); emits `FELL` if the new position is a CHASM |
+| `CREATE_POSITION` | `_create_position` | Create a new `Position` (kind defaults to FEATURE); optionally connect it to the actor's current position (`position_connect_from_actor`) and move a target into it (`position_place_occupant`); emits `FELL` if the new position is a CHASM **and** `position_place_occupant=True` (an occupant is placed into it) |
 | `MOVE_TO_POSITION` | `_move_to_position` | Force-move the resolved target to the destination position; destination is resolved via `PositionDestination` (see below); emits `FELL` if destination is a CHASM |
 | `SEVER_EDGE` | `_sever_edge` | Disconnect the edge between two named positions in the room; skips gracefully if either endpoint or the edge is absent |
 | `CONNECT_EDGE` | `_connect_edge` | Connect two named positions (idempotent — no-op when an edge already exists) |
