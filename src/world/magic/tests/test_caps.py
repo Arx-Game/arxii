@@ -6,10 +6,12 @@ Spec A §2.4. TDD: written before the implementation.
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import TargetKind
+from world.magic.constants import SanctumSlotKind, TargetKind
 from world.magic.exceptions import AnchorCapNotImplemented
-from world.magic.factories import ThreadFactory
+from world.magic.factories import ResonanceFactory, ThreadFactory
+from world.magic.models import SanctumDetails, SanctumOwnerMode
 from world.magic.services import compute_anchor_cap, compute_effective_cap, compute_path_cap
+from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
 
 class AnchorCapTests(TestCase):
@@ -53,6 +55,57 @@ class AnchorCapTests(TestCase):
         thread = ThreadFactory(as_room_thread=True)
         with self.assertRaises(AnchorCapNotImplemented):
             compute_anchor_cap(thread)
+
+    def test_sanctum_anchor_cap_is_level_times_ten(self) -> None:
+        """SANCTUM thread cap = sanctum feature_instance.level × 10 (Plan 4 §F)."""
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(
+                feature_kind=RoomFeatureKindFactory(), level=3
+            ),
+            resonance_type=ResonanceFactory(),
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        thread = ThreadFactory(
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+        )
+        self.assertEqual(compute_anchor_cap(thread), 30)
+
+    def test_sanctum_anchor_cap_level_one(self) -> None:
+        """SANCTUM level 1 → cap 10."""
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(
+                feature_kind=RoomFeatureKindFactory(), level=1
+            ),
+            resonance_type=ResonanceFactory(),
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        thread = ThreadFactory(
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+        )
+        self.assertEqual(compute_anchor_cap(thread), 10)
+
+    def test_sanctum_anchor_cap_level_five(self) -> None:
+        """SANCTUM level 5 (max) → cap 50."""
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(
+                feature_kind=RoomFeatureKindFactory(), level=5
+            ),
+            resonance_type=ResonanceFactory(),
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        thread = ThreadFactory(
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+        )
+        self.assertEqual(compute_anchor_cap(thread), 50)
 
 
 class CovenantRoleAnchorCapTests(TestCase):
@@ -164,3 +217,42 @@ class EffectiveCapTests(TestCase):
         # anchor=50 (technique level 5 × 10), path=20 (stage 2 × 10) → 20
         thread = ThreadFactory(as_technique_thread=True, _technique_level=5, _path_stage=2)
         self.assertEqual(compute_effective_cap(thread), 20)
+
+
+class SanctumSerializerCapTests(TestCase):
+    """ThreadSerializer returns real int anchor_cap and effective_cap for SANCTUM threads."""
+
+    def _make_sanctum_thread(self, level: int) -> "object":
+        """Build a SANCTUM thread whose sanctum has the given feature_instance level."""
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(
+                feature_kind=RoomFeatureKindFactory(), level=level
+            ),
+            resonance_type=ResonanceFactory(),
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        return ThreadFactory(
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+        )
+
+    def test_anchor_cap_is_integer_for_sanctum_thread(self) -> None:
+        """anchor_cap field returns an int (not None) for a SANCTUM thread."""
+        from world.magic.serializers import ThreadSerializer
+
+        thread = self._make_sanctum_thread(level=3)
+        data = ThreadSerializer(thread).data
+        self.assertIsInstance(data["anchor_cap"], int)
+        self.assertEqual(data["anchor_cap"], 30)
+
+    def test_effective_cap_is_integer_for_sanctum_thread(self) -> None:
+        """effective_cap field returns an int (not None) for a SANCTUM thread."""
+        from world.magic.serializers import ThreadSerializer
+
+        thread = self._make_sanctum_thread(level=3)
+        data = ThreadSerializer(thread).data
+        self.assertIsInstance(data["effective_cap"], int)
+        # effective_cap = min(path_cap, anchor_cap); path_cap ≥ 10, anchor_cap = 30
+        self.assertEqual(data["effective_cap"], min(data["path_cap"], 30))

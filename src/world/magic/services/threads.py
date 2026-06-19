@@ -122,6 +122,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
       Use-based (issue #517): personal investment adds on top of the covenant floor.
     - MANTLE: max cleared mantle level × 10 (Spec D §6.2). Cap grows as the
       character clears higher mantle ranks via codex research.
+    - SANCTUM: target_sanctum_details.feature_instance.level × 10 (Plan 4 §F).
+      Cap scales with the Sanctum's upgrade level (1–5 → 10–50).
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """
     match thread.target_kind:
@@ -167,6 +169,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             mantle = thread.target_mantle
             max_level = thread.owner.character.mantle_clearances.max_cleared_level(mantle)
             return max_level * 10
+        case TargetKind.SANCTUM:
+            return thread.target_sanctum_details.feature_instance.level * 10
         case TargetKind.ROOM:
             msg = thread.target_kind + " anchor cap awaits Spec D."
             raise AnchorCapNotImplemented(msg)
