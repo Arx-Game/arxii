@@ -54,3 +54,5 @@ class EventName(models.TextChoices):
     JUDGE_PRESENTATION = "judge_presentation", "Judge Presentation"
     # Combat encounter lifecycle (#876)
     ENCOUNTER_COMPLETED = "encounter_completed", "Encounter Completed"
+    # Vertical positioning (#1018): emitted when an entity enters a CHASM position.
+    FELL = "fell", "Fell"
