@@ -218,7 +218,7 @@ describe('WeaveThreadWizard', () => {
       expect(screen.getByTestId('kind-button-TRAIT')).toBeInTheDocument();
       expect(screen.getByTestId('kind-button-TECHNIQUE')).toBeInTheDocument();
       expect(screen.getByTestId('kind-button-COVENANT_ROLE')).toBeInTheDocument();
-      expect(screen.getByTestId('kind-button-ROOM')).toBeInTheDocument();
+      expect(screen.getByTestId('kind-button-SANCTUM')).toBeInTheDocument();
       expect(screen.getByTestId('kind-button-RELATIONSHIP_TRACK')).toBeInTheDocument();
       expect(screen.getByTestId('kind-button-RELATIONSHIP_CAPSTONE')).toBeInTheDocument();
     });
@@ -253,13 +253,13 @@ describe('WeaveThreadWizard', () => {
       expect(btn.textContent).toContain('Acquire a Thread Weaving Unlock');
     });
 
-    it('enables TRAIT, TECHNIQUE, ROOM, RELATIONSHIP_TRACK when eligibility is true', () => {
+    it('enables TRAIT, TECHNIQUE, SANCTUM, RELATIONSHIP_TRACK when eligibility is true', () => {
       // These kinds are now supported — they should be enabled when the character has the unlock.
       const summary = makeSummary({
         weaving_eligibility: {
           TRAIT: true,
           TECHNIQUE: true,
-          ROOM: true,
+          SANCTUM: true,
           RELATIONSHIP_TRACK: true,
         },
       });
@@ -268,7 +268,7 @@ describe('WeaveThreadWizard', () => {
       });
       expect(screen.getByTestId('kind-button-TRAIT')).not.toBeDisabled();
       expect(screen.getByTestId('kind-button-TECHNIQUE')).not.toBeDisabled();
-      expect(screen.getByTestId('kind-button-ROOM')).not.toBeDisabled();
+      expect(screen.getByTestId('kind-button-SANCTUM')).not.toBeDisabled();
       expect(screen.getByTestId('kind-button-RELATIONSHIP_TRACK')).not.toBeDisabled();
     });
 

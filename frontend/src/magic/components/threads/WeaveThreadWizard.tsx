@@ -3,7 +3,7 @@
  *
  * Steps:
  *   1. Pick anchor kind (TargetKind) — disabled if character has no unlock for that kind.
- *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, ROOM,
+ *   2. Pick anchor — kind-specific picker. FACET, COVENANT_ROLE, TRAIT, TECHNIQUE, SANCTUM,
  *      and RELATIONSHIP_TRACK are supported; RELATIONSHIP_CAPSTONE is deferred per spec.
  *   3. Pick resonance — combobox over useCharacterResonances().
  *   4. Narrative — optional name (max 120) and description.
@@ -33,7 +33,6 @@ import { useCharacterResonances, useWeaveThread } from '../../queries';
 import type {
   CharacterResonance,
   RelationshipTrack,
-  RoomBrief,
   TargetKind,
   ThreadHubSummary,
 } from '../../types';
@@ -63,8 +62,8 @@ interface KindMeta {
 const KIND_META: Record<string, KindMeta> = {
   TRAIT: { label: 'Trait', supported: true },
   TECHNIQUE: { label: 'Technique', supported: true },
-  ROOM: { label: 'Room', supported: true },
   FACET: { label: 'Facet', supported: true },
+  SANCTUM: { label: 'Sanctum', supported: true },
   COVENANT_ROLE: { label: 'Covenant Role', supported: true },
   RELATIONSHIP_TRACK: { label: 'Relationship Track', supported: true },
   RELATIONSHIP_CAPSTONE: {
@@ -79,7 +78,7 @@ const ALL_KINDS: TargetKind[] = [
   'TRAIT',
   'TECHNIQUE',
   'FACET',
-  'ROOM',
+  'SANCTUM',
   'COVENANT_ROLE',
   'RELATIONSHIP_TRACK',
   'RELATIONSHIP_CAPSTONE',
@@ -145,16 +144,6 @@ function fetchTechniqueOptions(summary: ThreadHubSummary | undefined): AnchorOpt
   }));
 }
 
-async function fetchRoomOptions(summary: ThreadHubSummary | undefined): Promise<AnchorOption[]> {
-  const propertyIds = summary?.room_property_ids ?? [];
-  if (propertyIds.length === 0) return [];
-  const qs = propertyIds.map((id) => `property_id=${id}`).join('&');
-  const res = await apiFetch(`/api/magic/rooms-by-property/?${qs}`);
-  if (!res.ok) throw new Error('Failed to load rooms');
-  const data = (await res.json()) as RoomBrief[];
-  return data.map((r) => ({ id: r.id, label: r.name }));
-}
-
 async function fetchRelationshipTrackOptions(
   summary: ThreadHubSummary | undefined
 ): Promise<AnchorOption[]> {
@@ -179,8 +168,6 @@ async function fetchAnchorOptions(
       return fetchTraitOptions(summary);
     case 'TECHNIQUE':
       return fetchTechniqueOptions(summary);
-    case 'ROOM':
-      return fetchRoomOptions(summary);
     case 'RELATIONSHIP_TRACK':
       return fetchRelationshipTrackOptions(summary);
     default:
