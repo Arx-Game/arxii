@@ -38,6 +38,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     quantity: 1,
     charges: 0,
     is_open: false,
+    is_usable: false,
     ...overrides,
   };
 }

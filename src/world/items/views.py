@@ -473,7 +473,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
     @extend_schema(request=UseItemSerializer, responses=UseItemResultSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="use")
     def use(self, request: Request, pk: str | None = None) -> Response:
-        """Use a consumable item: apply its on-use effects (to self) and spend a charge.
+        """Use an item with an on-use pool: apply its effects (to self); consumables spend a charge.
 
         Owner-or-staff gated. Business logic lives entirely in ``use_item``;
         this view resolves the actor, enforces ownership, and maps

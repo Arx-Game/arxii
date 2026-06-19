@@ -258,6 +258,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     display_description = serializers.CharField(read_only=True)
     display_image_url = serializers.SerializerMethodField()
+    is_usable = serializers.SerializerMethodField()
     contained_in = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
@@ -269,6 +270,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "display_name",
             "display_description",
             "display_image_url",
+            "is_usable",
             "contained_in",
             "quantity",
             "charges",
@@ -280,6 +282,11 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         """Return the cloudinary URL for the item's display image, if any."""
         media = obj.display_image
         return media.cloudinary_url if media else None
+
+    def get_is_usable(self, obj: ItemInstance) -> bool:
+        """True iff use_item would proceed: the template has an on-use pool.
+        Mirrors the precondition in services.usage.use_item."""
+        return obj.template.on_use_pool_id is not None
 
 
 class VisibleWornItemSerializer(serializers.Serializer):

@@ -8284,7 +8284,7 @@ paths:
     post:
       operationId: items_inventory_use_create
       description: |-
-        Use a consumable item: apply its on-use effects (to self) and spend a charge.
+        Use an item with an on-use pool: apply its effects (to self); consumables spend a charge.
 
         Owner-or-staff gated. Business logic lives entirely in ``use_item``;
         this view resolves the actor, enforces ownership, and maps
@@ -29189,6 +29189,12 @@ components:
           description: Return the cloudinary URL for the item's display image, if
             any.
           readOnly: true
+        is_usable:
+          type: boolean
+          description: |-
+            True iff use_item would proceed: the template has an on-use pool.
+            Mirrors the precondition in services.usage.use_item.
+          readOnly: true
         contained_in:
           type: integer
           readOnly: true
@@ -29212,6 +29218,7 @@ components:
       - display_name
       - id
       - is_open
+      - is_usable
       - quality_tier
       - quantity
       - template

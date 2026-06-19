@@ -192,3 +192,48 @@ class UseItemTests(TestCase):
 
         self.assertIsNotNone(result.check_result)
         self.assertEqual(result.charges_remaining, 0)
+
+    def test_non_consumable_with_pool_applies_effects_without_spending_charge(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.factories import ItemTemplateFactory
+        from world.items.services.usage import use_item
+
+        template = ItemTemplateFactory(
+            is_consumable=False,
+            max_charges=0,  # DB constraint: charges (max_charges>0) require is_consumable
+            on_use_pool=self._pool_with_condition_effect(),
+            on_use_check_type=None,
+        )
+        inst = self._instance(template=template, charges=0)
+
+        result = use_item(item_instance=inst, user=self.character)
+
+        self.assertTrue(result.applied_effects)
+        self.assertFalse(result.destroyed)
+        self.assertFalse(result.soft_deleted)
+        inst.refresh_from_db()
+        self.assertTrue(
+            inst.ownership_events.filter(event_type=OwnershipEventType.ACTIVATED).exists()
+        )
+        # Reusable: a second use still works (no NoChargesRemaining).
+        use_item(item_instance=inst, user=self.character)
+
+    def test_non_consumable_use_leaves_authored_charges_untouched(self):
+        """A non-consumable template with an authored nonzero instance charge count
+        must not have its charges spent on use (guards the reusable intent)."""
+        from world.items.factories import ItemTemplateFactory
+        from world.items.services.usage import use_item
+
+        template = ItemTemplateFactory(
+            is_consumable=False,
+            max_charges=0,
+            on_use_pool=self._pool_with_condition_effect(),
+            on_use_check_type=None,
+        )
+        inst = self._instance(template=template, charges=5)
+
+        result = use_item(item_instance=inst, user=self.character)
+
+        self.assertEqual(result.charges_remaining, 5)
+        inst.refresh_from_db()
+        self.assertEqual(inst.charges, 5)
