@@ -92,6 +92,7 @@ from world.mechanics.factories import (
     PowerMultiplierTargetFactory,
 )
 from world.roster.factories import RosterEntryFactory
+from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 from world.traits.factories import TraitFactory
 
 # Centralized repeated literals (avoids the duplicated-literal SonarCloud
@@ -2634,6 +2635,10 @@ def ensure_audere_majora_threshold(
         requires_active_audere=requires_active_audere,
         vision_text="[PLACEHOLDER VISION — real text is authored in the DB]",
         manifestation_text="[PLACEHOLDER MANIFESTATION — real text is authored in the DB]",
+        magnitude=RenownMagnitude.HIGH,
+        risk=RenownRisk.HIGH,
+        reach=RenownReach.REGIONAL,
+        deed_title="",
     )
 
 
