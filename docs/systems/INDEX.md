@@ -46,6 +46,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
     tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
     `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
+  - **Spec C Resonance Gain (endorsements + audit — #1138):** `ResonanceGainConfig`
+    (singleton pk=1 tuning surface), `PoseEndorsement` (weekly deferred; `endorser_sheet`
+    FK, `resonance` FK (PROTECT), `persona_snapshot` FK to `scenes.Persona` (SET_NULL),
+    unique `(endorser_sheet, interaction)`), `SceneEntryEndorsement` (immediate flat
+    grant; same FK shape, unique `(endorser_sheet, endorsee_sheet, scene)`),
+    `ResonanceGrant` (universal audit ledger — discriminator `source` + typed source FKs).
+    Read surface: `InteractionListSerializer` now nests `pose_kind`, `endorsee_sheet_id`,
+    `endorsable_resonances`, `pose_endorsers`/`my_pose_endorsement`,
+    `entry_endorsers`/`entry_endorsed_by_me` on every `GET /api/interactions/?scene=<id>`
+    row. Frontend: `EndorsementControl` in `PoseUnit` (`frontend/src/scenes/components/`).
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -120,6 +130,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
+  - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
+  - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
+  - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
