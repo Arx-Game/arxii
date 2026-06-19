@@ -198,6 +198,29 @@ now say "Mage Scars."
 | `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields |
 | `MagicalAlterationEvent` | Immutable provenance audit log | `pending`, `event_type`, `data`, `created_at` |
 
+### Audere & Audere Majora (models/audere.py, audere_majora.py, models/renown_config.py)
+
+**`RenownAwardConfig`** (`models/renown_config.py`) — abstract base (SharedMemoryModel)
+shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries `magnitude`,
+`risk`, `reach` (nullable override), and `archetypes` M2M to `societies.PhilosophicalArchetype`.
+Provides `as_renown_award_kwargs() -> dict`. When `risk == NONE`, `fire_renown_award`
+creates no `LegendEntry` — the invariant that gates deed creation.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `AudereMajoraThreshold` | One row per boundary level (5/10/15/20). Inherits `RenownAwardConfig`. | `boundary_level`, `target_stage`, `minimum_intensity_tier` FK, `minimum_warp_stage` FK, `requires_active_audere`, `deed_title` (public — non-spoiler), `vision_text`/`manifestation_text` (spoiler-private — DB-only) |
+| `PendingAudereMajoraOffer` | Poll-able Crossing offer, one per character | `character_sheet` FK, `threshold` FK |
+| `AudereMajoraCrossing` | Irreversible receipt of a completed crossing | `character_sheet` FK, `threshold` FK, `chosen_path` FK, `scene` FK, `declaration_interaction` FK, `level_before`, `level_after`, `legend_entry` OneToOneField → `societies.LegendEntry` (related_name `audere_majora_crossing`; null when no deed was minted) |
+
+**Deed minting.** `cross_threshold` calls `_mint_crossing_deed(crossing)` after writing
+the receipt. This resolves the character's primary persona, calls `fire_renown_award`
+(full renown event), records every persona present in the scene as `WITNESSED` via
+`grant_deed_knowledge` + `scene_witness_personas`, and stores the resulting
+`LegendEntry` on `crossing.legend_entry`. Deed title uses `threshold.deed_title` when
+authored, falling back to a generic public-fact composition; ceremony text is never used.
+No deed is created when `threshold.risk == NONE` or when the sheet has no primary
+persona (`legend_entry` stays null).
+
 ### Other
 
 | Model | Purpose |

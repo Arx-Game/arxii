@@ -373,17 +373,31 @@ config), `PendingAudereOffer` (poll-able offer, one per character),
 `check_audere_eligibility` (intensity tier + Soulfray stage + engagement),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
 
+`models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
+shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored
+knobs consumed by `fire_renown_award`: `magnitude`, `risk`, `reach` (nullable
+override), and `archetypes` (M2M to `PhilosophicalArchetype`). Provides
+`as_renown_award_kwargs() -> dict`. When `risk == NONE`, `fire_renown_award` creates
+no `LegendEntry` — the invariant that gates deed creation.
+
 `audere_majora.py` — Audere Majora / Crossing the Threshold, the unified tier-crossing
 event:
-- `AudereMajoraThreshold` — one authored row per boundary level (5/10/15/20): gate
-  thresholds (`minimum_intensity_tier`, `minimum_warp_stage`, `requires_active_audere`)
-  + ceremony content. **`vision_text`/`manifestation_text` are spoiler-private:
-  authored in the DB only; factories/tests use placeholders; never commit real
-  ceremony wording.**
+- `AudereMajoraThreshold` — one authored row per boundary level (5/10/15/20).
+  Inherits `RenownAwardConfig` (magnitude/risk/reach/archetypes). Additional fields:
+  gate thresholds (`minimum_intensity_tier`, `minimum_warp_stage`,
+  `requires_active_audere`) + ceremony content + `deed_title` (public, non-spoiler
+  CharField; blank → generic composed title). **`vision_text`/`manifestation_text`
+  are spoiler-private: authored in the DB only; factories/tests use placeholders;
+  never commit real ceremony wording.** `deed_title` is the only ceremony-adjacent
+  field that may appear in code and tests.
 - `PendingAudereMajoraOffer` — poll-able Crossing offer (AbstractPendingOffer +
   threshold FK; one per character).
 - `AudereMajoraCrossing` — irreversible receipt (unique per sheet+threshold;
-  `chosen_path`, scene + declaration-interaction links, level_before/after). Survives
+  `chosen_path`, scene + declaration-interaction links, level_before/after,
+  `legend_entry` OneToOneField → `societies.LegendEntry` with
+  related_name `audere_majora_crossing`). The receipt is the single source of truth
+  and points to the deed it minted; `legend_entry` is null when the threshold has
+  `risk == NONE` or when the crossing sheet has no primary persona. Survives
   character death.
 - Services: `check_audere_majora_eligibility` (8 gates),
   `eligible_paths_for_threshold` (current path's child paths at the target stage),
@@ -391,8 +405,16 @@ event:
   manifestation EMIT broadcast on creation only), `resolve_audere_majora_offer`
   (two-phase staleness + spend guards + path validation),
   `cross_threshold` (atomic: declaration pose → level write → path history → receipt
-  → Majora condition), `end_audere_majora` (encounter cleanup calls it alongside
-  `end_audere`).
+  → Majora condition → **`_mint_crossing_deed`**), `end_audere_majora` (encounter
+  cleanup calls it alongside `end_audere`).
+- `_mint_crossing_deed(crossing)` — called by `cross_threshold` after writing the
+  receipt. Resolves the sheet's primary persona, calls `fire_renown_award`
+  (full renown event — fame/prestige/legend/society-reputation), records every
+  persona present in the scene as `WITNESSED` via `grant_deed_knowledge` +
+  `scene_witness_personas` (#916), and links the minted `LegendEntry` back onto
+  `crossing.legend_entry`. Deed title/description use `threshold.deed_title` (if
+  authored) or a generic public-fact composition; ceremony text is never used.
+  No-ops silently if the sheet has no primary persona.
 - API: `/api/magic/audere-majora/pending/` + `/respond/`; frontend
   `AudereMajoraOfferGate`/`AudereMajoraOfferDialog` (amber ceremony dialog with path
   choice + declaration composer) mounted in the combat panel.
