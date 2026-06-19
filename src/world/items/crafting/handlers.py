@@ -14,12 +14,13 @@ Both concrete handlers are registered at module import time so that
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
-    from world.items.models import ItemFacet, ItemInstance, ItemStyle, QualityTier
+    from world.items.models import ItemFacet, ItemInstance, ItemStyle, QualityTier, Style
+    from world.magic.models import Facet
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ class FacetAttachHandler(CraftingHandler):
     def pre_validate(self, *, item_instance: ItemInstance, target: object) -> None:
         from world.items.services.facets import assert_facet_attachable  # noqa: PLC0415
 
-        assert_facet_attachable(item_instance, target)  # type: ignore[arg-type]
+        assert_facet_attachable(item_instance, cast("Facet", target))
 
     def apply(
         self,
@@ -96,7 +97,7 @@ class FacetAttachHandler(CraftingHandler):
         return attach_facet_to_item(
             crafter=crafter_account,
             item_instance=item_instance,
-            facet=target,  # type: ignore[arg-type]
+            facet=cast("Facet", target),
             attachment_quality_tier=quality_tier,
         )
 
@@ -107,7 +108,7 @@ class StyleAttachHandler(CraftingHandler):
     def pre_validate(self, *, item_instance: ItemInstance, target: object) -> None:
         from world.items.services.styles import assert_style_attachable  # noqa: PLC0415
 
-        assert_style_attachable(item_instance, target)  # type: ignore[arg-type]
+        assert_style_attachable(item_instance, cast("Style", target))
 
     def apply(
         self,
@@ -122,7 +123,7 @@ class StyleAttachHandler(CraftingHandler):
         return attach_style_to_item(
             crafter=crafter_account,
             item_instance=item_instance,
-            style=target,  # type: ignore[arg-type]
+            style=cast("Style", target),
             attachment_quality_tier=quality_tier,
         )
 
