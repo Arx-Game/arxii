@@ -1,373 +1,239 @@
-# Technique Use Flow Design
+# How Magic Works — The Technique Cast Lifecycle
 
-## Purpose
+**Status:** as-built. This documents the live `use_technique` pipeline end to end.
+**Companion docs:** `docs/architecture/power-derivation.md` (the authoritative
+reference for the power ledger and the penetration-vs-resistance contest — read it
+for the internals of step 5/“resolve” below), `docs/systems/magic.md` (model/API
+catalog), `docs/architecture/combat-magic-integration.md`,
+`docs/architecture/non-clash-casting.md`, `docs/architecture/soulfray-progression-design.md`,
+`docs/architecture/runtime-modifiers-audere.md`.
 
-Define how a character uses a magical technique — from choosing to cast through
-resolution, anima cost, and side effects. This is the core "I use Flame Lance"
-pipeline that connects the magic system to the existing resolution infrastructure.
+This is the "I use Flame Lance" pipeline: from choosing to cast through cost,
+resolution, consequences, and narration. It is the spine that connects the magic
+system to combat, scenes, and the reactive (flows) layer. `use_technique`
+(`world/magic/services/techniques.py`) is the single canonical entry that every
+cast funnels through, no matter how it started.
 
-## Key Design Principles
+---
 
-- **Anima is not a gate.** A character can always attempt to use magic. Anima
-  determines safety, not access. When anima runs out, the deficit is drawn from
-  the caster's life force.
-- **Risk is always explicit.** Any outcome that could harm the character requires
-  an opt-in safety checkpoint. The player must see the cost, understand the danger,
-  and deliberately confirm. Character death risk is stated in those exact terms.
+## 1. Design principles (load-bearing)
+
+These shaped the system and still hold:
+
+- **Anima is not a gate.** A character can always attempt magic. Anima determines
+  *safety*, not access. When anima runs out, the deficit is drawn from the caster's
+  life force (overburn).
+- **Risk is always explicit.** Any outcome that could harm the character requires an
+  opt-in checkpoint — the player sees the cost and the danger and deliberately
+  confirms (the Soulfray-risk confirmation, step 3).
 - **The technique always works.** The intended effect resolves through the normal
   check/consequence pipeline. Mishaps from loss of control are *additional*
-  consequences, not replacements for the intended effect.
-- **Higher intensity is genuinely better.** Pushing intensity increases capability
-  values and effect power. The cost and mishap risk are the trade-off, not a
-  penalty on effectiveness.
-- **Control is efficiency.** High control reduces anima costs and eliminates mishap
-  risk. Mastery means casting for free with no side effects.
+  consequences, never replacements for the intended effect.
+- **Intensity is genuinely better — and genuinely costlier.** Pushing intensity
+  raises the *landed effect* (it is the base of power). The trade-off is higher anima
+  cost and mishap/Soulfray risk, not a penalty on effectiveness.
+- **Control is efficiency.** High control reduces anima cost and eliminates mishap
+  risk. Mastery means casting cheaply with no side effects.
 
-## Technique Use Flow
+---
 
-When a player uses a technique (against a challenge, in a scene, or in combat):
+## 2. The two magnitudes: intensity vs power
 
-### Step 1: Calculate Runtime Stats
+A cast carries **two** separate magnitudes. Keeping them apart is the central
+invariant of the whole system (full detail in `power-derivation.md` §2):
 
-Compute `runtime_intensity` and `runtime_control` from the technique's base values
-plus any active modifiers.
+- **Intensity** — what the caster *channels*. It governs **cost and risk**: anima
+  cost, control mishap (`control_deficit`), Soulfray accumulation, Audere gating,
+  and resonance attribution. A ward must never reduce intensity.
+- **Power** — the *effective magnitude the working carries into the world*. It
+  governs **landed effect**: damage budgets, condition severity/duration, capability
+  grants, and per-round clash progress. Power is the modifiable lever; it is always
+  **derived, never stored**, recomputed every cast.
 
-For MVP, this is just the base values (IntensityTier.control_modifier is
-deferred to scope #2 alongside other runtime modifiers):
-```
-runtime_intensity = technique.intensity
-runtime_control = technique.control
-```
+They start from the same base (intensity seeds power) and then diverge — power picks
+up multipliers, flat bonuses, environment amplification, combat pulls, and pre-cast
+reactive edits, while the cost/risk side keeps reading raw intensity. See the
+intensity-vs-power table in §6.
 
-**Future modifier hooks (scope #2):**
-- Affinity bonuses: Celestial +2 control per 10 resonance, Primal +1/+1,
-  Abyssal +2 intensity per 10 resonance
-- Social scene safety: large passive control bonus outside combat/challenges,
-  making magic trivially safe during RP
-- Combat escalation: intensity increases per round in boss fights
-- Relationship spikes: emotional events (ally falls, loved one threatened)
-  spike intensity
-- Audere: massive intensity increase with tier-locked technique access
+---
 
-### Step 2: Calculate Effective Anima Cost
+## 3. Entry points — three ways a cast starts
 
-```
-control_delta = runtime_control - runtime_intensity
-effective_cost = max(technique.anima_cost - control_delta, 0)
-```
+Every path converges on `use_technique`. Prerequisites (the caster knows the
+technique; the technique has a castable `action_template`; hostility/consent rules)
+are enforced at the entry layer, before `use_technique` runs.
 
-- **Control > intensity**: delta is positive, cost decreases (efficiency)
-- **Intensity > control**: delta is negative, cost increases (strain)
-- **Very high control**: cost floors at 0 (mastery, free casting)
+| Path | Entry | Notes |
+|------|-------|-------|
+| **Scene cast (non-combat)** | `request_technique_cast` → `_resolve_cast` (`world/scenes/cast_services.py`) | Routes to immediate (self/room/no-target), benign (PENDING consent), or hostile (seeds/feeds a combat encounter). |
+| **Combat round** | `_resolve_pc_action` → `resolve_combat_technique` (`world/combat/services.py`) | Builds a `CombatTechniqueResolver` and passes it as the resolve function. |
+| **Clash contribution** | `commit_to_clash` (`world/combat/clash.py`) | Check-only resolve function — no damage; power drives `outcome_to_delta` → clash progress. |
 
-Examples with base_anima_cost=10:
-- intensity=10, control=10 → delta=0 → cost=10 (baseline)
-- intensity=10, control=15 → delta=5 → cost=5 (efficient)
-- intensity=10, control=25 → delta=15 → cost=0 (mastery)
-- intensity=15, control=10 → delta=-5 → cost=15 (strained)
-- intensity=25, control=10 → delta=-15 → cost=25 (dangerous)
+Hostile scene casts against another PC may park as a PENDING `SceneActionRequest`
+until the target consents; on accept the request re-routes through the same lifecycle.
 
-### Step 3: Safety Checkpoint (Only When Overburning)
+---
 
-Calculate the deficit:
-```
-deficit = effective_cost - character_anima.current
-```
+## 4. The lifecycle at a glance
 
-**If deficit <= 0:** No checkpoint. Anima is deducted silently. The player sees
-the updated value in their UI but is not prompted.
-
-**If deficit > 0:** The pipeline pauses and presents:
-
-- Exact cost breakdown: "Flame Lance costs 15 anima. You have 8."
-- What happens: "7 anima will be drawn from your life force."
-- Severity label based on the deficit relative to character state:
-  - Minor overburn: "Painful — you will sustain magical injuries."
-  - Significant overburn: "Dangerous — you will sustain serious magical injuries."
-  - Severe overburn: **"This can result in character death."**
-- Explicit opt-in: Confirm or Cancel.
-
-The severity thresholds are configurable (authored data, not hardcoded), but the
-"can result in character death" label is **mandatory** above a defined threshold.
-It is never hidden, softened, or omitted.
-
-This uses the same `awaiting_confirmation` pause pattern as the existing action
-resolution pipeline, triggered by resource math rather than consequence pool
-`character_loss` flags.
-
-### Step 4: Deduct Anima
-
-On confirmation (or immediately if no checkpoint):
-```
-character_anima.current = max(character_anima.current - effective_cost, 0)
+```mermaid
+flowchart TD
+    subgraph ENTRY["Entry — how a cast starts (§3)"]
+        A["Scene cast<br/>request_technique_cast"]
+        B["Combat round<br/>resolve_combat_technique"]
+        C["Clash<br/>commit_to_clash"]
+    end
+    A --> UT
+    B --> UT
+    C --> UT
+    UT(["use_technique — canonical lifecycle"])
+    UT --> S1["1 · runtime stats → INTENSITY + control<br/>get_runtime_technique_stats"]
+    S1 --> S2["2 · effective anima cost<br/>control_delta = control − intensity (+ strain)"]
+    S2 --> S3{"3 · Soulfray risk?<br/>confirm to proceed"}
+    S3 -- "unconfirmed" --> ABORT([abort — no anima spent])
+    S3 -- "ok / none" --> S4["4 · evaluate resonance environment (once)"]
+    S4 --> S5["5 · _derive_power → PowerLedger<br/>(power-derivation.md)"]
+    S5 --> S6["6 · emit TECHNIQUE_PRE_CAST (mutable)<br/>MODIFY_PAYLOAD edits power · CANCEL aborts"]
+    S6 -- "cancelled" --> ABORT
+    S6 --> S7["7 · reconcile REACTIVE delta · charge pulls"]
+    S7 --> S8["8 · deduct anima (overburn → life force)"]
+    S8 --> RES{9 · resolution path}
+    RES -- "scene" --> RSCENE["start_action_resolution — check"]
+    RES -- "combat" --> RCOMBAT["CombatTechniqueResolver<br/>COMBAT_PULL → PENETRATION → damage + conditions"]
+    RES -- "clash" --> RCLASH["perform_check → outcome_to_delta<br/>→ clash progress (no damage)"]
+    RSCENE --> CONS
+    RCOMBAT --> CONS
+    RCLASH --> CONS
+    CONS["10 · consequences (read INTENSITY):<br/>Soulfray · control mishap · fatigue ·<br/>Audere / Audere Majora offers ·<br/>resonance attribution · corruption ·<br/>environment backfire / defile"]
+    CONS --> EV["11 · emit TECHNIQUE_CAST + TECHNIQUE_AFFECTED (frozen)"]
+    EV --> NARR["12 · narration — render_*_outcome_narration<br/>+ power_outcome_clause (ward / environment)"]
 ```
 
-The deficit value is **passed through from Step 3's calculation** — it is not
-re-derived by attempting to make the model go negative. `CharacterAnima.current`
-is a `PositiveIntegerField` and never goes below 0. The deficit is a computed
-value (`effective_cost - current_anima`) that determines overburn severity in Step 7.
+---
 
-Uses `select_for_update` for race-condition safety, following the
-`ActionPointPool.spend()` pattern. Two simultaneous technique uses must not both
-pass the safety checkpoint and then overdraw.
+## 5. The lifecycle, step by step
 
-### Step 5: Calculate Capability Value
+All symbols below live in `world/magic/services/techniques.py` unless noted.
+Steps marked **[INTENSITY]** read the channeled intensity (cost/risk side); steps
+marked **[POWER]** read the derived power (landed-effect side).
 
-The technique's capability grants are evaluated with the runtime intensity:
-```
-effective_value = grant.base_value + (grant.intensity_multiplier * runtime_intensity)
-```
+1. **Runtime stats** — `get_runtime_technique_stats` computes the cast's
+   **intensity** and **control** from the technique's authored base plus the
+   identity stream (`CharacterModifier` rows: traits, equipment, conditions), the
+   process stream (`CharacterEngagement.intensity_modifier` / `.control_modifier`,
+   where Audere's bonus lands), a social-safety control bonus when un-engaged, and
+   the `IntensityTier` control penalty. **[INTENSITY]**
+2. **Effective anima cost** — `calculate_effective_anima_cost`:
+   `effective_cost = max(base_cost − (control − intensity), 0) + max(strain_commitment, 0)`.
+   High control lowers cost; high intensity raises it. **[INTENSITY]**
+3. **Soulfray safety checkpoint** — if an active Soulfray stage warns of risk and the
+   caster has not confirmed, the cast **aborts with no anima spent**, returning an
+   unconfirmed result for the UI to confirm.
+4. **Evaluate resonance environment (once)** — `evaluate_resonance_environment` runs
+   a single time; the result feeds both power derivation (step 5) and the
+   environment reaction (step 10). Evaluating once is a deliberate double-count guard.
+5. **Derive power** — `_derive_power` builds the `PowerLedger` from the channeled
+   intensity (BASE) through MULTIPLIER, FLAT_MODIFIER, TERM, and ENVIRONMENT stages.
+   **[POWER]** — see `power-derivation.md` §3 for the stage internals.
+6. **`TECHNIQUE_PRE_CAST` (mutable)** — `emit_event` fires the event with a mutable
+   `TechniquePreCastPayload` carrying `intensity`, `power`, and the seed `ledger`. The
+   reactive (flows) layer runs matching triggers: `MODIFY_PAYLOAD` steps edit
+   `payload.power` in place (this is how reactive conditions/room properties bend a
+   cast); a `CANCEL` step aborts the cast before any anima is spent.
+7. **Reconcile reactive + charge pulls** — `_reconcile_precast_ledger` compares the
+   hook-edited `payload.power` to the seed total and appends a `REACTIVE` ledger entry
+   for any delta (so `ledger.total` stays canonical). Declared resonance pulls are
+   charged here (`spend_resonance_for_pull`), after the cancel gate, before anima. **[POWER]**
+8. **Deduct anima** — `deduct_anima` spends `effective_cost` under `SELECT FOR UPDATE`;
+   any shortfall is the **overburn deficit**, drawn from life force. **[INTENSITY]**
+9. **Resolve the intended effect** — the resolve function runs for the active path:
+   - **Scene:** `start_action_resolution` performs the action check with the enhanced
+     capability values.
+   - **Combat:** `CombatTechniqueResolver.__call__` receives the effective power,
+     adds the `COMBAT_PULL` stage, runs the **penetration** contest against the
+     target's ward, then computes the damage budget and condition scaling from the
+     resulting power and calls `apply_damage_to_opponent` (which soaks resistance). **[POWER]**
+   - **Clash:** a check-only resolve function; power is captured for `outcome_to_delta`
+     → `ClashRound` progress (no damage applied here). **[POWER]**
+10. **Consequences** — fired after the effect resolves, all reading **intensity**:
+    Soulfray accumulation (`calculate_soulfray_severity`, scales with anima ratio and
+    deficit), the control mishap rider when `control_deficit = intensity − control > 0`
+    (`select_mishap_pool` → consequence-pool roll), technique fatigue, Audere /
+    Audere Majora offer gating (`maybe_create_audere_offer`), resonance attribution
+    (intensity split across the gift's resonances), per-cast corruption accrual, and the
+    resonance-environment reaction (OPPOSED-cast backfire / place defilement). **[INTENSITY]**
+11. **`TECHNIQUE_CAST` + `TECHNIQUE_AFFECTED` (frozen)** — `_emit_cast_events` emits the
+    frozen `TechniqueCastPayload` (caster's room) and a `TechniqueAffectedPayload` per
+    target. These are immutable by design: a `MODIFY_PAYLOAD` attempt raises.
+12. **Narration** — a deterministic one-line outcome pose. Non-combat uses
+    `render_cast_outcome_narration`; combat uses `render_action_outcome_narration` then
+    broadcasts live. Both fold in `power_outcome_clause` for the ward/environment tag
+    (e.g. "the ward turns it aside", "it tears through the ward",
+    "the place's resonance swells the working").
 
-Higher intensity = higher capability value = better chance against tough challenges
-and access to harder approaches. This is why pushing intensity is desirable despite
-the cost.
+---
 
-Note: `TechniqueCapabilityGrant.calculate_value()` already accepts an optional
-`intensity` override parameter. The runtime intensity feeds in here.
+## 6. Intensity vs power, by step
 
-### Step 6: Resolve Intended Effect
+| Step | Reads | Why |
+|------|-------|-----|
+| 1 runtime stats | **INTENSITY** (computes it) | base + identity + process + social safety − tier penalty |
+| 2 anima cost | **INTENSITY** | `control − intensity` sets cost |
+| 5 derive power | **INTENSITY → POWER** | intensity seeds the power BASE |
+| 6–7 pre-cast reactive | **POWER** | hooks edit `payload.power` only |
+| 8 deduct anima | **INTENSITY** | overburn deficit from intensity-driven cost |
+| 9 resolve (combat/clash) | **POWER** | damage budget, condition scaling, clash delta |
+| 10 Soulfray / mishap / Audere / attribution | **INTENSITY** | cost & risk, never power |
 
-The normal resolution pipeline runs:
-- **Challenge path**: `get_available_actions()` → player picks approach →
-  `resolve_challenge()` with the enhanced capability source
-- **Scene action path**: `resolve_scene_action()` via `Technique.action_template` FK
-  (already exists on the model for using techniques outside challenge contexts)
-- **Gated pipeline**: `start_action_resolution()` if the approach/template uses gates
+**Invariant:** intensity governs *cost and risk*; power governs *landed effect*.
+The anima / Soulfray / mishap / Audere paths are insulated from power-side modifiers
+by construction — a ward or a buff that changes power never changes what the cast
+costs the caster.
 
-The check runs, consequences are selected and applied. This is unchanged from the
-existing pipeline — the technique use flow feeds *into* it with enhanced values.
+---
 
-### Step 7: Apply Overburn Condition
+## 7. Branch points
 
-If there was an anima deficit (from Step 3/4), apply a condition:
-- Condition template: "Soulfray" (working name, to be workshopped)
-- Severity: scaled to the deficit amount
-- Applied deterministically — not a random consequence, but a guaranteed result
-  of the resource math
-- The condition carries mechanical effects (stat penalties, ongoing damage, etc.)
-  and can evolve into permanent mage scars at high severity
+- **Combat vs non-combat vs clash** — chosen at the entry layer (§3). Only the combat
+  path runs `CombatTechniqueResolver` (pull + penetration + damage); the scene path
+  runs an action check; the clash path is check-only and feeds clash progress.
+- **Hostile vs benign target (scene)** — a hostile cast seeds/feeds a combat encounter
+  instead of resolving inline; a benign cast on another PC parks for consent, then
+  resumes the lifecycle on accept.
+- **Overburn vs safe** — when `effective_cost > current anima`, step 8 draws the
+  deficit from life force and step 10's Soulfray accumulation escalates accordingly.
+  Non-lethal encounters clamp cost to available anima (no overburn).
+- **Warded vs unwarded target** — only a target with `barrier_strength > 0` triggers
+  the penetration contest (`power-derivation.md` §4); unwarded casts record no
+  `PENETRATION` ledger entry.
 
-This uses the existing `ConsequenceEffect` APPLY_CONDITION handler.
+---
 
-### Step 8: Resolve Mishap Rider (If Intensity > Control)
+## 8. Where to find the code
 
-If `runtime_intensity > runtime_control`, a mishap consequence pool fires
-**after** the intended effect has resolved. This happens regardless of anima
-state — even with plenty of anima, loss of control produces side effects.
-The difference is that with sufficient anima, these side effects are always
-non-lethal (environmental collateral, minor injuries, unintended area effects).
-Lethal mishap consequences only enter the pool when combined with anima overburn.
+| Concern | Symbol(s) | Module |
+|---------|-----------|--------|
+| Canonical lifecycle | `use_technique`, `get_runtime_technique_stats`, `calculate_effective_anima_cost`, `_derive_power`, `_reconcile_precast_ledger`, `_emit_cast_events` | `world/magic/services/techniques.py` |
+| Scene entry | `request_technique_cast`, `_resolve_cast`, `render_cast_outcome_narration` | `world/scenes/cast_services.py`, `world/magic/narration.py` |
+| Combat entry & resolver | `_resolve_pc_action`, `resolve_combat_technique`, `CombatTechniqueResolver`, `apply_damage_to_opponent` | `world/combat/services.py` |
+| Clash | `commit_to_clash`, `strain_to_intensity`, `outcome_to_delta` | `world/combat/clash.py` |
+| Anima | `deduct_anima` | `world/magic/services/anima.py` |
+| Soulfray / mishap | `calculate_soulfray_severity`, `select_mishap_pool` | `world/magic/services/soulfray.py` |
+| Audere gating | `maybe_create_audere_offer`, `maybe_create_audere_majora_offer` | `world/magic/audere.py` |
+| Event payloads | `TechniquePreCastPayload`, `TechniqueCastPayload`, `TechniqueAffectedPayload` | `flows/events/payloads.py` |
+| Reactive dispatch | `emit_event`, `MODIFY_PAYLOAD` / `CANCEL` flow actions | `flows/emit.py`, `flows/models/flows.py` |
+| Power internals | see the full symbol table | `docs/architecture/power-derivation.md` §7 |
 
-- The mishap pool is selected based on the control deficit magnitude:
-  `control_deficit = runtime_intensity - runtime_control`
-- Small deficit → minor side effects pool (environmental collateral, brief
-  discomfort)
-- Large deficit → severe side effects pool (magical burns, property damage,
-  area effects hitting allies)
-- The main resolution's check result is reused for consequence selection from
-  the mishap pool (same outcome tier determines which mishap is selected)
-- These consequences are *additional* to the intended effect. The technique
-  worked; these are the collateral.
+---
 
-The mishap rider calls `select_consequence_from_result()` directly with the
-mishap pool and the main check result, then `apply_resolution()` for the
-selected consequence. This is a direct call from the technique use wrapper
-(post-resolution), not routed through the context pool infrastructure (which
-exists but is not yet wired into `start_action_resolution()`).
+## 9. History
 
-**Audere hook (scope #2):** During Audere, the control deficit is enormous, so the
-mishap pool is severe — these are the most dramatic moments in the game.
-
-## What Needs Building
-
-### New Service Functions (world/magic/services.py)
-
-- **`calculate_effective_anima_cost(technique, runtime_intensity, runtime_control)`**
-  → returns `int` (effective cost after control delta)
-- **`calculate_anima_deficit(character, effective_cost)`**
-  → returns `int` (deficit, 0 if no overburn)
-- **`deduct_anima(character, effective_cost)`**
-  → deducts from CharacterAnima, returns deficit amount
-- **`get_overburn_severity(deficit)`**
-  → returns severity label and whether character death is possible
-- **`get_runtime_technique_stats(technique, character)`**
-  → returns `(runtime_intensity, runtime_control)` — MVP returns base values,
-  future work adds modifier hooks
-
-### Orchestrator (world/magic/services.py)
-
-- **`use_technique(character, technique, resolution_context)`**
-  → orchestrates Steps 1-8: calculates runtime stats, effective cost,
-  checks for overburn, deducts anima, delegates to the appropriate
-  resolution path (Step 6), then applies overburn condition and mishap
-  rider. Returns a result combining the resolution outcome with any
-  overburn/mishap effects.
-
-### Mishap Pool Selection (world/magic/services.py)
-
-- **`select_mishap_pool(control_deficit)`**
-  → returns the appropriate ConsequencePool based on deficit magnitude,
-  or None if no deficit
-
-Mishap pools are a small number of global ConsequencePool records tiered by
-deficit range (e.g., deficit 1-5 = minor mishaps, 6-15 = moderate, 16+ = severe),
-authored by staff. No new model needed — just ConsequencePool records with
-consequences at various outcome tiers. Lookup is by deficit range, not by
-technique or EffectType.
-
-### Pipeline Integration
-
-- New pause trigger in the resolution pipeline for anima overburn
-  (alongside existing `character_loss` pause)
-- Mishap rider pool wired as a context consequence pool after main resolution
-- `TechniqueCapabilityGrant.calculate_value(intensity=runtime_intensity)` called
-  with runtime intensity instead of base intensity
-
-### Authored Content (Not Code)
-
-- Overburn condition template(s) with severity-scaled effects
-- Mishap consequence pools at different severity tiers
-- Severity threshold configuration for safety checkpoint labels
-
-## What This Does NOT Build (Future Scope)
-
-### Scope #2: Runtime Intensity/Control Modifiers
-- Affinity bonuses to intensity/control from resonance
-- Social scene passive control bonus
-- Combat escalation (per-round intensity increase)
-- Relationship event intensity spikes
-- Audere condition and its stat modifications
-- Audere Majora and tier-crossing
-
-### Scope #3: Negative Consequence Types
-- Mage scar condition templates and their mechanical effects
-- Abyssal corruption as a long-term consequence of overuse
-- New ConsequenceEffect types if needed (or use APPLY_CONDITION with
-  specific templates)
-
-## Design Notes for Future Scopes
-
-These decisions were made during brainstorming and should inform future specs.
-They are not implemented in scope #1 but are load-bearing design constraints.
-
-### Soulfray Progression
-
-Soulfray is **progressive, not sudden**. It builds in severity over rounds of
-deficit casting. A character does not die the first time they overburn — they
-accumulate Soulfray stages over subsequent rounds of deficit use.
-
-**Stage model:**
-- Soulfray is a Condition with multiple severity stages
-- Each round of deficit casting increments the stage
-- Early stages: penalties, pain, visible strain (non-lethal, narrative flavor)
-- Middle stages: serious mechanical penalties, mage scarring risk
-- Late stages: approaching lethal territory, explicit death risk warnings
-- The progression is a runway, not a cliff — players see themselves moving
-  through stages and can make informed choices about whether to keep pushing
-
-This means Step 7 of the technique use flow (apply overburn condition) should
-**increment** an existing Soulfray condition rather than always creating a
-new one. The severity of the increment scales with the deficit amount — a small
-overburn nudges you one stage, a massive one can jump several.
-
-### Audere as a Condition
-
-Audere is a **distinct mechanical state** (Condition) on the character, not just
-"what happens when intensity is high." It is deliberately entered and has its
-own lifecycle:
-
-- **Trigger**: Offered by the system when runtime intensity crosses a threshold
-  (pushed by combat escalation and narrative events). The player chooses whether
-  to embrace it — it is never automatic.
-- **Effects when active**: Massive intensity increase, access to higher-tier
-  techniques normally beyond the character's level, temporarily expanded anima
-  pool (but not nearly enough to cover the new technique costs safely).
-- **Relationship to Soulfray**: Audere dramatically accelerates Soulfray
-  accumulation. Without Audere, a character might slowly build Soulfray over many
-  rounds. During Audere, the intensity/control deficit is enormous, so each
-  technique use pushes Soulfray severity much faster.
-- **Lifecycle**: Audere is not permanent. It ends when the scene/combat ends,
-  when the character chooses to release it, or when Soulfray reaches a
-  critical stage.
-
-### Audere Majora: Sacrifice, Not Failure
-
-Audere Majora ("To Dare Greatly") is the threshold-crossing moment — ascending
-from one level tier to the next (5→6, 10→11, 15→16, 20→21). It requires being
-ready for the next tier.
-
-**Key design principle: death during Audere Majora is sacrifice, not failure.**
-
-A character who dies during Audere Majora is not "failing a check." They are
-choosing to give everything so others can win. This is the culmination of a
-character arc — the warrior who holds the line so the party can escape, the
-mage who channels beyond their limits to destroy the threat.
-
-- Characters should almost never die pointlessly. If they die, it is because
-  they sacrificed themselves so others could succeed.
-- Audere Majora that succeeds means leveling up to the next tier — a
-  transformative character moment.
-- Audere Majora that "fails" in the check sense may still succeed narratively
-  if the character's sacrifice achieves the goal.
-- The system should make space for players to choose sacrifice deliberately,
-  with full understanding of what they're giving up and what they're
-  achieving for others.
-
-### Non-Lethal vs Lethal Mishap Pools
-
-Mishap consequences have two tiers of danger based on anima state:
-
-- **With sufficient anima** (no overburn): Mishaps from intensity > control are
-  always non-lethal. Environmental collateral, minor injuries, unintended area
-  effects. The character is strained but safe. These are consequences of
-  imprecision, not existential danger.
-- **With anima deficit** (overburning): Lethal consequences enter the mishap pool.
-  Severe magical injuries, mage scarring, and at extreme Soulfray stages,
-  character death risk. The combination of loss of control AND life force drain
-  is what makes magic truly dangerous.
-
-This means the mishap pool selection (`select_mishap_pool`) considers both the
-control deficit AND the current Soulfray stage to determine which pool to use.
-
-## Integration Test Expansion Points
-
-The pipeline integration tests (`test_pipeline_integration.py`) should grow to cover:
-
-- **Anima cost calculation**: technique with various intensity/control ratios
-  produces correct effective costs
-- **Safety checkpoint trigger**: overburn deficit triggers confirmation pause,
-  no-deficit does not
-- **Anima deduction**: current anima reduced correctly, deficit tracked
-- **Overburn condition application**: deficit > 0 applies condition with
-  correct severity
-- **Capability value with runtime intensity**: enhanced intensity produces
-  higher capability values that match harder challenges
-- **Mishap rider firing**: intensity > control triggers mishap pool after
-  main resolution succeeds
-- **Mishap not firing when controlled**: intensity <= control produces no
-  mishap consequences
-- **Safety checkpoint cancel**: overburn triggers confirmation, player cancels,
-  no anima deducted, no resolution occurs
-- **Full flow**: technique use → anima cost → safety check → resolution →
-  overburn condition → mishap rider, all in one test proving the complete chain
-
-## Relationship to Existing Pipeline
-
-```
-Current pipeline (unchanged):
-  get_available_actions() → player picks → resolve_challenge() / resolve_scene_action()
-
-New technique use wrapper:
-  Player chooses technique
-  → calculate_runtime_stats()          [Step 1 - base values, future: modifiers]
-  → calculate_effective_anima_cost()   [Step 2 - delta formula]
-  → safety_checkpoint()                [Step 3 - pause if overburn]
-  → deduct_anima()                     [Step 4 - resource update]
-  → calculate_value(runtime_intensity) [Step 5 - enhanced capability]
-  → [existing resolution pipeline]     [Step 6 - unchanged]
-  → apply_overburn_condition()         [Step 7 - if deficit]
-  → resolve_mishap_rider()             [Step 8 - if intensity > control]
-```
-
-The technique use flow wraps the existing pipeline — it doesn't replace it.
-Steps 1-5 happen before resolution, steps 7-8 happen after.
+- Original design (pre-implementation) defined the MVP flow (runtime stats → anima
+  cost → safety checkpoint → deduct → resolve → overburn → mishap) and the
+  forward-looking design notes on Soulfray progression, Audere, and non-lethal vs
+  lethal mishap pools.
+- **#524–#639** built the derived-power pipeline, the `PowerLedger`, the
+  penetration-vs-resistance contest, the resonance-environment integration, and the
+  reactive `MODIFY_PAYLOAD` path (see `power-derivation.md` §8).
+- **#769** rewrote this document to the as-built end-to-end lifecycle and added the
+  overview mermaid diagram (the "How Magic Works" pass).
