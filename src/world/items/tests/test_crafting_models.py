@@ -133,6 +133,11 @@ class CraftingSkillCapTests(TestCase):
                 recipe=self.recipe, min_skill_value=0, max_quality_tier=self.fine
             )
 
+    def test_for_skill_at_exact_boundary(self) -> None:
+        """for_skill at exactly min_skill_value=50 returns Fine (<=, not <)."""
+        result = CraftingSkillCap.for_skill(self.recipe, 50)
+        self.assertEqual(result.name, "Fine")  # type: ignore[union-attr]
+
     def test_skill_cap_related_name(self) -> None:
         """skill_caps reverse manager exists on CraftingRecipe."""
         caps = list(self.recipe.skill_caps.all())

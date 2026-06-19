@@ -5,7 +5,7 @@ from decimal import Decimal
 import factory
 
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
-from world.items.crafting.constants import CraftingRecipeKind
+from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.items.models import (
     EquippedItem,
     FacetCraftingConfig,
@@ -401,4 +401,4 @@ class CraftingRecipeConsequenceFactory(factory.django.DjangoModelFactory):
     recipe = factory.SubFactory(CraftingRecipeFactory)
     consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
     weight_override = None
-    cost_consumption = "full"
+    cost_consumption = CostConsumption.FULL

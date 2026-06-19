@@ -7,10 +7,15 @@ Task 7 of the crafting framework PR.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
+
+if TYPE_CHECKING:
+    from world.items.models import QualityTier
 
 # Cross-app FK strings — centralised to avoid duplicated-literal smell.
 _CHECK_TYPE_FK = "checks.CheckType"
@@ -159,7 +164,7 @@ class CraftingSkillCap(SharedMemoryModel):
         return f"{self.recipe}: skill>={self.min_skill_value} → {self.max_quality_tier}"
 
     @classmethod
-    def for_skill(cls, recipe: CraftingRecipe, skill_value: int) -> object | None:
+    def for_skill(cls, recipe: CraftingRecipe, skill_value: int) -> QualityTier | None:
         """Return the max_quality_tier for the highest skill cap band the crafter qualifies for.
 
         Finds the row with the largest ``min_skill_value`` that is still <= ``skill_value``
