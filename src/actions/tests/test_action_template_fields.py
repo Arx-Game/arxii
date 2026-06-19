@@ -17,3 +17,13 @@ class ActionTemplateCostFieldsTest(TestCase):
         self.assertTrue(template.accepts_pose_text)
         self.assertEqual(template.ap_cost, 20)
         self.assertEqual(template.social_fatigue_cost, 5)
+
+
+class ActionTemplateConsentCategoryTest(TestCase):
+    def test_consent_category_optional_and_settable(self):
+        from world.consent.factories import SocialConsentCategoryFactory
+
+        cat = SocialConsentCategoryFactory(key="romantic", name="Romantic")
+        tmpl = ActionTemplateFactory(consent_category=cat)
+        self.assertEqual(tmpl.consent_category.key, "romantic")
+        self.assertIsNone(ActionTemplateFactory().consent_category)

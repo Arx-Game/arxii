@@ -69,6 +69,17 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         max_length=50,
         help_text="Grouping category (e.g., 'magic', 'combat', 'exploration').",
     )
+    consent_category = models.ForeignKey(
+        "consent.SocialConsentCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="action_templates",
+        help_text=(
+            "Consent category for social actions (#1141). Null = uncategorized "
+            "(gated only by the master switch). Staff tag social templates."
+        ),
+    )
     accepts_pose_text = models.BooleanField(
         default=False,
         help_text="If true, dispatch may carry freeform pose_text echoed with the outcome.",
