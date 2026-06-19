@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from world.covenants.views import (
     CharacterCovenantRoleViewSet,
     CovenantLevelThresholdViewSet,
+    CovenantRankViewSet,
     CovenantRiteViewSet,
     CovenantRoleViewSet,
     CovenantViewSet,
@@ -49,6 +50,13 @@ router.register(
     "rites",
     CovenantRiteViewSet,
     basename="covenant-rite",
+)
+
+# Per-covenant rank ladder: CRUD for managers; read for any active member.
+router.register(
+    "ranks",
+    CovenantRankViewSet,
+    basename="covenant-rank",
 )
 
 urlpatterns = router.urls

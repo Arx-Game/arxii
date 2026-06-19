@@ -4361,6 +4361,252 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantLevelThreshold'
           description: ''
+  /api/covenants/ranks/:
+    get:
+      operationId: covenants_ranks_list
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCovenantRankList'
+          description: ''
+    post:
+      operationId: covenants_ranks_create
+      description: POST /api/covenants/ranks/ — create a new rank via the service.
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+  /api/covenants/ranks/{id}/:
+    get:
+      operationId: covenants_ranks_retrieve
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    put:
+      operationId: covenants_ranks_update
+      description: PUT/PATCH — rename and/or set capability flags via service functions.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    patch:
+      operationId: covenants_ranks_partial_update
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCovenantRankRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    delete:
+      operationId: covenants_ranks_destroy
+      description: DELETE — requires reassign_to in body; routes through delete_rank
+        service.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/covenants/ranks/{id}/assign-member/:
+    post:
+      operationId: covenants_ranks_assign_member_create
+      description: |-
+        POST /api/covenants/ranks/{pk}/assign-member/
+
+        Body: { "membership": <pk> }
+        Assigns the given membership to this rank — requires can_manage_ranks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+  /api/covenants/ranks/{id}/transfer-top/:
+    post:
+      operationId: covenants_ranks_transfer_top_create
+      description: |-
+        POST /api/covenants/ranks/{pk}/transfer-top/
+
+        Body: { "new_top_membership": <pk> }
+        Transfer the top rank (this rank) from the actor to the given membership.
+        Requires can_manage_ranks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+  /api/covenants/ranks/reorder/:
+    post:
+      operationId: covenants_ranks_reorder_create
+      description: |-
+        POST /api/covenants/ranks/reorder/
+
+        Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
+        Reorders the covenant's ranks — requires can_manage_ranks.
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
   /api/covenants/rites/:
     get:
       operationId: covenants_rites_list
@@ -23182,7 +23428,12 @@ components:
       - name
     CharacterCovenantRole:
       type: object
-      description: Read-only serializer for a character's covenant role assignment.
+      description: |-
+        Read-only serializer for a character's covenant role assignment.
+
+        Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
+        block showing the requesting user's own active membership capabilities in
+        the same covenant (or all-False if the viewer has no active membership).
       properties:
         id:
           type: integer
@@ -23197,6 +23448,10 @@ components:
         covenant_role:
           allOf:
           - $ref: '#/components/schemas/CovenantRole'
+          readOnly: true
+        rank:
+          allOf:
+          - $ref: '#/components/schemas/CovenantRankNested'
           readOnly: true
         engaged:
           type: boolean
@@ -23225,6 +23480,13 @@ components:
           type: string
           nullable: true
           readOnly: true
+        viewer_capabilities:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
+            active membership in the same covenant, or all-False when not a member.
+          readOnly: true
       required:
       - can_engage
       - character_sheet
@@ -23236,6 +23498,8 @@ components:
       - is_active
       - joined_at
       - left_at
+      - rank
+      - viewer_capabilities
     CharacterDraft:
       type: object
       description: Serializer for character drafts.
@@ -24826,6 +25090,100 @@ components:
       required:
       - level
       - required_legend
+    CovenantRank:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        covenant:
+          type: integer
+        name:
+          type: string
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
+      required:
+      - covenant
+      - id
+      - name
+      - tier
+    CovenantRankNested:
+      type: object
+      description: |-
+        Minimal nested representation of a CovenantRank (id, name, tier) for embedding
+        inside CharacterCovenantRoleSerializer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Player-chosen tier name, e.g. 'Magister'.
+        tier:
+          type: integer
+          readOnly: true
+          description: Precedence; lower = higher authority (1 = top).
+      required:
+      - id
+      - name
+      - tier
+    CovenantRankRequest:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        covenant:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
+      required:
+      - covenant
+      - name
+      - tier
     CovenantRite:
       type: object
       description: Read-only serializer for CovenantRite authored definitions.
@@ -24930,11 +25288,6 @@ components:
           type: integer
           readOnly: true
           description: Combat resolution order. Lower is faster (1 = fastest).
-        is_leadership:
-          type: boolean
-          readOnly: true
-          description: 'Staff-authored. Members holding a leadership role may kick
-            non-leader members. Leaders cannot kick other leaders. See issue #519.'
         description:
           type: string
           readOnly: true
@@ -24952,7 +25305,6 @@ components:
       - covenant_type_display
       - description
       - id
-      - is_leadership
       - name
       - parent_role
       - slug
@@ -32200,6 +32552,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Covenant'
+    PaginatedCovenantRankList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CovenantRank'
     PaginatedCovenantRiteList:
       type: object
       required:
@@ -34648,6 +35023,37 @@ components:
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
+    PatchedCovenantRankRequest:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        covenant:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
     PatchedEncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.

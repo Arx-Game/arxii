@@ -36,9 +36,11 @@ class IsOwnMembership(permissions.BasePermission):
 
 class CanKickFromCovenant(permissions.BasePermission):
     """Permits kicking ``obj`` (a target CharacterCovenantRole) only if the requester
-    plays an active character holding an active leadership role in the same covenant,
-    and ``obj`` is not their own membership. The 'cannot kick a leader' rule is enforced
-    in the service layer (→ 400) for a specific message."""
+    plays an active character whose rank has can_kick=True and whose tier is strictly
+    less than the target's rank tier (lower tier = higher authority).
+
+    The CannotKickEqualOrHigherRankError detail is enforced in the service layer (→ 400).
+    """
 
     def has_object_permission(
         self,
@@ -48,14 +50,80 @@ class CanKickFromCovenant(permissions.BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
+        # The actor must be: active, in the same covenant, can_kick=True, and
+        # have a strictly lower tier (higher authority) than the target.
         return (
             CharacterCovenantRole.objects.filter(
                 covenant_id=obj.covenant_id,
                 left_at__isnull=True,
-                covenant_role__is_leadership=True,
+                rank__can_kick=True,
+                rank__tier__lt=obj.rank.tier,
                 character_sheet__roster_entry__tenures__end_date__isnull=True,
                 character_sheet__roster_entry__tenures__player_data__account=request.user,
             )
             .exclude(pk=obj.pk)
             .exists()
         )
+
+
+class CanInviteToCovenant(permissions.BasePermission):
+    """Permits inviting to ``obj`` (a Covenant) only if the requester plays an
+    active member whose rank has can_invite=True.
+
+    Object-level: ``obj`` is a Covenant instance; checks the requester's active
+    membership in that covenant.
+    """
+
+    def has_object_permission(
+        self,
+        request: Request,
+        view: object,
+        obj: object,
+    ) -> bool:
+        if request.user.is_staff:
+            return True
+        return CharacterCovenantRole.objects.filter(
+            covenant=obj,
+            left_at__isnull=True,
+            rank__can_invite=True,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=request.user,
+        ).exists()
+
+
+class CanManageCovenantRanks(permissions.BasePermission):
+    """Permits rank-management actions only if the requester plays an active member
+    in the relevant covenant whose rank has can_manage_ranks=True.
+
+    When used on a CovenantRank detail action the covenant is obtained from
+    ``obj.covenant``; when used on a Covenant action it is ``obj`` directly.
+    """
+
+    def has_permission(self, request: Request, view: object) -> bool:
+        # List/create actions: require authentication; object-level enforces the rest.
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(
+        self,
+        request: Request,
+        view: object,
+        obj: object,
+    ) -> bool:
+        if request.user.is_staff:
+            return True
+        # Support both CovenantRank objects (obj.covenant) and Covenant objects (obj).
+        from world.covenants.models import Covenant, CovenantRank  # noqa: PLC0415
+
+        if isinstance(obj, CovenantRank):
+            covenant = obj.covenant
+        elif isinstance(obj, Covenant):
+            covenant = obj
+        else:
+            return False
+        return CharacterCovenantRole.objects.filter(
+            covenant=covenant,
+            left_at__isnull=True,
+            rank__can_manage_ranks=True,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=request.user,
+        ).exists()

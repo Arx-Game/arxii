@@ -7,6 +7,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRank,
     CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
@@ -32,20 +33,84 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "archetype",
             "archetype_display",
             "speed_rank",
-            "is_leadership",
             "description",
             "parent_role",
         ]
         read_only_fields = fields
 
 
+class CovenantRankSerializer(serializers.ModelSerializer):
+    """Serializer for CovenantRank (the per-covenant authority ladder).
+
+    Read: exposes all rank fields.
+    Write: validates tier uniqueness per covenant and capability flags.
+    """
+
+    class Meta:
+        model = CovenantRank
+        fields = [
+            "id",
+            "covenant",
+            "name",
+            "tier",
+            "description",
+            "can_invite",
+            "can_kick",
+            "can_manage_ranks",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        inst: CovenantRank | None = self.instance  # type: ignore[assignment]
+        covenant = attrs.get("covenant", inst.covenant if inst is not None else None)
+        tier = attrs.get("tier", inst.tier if inst is not None else None)
+        name = attrs.get("name", inst.name if inst is not None else None)
+
+        if covenant is not None and tier is not None:
+            qs = CovenantRank.objects.filter(covenant=covenant, tier=tier)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"tier": "A rank with this tier already exists for this covenant."}
+                )
+
+        if covenant is not None and name is not None:
+            qs = CovenantRank.objects.filter(covenant=covenant, name=name)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"name": "A rank with this name already exists for this covenant."}
+                )
+
+        return attrs
+
+
+class CovenantRankNestedSerializer(serializers.ModelSerializer):
+    """Minimal nested representation of a CovenantRank (id, name, tier) for embedding
+    inside CharacterCovenantRoleSerializer."""
+
+    class Meta:
+        model = CovenantRank
+        fields = ["id", "name", "tier"]
+        read_only_fields = fields
+
+
 class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
-    """Read-only serializer for a character's covenant role assignment."""
+    """Read-only serializer for a character's covenant role assignment.
+
+    Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
+    block showing the requesting user's own active membership capabilities in
+    the same covenant (or all-False if the viewer has no active membership).
+    """
 
     covenant_role = CovenantRoleSerializer(read_only=True)
+    rank = CovenantRankNestedSerializer(read_only=True)
     is_active = serializers.SerializerMethodField()
     can_engage = serializers.SerializerMethodField()
     engage_blocked_reason = serializers.SerializerMethodField()
+    viewer_capabilities = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterCovenantRole
@@ -54,12 +119,14 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "character_sheet",
             "covenant",
             "covenant_role",
+            "rank",
             "engaged",
             "joined_at",
             "left_at",
             "is_active",
             "can_engage",
             "engage_blocked_reason",
+            "viewer_capabilities",
         ]
         read_only_fields = fields
 
@@ -79,6 +146,30 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
                 "This battle covenant is dormant — it must be raised again before you can engage."
             )
         return "No covenant members present in this scene."
+
+    def get_viewer_capabilities(self, obj: CharacterCovenantRole) -> dict:
+        """Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
+        active membership in the same covenant, or all-False when not a member."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return {"can_invite": False, "can_kick": False, "can_manage_ranks": False}
+        viewer_membership = (
+            CharacterCovenantRole.objects.filter(
+                covenant_id=obj.covenant_id,
+                left_at__isnull=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=request.user,
+            )
+            .select_related("rank")
+            .first()
+        )
+        if viewer_membership is None:
+            return {"can_invite": False, "can_kick": False, "can_manage_ranks": False}
+        return {
+            "can_invite": viewer_membership.rank.can_invite,
+            "can_kick": viewer_membership.rank.can_kick,
+            "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
+        }
 
 
 class CovenantSerializer(serializers.ModelSerializer):

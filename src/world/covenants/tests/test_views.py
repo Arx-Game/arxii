@@ -727,3 +727,316 @@ class CovenantRoleViewTests(CovenantsViewTestCase):
         self.assertEqual(returned_ids, {self.sub_a.pk, self.sub_b.pk})
         for row in response.data:
             self.assertEqual(row["parent_role"], self.parent_role.pk)
+
+    def test_is_leadership_absent_from_role_payload(self) -> None:
+        """The CovenantRoleSerializer must NOT expose is_leadership (#1027)."""
+        response = self.client.get(f"/api/covenants/roles/{self.parent_role.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("is_leadership", response.data)
+
+
+class CharacterCovenantRoleRankFieldTests(CovenantsViewTestCase):
+    """Verify the membership serializer exposes rank and viewer_capabilities."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+        )
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        super().setUpTestData()
+        cls.sheet = CharacterSheetFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.player_data = PlayerDataFactory(account=cls.user)
+        cls.tenure = RosterTenureFactory(
+            roster_entry=cls.roster_entry,
+            player_data=cls.player_data,
+            end_date=None,
+        )
+        cls.cov = CovenantFactory(name="RankFieldTestCov")
+        cls.mgr_rank = CovenantManagerRankFactory(covenant=cls.cov, tier=1)
+        cls.assignment = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.cov,
+            rank=cls.mgr_rank,
+        )
+
+    def test_membership_payload_includes_rank(self) -> None:
+        """GET character-roles/{pk}/ includes a nested rank block."""
+        response = self.client.get(f"/api/covenants/character-roles/{self.assignment.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("rank", response.data)
+        self.assertEqual(response.data["rank"]["id"], self.mgr_rank.pk)
+        self.assertIn("name", response.data["rank"])
+        self.assertIn("tier", response.data["rank"])
+
+    def test_membership_payload_includes_viewer_capabilities(self) -> None:
+        """GET character-roles/{pk}/ includes viewer_capabilities for the requesting user."""
+        response = self.client.get(f"/api/covenants/character-roles/{self.assignment.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("viewer_capabilities", response.data)
+        caps = response.data["viewer_capabilities"]
+        self.assertIn("can_invite", caps)
+        self.assertIn("can_kick", caps)
+        self.assertIn("can_manage_ranks", caps)
+        # The user's own rank is the manager rank — all caps True.
+        self.assertTrue(caps["can_invite"])
+        self.assertTrue(caps["can_kick"])
+        self.assertTrue(caps["can_manage_ranks"])
+
+    def test_is_leadership_absent_from_membership_payload(self) -> None:
+        """The CharacterCovenantRoleSerializer must NOT expose is_leadership."""
+        response = self.client.get(f"/api/covenants/character-roles/{self.assignment.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Check nested covenant_role block too.
+        self.assertNotIn("is_leadership", response.data)
+        self.assertNotIn("is_leadership", response.data.get("covenant_role", {}))
+
+
+class CovenantRankViewSetTests(CovenantsViewTestCase):
+    """Tests for /api/covenants/ranks/ CRUD and custom actions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.accounts.models import AccountDB
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        super().setUpTestData()
+
+        # Manager user + sheet + active tenure.
+        cls.mgr_sheet = CharacterSheetFactory()
+        cls.mgr_entry = RosterEntryFactory(character_sheet=cls.mgr_sheet)
+        cls.mgr_player_data = PlayerDataFactory(account=cls.user)
+        cls.mgr_tenure = RosterTenureFactory(
+            roster_entry=cls.mgr_entry,
+            player_data=cls.mgr_player_data,
+            end_date=None,
+        )
+
+        # Non-manager user.
+        cls.non_mgr_user = AccountDB.objects.create_user(
+            username="ranktestnonmgr",
+            email="ranktestnonmgr@test.com",
+            password="p",
+        )
+        cls.non_mgr_sheet = CharacterSheetFactory()
+        cls.non_mgr_entry = RosterEntryFactory(character_sheet=cls.non_mgr_sheet)
+        cls.non_mgr_player = PlayerDataFactory(account=cls.non_mgr_user)
+        cls.non_mgr_tenure = RosterTenureFactory(
+            roster_entry=cls.non_mgr_entry,
+            player_data=cls.non_mgr_player,
+            end_date=None,
+        )
+
+        cls.cov = CovenantFactory(name="RankViewSetCov")
+        cls.mgr_rank = CovenantManagerRankFactory(covenant=cls.cov, tier=1)
+        cls.member_rank = CovenantRankFactory(
+            covenant=cls.cov, tier=2, can_invite=False, can_kick=False, can_manage_ranks=False
+        )
+
+        # Manager membership on the test covenant.
+        cls.mgr_membership = CharacterCovenantRoleFactory(
+            character_sheet=cls.mgr_sheet,
+            covenant=cls.cov,
+            rank=cls.mgr_rank,
+        )
+        # Non-manager membership on the test covenant.
+        cls.non_mgr_membership = CharacterCovenantRoleFactory(
+            character_sheet=cls.non_mgr_sheet,
+            covenant=cls.cov,
+            rank=cls.member_rank,
+        )
+
+    def _non_mgr_client(self) -> "APIClient":
+        client = APIClient()
+        client.force_authenticate(user=self.non_mgr_user)
+        return client
+
+    def test_list_returns_ranks_for_member(self) -> None:
+        """GET /api/covenants/ranks/ returns ranks the user's covenant has."""
+        response = self.client.get("/api/covenants/ranks/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertIn(self.mgr_rank.pk, ids)
+        self.assertIn(self.member_rank.pk, ids)
+
+    def test_filter_by_covenant(self) -> None:
+        """?covenant=<pk> narrows to ranks for that covenant."""
+        response = self.client.get("/api/covenants/ranks/", {"covenant": self.cov.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for row in response.data["results"]:
+            self.assertEqual(row["covenant"], self.cov.pk)
+
+    def test_manager_can_create_rank(self) -> None:
+        """A manager (can_manage_ranks=True) can POST a new rank."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+        )
+
+        new_cov = CovenantFactory(name="RankCreateCov")
+        mgr_rank = CovenantManagerRankFactory(covenant=new_cov, tier=1)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mgr_sheet,
+            covenant=new_cov,
+            rank=mgr_rank,
+        )
+        response = self.client.post(
+            "/api/covenants/ranks/",
+            {
+                "covenant": new_cov.pk,
+                "name": "Scribe",
+                "tier": 3,
+                "can_invite": False,
+                "can_kick": False,
+                "can_manage_ranks": False,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Scribe")
+        self.assertEqual(response.data["tier"], 3)
+
+    def test_non_manager_cannot_create_rank(self) -> None:
+        """A member without can_manage_ranks is denied with 403."""
+        client = self._non_mgr_client()
+        response = client.post(
+            "/api/covenants/ranks/",
+            {
+                "covenant": self.cov.pk,
+                "name": "Infiltrator",
+                "tier": 5,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_can_rename_rank(self) -> None:
+        """PATCH a rank name succeeds for a manager."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+
+        cov2 = CovenantFactory(name="RankRenameCov")
+        mgr_rank2 = CovenantManagerRankFactory(covenant=cov2, tier=1)
+        target_rank = CovenantRankFactory(covenant=cov2, tier=2, name="OldName")
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mgr_sheet,
+            covenant=cov2,
+            rank=mgr_rank2,
+        )
+        # Add a second member so covenant doesn't dissolve.
+        CharacterCovenantRoleFactory(
+            character_sheet=self.non_mgr_sheet,
+            covenant=cov2,
+            rank=target_rank,
+        )
+        response = self.client.patch(
+            f"/api/covenants/ranks/{target_rank.pk}/",
+            {"name": "NewName"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "NewName")
+
+    def test_non_manager_cannot_update_rank(self) -> None:
+        """PATCH denied (403) for a member without can_manage_ranks."""
+        client = self._non_mgr_client()
+        response = client.patch(
+            f"/api/covenants/ranks/{self.member_rank.pk}/",
+            {"name": "Hacker"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_reorder_action(self) -> None:
+        """POST /api/covenants/ranks/reorder/ reorders the ladder."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+
+        cov3 = CovenantFactory(name="ReorderCov")
+        r1 = CovenantManagerRankFactory(covenant=cov3, tier=1, name="Leader")
+        r2 = CovenantRankFactory(covenant=cov3, tier=2, name="Mid")
+        r3 = CovenantRankFactory(covenant=cov3, tier=3, name="Base")
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mgr_sheet,
+            covenant=cov3,
+            rank=r1,
+        )
+        # Non-mgr as second member so covenant persists.
+        CharacterCovenantRoleFactory(
+            character_sheet=self.non_mgr_sheet,
+            covenant=cov3,
+            rank=r3,
+        )
+        # Reverse order: r3 → tier 1, r2 → tier 2, r1 → tier 3.
+        response = self.client.post(
+            "/api/covenants/ranks/reorder/",
+            {"covenant": cov3.pk, "ordered_rank_ids": [r3.pk, r2.pk, r1.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        tiers = {row["id"]: row["tier"] for row in response.data}
+        self.assertEqual(tiers[r3.pk], 1)
+        self.assertEqual(tiers[r2.pk], 2)
+        self.assertEqual(tiers[r1.pk], 3)
+
+    def test_assign_member_action(self) -> None:
+        """POST /api/covenants/ranks/{pk}/assign-member/ re-assigns a membership's rank."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+
+        cov4 = CovenantFactory(name="AssignMemberCov")
+        top = CovenantManagerRankFactory(covenant=cov4, tier=1, name="Top")
+        base = CovenantRankFactory(covenant=cov4, tier=2, name="Base")
+        CharacterCovenantRoleFactory(character_sheet=self.mgr_sheet, covenant=cov4, rank=top)
+        target_m = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov4, rank=base
+        )
+        response = self.client.post(
+            f"/api/covenants/ranks/{top.pk}/assign-member/",
+            {"membership": target_m.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        target_m.refresh_from_db()
+        self.assertEqual(target_m.rank_id, top.pk)
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated requests receive 403."""
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.get("/api/covenants/ranks/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

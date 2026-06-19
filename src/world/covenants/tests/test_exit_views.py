@@ -13,12 +13,12 @@ from rest_framework.test import APIClient
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
-from world.covenants.exceptions import CannotKickLeaderError
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
+    CovenantManagerRankFactory,
+    CovenantRankFactory,
     CovenantRoleFactory,
-    LeaderCovenantRoleFactory,
 )
 from world.roster.factories import (
     PlayerDataFactory,
@@ -120,7 +120,12 @@ class LeaveActionTests(TestCase):
 
 
 class KickActionTests(TestCase):
-    """Tests for the /character-roles/{id}/kick/ leader-removes-member action."""
+    """Tests for the /character-roles/{id}/kick/ leader-removes-member action.
+
+    Uses rank-capability flags (can_kick=True on the top rank) instead of the
+    removed is_leadership field. A tier-1 rank (can_kick=True) can kick tier-2
+    members but not other tier-1 members (equal/higher rank → 400).
+    """
 
     def setUp(self) -> None:
         self.leader_user = _make_user("exit_kick_leader")
@@ -132,26 +137,31 @@ class KickActionTests(TestCase):
         self.nonleader_sheet = _setup_user_with_sheet(self.nonleader_user)
 
         self.cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
-        self.leader_role = LeaderCovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        self.member_role = CovenantRoleFactory(
-            covenant_type=CovenantType.DURANCE,
-            is_leadership=False,
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # Rank ladder: tier 1 (leader, can_kick) > tier 2 (member, no caps).
+        self.leader_rank = CovenantManagerRankFactory(covenant=self.cov, tier=1)
+        self.member_rank = CovenantRankFactory(
+            covenant=self.cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=False
         )
 
         self.leader_membership = CharacterCovenantRoleFactory(
             character_sheet=self.leader_sheet,
             covenant=self.cov,
-            covenant_role=self.leader_role,
+            covenant_role=self.role,
+            rank=self.leader_rank,
         )
         self.target_membership = CharacterCovenantRoleFactory(
             character_sheet=self.target_sheet,
             covenant=self.cov,
-            covenant_role=self.member_role,
+            covenant_role=self.role,
+            rank=self.member_rank,
         )
         self.nonleader_membership = CharacterCovenantRoleFactory(
             character_sheet=self.nonleader_sheet,
             covenant=self.cov,
-            covenant_role=self.member_role,
+            covenant_role=self.role,
+            rank=self.member_rank,
         )
 
         self.leader_client = APIClient()
@@ -162,7 +172,7 @@ class KickActionTests(TestCase):
         self.nonleader_client.force_authenticate(user=self.nonleader_user)
 
     def test_leader_kicks_nonleader_soft_ends_target(self) -> None:
-        """A leader removing a non-leader returns 200 and soft-ends the target."""
+        """A leader (can_kick, tier 1) removing a tier-2 member returns 200 and soft-ends."""
         response = self.leader_client.post(
             f"/api/covenants/character-roles/{self.target_membership.pk}/kick/"
         )
@@ -172,7 +182,7 @@ class KickActionTests(TestCase):
         self.assertIsNotNone(self.target_membership.left_at)
 
     def test_nonleader_cannot_kick(self) -> None:
-        """A non-leader requester is denied (403) and the target is untouched."""
+        """A member without can_kick rank is denied (403) and the target is untouched."""
         response = self.nonleader_client.post(
             f"/api/covenants/character-roles/{self.target_membership.pk}/kick/"
         )
@@ -180,20 +190,21 @@ class KickActionTests(TestCase):
         self.target_membership.refresh_from_db()
         self.assertIsNone(self.target_membership.left_at)
 
-    def test_leader_cannot_kick_fellow_leader(self) -> None:
-        """Kicking another leader returns 400 with CannotKickLeaderError's message."""
+    def test_leader_cannot_kick_equal_rank(self) -> None:
+        """Kicking a member of equal rank (tier 1) is denied — CanKickFromCovenant rejects (403)."""
         second_leader_user = _make_user("exit_kick_leader2")
         second_leader_sheet = _setup_user_with_sheet(second_leader_user)
         second_leader_membership = CharacterCovenantRoleFactory(
             character_sheet=second_leader_sheet,
             covenant=self.cov,
-            covenant_role=self.leader_role,
+            covenant_role=self.role,
+            rank=self.leader_rank,
         )
         response = self.leader_client.post(
             f"/api/covenants/character-roles/{second_leader_membership.pk}/kick/"
         )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], CannotKickLeaderError.user_message)
+        # Equal rank tier: CanKickFromCovenant denies (403) — no actor whose tier < target.tier
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         second_leader_membership.refresh_from_db()
         self.assertIsNone(second_leader_membership.left_at)
 
