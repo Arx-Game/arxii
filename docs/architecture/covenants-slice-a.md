@@ -1,7 +1,12 @@
 # Covenants Slice A — Entity & Membership
 
 **Date:** 2026-05-09
-**Status:** Draft (post-brainstorm; awaiting spec review)
+**Status:** SHIPPED. This document records the Slice A design; it reflects the
+state of the codebase after Slice A landed. Subsequent slices extended the schema:
+**#1027** added `CovenantRank` (per-covenant administrative authority tier) and
+`CharacterCovenantRole.rank` FK — see `docs/roadmap/covenants.md` §"Two Orthogonal
+Authority Axes" for the full two-axis model. `CovenantRole.is_leadership` was
+removed by #1027 and no longer exists.
 **Branch:** TBD (e.g. `covenants-slice-a-entity`)
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; this spec implements the foundational missing skeleton

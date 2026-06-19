@@ -766,20 +766,30 @@ services, and equipment-modifier integration.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles and gear compatibility. Spec D PR1 shipped
-the role-assignment and gear-compatibility data layer; #985 wired the per-role bonus
-authoring model and the combat seams that consume it.
+Magically-empowered group oaths with roles, gear compatibility, and a per-covenant
+rank ladder. Spec D PR1 shipped the role-assignment and gear-compatibility data
+layer; #985 wired per-role bonus authoring and the combat seams; #1027 added
+`CovenantRank` (administrative authority, orthogonal to `CovenantRole` power).
+
+**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
+Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
+These two axes are orthogonal — never re-merge them.
 
 - **Models:**
-  - `CharacterCovenantRole` — per-character record of a covenant role assignment;
-    `left_at IS NULL` = currently active (Spec D §4.4)
+  - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
+    currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
+    boolean, `rank` FK → `CovenantRank` (added #1027).
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
-  - `CovenantRoleBonus` (NEW #985) — authored config: one row per
+  - `CovenantRoleBonus` (#985) — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
-    `char_level × bonus_per_level`; no row → 0. Admin-registered. Default
-    authoring empty → no live numeric effect until staff author rows.
+    `char_level × bonus_per_level`; no row → 0. Admin-registered.
+  - `CovenantRank` (#1027) — per-covenant administrative authority tier.
+    Fields: `covenant` FK (CASCADE, `related_name="ranks"`), `name` (max 60,
+    player-chosen), `tier` (PositiveInt; 1 = top authority), `description`,
+    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
+    `(covenant, tier)` and `(covenant, name)`. Ordered by `["covenant", "tier"]`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
     `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
@@ -787,22 +797,39 @@ authoring model and the combat seams that consume it.
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
+  - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
+    and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
+    `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
   - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
     `char_level × bonus_per_level`; 0 if no row (#985)
+  - **Rank management (#1027)** — all require `actor.rank.can_manage_ranks=True`:
+    `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
+    `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
+    `LastManagerRankError` if an op would leave zero active managers.
 - **Combat seams (#985):** `apply_equipped_armor_soak` adds
   `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top of raw
   soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
   WEAPON_DAMAGE_TARGET_NAME)` to technique budget. Both route through
   `get_modifier_total` → `covenant_role_bonus` equipment walk.
-- **Exceptions:** `CovenantRoleNeverHeldError` (raised by `weave_thread` when
-  `target_kind=COVENANT_ROLE` and character never held the role) — in
-  `world.covenants.exceptions`
+- **Exceptions:** `world.covenants.exceptions` —
+  `CovenantRoleNeverHeldError` (Thread weave gate);
+  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
+  `CannotKickSelfError` (kick service);
+  `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
+  `CrossCovenantRankError` (rank management, #1027)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
-    currently-played sheets
+    currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+  - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
+  - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
+  - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
+  - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
+  - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+- **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
+  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
   mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
   `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
