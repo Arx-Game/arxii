@@ -4044,7 +4044,8 @@ paths:
     post:
       operationId: covenants_character_roles_kick_create
       description: |-
-        POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+        POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+        authority (rank tier precedence: actor.rank.tier < target.rank.tier).
 
         The target may be outside the requester's own-scoped get_queryset, so fetch it
         via the full manager and run object permissions explicitly rather than get_object().
@@ -23497,15 +23498,8 @@ components:
           nullable: true
           readOnly: true
         viewer_capabilities:
-          type: object
-          additionalProperties: {}
-          description: |-
-            Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
-            active membership in the same covenant, or all-False when not a member.
-
-            Results are memoized per covenant_id in the serializer context so a list
-            response of N memberships from the same covenant issues only one query
-            rather than one per row.
+          allOf:
+          - $ref: '#/components/schemas/ViewerCapabilities'
           readOnly: true
       required:
       - can_engage
@@ -42965,6 +42959,20 @@ components:
           type: integer
       required:
       - story
+    ViewerCapabilities:
+      type: object
+      description: Inline serializer for the viewer's capabilities in a covenant.
+      properties:
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+        can_manage_ranks:
+          type: boolean
+      required:
+      - can_invite
+      - can_kick
+      - can_manage_ranks
     VisibilityF91Enum:
       enum:
       - default

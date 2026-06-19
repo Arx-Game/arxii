@@ -332,10 +332,12 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
   const isActiveMember = ownMembership !== null;
 
   // viewer_capabilities is the same value on every row in one covenant (server memoizes it);
-  // read it from the first result. Cast from the generated {[key: string]: unknown} shape.
-  const viewerCapabilities: ViewerCapabilities = (membersPage?.results?.[0]?.viewer_capabilities as
-    | ViewerCapabilities
-    | undefined) ?? { can_invite: false, can_kick: false, can_manage_ranks: false };
+  // read it from the first result. Now typed directly from the generated schema.
+  const viewerCapabilities: ViewerCapabilities = membersPage?.results?.[0]?.viewer_capabilities ?? {
+    can_invite: false,
+    can_kick: false,
+    can_manage_ranks: false,
+  };
 
   // Viewer's own rank tier (or Infinity = lowest authority if not a member).
   const viewerRankTier: number = ownMembership?.rank?.tier ?? Infinity;

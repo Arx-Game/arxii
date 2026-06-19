@@ -228,6 +228,7 @@ export function useReorderRanks(covenantId: number) {
       api.reorderRanks(covenantId, vars.orderedRankIds),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
     },
   });
 }

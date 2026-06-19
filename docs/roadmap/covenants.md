@@ -290,6 +290,10 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `CrossCovenantRankError` (#1027) — rank and membership belong to different
     covenants.
   - `CannotKickSelfError` — self-kick attempt.
+  - `IncompleteRankReorderError` (#1027) — `ordered_rank_ids` does not cover all
+    covenant ranks.
+  - `CannotTransferToDepartedMemberError` (#1027) — attempted to transfer top rank
+    to a departed member.
 
 - **REST API** (`/api/covenants/`):
   - `GET /covenants/` — `CovenantViewSet` (read-only). Non-staff scoped to
@@ -475,7 +479,7 @@ All require the actor's `rank.can_manage_ranks=True`; raise
 additional actions: `POST /ranks/reorder/`, `POST /ranks/{pk}/assign-member/`,
 `POST /ranks/{pk}/transfer-top/`. `CanManageCovenantRanks` permission class gates
 write operations. Membership serializer exposes nested `rank` + a
-`viewer_capabilities` block (can_invite/can_kick/can_manage for the requesting
+`viewer_capabilities` block (can_invite/can_kick/can_manage_ranks for the requesting
 user's own active membership).
 
 ### Durable Design Decision: Sworn Objective Is an Enduring Mission Statement

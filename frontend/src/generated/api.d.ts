@@ -2946,7 +2946,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+     * @description POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+     *     authority (rank tier precedence: actor.rank.tier < target.rank.tier).
      *
      *     The target may be outside the requester's own-scoped get_queryset, so fetch it
      *     via the full manager and run object permissions explicitly rather than get_object().
@@ -13662,17 +13663,7 @@ export interface components {
       readonly is_active: boolean;
       readonly can_engage: boolean;
       readonly engage_blocked_reason: string | null;
-      /**
-       * @description Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
-       *     active membership in the same covenant, or all-False when not a member.
-       *
-       *     Results are memoized per covenant_id in the serializer context so a list
-       *     response of N memberships from the same covenant issues only one query
-       *     rather than one per row.
-       */
-      readonly viewer_capabilities: {
-        [key: string]: unknown;
-      };
+      readonly viewer_capabilities: components['schemas']['ViewerCapabilities'];
     };
     /** @description Serializer for character drafts. */
     CharacterDraft: {
@@ -23588,6 +23579,12 @@ export interface components {
     /** @description Input serializer for POST /api/narrative/story-mutes/. */
     UserStoryMuteCreateRequest: {
       story: number;
+    };
+    /** @description Inline serializer for the viewer's capabilities in a covenant. */
+    ViewerCapabilities: {
+      can_invite: boolean;
+      can_kick: boolean;
+      can_manage_ranks: boolean;
     };
     /**
      * @description * `default` - Default

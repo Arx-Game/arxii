@@ -1,5 +1,6 @@
 """DRF serializers for covenants API."""
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.covenants.handlers import can_engage_membership
@@ -97,6 +98,14 @@ class CovenantRankNestedSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ViewerCapabilitiesSerializer(serializers.Serializer):
+    """Inline serializer for the viewer's capabilities in a covenant."""
+
+    can_invite = serializers.BooleanField()
+    can_kick = serializers.BooleanField()
+    can_manage_ranks = serializers.BooleanField()
+
+
 class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
     """Read-only serializer for a character's covenant role assignment.
 
@@ -147,6 +156,7 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             )
         return "No covenant members present in this scene."
 
+    @extend_schema_field(ViewerCapabilitiesSerializer)
     def get_viewer_capabilities(self, obj: CharacterCovenantRole) -> dict:
         """Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
         active membership in the same covenant, or all-False when not a member.

@@ -818,7 +818,8 @@ These two axes are orthogonal — never re-merge them.
   `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
   `CannotKickSelfError` (kick service);
   `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
-  `CrossCovenantRankError` (rank management, #1027)
+  `CrossCovenantRankError`, `IncompleteRankReorderError`,
+  `CannotTransferToDepartedMemberError` (rank management, #1027)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
