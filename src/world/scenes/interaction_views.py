@@ -5,7 +5,7 @@ from http import HTTPMethod
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
@@ -55,6 +55,7 @@ from world.scenes.models import (
     InteractionReaction,
     Persona,
     Scene,
+    SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
@@ -152,87 +153,75 @@ class InteractionViewSet(
             ),
         )
 
-        persona_ids = get_account_personas(self.request)
-
         user = self.request.user
         if user.is_staff:
-            # Staff sees everything EXCEPT very_private
+            # Staff sees everything except very-private (#1219: that tier admits no exception).
             return base_qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
 
-        if not persona_ids:
-            # No personas: show only public interactions (with time bound for pruning)
-            default_since = timezone.now() - timedelta(days=90)
-            since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET
-            time_bound = (
-                {"timestamp__gte": since_filter}
-                if since_filter
-                else {"timestamp__gte": default_since}
-            )
-            public_ids = (
-                Interaction.objects.filter(
-                    scene__privacy_mode=ScenePrivacyMode.PUBLIC,
-                    visibility=InteractionVisibility.DEFAULT,
-                    place__isnull=True,
-                    **time_bound,
-                )
-                .exclude(mode=InteractionMode.WHISPER)
-                .values("pk")
-                .union(
-                    Interaction.objects.filter(
-                        scene__isnull=True,
-                        place__isnull=True,
-                        visibility=InteractionVisibility.DEFAULT,
-                        **time_bound,
-                    )
-                    .exclude(mode=InteractionMode.WHISPER)
-                    .values("pk"),
-                )
-            )
-            return base_qs.filter(pk__in=public_ids)
-
-        # Default time bound for partition pruning. Without this, the UNION
-        # subquery scans all monthly partitions. The 'since' filter param
-        # overrides this when provided by the frontend.
-        default_since = timezone.now() - timedelta(days=90)
+        # Time bound for partition pruning; the 'since' param overrides the 90-day default.
         since_filter = self.request.query_params.get("since")  # noqa: USE_FILTERSET
-        if since_filter:
-            # Frontend provided an explicit time bound — use it for pruning
-            time_bound = {"timestamp__gte": since_filter}
-        else:
-            time_bound = {"timestamp__gte": default_since}
+        time_bound = {"timestamp__gte": since_filter or (timezone.now() - timedelta(days=90))}
 
-        # UNION subquery for visibility filtering — each branch hits one index
-        # and includes a timestamp bound for partition pruning. UNION
-        # deduplicates, so no .distinct() needed.
-        visible_ids = (
-            Interaction.objects.filter(
-                persona_id__in=persona_ids,
-                **time_bound,
-            )
-            .values("pk")
-            .union(
-                Interaction.objects.filter(
-                    receivers__persona_id__in=persona_ids,
-                    **time_bound,
-                ).values("pk"),
-                Interaction.objects.filter(
-                    scene__privacy_mode=ScenePrivacyMode.PUBLIC,
-                    visibility=InteractionVisibility.DEFAULT,
-                    place__isnull=True,
-                    **time_bound,
-                )
-                .exclude(mode=InteractionMode.WHISPER)
-                .values("pk"),
-                Interaction.objects.filter(
-                    scene__isnull=True,
-                    place__isnull=True,
-                    visibility=InteractionVisibility.DEFAULT,
-                    **time_bound,
-                )
-                .exclude(mode=InteractionMode.WHISPER)
-                .values("pk"),
-            )
+        # "Room-heard" = broadcast content everyone present perceived: default visibility,
+        # not place-scoped, and not directed — i.e. no receiver rows and not a whisper (a
+        # whisper is always private even if it somehow has no receiver rows). Whispers /
+        # table-talk / receiver-scoped mutters are DIRECTED — they reach only their parties
+        # (the `party` branch below), never a bystander or a future inheritor of the persona.
+        room_heard = Q(
+            visibility=InteractionVisibility.DEFAULT,
+            place__isnull=True,
+            receivers__isnull=True,
+        ) & ~Q(mode=InteractionMode.WHISPER)
+
+        # Public room-heard → anyone, including unauthenticated viewers.
+        public_visible = Interaction.objects.filter(
+            room_heard,
+            Q(scene__privacy_mode=ScenePrivacyMode.PUBLIC) | Q(scene__isnull=True),
+            **time_bound,
+        ).values("pk")
+
+        account_id = user.pk if user.is_authenticated else None
+        if account_id is None:
+            return base_qs.filter(pk__in=public_visible)
+
+        current_persona_ids = get_account_personas(self.request)
+
+        # Scenes whose room-heard content this account may read: where one of their CURRENT
+        # characters was present (so a new player inherits the character's full history), or
+        # which they PERSONALLY participated in (so a former player keeps the scenes they did).
+        present_scene_ids = Interaction.objects.filter(
+            Q(persona_id__in=current_persona_ids)
+            | Q(receivers__persona_id__in=current_persona_ids),
+            scene__isnull=False,
+        ).values("scene_id")
+        participated_scene_ids = SceneParticipation.objects.filter(account_id=account_id).values(
+            "scene_id"
         )
+        gm_scene_ids = SceneParticipation.objects.filter(account_id=account_id, is_gm=True).values(
+            "scene_id"
+        )
+
+        # Private content reaches this account ONLY as an actual party — writer or receiver,
+        # pinned BY ACCOUNT at creation. Persona inheritance and mere scene presence never
+        # grant it; a former party keeps it. This is the whole privacy guarantee.
+        party = Interaction.objects.filter(
+            Q(writer_account_id=account_id) | Q(receivers__account_id=account_id),
+            **time_bound,
+        ).values("pk")
+        present_visible = Interaction.objects.filter(
+            room_heard, scene_id__in=present_scene_ids, **time_bound
+        ).values("pk")
+        participated_visible = Interaction.objects.filter(
+            room_heard, scene_id__in=participated_scene_ids, **time_bound
+        ).values("pk")
+        # The GM who ran a scene sees everything in it except very-private.
+        gm_visible = (
+            Interaction.objects.filter(scene_id__in=gm_scene_ids, **time_bound)
+            .exclude(visibility=InteractionVisibility.VERY_PRIVATE)
+            .values("pk")
+        )
+
+        visible_ids = public_visible.union(party, present_visible, participated_visible, gm_visible)
         return base_qs.filter(pk__in=visible_ids)
 
     def get_serializer_class(

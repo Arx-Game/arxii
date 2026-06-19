@@ -206,9 +206,49 @@ What landed:
 - **REST:** `POST /api/items/inventory/<pk>/use/` — a `use` action on `ItemInstanceViewSet`,
   owner-or-staff gated, `ItemError` → HTTP 400; list/retrieve filter `.in_play()`.
 
-Deferred follow-ups (at time of #509): use-item *Action* (shipped in #1024 — see below),
-time-based cleanup of soft-deleted, non-lore-critical instances; durability-on-use (#508)
-integration; quantity/stack consumption.
+Deferred follow-ups (at time of #509): use-item *Action* (shipped in #1024 — see below);
+time-based cleanup of soft-deleted non-lore-critical instances (shipped in #1025 — see below);
+durability-on-use (#508) integration; quantity/stack consumption.
+
+## Time-Based Cleanup of Soft-Deleted Items (DONE, #1025)
+
+**Branch:** `feature-1025-time-based-cleanup-of-soft-deleted-non-l`
+
+Closes the deferred cleanup follow-up from #509: non-lore-critical soft-deleted items are
+now automatically hard-purged after a configurable grace period.
+
+What landed:
+
+- **`is_lore_critical` predicate** on `ItemInstance` (`world/items/models.py`) — returns
+  `True` if the item must never be auto-purged: `lore_value != 0`, OR has attached facets
+  (`ItemFacet` rows), OR has transfer provenance (a GIVEN, STOLEN, or TRANSFERRED
+  `OwnershipEvent`). Cosmetic-only data (custom name, quality tier) is deliberately *not*
+  lore-critical so throwaway cosmetics are still eligible for purge.
+- **`PROVENANCE_EVENT_TYPES`** frozenset in `world/items/constants.py` — `{GIVEN, STOLEN,
+  TRANSFERRED}` — the transfer-event guard shared by the predicate and the cleanup query.
+- **`hard_delete_item_instance(item_instance)` shared helper** in
+  `world/items/services/usage.py` — convergence of the destruction-at-0-charges path
+  (#509) and the cleanup path (#1025). Deletes ledger rows first, then the game object
+  (CASCADE) or instance row directly; no dangling FKs possible. Previously, bare-throwaway
+  destruction left a `CONSUMED` ledger row with `item_instance=NULL`; that dangling-row
+  behavior is now retired for hard-delete paths.
+- **`purge_expired_soft_deleted_items(*, grace=None) -> int`** in
+  `world/items/services/cleanup.py` — queries `destroyed_at < cutoff AND lore_value=0
+  AND facets=0 AND transfer_provenance=0`, then purges each via a per-item savepoint so one
+  PROTECT-referenced row can't wedge the batch (Mantle / ProjectContribution rows are also
+  excluded at the query level); returns the count purged. **In-world safety guard:** an
+  otherwise-eligible row whose `game_object` still has a location (a half-undelete) is never
+  purged — it is logged at WARNING for staff to resolve, so the cron can't delete a game
+  object out from under a live room.
+- **`ITEM_SOFT_DELETE_GRACE_DAYS`** in `settings.py` — defaults to 30, configurable via
+  the `ITEM_SOFT_DELETE_GRACE_DAYS` env var. Passed as `timedelta(days=N)` to the
+  cleanup service.
+- **`items.soft_delete_cleanup` daily cron task** in `world/items/tasks.py` — registered
+  with `world.game_clock.task_registry` via `register_all_tasks()`; runs every 24 hours;
+  logs the purge count.
+- **Tests** — lore-critical items are retained forever; past-grace non-lore-critical items
+  are purged; within-grace items are retained; no-op when nothing eligible; no orphaned
+  ledger rows after purge; PROTECT-referenced rows are skipped without aborting the batch.
 
 ## Use-Item Frontend UI (DONE, #1026)
 

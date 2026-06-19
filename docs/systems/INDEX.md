@@ -705,7 +705,9 @@ services, and equipment-modifier integration.
   — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
   by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
-  accessory), `OwnershipEventType` (created/given/stolen/transferred), `GearArchetype`
+  accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
+  `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
+  provenance used by the lore-critical predicate)
 - **Handlers:**
   - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
     `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
@@ -720,6 +722,17 @@ services, and equipment-modifier integration.
     consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
     usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
     (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
+  - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
+    deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
+  - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
+    — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
+    by the `items.soft_delete_cleanup` daily cron task (#1025)
+- **Predicates on `ItemInstance`:**
+  - `differs_from_template` — True if instance has any per-instance data (custom name/desc,
+    lore_value, quality_tier, facets, or non-CREATED provenance); gates soft- vs. hard-delete
+    at 0 charges
+  - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
+    OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
 - **Usable vs consumable:** `ItemTemplate.is_usable` (= `on_use_pool_id is not None`) is the
   canonical predicate; `use_item`, `ItemUsablePrerequisite`, and the serializer all delegate to it.
   *Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge

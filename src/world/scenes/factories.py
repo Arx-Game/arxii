@@ -92,11 +92,32 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     is_fake_name = False
 
 
+def _current_account_for_persona(persona):
+    """The account currently playing ``persona``'s character, or None (#1219).
+
+    Mirrors what ``create_interaction`` pins as the writer/receiver party account, so
+    factory-built interactions carry the same account-party identity as real ones.
+    """
+    from world.roster.models import RosterTenure
+
+    tenure = (
+        RosterTenure.objects.filter(
+            roster_entry__character_sheet_id=persona.character_sheet_id,
+            end_date__isnull=True,
+        )
+        .select_related("player_data__account")
+        .first()
+    )
+    return tenure.player_data.account if tenure is not None else None
+
+
 class InteractionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Interaction
 
     persona = factory.SubFactory(PersonaFactory)
+    # Pin the party account from the persona's current tenure, like create_interaction (#1219).
+    writer_account = factory.LazyAttribute(lambda o: _current_account_for_persona(o.persona))
     content = factory.Faker("text", max_nb_chars=500)
     mode = InteractionMode.POSE
     visibility = InteractionVisibility.DEFAULT
@@ -178,6 +199,8 @@ class InteractionReceiverFactory(factory_django.DjangoModelFactory):
     interaction = factory.SubFactory(InteractionFactory)
     timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
     persona = factory.SubFactory(PersonaFactory)
+    # Pin the receiver's party account from the persona's current tenure (#1219).
+    account = factory.LazyAttribute(lambda o: _current_account_for_persona(o.persona))
 
 
 class SceneActionRequestFactory(factory_django.DjangoModelFactory):
