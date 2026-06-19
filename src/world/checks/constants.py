@@ -19,6 +19,20 @@ class EffectType(models.TextChoices):
     CAPTURE = "capture", "Capture"
     ESCAPE_CAPTIVITY = "escape_captivity", "Escape Captivity"
     RESCUE_CAPTIVE = "rescue_captive", "Rescue Captive"
+    CREATE_POSITION = "create_position", "Create Position"
+    MOVE_TO_POSITION = "move_to_position", "Move to Position"
+    SEVER_EDGE = "sever_edge", "Sever Edge"
+    CONNECT_EDGE = "connect_edge", "Connect Edge"
+    GRANT_FLIGHT = "grant_flight", "Grant Flight"
+    REMOVE_FLIGHT = "remove_flight", "Remove Flight"
+
+
+class PositionDestination(models.TextChoices):
+    """How a MOVE_TO_POSITION effect resolves its destination within the room."""
+
+    ACTOR_POSITION = "actor_position", "Actor's current position"
+    GATING_FAR_SIDE = "gating_far_side", "Far side of the gating edge"
+    NAMED = "named", "Named position in the room"
 
 
 class EffectTarget(models.TextChoices):

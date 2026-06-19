@@ -836,11 +836,8 @@ tied to the combat subsystem.
   and dispatched via `ActionRef` with a `position_id` token — slots into the
   unified player-action interface shipped in Phase 7
 
-**Deferred to follow-up issues:**
+**Deferred to follow-up issues (still open):**
 
-- Cross-a-gated-edge-via-approach resolution (approach-resolver + Challenge spawn)
-- Dynamic-reshaping consequence `EffectType`s
-- Implicit aerial positions
 - Occupancy-screening reachability (crowded-position filtering)
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
 
@@ -886,6 +883,58 @@ GM terrain-blueprint authoring and non-combat scene positioning, building on Pha
   skips gating. Full gated-edge instantiation requires `instantiate_situation()` to mint
   `ChallengeInstance`s.
 
+### Positioning — Dynamic Reshaping, Aerial Layer, Gated Crossings (SHIPPED — #1018)
+
+Battlefield mutation via consequence effects, flight, chasms, and approach-based
+gated-edge crossing. Builds on the Phase-1 and Blueprint (#1017) positioning base.
+
+**Location:** `src/world/areas/positioning/` + `src/world/checks/constants.py` +
+`src/world/mechanics/effect_handlers.py` + `src/world/mechanics/factories.py`
+
+**What ships:**
+
+- **`Position.elevation_anchor`** (self-FK, null=floor/top-level) — links each AERIAL or
+  CHASM position to the ground node directly below it
+- **`PositionKind.CHASM`** — a below-ground region; entering one triggers `maybe_emit_fall`
+  which emits `EventName.FELL` into the reactive layer
+- **Aerial layer services:**
+  - `materialize_aerial_layer(room)` — idempotent: for each non-AERIAL position X, creates
+    `"Above X"` (AERIAL, `elevation_anchor=X`) with a vertical edge X↔Above X; mirrors every
+    ground horizontal edge as a passable, ungated aerial edge (flight bypasses all obstacles)
+  - `teardown_aerial_layer(room)` — delete all AERIAL positions (cascade edges + occupancy)
+    once no airborne occupants remain
+  - `enter_aerial(objectdb)` — materialize layer + move to AERIAL twin + set `"aerial"`
+    `ObjectProperty`
+  - `leave_aerial(objectdb)` — return to `elevation_anchor` ground position, clear property,
+    teardown layer when empty
+  - `maybe_emit_fall(objectdb, position)` — emit `EventName.FELL` when entering a CHASM;
+    returns `True` if emitted
+- **`"aerial"` Property seed** — `AerialPropertyFactory` in `world/mechanics/factories.py`
+  (get-or-create by name; doubles as seed and test factory)
+- **Dynamic-reshaping `EffectType`s** (dispatched via `apply_resolution`):
+  - `CREATE_POSITION` — carve a new position node and optionally connect + place occupant
+  - `MOVE_TO_POSITION` — force-move a target; destination resolved via `PositionDestination`
+  - `SEVER_EDGE` — disconnect a named edge (skips gracefully if absent)
+  - `CONNECT_EDGE` — connect two named positions (idempotent)
+  - `GRANT_FLIGHT` — call `enter_aerial` on the resolved target
+  - `REMOVE_FLIGHT` — call `leave_aerial` on the resolved target
+- **`PositionDestination`** enum (`world/checks/constants.py`): `ACTOR_POSITION` /
+  `GATING_FAR_SIDE` / `NAMED` — determines how `MOVE_TO_POSITION` locates its destination
+- **`ConsequenceEffect` positioning columns** — `position_name`, `position_name_b`,
+  `position_kind`, `position_description`, `position_destination`,
+  `position_connect_from_actor`, `position_place_occupant`
+- **Gated-edge crossing via approach:** `PERSONAL` resolution mode lets one character cross a
+  gated edge (the `ChallengeInstance` stays active for others); a `MOVE_TO_POSITION` /
+  `GATING_FAR_SIDE` consequence on the approach pool executes `force_move_to_position` to
+  the far side; gated edges surface as locked entries in the player's move list
+
+**Deferred to follow-up (#520 + reactive-layer):**
+
+- Reactive fall consumer: `EventName.FELL` seam is open; the capability-based catch
+  (fly/teleport/acrobatics interrupt) and AFK-safe multi-round plummet down the
+  `elevation_anchor` chain with impact consequences await the round/turn framework (#520)
+- Anti-air "blocks-flight" gate flag: a future `PositionEdge` flag preventing flight over
+  certain edges
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management

@@ -26,12 +26,43 @@ They do not use the command system, dispatchers, or handlers.
 - **`registry.py`**: Action lookup by key (`get_action`) and by target type (`get_actions_for_target_type`)
 - **`definitions/`**: Concrete action implementations grouped by category
 
+## Prerequisites
+
+`get_prerequisites()` is **load-bearing** — `run()` calls `check_availability()`
+against all returned prerequisites after enhancements are applied and before
+`execute()` is ever reached. A non-empty list is a hard gate, not advisory.
+
+### kwargs-via-context convention
+
+`check_availability()` receives `context={"kwargs": context.kwargs, "scene_data": sdm}`.
+Prerequisites that need to inspect action-specific kwargs (e.g., the `item` kwarg
+on `UseItemAction`) read them from `context["kwargs"]`:
+
+```python
+item_obj = (context or {}).get("kwargs", {}).get("item")
+```
+
+This lets a prerequisite see a second target or any other kwarg without being
+coupled to the action's kwarg names by the base class.
+
+### Prerequisite implementations (`prerequisites.py`)
+
+- **`StaffOnlyPrerequisite`** — actor's account must be staff.
+- **`HoldsItemPrerequisite`** — actor holds the `item` kwarg.
+- **`ItemUsablePrerequisite`** — item template has `on_use_pool` (is usable); consumables
+  must have charges remaining. Delegates to `ItemTemplate.is_usable`.
+- **`OnUseTargetPrerequisite`** — enforces `ItemTemplate.on_use_target_kind`: null ⇒
+  self-use only (external target rejected); set ⇒ requires a target of that kind,
+  reachable and visible. Visibility is currently a same-location MVP proxy
+  (`_is_visible_to`); a real perception/stealth system will replace it.
+
 ## Adding a New Action
 
 1. Create a new class in the appropriate `definitions/` file (or create a new file)
 2. Subclass `Action`, set `key`, `name`, `icon`, `category`, `target_type`
 3. Override `execute(actor, context, **kwargs)` with the action's logic
-4. Override `get_prerequisites()` if the action has prerequisites
+4. Override `get_prerequisites()` if the action has prerequisites — these are enforced
+   by `run()` before `execute()` is called; read extra kwargs via `context["kwargs"]`
 5. Add the action instance to `_ALL_ACTIONS` in `registry.py`
 6. Write tests in `tests/`
 7. (Optional) Create a telnet command in `commands/` that delegates to the action
@@ -79,6 +110,10 @@ Contains:
 - `post_effects` — callables run after execution
 - `result` — set after execution completes
 
+`context.kwargs` is also threaded into `check_availability()` as
+`context={"kwargs": context.kwargs, "scene_data": sdm}` so prerequisites can read
+action-specific kwargs (see "Prerequisites" above).
+
 ### Source Contract
 Source models implement one method:
 - `should_apply_enhancement(actor, enhancement) -> bool` — involuntary filtering
@@ -90,8 +125,14 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
 1. Build `ActionContext` with SceneDataManager
 2. Apply voluntary enhancements via `enh.apply(context)` → dispatches to handlers
 3. Query and apply involuntary enhancements via `enh.apply(context)`
-4. Call `execute()` with context and kwargs
-5. Run post-effects
+4. **Enforce prerequisites** — `check_availability()` is called against the
+   post-enhancement kwargs; if any prerequisite is unmet, `run()` returns a failure
+   `ActionResult` immediately (never reaches `execute()`). This is a hard gate, not
+   advisory. See "Prerequisites" below for the kwargs-via-context convention.
+5. Charge declarative AP + fatigue costs (`_charge_costs`) — fails if AP cannot be
+   afforded.
+6. Call `execute()` with context and kwargs
+7. Run post-effects
 
 ## What's Not Built Yet
 

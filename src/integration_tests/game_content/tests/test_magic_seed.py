@@ -997,17 +997,24 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
         _seed_endure_hallowed_ground_check()
         self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
 
-    def test_seeds_four_result_chart_outcomes(self):
+    def test_ensures_canonical_resolution_spine(self):
         from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
-        from world.traits.models import ResultChart, ResultChartOutcome
+        from world.traits.models import CheckOutcome, ResultChart, ResultChartOutcome
 
         _seed_endure_hallowed_ground_check()
-        # The slice seeds rank_difference=0 chart with 4 outcomes.
+        # The checks spine (world.seeds.checks) is the single authority for the
+        # global resolution charts. The diff=0 chart carries the spine's even
+        # bands (Failure / Partial Success / Success), NOT the old placeholder.
         chart = ResultChart.objects.get(rank_difference=0)
         outcomes_for_chart = ResultChartOutcome.objects.filter(chart=chart)
         outcome_names = {ro.outcome.name for ro in outcomes_for_chart.select_related("outcome")}
-        expected = {"Critical Success", "Success", "Failure", "Critical Failure"}
-        self.assertGreaterEqual(outcome_names, expected)
+        self.assertEqual(outcome_names, {"Failure", "Partial Success", "Success"})
+        # The full outcome catalog the magic backfire pools fetch must exist.
+        catalog = set(CheckOutcome.objects.values_list("name", flat=True))
+        self.assertGreaterEqual(
+            catalog,
+            {"Critical Success", "Success", "Failure", "Critical Failure"},
+        )
 
     def test_idempotent(self):
         from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check

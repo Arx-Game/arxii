@@ -20,6 +20,7 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
+from world.mechanics.factories import ChallengeInstanceFactory
 
 
 def _make_character_in_room(room: object) -> object:
@@ -177,3 +178,97 @@ class TestMoveToPositionActionDispatch(django.test.TestCase):
         # Should not raise; should return a failed ActionResult
         self.assertFalse(result.deferred)
         self.assertFalse(result.detail.success)  # type: ignore[union-attr]
+
+
+class TestGatedEdgeSurfacing(django.test.TestCase):
+    """get_player_actions surfaces gated edges as locked/non-actionable CHALLENGE entries.
+
+    A passable edge with an active gating challenge must appear in the action list
+    with prerequisite_met=False and a display name that references the challenge,
+    so the player knows the path is blocked and why.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.mechanics.factories import (
+            ApplicationFactory,
+            ChallengeTemplateFactory,
+            PropertyFactory,
+        )
+
+        self.room = create_object("typeclasses.rooms.Room", key="GatedRoom", nohome=True)
+        self.ground = PositionFactory(room=self.room, name="ground_gs")
+        self.tower = PositionFactory(room=self.room, name="tower_gs")
+
+        # Wire a gating challenge on the edge.
+        prop = PropertyFactory(name="gs_prop")
+        ApplicationFactory(target_property=prop)
+        template = ChallengeTemplateFactory(name="The Drawbridge")
+        self.gate = ChallengeInstanceFactory(
+            template=template,
+            location=self.room,
+            target_object=self.room,
+        )
+        connect_positions(self.ground, self.tower, gating_challenge=self.gate)
+
+        self.character = _make_character_in_room(self.room)
+        place_in_position(self.character, self.ground)
+
+    def test_gated_neighbor_appears_as_locked_entry(self) -> None:
+        """A gated adjacent position appears as a CHALLENGE action with prerequisite_met=False."""
+        from actions.constants import ActionBackend
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        locked = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.CHALLENGE
+            and a.ref.challenge_instance_id == self.gate.pk
+            and not a.prerequisite_met
+        ]
+        self.assertEqual(
+            len(locked),
+            1,
+            f"Expected exactly 1 locked gated-edge action, got: {locked}",
+        )
+        self.assertIn("tower_gs", locked[0].display_name)
+        self.assertIn("The Drawbridge", locked[0].display_name)
+
+    def test_gated_edge_not_in_open_move_list(self) -> None:
+        """The gated position is NOT offered as a free move_to_position action."""
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        open_moves = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.REGISTRY
+            and a.ref.registry_key == "move_to_position"
+            and a.ref.position_id == self.tower.pk
+        ]
+        self.assertEqual(
+            len(open_moves),
+            0,
+            "Gated position must not appear as a free move action",
+        )
+
+    def test_locked_entry_names_the_challenge(self) -> None:
+        """The locked entry's prerequisite_reasons mentions the challenge name."""
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        locked = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.CHALLENGE
+            and a.ref.challenge_instance_id == self.gate.pk
+            and not a.prerequisite_met
+        ]
+        self.assertEqual(len(locked), 1)
+        reasons = locked[0].prerequisite_reasons
+        self.assertTrue(
+            any("The Drawbridge" in r for r in reasons),
+            f"Expected challenge name in prerequisite_reasons, got: {reasons}",
+        )

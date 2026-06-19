@@ -231,12 +231,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
-### Positioning (#530 + #1017)
+### Positioning (#530 + #1017 + #1018)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
-occupancy, capability-gated movement, GM terrain blueprints, and non-combat scene
-positioning UI.
+occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
+positioning UI, and dynamic battlefield reshaping (aerial layer, chasms, consequence
+effects for graph mutation and flight).
 
-- **Models:** `Position` (`PositionKind` discriminator), `PositionEdge` (optional
+- **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
+  the ground node an AERIAL or CHASM node is anchored to), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable`), `ObjectPosition` (OneToOne occupancy);
   **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live and blueprint
   layers; **blueprint models** `PositionBlueprint` (reusable GM-authored layout),
@@ -248,7 +250,15 @@ positioning UI.
   `force_move_to_position` / `position_of` / `reachable_positions` /
   `adjacent_open_positions`; **blueprint authoring** `create_blueprint` /
   `add_blueprint_position` / `connect_blueprint_positions` / `remove_blueprint`;
-  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`
+  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`;
+  **aerial layer** `materialize_aerial_layer(room)` / `teardown_aerial_layer(room)` /
+  `enter_aerial(objectdb)` / `leave_aerial(objectdb)`;
+  **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
+- **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
+  `PositionDestination` in `world/checks/constants.py`
+  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED) — governs `MOVE_TO_POSITION` effect destination
+- **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
+  factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
@@ -258,10 +268,14 @@ positioning UI.
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
   `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
-- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
+- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
+  aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service);
+  reactive fall consumer (catch/plummet tied to #520)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
-  mechanics (Challenge/gating), actions (`MoveToPositionAction` / `SetTheStageAction`)
+  mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
+  flows (`EventName.FELL` reactive seam),
+  actions (`MoveToPositionAction` / `SetTheStageAction`)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
@@ -686,7 +700,14 @@ Unified modifier system — categories, types, sources, and per-character modifi
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Equipment
   bonuses flow through `passive_facet_bonuses` + `covenant_role_bonus` (called inline
   by `get_modifier_total`, not stored as `CharacterModifier` rows).
-- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
+- **EffectType values** (`world/checks/constants.py` — dispatched by `world/mechanics/effect_handlers.py`):
+  - Pre-#1018: `APPLY_CONDITION`, `REMOVE_CONDITION`, `ADD_PROPERTY`, `REMOVE_PROPERTY`,
+    `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,
+    `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
+  - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
+    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
+  action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 
@@ -701,6 +722,9 @@ services, and equipment-modifier integration.
     `attachment_quality_tier`; unique per (item_instance, facet)
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
+  — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
+  by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
@@ -730,12 +754,18 @@ services, and equipment-modifier integration.
     at 0 charges
   - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
     OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
-- **Usable vs consumable:** an item is *usable* iff `template.on_use_pool_id is not None`.
+- **Usable vs consumable:** `ItemTemplate.is_usable` (= `on_use_pool_id is not None`) is the
+  canonical predicate; `use_item`, `ItemUsablePrerequisite`, and the serializer all delegate to it.
   *Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge
   per use and are destroyed at 0 charges. Non-consumable usable items are reusable.
 - **Serializer field `is_usable`:** `ItemInstanceReadSerializer` exposes `is_usable` (bool,
   `SerializerMethodField`) — `True` iff `template.on_use_pool_id is not None`. Clients gate the
   Use button on this field.
+- **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
+  point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
+  instance), optional `target` (validated by `OnUseTargetPrerequisite` against
+  `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
+  Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
   `SlotIncompatible`, `ItemNotUsable`, `NoChargesRemaining` — all in `world.items.exceptions`
 - **API Endpoints:**
@@ -856,10 +886,11 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`
-- **Pattern:** `action.run(actor, **kwargs)` → checks prerequisites → executes → returns `ActionResult`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `ActionEnhancement` model, `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Source:** `src/actions/`
 
 ### Flows
@@ -918,6 +949,21 @@ Extensions to Evennia models for additional data storage.
 - **Integrates with:** accounts, characters, Evennia core
 - **Source:** `src/evennia_extensions/`
 - **Details:** [evennia_extensions.md](evennia_extensions.md)
+
+### Dev Seed Orchestrator
+Production-callable seed layer for populating sane defaults on a fresh dev install.
+
+- **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name (`"magic"`, `"items"`, `"combat"`, `"checks"`). Add a new cluster by appending an entry here.
+- **Surfaces:**
+  - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
+  - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message.
+- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220).
+- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (`seed_check_resolution_tables()` — the natively-owned checks cluster), `types.py` (`SeedReport` dataclass).
+- **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression.
+- **Source:** `src/world/seeds/`
+- **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
+
 ---
 
 ## Frontend

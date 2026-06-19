@@ -737,6 +737,9 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     If the character is not placed in any position (unplaced or no positioning graph
     in the room), returns an empty list — no error is raised.
     """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.areas.positioning.models import PositionEdge  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         adjacent_open_positions,
         position_of,
@@ -764,6 +767,35 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
                 action_category=ActionCategory.PHYSICAL,
             )
         )
+
+    # Surface gated (locked) edges as non-actionable entries so the player
+    # can see that a path exists but is currently blocked by a challenge.
+    gated_edges = PositionEdge.objects.filter(
+        Q(position_a=current) | Q(position_b=current),
+        is_passable=True,
+        gating_challenge__isnull=False,
+        gating_challenge__is_active=True,
+    ).select_related("position_a", "position_b", "gating_challenge__template")
+    for edge in gated_edges:
+        neighbor = edge.position_b if edge.position_a_id == current.pk else edge.position_a
+        challenge_name = edge.gating_challenge.template.name
+        # Point the ref at the gating challenge so the UI can offer the approach.
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=edge.gating_challenge_id,
+        )
+        result.append(
+            PlayerAction(
+                backend=ActionBackend.CHALLENGE,
+                display_name=f"Move to {neighbor.name} (blocked: {challenge_name})",
+                ref=ref,
+                description=neighbor.description,
+                action_category=ActionCategory.PHYSICAL,
+                prerequisite_met=False,
+                prerequisite_reasons=[f"Gated by challenge: {challenge_name}"],
+            )
+        )
+
     return result
 
 

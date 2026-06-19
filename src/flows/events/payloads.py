@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from typeclasses.exits import Exit
     from typeclasses.rooms import Room
+    from world.areas.positioning.models import Position
     from world.combat.models import (
         CombatEncounter,
         CombatOpponent,
@@ -233,6 +234,17 @@ class TechniqueAffectedPayload:
     effect: object
 
 
+# ---- Positioning ----
+
+
+@dataclass(frozen=True)
+class FallEvent:
+    """An entity has entered a CHASM position (the reactive catch hook, #1018)."""
+
+    faller: ObjectDB
+    position: Position
+
+
 PAYLOAD_FOR_EVENT: dict[str, type] = {
     "attack_pre_resolve": AttackPreResolvePayload,
     "attack_landed": AttackLandedPayload,
@@ -253,4 +265,5 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "technique_pre_cast": TechniquePreCastPayload,
     "technique_cast": TechniqueCastPayload,
     "technique_affected": TechniqueAffectedPayload,
+    "fell": FallEvent,
 }

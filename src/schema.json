@@ -8539,7 +8539,7 @@ paths:
         this view resolves the actor, enforces ownership, and maps
         ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
         surface does NOT accept a target — on-use effects apply to the holder
-        only. Targeted use belongs in the future use-item Action layer, which
+        only by design. Targeted use is handled by ``UseItemAction``, which
         carries proximity/prerequisite checks.
       parameters:
       - in: path
@@ -29554,7 +29554,7 @@ components:
           type: boolean
           description: |-
             True iff use_item would proceed: the template has an on-use pool.
-            Mirrors the precondition in services.usage.use_item.
+            Delegates to the canonical ``ItemTemplate.is_usable`` predicate.
           readOnly: true
         contained_in:
           type: integer

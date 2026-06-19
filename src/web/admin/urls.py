@@ -3,6 +3,7 @@
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.views import (
     export_data,
     export_preview,
@@ -23,5 +24,7 @@ urlpatterns = [
     path("_export_preview/", export_preview, name="admin_export_preview"),
     path("_import_upload/", import_upload, name="admin_import_upload"),
     path("_import_execute/", import_execute, name="admin_import_execute"),
+    path("_seed/", seed_confirm, name="admin_seed"),
+    path("_seed_run/", seed_run, name="admin_seed_run"),
     path("", arx_admin_site.urls),
 ]
