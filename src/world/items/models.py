@@ -1464,3 +1464,9 @@ class Trendsetter(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Trendsetter({self.persona_id} for society {self.society_id})"
+
+
+# ---------------------------------------------------------------------------
+# Crafting submodule — import last so all models above are registered first
+# ---------------------------------------------------------------------------
+from world.items.crafting.models import CraftingRecipe  # noqa: E402,F401

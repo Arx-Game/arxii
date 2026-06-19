@@ -331,3 +331,24 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0) -> FacetCraftingConfig
         },
     )
     return config
+
+
+class CraftingRecipeFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftingRecipe.
+
+    Creates a minimal recipe with sensible defaults. Override ``kind`` when you need
+    a specific recipe kind; note the unique constraint means only one recipe per kind
+    can exist at a time.
+    """
+
+    class Meta:
+        model = "items.CraftingRecipe"
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
+    kind = "facet_attach"
+    base_difficulty = 0
+    success_level_step = 10
+    min_success_level = 1
+    action_point_cost = 0
+    anima_cost = 0
