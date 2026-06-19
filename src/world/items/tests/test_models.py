@@ -439,3 +439,49 @@ class ItemTemplateUseFieldsTests(TestCase):
         from world.items.factories import ItemInstanceFactory
 
         self.assertIsNone(ItemInstanceFactory().destroyed_at)
+
+
+class IsLoreCriticalTests(TestCase):
+    """ItemInstance.is_lore_critical — the never-purge predicate (#1025)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.items.factories import ItemInstanceFactory
+
+        cls.ItemInstanceFactory = ItemInstanceFactory
+
+    def test_bare_instance_is_not_lore_critical(self):
+        inst = self.ItemInstanceFactory(quality_tier=None)
+        self.assertFalse(inst.is_lore_critical)
+
+    def test_lore_value_makes_it_lore_critical(self):
+        inst = self.ItemInstanceFactory(quality_tier=None, lore_value=5)
+        self.assertTrue(inst.is_lore_critical)
+
+    def test_facet_makes_it_lore_critical(self):
+        from world.items.factories import ItemFacetFactory
+
+        inst = self.ItemInstanceFactory(quality_tier=None)
+        _ = inst.cached_item_facets  # populate cache before the facet is added
+        ItemFacetFactory(item_instance=inst)
+        del inst.cached_item_facets  # invalidate so is_lore_critical re-queries
+        self.assertTrue(inst.is_lore_critical)
+
+    def test_transfer_provenance_makes_it_lore_critical(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.models import OwnershipEvent
+
+        inst = self.ItemInstanceFactory(quality_tier=None)
+        OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.GIVEN)
+        self.assertTrue(inst.is_lore_critical)
+
+    def test_activated_and_consumed_events_are_not_provenance(self):
+        # A consumed item ALWAYS has ACTIVATED + CONSUMED events; those must
+        # NOT count as lore-critical or the cleanup is a silent no-op.
+        from world.items.constants import OwnershipEventType
+        from world.items.models import OwnershipEvent
+
+        inst = self.ItemInstanceFactory(quality_tier=None)
+        OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.ACTIVATED)
+        OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.CONSUMED)
+        self.assertFalse(inst.is_lore_critical)
