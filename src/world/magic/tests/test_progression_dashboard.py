@@ -226,6 +226,97 @@ class ProgressionDashboardTests(TestCase):
             assert sv.milestones == []
 
 
+class StageCrossingMilestoneTests(TestCase):
+    """stage_crossing milestones are a retrospective journey record.
+
+    They are LOCKED while the stage is ahead and ALREADY_HAVE once it is reached
+    (by any mechanism), and are never ELIGIBLE — a crossing is performed in play,
+    not from the dashboard. "Reached" is derived from the character's current path
+    stage, not from AudereMajoraCrossing receipts (the level-3 Prospect->Potential
+    crossing mints no receipt, and Audere thresholds only exist at 5/10/15/20).
+    """
+
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+
+    def _set_current_stage(self, stage):
+        """Advance the character's path stage by writing a CharacterPathHistory row."""
+        from world.classes.factories import PathFactory
+        from world.progression.factories import CharacterPathHistoryFactory
+
+        path = PathFactory(name=f"Test Path Stage {int(stage)}", stage=stage)
+        CharacterPathHistoryFactory(character=self.sheet.character, path=path)
+
+    def _crossing_milestone(self, stage):
+        """Create a KNOWN (public) stage_crossing milestone at the destination stage."""
+        from world.codex.factories import CodexEntryFactory
+        from world.magic.factories import MagicProgressionMilestoneFactory
+
+        entry = CodexEntryFactory(
+            is_public=True, name=f"Crossing to {int(stage)}", summary="A crossing."
+        )
+        return MagicProgressionMilestoneFactory(
+            stage=stage, kind=MagicMilestoneKind.STAGE_CROSSING, codex_entry=entry
+        )
+
+    def _crossing_view(self, stage):
+        from world.magic.services.progression_dashboard import build_progression_dashboard
+
+        result = build_progression_dashboard(self.sheet)
+        stage_view = next(sv for sv in result if sv.stage == stage)
+        assert len(stage_view.milestones) == 1
+        return stage_view.milestones[0]
+
+    def test_crossing_ahead_of_current_stage_is_locked(self):
+        """current_stage < milestone.stage → LOCKED with a 'Reach <Stage>' hint."""
+        from world.classes.models import PathStage
+
+        # Character stays at the default Prospect (stage 1).
+        self._crossing_milestone(PathStage.PUISSANT)
+        mv = self._crossing_view(PathStage.PUISSANT)
+        assert mv.eligibility == MilestoneEligibility.LOCKED
+        assert "Puissant" in mv.missing[0]
+
+    def test_crossing_at_current_stage_is_already_have(self):
+        """current_stage == milestone.stage → ALREADY_HAVE (the crossing was made)."""
+        from world.classes.models import PathStage
+
+        self._set_current_stage(PathStage.POTENTIAL)
+        self._crossing_milestone(PathStage.POTENTIAL)
+        mv = self._crossing_view(PathStage.POTENTIAL)
+        assert mv.eligibility == MilestoneEligibility.ALREADY_HAVE
+        assert mv.missing == []
+
+    def test_crossing_below_current_stage_is_already_have(self):
+        """current_stage > milestone.stage → ALREADY_HAVE (crossing long passed)."""
+        from world.classes.models import PathStage
+
+        self._set_current_stage(PathStage.PUISSANT)
+        self._crossing_milestone(PathStage.POTENTIAL)
+        mv = self._crossing_view(PathStage.POTENTIAL)
+        assert mv.eligibility == MilestoneEligibility.ALREADY_HAVE
+
+    def test_reached_crossing_is_never_eligible(self):
+        """A reached crossing is ALREADY_HAVE, never ELIGIBLE (it is not a dashboard CTA)."""
+        from world.classes.models import PathStage
+
+        self._set_current_stage(PathStage.POTENTIAL)
+        self._crossing_milestone(PathStage.POTENTIAL)
+        mv = self._crossing_view(PathStage.POTENTIAL)
+        assert mv.eligibility != MilestoneEligibility.ELIGIBLE
+
+    def test_reached_crossing_with_pending_alterations_stays_already_have(self):
+        """The retrospective record is not gated by the Mage-Scars spend lock."""
+        from world.classes.models import PathStage
+        from world.magic.factories import PendingAlterationFactory
+
+        self._set_current_stage(PathStage.POTENTIAL)
+        self._crossing_milestone(PathStage.POTENTIAL)
+        PendingAlterationFactory(character=self.sheet)
+        mv = self._crossing_view(PathStage.POTENTIAL)
+        assert mv.eligibility == MilestoneEligibility.ALREADY_HAVE
+
+
 # =============================================================================
 # Progression Dashboard API endpoint tests
 # =============================================================================

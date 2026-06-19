@@ -110,17 +110,31 @@ def _already_have(kind: str, prefetched: _Prefetched) -> bool:
         return prefetched.anima_exists
     if kind == MagicMilestoneKind.SECOND_GIFT:
         return prefetched.gift_count >= 2  # noqa: PLR2004 — "second" gift is domain meaning
-    # TECHNIQUE_DEVELOPMENT, STAGE_CROSSING, and any future kinds default to False
+    # TECHNIQUE_DEVELOPMENT and any future kinds default to False. STAGE_CROSSING is
+    # resolved earlier in _resolve_eligibility (purely on path stage) and never
+    # reaches here.
     return False
 
 
-def _resolve_eligibility(
+def _resolve_eligibility(  # noqa: PLR0911
     sheet: CharacterSheet,
     milestone: MagicProgressionMilestone,
     current_stage: int,
     prefetched: _Prefetched,
 ) -> tuple[str, list[str], int | None]:
     """Compute eligibility, missing requirements list, and xp_cost for a KNOWN milestone."""
+    if milestone.kind == MagicMilestoneKind.STAGE_CROSSING:
+        # A crossing is a retrospective journey record, not a dashboard CTA: it is
+        # performed in play (the level-3 Prospect->Potential crossing, an Audere
+        # Majora crossing, or staff action), never from this dashboard. So it is
+        # LOCKED while the stage is ahead and ALREADY_HAVE once reached (by any
+        # mechanism — reached-ness reads from current path stage), and is never
+        # ELIGIBLE. Resolved before the Mage-Scars / protagonism spend locks below:
+        # those gate spendable advancement, which a past crossing is not.
+        if current_stage < milestone.stage:
+            stage_label = PathStage(milestone.stage).label
+            return MilestoneEligibility.LOCKED, [f"Reach {stage_label}"], None
+        return MilestoneEligibility.ALREADY_HAVE, [], None
     if has_pending_alterations(sheet):
         return MilestoneEligibility.LOCKED, ["Resolve your Mage Scars first"], None
     if sheet.is_protagonism_locked:
