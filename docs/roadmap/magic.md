@@ -141,6 +141,11 @@ authoring is separate.
   recurring at each crossing), 11 codex entries (resonance/motif public, rest gated), and
   `PathCodexGrant` rows for all active Prospect paths. `PathCodexGrant` is now consumed at
   CG finalize via `_finalize_path_codex_grants` (mirrors the tradition grant).
+- `stage_crossing` milestones (#1007) resolve as a retrospective journey record, not a
+  CTA: LOCKED while the stage is ahead, ALREADY_HAVE once reached (read from current path
+  stage, so it covers every crossing mechanism — the level-3 crossing, Audere Majora, or
+  staff action — not just `AudereMajoraCrossing` receipts), and never ELIGIBLE. Resolved
+  ahead of the Mage-Scars / protagonism spend locks, which only gate spendable advancement.
 
 ## What's Needed for MVP
 
