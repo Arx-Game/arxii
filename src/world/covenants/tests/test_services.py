@@ -1435,3 +1435,64 @@ class RankManagementTests(TestCase):
             delete_rank(
                 rank=self.manager_rank, actor=self.manager_member, reassign_to=self.base_rank
             )
+
+    def test_delete_rank_bulk_reassign_updates_all_members(self) -> None:
+        """Bulk update path reassigns ALL members in one shot, not per-row saves."""
+        extra_rank = CovenantRankFactory(covenant=self.cov, tier=3)
+        role = CovenantRoleFactory(covenant_type=self.cov.covenant_type)
+        member_a = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=role,
+            rank=extra_rank,
+        )
+        member_b = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=role,
+            rank=extra_rank,
+        )
+        delete_rank(rank=extra_rank, actor=self.manager_member, reassign_to=self.base_rank)
+        member_a.refresh_from_db()
+        member_b.refresh_from_db()
+        self.assertEqual(member_a.rank, self.base_rank)
+        self.assertEqual(member_b.rank, self.base_rank)
+
+    # --- transfer_top (review findings) ---
+
+    def test_transfer_top_to_departed_member_raises(self) -> None:
+        """Transferring leadership to a departed (left_at set) member raises ValueError."""
+        import datetime
+
+        self.base_member.left_at = datetime.datetime.now(datetime.UTC)
+        self.base_member.save(update_fields=["left_at"])
+        with self.assertRaises(ValueError, msg="Cannot transfer leadership to a departed member."):
+            transfer_top(
+                covenant=self.cov,
+                actor=self.manager_member,
+                new_top_membership=self.base_member,
+            )
+
+    def test_transfer_top_retains_active_manager(self) -> None:
+        """After a valid transfer the covenant still has at least one active manager."""
+        transfer_top(
+            covenant=self.cov,
+            actor=self.manager_member,
+            new_top_membership=self.base_member,
+        )
+        # base_member is now on the manager_rank (can_manage_ranks=True)
+        self.base_member.refresh_from_db()
+        self.assertEqual(self.base_member.rank, self.manager_rank)
+        self.assertTrue(self.base_member.rank.can_manage_ranks)
+
+    # --- reorder_ranks (review findings) ---
+
+    def test_reorder_ranks_partial_list_raises(self) -> None:
+        """Providing only a subset of a covenant's ranks raises ValueError."""
+        # manager_rank is omitted — only base_rank supplied.
+        with self.assertRaises(ValueError):
+            reorder_ranks(
+                covenant=self.cov,
+                actor=self.manager_member,
+                ordered_rank_ids=[self.base_rank.pk],
+            )

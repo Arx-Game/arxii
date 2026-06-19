@@ -664,6 +664,17 @@ def reorder_ranks(
     if not actor.rank.can_manage_ranks:
         raise NotAuthorizedToManageRanksError
 
+    all_rank_ids = set(CovenantRank.objects.filter(covenant=covenant).values_list("pk", flat=True))
+    provided_ids = set(ordered_rank_ids)
+    if provided_ids != all_rank_ids:
+        missing = all_rank_ids - provided_ids
+        extra = provided_ids - all_rank_ids
+        msg = (
+            f"ordered_rank_ids must contain exactly all rank ids for the covenant. "
+            f"Missing: {missing!r}. Extra: {extra!r}."
+        )
+        raise ValueError(msg)
+
     ranks = list(CovenantRank.objects.filter(covenant=covenant, pk__in=ordered_rank_ids))
     rank_map = {r.pk: r for r in ranks}
     n = len(ordered_rank_ids)
@@ -711,17 +722,24 @@ def delete_rank(
     if not reassign_to.can_manage_ranks:
         _assert_keeps_a_manager(rank.covenant, exclude_rank=rank)
 
-    # Reassign affected memberships.
+    # Reassign affected memberships via bulk update to avoid N individual saves.
+    # Collect affected rows first (for cache invalidation), then update in bulk.
     affected = list(
         CharacterCovenantRole.objects.filter(
             covenant=rank.covenant,
             left_at__isnull=True,
             rank=rank,
-        ).select_related("character_sheet")
+        ).select_related("character_sheet__character")
     )
+    CharacterCovenantRole.objects.filter(
+        covenant=rank.covenant,
+        left_at__isnull=True,
+        rank=rank,
+    ).update(rank=reassign_to)
     for membership in affected:
-        membership.rank = reassign_to
-        membership.save(update_fields=["rank"])
+        # Flush the SharedMemoryModel identity-map entry so subsequent
+        # refresh_from_db() calls see the updated rank_id from the DB.
+        CharacterCovenantRole.flush_cached_instance(membership)
         membership.character_sheet.character.covenant_roles.invalidate()
 
     rank.delete()
@@ -775,6 +793,9 @@ def transfer_top(
         raise NotAuthorizedToManageRanksError
     if new_top_membership.covenant_id != covenant.pk:
         raise CrossCovenantRankError
+    if new_top_membership.left_at is not None:
+        msg = "Cannot transfer leadership to a departed member."
+        raise ValueError(msg)
 
     top_rank = actor.rank
     base = _base_rank(covenant)
@@ -788,6 +809,9 @@ def transfer_top(
     actor.rank = base
     actor.save(update_fields=["rank"])
     actor.character_sheet.character.covenant_roles.invalidate()
+
+    # Belt-and-suspenders: ensure at least one active member still manages.
+    _assert_keeps_a_manager(covenant)
 
     covenant.member_roster.invalidate()
 
