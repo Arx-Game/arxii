@@ -2,7 +2,14 @@
 
 from django.contrib import admin
 
-from world.covenants.models import Covenant, CovenantLevelThreshold, CovenantRite, CovenantRole
+from world.covenants.models import (
+    Covenant,
+    CovenantLevelBonus,
+    CovenantLevelThreshold,
+    CovenantRite,
+    CovenantRole,
+    CovenantRoleBonus,
+)
 
 
 @admin.register(CovenantRole)
@@ -40,3 +47,14 @@ class CovenantRiteAdmin(admin.ModelAdmin):
     )
     list_filter = ("covenant_type",)
     autocomplete_fields = ("ritual", "granted_condition")
+
+
+@admin.register(CovenantRoleBonus)
+class CovenantRoleBonusAdmin(admin.ModelAdmin):
+    list_display = ("covenant_role", "modifier_target", "bonus_per_level")
+    list_filter = ("covenant_role__covenant_type",)
+
+
+@admin.register(CovenantLevelBonus)
+class CovenantLevelBonusAdmin(admin.ModelAdmin):
+    list_display = ("modifier_target", "bonus_per_level")

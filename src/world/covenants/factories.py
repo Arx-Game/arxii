@@ -15,6 +15,7 @@ from world.covenants.models import (
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
+    CovenantRoleBonus,
     GearArchetypeCompatibility,
 )
 from world.items.constants import GearArchetype
@@ -121,6 +122,18 @@ class CovenantLevelThresholdFactory(factory_django.DjangoModelFactory):
 
     level = factory.Sequence(lambda n: n + 1)
     required_legend = factory.LazyAttribute(lambda o: (o.level - 1) * 100)
+
+
+class CovenantRoleBonusFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRoleBonus."""
+
+    class Meta:
+        model = CovenantRoleBonus
+        django_get_or_create = ("covenant_role", "modifier_target")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    modifier_target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
+    bonus_per_level = 1
 
 
 class CovenantRiteFactory(factory_django.DjangoModelFactory):

@@ -468,6 +468,51 @@ class CovenantLevelBonus(SharedMemoryModel):
         return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
 
 
+class CovenantRoleBonus(SharedMemoryModel):
+    """Authored config: per-(role, target) covenant role bonus scaling with the
+    holder's character level (#985, Spec D §5.6).
+
+    One row per (CovenantRole, ModifierTarget). An engaged member holding the role
+    receives a derive-on-read modifier of ``character_level * bonus_per_level`` for
+    the target, blended per equipped slot against mundane gear stats in
+    ``world.mechanics.services.covenant_role_bonus`` (compatible → additive on top of
+    the gear combat already counts; incompatible → ``max(0, role_bonus - gear_stat)``).
+    No CharacterModifier rows are persisted.
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="role_bonuses",
+    )
+    modifier_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="covenant_role_bonuses",
+    )
+    bonus_per_level = models.SmallIntegerField(
+        help_text=(
+            "Per-level coefficient. Bonus for an engaged role holder = "
+            "character_level * bonus_per_level."
+        ),
+    )
+
+    class Meta:
+        ordering = ["covenant_role", "modifier_target"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "modifier_target"],
+                name="covenant_role_bonus_unique_role_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.covenant_role.name} / {self.modifier_target.name}: "
+            f"+{self.bonus_per_level}/level"
+        )
+
+
 class CovenantRite(SharedMemoryModel):
     """Authored definition: a covenant-scoped group ritual ('rite') with an
     activation gate and a turnout-scaled shared buff. Sidecar on a Ritual so the

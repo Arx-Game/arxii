@@ -653,9 +653,11 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
     `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
-  - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6) — per-equipped-item
-    additive (compat role) or max (incompat); PR3 wires `role_base_bonus_for_target`
-    and `item_mundane_stat_for_target` (return 0 until PR3)
+  - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6, #985) — loops
+    `currently_engaged_roles()` × equipped items; compatible slot adds `role_bonus`
+    (stacks on combat's gear read); incompatible slot adds `max(0, role_bonus -
+    gear_stat)`; 0 when no roles engaged. `role_base_bonus_for_target` and
+    `item_mundane_stat_for_target` now wired (#985)
   - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge
   - `select_consequence(character, check_type, difficulty, consequences) -> PendingResolution` — generic: perform check + select weighted consequence (in `checks/consequence_resolution.py`)
   - `apply_resolution(pending, context) -> list[AppliedEffect]` — generic: dispatch ConsequenceEffects (in `checks/consequence_resolution.py`)
@@ -716,20 +718,35 @@ services, and equipment-modifier integration.
 
 ### Covenants
 Magically-empowered group oaths with roles and gear compatibility. Spec D PR1 shipped
-the role-assignment and gear-compatibility data layer.
+the role-assignment and gear-compatibility data layer; #985 wired the per-role bonus
+authoring model and the combat seams that consume it.
 
 - **Models:**
   - `CharacterCovenantRole` — per-character record of a covenant role assignment;
     `left_at IS NULL` = currently active (Spec D §4.4)
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
+  - `CovenantRoleBonus` (NEW #985) — authored config: one row per
+    `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
+    `role_base_bonus_for_target(role, target, char_level)` returns
+    `char_level × bonus_per_level`; no row → 0. Admin-registered. Default
+    authoring empty → no live numeric effect until staff author rows.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
-    `currently_held()`, `invalidate()`
+    `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
+    `invalidate()`
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
   - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
+  - `role_base_bonus_for_target(role, target, char_level) -> int` (in
+    `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
+    `char_level × bonus_per_level`; 0 if no row (#985)
+- **Combat seams (#985):** `apply_equipped_armor_soak` adds
+  `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top of raw
+  soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
+  WEAPON_DAMAGE_TARGET_NAME)` to technique budget. Both route through
+  `get_modifier_total` → `covenant_role_bonus` equipment walk.
 - **Exceptions:** `CovenantRoleNeverHeldError` (raised by `weave_thread` when
   `target_kind=COVENANT_ROLE` and character never held the role) — in
   `world.covenants.exceptions`
@@ -739,7 +756,7 @@ the role-assignment and gear-compatibility data layer.
     currently-played sheets
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
   mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
-  `ItemTemplate`)
+  `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
 - **Source:** `src/world/covenants/`
 
 ### Relationships
