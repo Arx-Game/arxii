@@ -10,12 +10,20 @@ from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
+    CannotKickEqualOrHigherRankError,
+    CannotKickSelfError,
+    CannotTransferToDepartedMemberError,
     CovenantLevelTooLowError,
     CovenantNameConflictError,
     CovenantRiteError,
+    CrossCovenantRankError,
     DuplicateFounderError,
+    IncompleteRankReorderError,
     InsufficientFoundersError,
+    LastManagerRankError,
     NoActiveBattleError,
+    NotAuthorizedToKickError,
+    NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
     SubroleParentMismatchError,
     SubroleResonanceMismatchError,
@@ -24,6 +32,7 @@ from world.covenants.exceptions import (
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantRank,
     CovenantRite,
     CovenantRiteInstance,
     CovenantRiteParticipant,
@@ -61,6 +70,53 @@ def _invalidate_role_caches(character_sheet: CharacterSheet) -> None:
     character_sheet.character.threads.invalidate()
 
 
+def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRank, CovenantRank]:
+    """Create the default rank ladder for a newly formed covenant.
+
+    Default (not flat): two tiers —
+      - tier 1 "Founder" (all capability flags True)
+      - tier 2 "Member"  (all capability flags False)
+    Returns (top_rank, base_rank).
+
+    Flat: one tier —
+      - tier 1 "Member" (all capability flags False)
+    Returns (member_rank, member_rank) — both slots point to the single rank.
+    """
+    from world.covenants.constants import (  # noqa: PLC0415
+        DEFAULT_FOUNDER_RANK_NAME,
+        DEFAULT_MEMBER_RANK_NAME,
+    )
+
+    if flat:
+        member_rank = CovenantRank.objects.create(
+            covenant=covenant,
+            name=DEFAULT_MEMBER_RANK_NAME,
+            tier=1,
+            can_invite=False,
+            can_kick=False,
+            can_manage_ranks=False,
+        )
+        return member_rank, member_rank
+
+    founder_rank = CovenantRank.objects.create(
+        covenant=covenant,
+        name=DEFAULT_FOUNDER_RANK_NAME,
+        tier=1,
+        can_invite=True,
+        can_kick=True,
+        can_manage_ranks=True,
+    )
+    member_rank = CovenantRank.objects.create(
+        covenant=covenant,
+        name=DEFAULT_MEMBER_RANK_NAME,
+        tier=2,
+        can_invite=False,
+        can_kick=False,
+        can_manage_ranks=False,
+    )
+    return founder_rank, member_rank
+
+
 @transaction.atomic
 def create_covenant(  # noqa: PLR0913
     *,
@@ -70,6 +126,7 @@ def create_covenant(  # noqa: PLR0913
     founders: Sequence[CovenantFounder],
     battle_binding: str = "",
     campaign_story: Story | None = None,
+    flat: bool = False,
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
 
@@ -78,6 +135,13 @@ def create_covenant(  # noqa: PLR0913
     serializer layer enforces this for user-supplied data; the service
     raises typed exceptions as defensive assertions against programmer
     errors (Insufficient/DuplicateFounderError).
+
+    Rank ladder:
+    - Default (flat=False): "Founder" rank (tier 1, all caps) + "Member" rank (tier 2, no caps).
+    - Flat (flat=True): single "Member" rank (tier 1, no caps).
+
+    Seating: the founder with ``is_leader=True`` gets the Founder rank; all others get Member.
+    If no founder is flagged is_leader and flat=False, the FIRST founder defaults to leader.
     """
     if len(founders) < MINIMUM_FOUNDERS:
         raise InsufficientFoundersError
@@ -108,17 +172,60 @@ def create_covenant(  # noqa: PLR0913
         battle_binding=battle_binding,
         campaign_story=campaign_story,
     )
-    for founder in founders:
+
+    # Build rank ladder and determine which rank each founder gets.
+    top_rank, base_rank = _build_default_ladder(cov, flat=flat)
+
+    # Determine the leader: the first is_leader=True founder; if none, the first founder.
+    any_leader_flagged = any(f.is_leader for f in founders)
+    for idx, founder in enumerate(founders):
+        if flat:
+            founder_rank = base_rank
+        elif founder.is_leader or (not any_leader_flagged and idx == 0):
+            founder_rank = top_rank
+        else:
+            founder_rank = base_rank
         CharacterCovenantRole.objects.create(
             character_sheet=founder.character_sheet,
             covenant=cov,
             covenant_role=founder.role,
+            rank=founder_rank,
         )
         founder.character_sheet.character.covenant_roles.invalidate()
     # The covenant is freshly created so its member_roster handler is new, but
     # invalidate for consistency in case the handler was accessed during this flow.
     cov.member_roster.invalidate()
     return cov
+
+
+def _base_rank(covenant: Covenant) -> CovenantRank:
+    """Return the covenant's base rank (highest tier number = lowest authority)."""
+    return covenant.ranks.order_by("-tier").first()
+
+
+def _ensure_base_rank(covenant: Covenant) -> CovenantRank:
+    """Return the covenant's base rank, provisioning a default one if it has none.
+
+    Covenants formed via ``create_covenant`` always have a rank ladder. A covenant
+    created outside formation (e.g. test/seed factories that instantiate ``Covenant``
+    directly) may have no ranks yet, and memberships require a NOT NULL ``rank``. In
+    that case, fall back to a single flat "Member" rank (tier 1, no capabilities) —
+    matching ``create_covenant``'s flat default — so adding the first member always
+    has a valid base rank to assign.
+    """
+    from world.covenants.constants import DEFAULT_MEMBER_RANK_NAME  # noqa: PLC0415
+
+    base = _base_rank(covenant)
+    if base is not None:
+        return base
+    return CovenantRank.objects.create(
+        covenant=covenant,
+        name=DEFAULT_MEMBER_RANK_NAME,
+        tier=1,
+        can_invite=False,
+        can_kick=False,
+        can_manage_ranks=False,
+    )
 
 
 @transaction.atomic
@@ -130,13 +237,17 @@ def add_member(
 ) -> CharacterCovenantRole:
     """Create a new active membership row. Atomic.
 
-    The active-uniqueness DB constraint enforces "at most one active role per
-    (character, covenant)"; the IntegrityError on conflict is the contract.
+    New members are assigned the covenant's base rank (the rank with the
+    highest tier number — lowest authority). The active-uniqueness DB constraint
+    enforces "at most one active role per (character, covenant)"; the
+    IntegrityError on conflict is the contract.
     """
+    rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
         covenant_role=role,
+        rank=rank,
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -149,7 +260,11 @@ def change_role(
     membership: CharacterCovenantRole,
     new_role: CovenantRole,
 ) -> CharacterCovenantRole:
-    """Close the existing membership row; create a new active row in the same covenant."""
+    """Close the existing membership row; create a new active row in the same covenant.
+
+    Preserves the member's existing rank on the new row.
+    """
+    existing_rank = membership.rank
     membership.engaged = False
     membership.left_at = timezone.now()
     membership.save(update_fields=["engaged", "left_at"])
@@ -157,6 +272,7 @@ def change_role(
         character_sheet=membership.character_sheet,
         covenant=membership.covenant,
         covenant_role=new_role,
+        rank=existing_rank,
     )
     membership.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(membership.character_sheet)
@@ -197,12 +313,19 @@ def assign_covenant_role(
     character_sheet: CharacterSheet,
     covenant: Covenant,
     covenant_role: CovenantRole,
+    rank: CovenantRank | None = None,
 ) -> CharacterCovenantRole:
-    """Create a new active CharacterCovenantRole row. Atomic."""
+    """Create a new active CharacterCovenantRole row. Atomic.
+
+    If ``rank`` is not provided, the covenant's base rank (highest tier = lowest
+    authority) is used.
+    """
+    effective_rank = rank if rank is not None else _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
         covenant_role=covenant_role,
+        rank=effective_rank,
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -226,11 +349,22 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
 def leave_covenant(*, membership: CharacterCovenantRole) -> None:
     """A member voluntarily leaves a covenant. Soft-ends the membership, then
     auto-dissolves the covenant if active membership falls below the minimum.
-    Idempotent: leaving an already-ended membership is a no-op."""
+    Idempotent: leaving an already-ended membership is a no-op.
+
+    Raises LastManagerRankError if the member holds the last can_manage_ranks rank
+    and the covenant would survive the departure (i.e. enough members remain).
+    """
     if membership.left_at is not None:
         return
     covenant = membership.covenant
     departed_sheet = membership.character_sheet
+    # Check dissolution: if the covenant will survive this departure, guard against
+    # removing the last manager.  Count remaining members excluding this one.
+    active_count_after = (
+        covenant.memberships.filter(left_at__isnull=True).exclude(pk=membership.pk).count()
+    )
+    if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
+        _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=False)
@@ -238,28 +372,37 @@ def leave_covenant(*, membership: CharacterCovenantRole) -> None:
 
 @transaction.atomic
 def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) -> None:
-    """A leader removes another (non-leader) member. Soft-ends the target, then
+    """Remove a member by rank authority. Soft-ends the target, then
     auto-dissolves if active membership falls below the minimum.
-    Idempotent: kicking an already-departed member is a no-op."""
-    from world.covenants.exceptions import (  # noqa: PLC0415
-        CannotKickLeaderError,
-        CannotKickSelfError,
-        NotACovenantLeaderError,
-    )
+    Idempotent: kicking an already-departed member is a no-op.
 
-    if actor.left_at is not None or not actor.covenant_role.is_leadership:
-        raise NotACovenantLeaderError
+    Authorization rules:
+    - actor must be active (left_at IS NULL) and have rank.can_kick → NotAuthorizedToKickError
+    - actor must be in the same covenant as target → NotAuthorizedToKickError
+    - actor cannot kick themselves → CannotKickSelfError
+    - actor.rank.tier must be strictly less than target.rank.tier
+      (lower tier = higher authority) → CannotKickEqualOrHigherRankError
+    """
+    if actor.left_at is not None or not actor.rank.can_kick:
+        raise NotAuthorizedToKickError
     if actor.covenant_id != target.covenant_id:
         # cross-covenant: defensive guard, UI-unreachable (targets are always same-covenant)
-        raise NotACovenantLeaderError
+        raise NotAuthorizedToKickError
     if actor.pk == target.pk:
         raise CannotKickSelfError
-    if target.covenant_role.is_leadership:
-        raise CannotKickLeaderError
+    if actor.rank.tier >= target.rank.tier:
+        # Equal or higher target tier means equal or superior authority — cannot kick.
+        raise CannotKickEqualOrHigherRankError
     if target.left_at is not None:
         return
     covenant = target.covenant
     departed_sheet = target.character_sheet
+    # Guard against management lock-out when the covenant will survive the kick.
+    active_count_after = (
+        covenant.memberships.filter(left_at__isnull=True).exclude(pk=target.pk).count()
+    )
+    if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
+        _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=True)
@@ -424,14 +567,18 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
     battle_binding: str = session.session_kwargs.get("battle_binding", "")
 
     founders: list[CovenantFounder] = []
-    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+    participants = list(session.participants.filter(state=ParticipantState.ACCEPTED))
+    for p in participants:
         ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
         if ref is None:
             raise RequiredReferenceMissingError
+        # The session initiator (first participant = session.initiator) is the default leader.
+        is_leader = p.character_sheet_id == session.initiator_id
         founders.append(
             CovenantFounder(
                 character_sheet=p.character_sheet,
                 role=ref.ref_covenant_role,
+                is_leader=is_leader,
             )
         )
     try:
@@ -449,6 +596,283 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         if _COVENANT_NAME_UNIQUE_MARKER in str(e).lower():
             raise CovenantNameConflictError from e
         raise
+
+
+def _assert_keeps_a_manager(
+    covenant: Covenant, *, exclude_rank: CovenantRank | None = None
+) -> None:
+    """Raise LastManagerRankError if the proposed change would leave zero active members
+    holding a can_manage_ranks rank.
+
+    Pass ``exclude_rank`` when the rank being deleted/demoted should not count toward
+    the remaining-manager check (e.g. when reassigning all members away from it).
+    """
+    qs = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+        rank__can_manage_ranks=True,
+    )
+    if exclude_rank is not None:
+        qs = qs.exclude(rank=exclude_rank)
+    if not qs.exists():
+        raise LastManagerRankError
+
+
+def _assert_keeps_a_manager_excluding_membership(
+    covenant: Covenant, exclude_membership_pk: int
+) -> None:
+    """Raise LastManagerRankError if removing the given membership would leave zero
+    active members holding a can_manage_ranks rank.
+
+    Used by leave_covenant and kick_member to prevent management lock-out when the
+    covenant has enough remaining members to survive (i.e. will not dissolve).
+    """
+    has_other_manager = (
+        CharacterCovenantRole.objects.filter(
+            covenant=covenant,
+            left_at__isnull=True,
+            rank__can_manage_ranks=True,
+        )
+        .exclude(pk=exclude_membership_pk)
+        .exists()
+    )
+    if not has_other_manager:
+        raise LastManagerRankError
+
+
+@transaction.atomic
+def create_rank(  # noqa: PLR0913
+    *,
+    covenant: Covenant,
+    actor: CharacterCovenantRole,
+    name: str,
+    tier: int,
+    can_invite: bool = False,
+    can_kick: bool = False,
+    can_manage_ranks: bool = False,
+) -> CovenantRank:
+    """Create a new rank in the covenant's ladder. Requires can_manage_ranks."""
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+    rank = CovenantRank.objects.create(
+        covenant=covenant,
+        name=name,
+        tier=tier,
+        can_invite=can_invite,
+        can_kick=can_kick,
+        can_manage_ranks=can_manage_ranks,
+    )
+    covenant.member_roster.invalidate()
+    return rank
+
+
+@transaction.atomic
+def rename_rank(*, rank: CovenantRank, actor: CharacterCovenantRole, name: str) -> CovenantRank:
+    """Rename a rank. Requires can_manage_ranks."""
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+    rank.name = name
+    rank.save(update_fields=["name"])
+    return rank
+
+
+@transaction.atomic
+def set_rank_capabilities(
+    *,
+    rank: CovenantRank,
+    actor: CharacterCovenantRole,
+    can_invite: bool | None = None,
+    can_kick: bool | None = None,
+    can_manage_ranks: bool | None = None,
+) -> CovenantRank:
+    """Update capability flags on a rank. Requires can_manage_ranks.
+
+    Lock-out invariant: if demoting can_manage_ranks to False would leave no
+    active member with a can_manage_ranks rank, raises LastManagerRankError.
+    """
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+
+    update_fields = []
+    if can_invite is not None:
+        rank.can_invite = can_invite
+        update_fields.append("can_invite")
+    if can_kick is not None:
+        rank.can_kick = can_kick
+        update_fields.append("can_kick")
+    if can_manage_ranks is not None:
+        rank.can_manage_ranks = can_manage_ranks
+        update_fields.append("can_manage_ranks")
+
+    # Check lock-out: if we're removing manage capability from this rank,
+    # ensure other members still hold a can_manage_ranks rank.
+    if "can_manage_ranks" in update_fields and not rank.can_manage_ranks:  # noqa: STRING_LITERAL
+        _assert_keeps_a_manager(rank.covenant, exclude_rank=rank)
+
+    if update_fields:
+        rank.save(update_fields=update_fields)
+    return rank
+
+
+@transaction.atomic
+def reorder_ranks(
+    *,
+    covenant: Covenant,
+    actor: CharacterCovenantRole,
+    ordered_rank_ids: list[int],
+) -> list[CovenantRank]:
+    """Rewrite tiers for the given ranks atomically and uniquely.
+
+    ``ordered_rank_ids`` is a list of rank PKs in desired order (index 0 = top/tier 1).
+    All PKs must belong to ``covenant``. Returns the updated ranks in order.
+    Requires can_manage_ranks.
+    """
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+
+    all_rank_ids = set(CovenantRank.objects.filter(covenant=covenant).values_list("pk", flat=True))
+    provided_ids = set(ordered_rank_ids)
+    if provided_ids != all_rank_ids:
+        raise IncompleteRankReorderError
+
+    ranks = list(CovenantRank.objects.filter(covenant=covenant, pk__in=ordered_rank_ids))
+    rank_map = {r.pk: r for r in ranks}
+    n = len(ordered_rank_ids)
+
+    # Assign unique temporary high-offset tiers first to avoid uniqueness conflicts mid-write.
+    # Offset chosen to not collide with any existing tiers (n+1 … 2n).
+    for idx, pk in enumerate(ordered_rank_ids):
+        r = rank_map[pk]
+        r.tier = n + idx + 1
+        r.save(update_fields=["tier"])
+
+    # Now assign the real tiers.
+    result = []
+    for idx, pk in enumerate(ordered_rank_ids):
+        r = rank_map[pk]
+        r.tier = idx + 1
+        r.save(update_fields=["tier"])
+        result.append(r)
+
+    covenant.member_roster.invalidate()
+    return result
+
+
+@transaction.atomic
+def delete_rank(
+    *,
+    rank: CovenantRank,
+    actor: CharacterCovenantRole,
+    reassign_to: CovenantRank,
+) -> None:
+    """Delete a rank after reassigning all active members to ``reassign_to``.
+
+    Requires can_manage_ranks. Lock-out invariant: if the deleted rank held the
+    last can_manage_ranks members (and reassign_to does not have can_manage_ranks),
+    raises LastManagerRankError.
+
+    CrossCovenantRankError if ``reassign_to`` belongs to a different covenant.
+    """
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+    if reassign_to.covenant_id != rank.covenant_id:
+        raise CrossCovenantRankError
+
+    # Check lock-out: exclude the rank being deleted if reassign_to doesn't manage.
+    if not reassign_to.can_manage_ranks:
+        _assert_keeps_a_manager(rank.covenant, exclude_rank=rank)
+
+    # Reassign affected memberships via bulk update to avoid N individual saves.
+    # Collect affected rows first (for cache invalidation), then update in bulk.
+    affected = list(
+        CharacterCovenantRole.objects.filter(
+            covenant=rank.covenant,
+            left_at__isnull=True,
+            rank=rank,
+        ).select_related("character_sheet__character")
+    )
+    CharacterCovenantRole.objects.filter(
+        covenant=rank.covenant,
+        left_at__isnull=True,
+        rank=rank,
+    ).update(rank=reassign_to)
+    for membership in affected:
+        # Flush the SharedMemoryModel identity-map entry so subsequent
+        # refresh_from_db() calls see the updated rank_id from the DB.
+        CharacterCovenantRole.flush_cached_instance(membership)
+        membership.character_sheet.character.covenant_roles.invalidate()
+
+    rank.delete()
+    rank.covenant.member_roster.invalidate()
+
+
+@transaction.atomic
+def assign_rank(
+    *,
+    membership: CharacterCovenantRole,
+    actor: CharacterCovenantRole,
+    rank: CovenantRank,
+) -> CharacterCovenantRole:
+    """Assign a new rank to a member. Requires can_manage_ranks.
+
+    Raises CrossCovenantRankError if rank.covenant != membership.covenant.
+    Lock-out invariant: moving the last manager to a non-manager rank raises
+    LastManagerRankError.
+    """
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+    if rank.covenant_id != membership.covenant_id:
+        raise CrossCovenantRankError
+
+    # Lock-out: if membership currently has manage cap and new rank doesn't,
+    # ensure others still do.
+    if membership.rank.can_manage_ranks and not rank.can_manage_ranks:
+        _assert_keeps_a_manager(membership.covenant, exclude_rank=membership.rank)
+
+    membership.rank = rank
+    membership.save(update_fields=["rank"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
+    return membership
+
+
+@transaction.atomic
+def transfer_top(
+    *,
+    covenant: Covenant,
+    actor: CharacterCovenantRole,
+    new_top_membership: CharacterCovenantRole,
+) -> None:
+    """Transfer the top rank (tier=1) from the actor to ``new_top_membership``.
+
+    Requires can_manage_ranks. The actor is moved to the base rank (highest tier);
+    new_top_membership is assigned the actor's current (top) rank.
+    Raises CrossCovenantRankError if new_top_membership is in a different covenant.
+    """
+    if not actor.rank.can_manage_ranks:
+        raise NotAuthorizedToManageRanksError
+    if new_top_membership.covenant_id != covenant.pk:
+        raise CrossCovenantRankError
+    if new_top_membership.left_at is not None:
+        raise CannotTransferToDepartedMemberError
+
+    top_rank = actor.rank
+    base = _base_rank(covenant)
+
+    # Move new_top_membership to the top rank.
+    new_top_membership.rank = top_rank
+    new_top_membership.save(update_fields=["rank"])
+    new_top_membership.character_sheet.character.covenant_roles.invalidate()
+
+    # Move actor to base rank.
+    actor.rank = base
+    actor.save(update_fields=["rank"])
+    actor.character_sheet.character.covenant_roles.invalidate()
+
+    # Belt-and-suspenders: ensure at least one active member still manages.
+    _assert_keeps_a_manager(covenant)
+
+    covenant.member_roster.invalidate()
 
 
 def recompute_covenant_level(*, covenant: Covenant) -> int | None:
@@ -847,13 +1271,15 @@ def promote_to_subrole(
         raise SubroleResonanceMismatchError
     if not any(t.level >= target_subrole.unlock_thread_level for t in matching):
         raise SubroleThreadLevelInsufficientError
-    # Reuse change_role: close old, open new with same engaged flag
+    # Reuse change_role: close old, open new with same engaged flag + preserve rank
     was_engaged = membership.engaged
+    existing_rank = membership.rank
     end_covenant_role(assignment=membership)
     new_membership = assign_covenant_role(
         character_sheet=membership.character_sheet,
         covenant=membership.covenant,
         covenant_role=target_subrole,
+        rank=existing_rank,
     )
     if was_engaged:
         set_engaged_membership(membership=new_membership)

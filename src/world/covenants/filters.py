@@ -6,6 +6,7 @@ import django_filters
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantRank,
     CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
@@ -64,6 +65,14 @@ class CovenantRiteFilter(django_filters.FilterSet):
     class Meta:
         model = CovenantRite
         fields = ["covenant_type"]
+
+
+class CovenantRankFilter(django_filters.FilterSet):
+    """Filter covenant ranks by covenant and capability flags."""
+
+    class Meta:
+        model = CovenantRank
+        fields = ["covenant", "can_invite", "can_kick", "can_manage_ranks"]
 
 
 class GearArchetypeCompatibilityFilter(django_filters.FilterSet):

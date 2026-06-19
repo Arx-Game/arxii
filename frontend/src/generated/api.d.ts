@@ -2946,7 +2946,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+     * @description POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+     *     authority (rank tier precedence: actor.rank.tier < target.rank.tier).
      *
      *     The target may be outside the requester's own-scoped get_queryset, so fetch it
      *     via the full manager and run object permissions explicitly rather than get_object().
@@ -3177,6 +3178,141 @@ export interface paths {
     get: operations['covenants_level_thresholds_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/ranks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+     *
+     *     Reads: any active covenant member.
+     *     Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+     *     (requester's active membership must have rank.can_manage_ranks=True).
+     *
+     *     All rank management operations route through the Task 5 service functions
+     *     (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+     *     No business logic lives in the view.
+     */
+    get: operations['covenants_ranks_list'];
+    put?: never;
+    /** @description POST /api/covenants/ranks/ — create a new rank via the service. */
+    post: operations['covenants_ranks_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/ranks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+     *
+     *     Reads: any active covenant member.
+     *     Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+     *     (requester's active membership must have rank.can_manage_ranks=True).
+     *
+     *     All rank management operations route through the Task 5 service functions
+     *     (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+     *     No business logic lives in the view.
+     */
+    get: operations['covenants_ranks_retrieve'];
+    /** @description PUT/PATCH — rename and/or set capability flags via service functions. */
+    put: operations['covenants_ranks_update'];
+    post?: never;
+    /** @description DELETE — requires reassign_to in body; routes through delete_rank service. */
+    delete: operations['covenants_ranks_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+     *
+     *     Reads: any active covenant member.
+     *     Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+     *     (requester's active membership must have rank.can_manage_ranks=True).
+     *
+     *     All rank management operations route through the Task 5 service functions
+     *     (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+     *     No business logic lives in the view.
+     */
+    patch: operations['covenants_ranks_partial_update'];
+    trace?: never;
+  };
+  '/api/covenants/ranks/{id}/assign-member/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/ranks/{pk}/assign-member/
+     *
+     *     Body: { "membership": <pk> }
+     *     Assigns the given membership to this rank — requires can_manage_ranks.
+     */
+    post: operations['covenants_ranks_assign_member_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/ranks/{id}/transfer-top/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/ranks/{pk}/transfer-top/
+     *
+     *     Body: { "new_top_membership": <pk> }
+     *     Transfer the top rank (this rank) from the actor to the given membership.
+     *     Requires can_manage_ranks.
+     */
+    post: operations['covenants_ranks_transfer_top_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/ranks/reorder/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/ranks/reorder/
+     *
+     *     Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
+     *     Reorders the covenant's ranks — requires can_manage_ranks.
+     */
+    post: operations['covenants_ranks_reorder_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -12766,6 +12902,11 @@ export interface components {
       /** @description Description of what this aspect represents */
       description?: string;
     };
+    /** @description Request body for POST /api/covenants/ranks/{pk}/assign-member/. */
+    AssignMemberRequestRequest: {
+      /** @description PK of the CharacterCovenantRole to assign to this rank. */
+      membership: number;
+    };
     /** @description Read-only serializer for AssistantGMClaim records. */
     AssistantGMClaim: {
       readonly id: number;
@@ -13499,13 +13640,20 @@ export interface components {
       /** @description Minimum level required to have this class (0-10) */
       minimum_level?: number;
     };
-    /** @description Read-only serializer for a character's covenant role assignment. */
+    /**
+     * @description Read-only serializer for a character's covenant role assignment.
+     *
+     *     Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
+     *     block showing the requesting user's own active membership capabilities in
+     *     the same covenant (or all-False if the viewer has no active membership).
+     */
     CharacterCovenantRole: {
       readonly id: number;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
       readonly covenant: number;
       readonly covenant_role: components['schemas']['CovenantRole'];
+      readonly rank: components['schemas']['CovenantRankNested'];
       /** @description True when the character is currently 'fulfilling' this role for this covenant. At most one engaged active row per (character_sheet, covenant.covenant_type) — service-enforced + clean()-enforced. Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull eligibility. See spec 2026-05-09 §3.6. */
       readonly engaged: boolean;
       /** Format: date-time */
@@ -13515,6 +13663,7 @@ export interface components {
       readonly is_active: boolean;
       readonly can_engage: boolean;
       readonly engage_blocked_reason: string | null;
+      readonly viewer_capabilities: components['schemas']['ViewerCapabilities'];
     };
     /** @description Serializer for character drafts. */
     CharacterDraft: {
@@ -14205,6 +14354,58 @@ export interface components {
       level: number;
       required_legend: number;
     };
+    /**
+     * @description Serializer for CovenantRank (the per-covenant authority ladder).
+     *
+     *     Read: exposes all rank fields.
+     *     Write: validates tier uniqueness per covenant and capability flags.
+     */
+    CovenantRank: {
+      readonly id: number;
+      covenant: number;
+      /** @description Player-chosen tier name, e.g. 'Magister'. */
+      name: string;
+      /** @description Precedence; lower = higher authority (1 = top). */
+      tier: number;
+      /** @description Optional flavor/ceremony text. */
+      description?: string;
+      can_invite?: boolean;
+      /** @description May remove members of a strictly lower tier. */
+      can_kick?: boolean;
+      /** @description May edit the ladder and assign members. */
+      can_manage_ranks?: boolean;
+    };
+    /**
+     * @description Minimal nested representation of a CovenantRank (id, name, tier) for embedding
+     *     inside CharacterCovenantRoleSerializer.
+     */
+    CovenantRankNested: {
+      readonly id: number;
+      /** @description Player-chosen tier name, e.g. 'Magister'. */
+      readonly name: string;
+      /** @description Precedence; lower = higher authority (1 = top). */
+      readonly tier: number;
+    };
+    /**
+     * @description Serializer for CovenantRank (the per-covenant authority ladder).
+     *
+     *     Read: exposes all rank fields.
+     *     Write: validates tier uniqueness per covenant and capability flags.
+     */
+    CovenantRankRequest: {
+      covenant: number;
+      /** @description Player-chosen tier name, e.g. 'Magister'. */
+      name: string;
+      /** @description Precedence; lower = higher authority (1 = top). */
+      tier: number;
+      /** @description Optional flavor/ceremony text. */
+      description?: string;
+      can_invite?: boolean;
+      /** @description May remove members of a strictly lower tier. */
+      can_kick?: boolean;
+      /** @description May edit the ladder and assign members. */
+      can_manage_ranks?: boolean;
+    };
     /** @description Read-only serializer for CovenantRite authored definitions. */
     CovenantRite: {
       readonly id: number;
@@ -14253,8 +14454,6 @@ export interface components {
       readonly archetype_display: string;
       /** @description Combat resolution order. Lower is faster (1 = fastest). */
       readonly speed_rank: number;
-      /** @description Staff-authored. Members holding a leadership role may kick non-leader members. Leaders cannot kick other leaders. See issue #519. */
-      readonly is_leadership: boolean;
       /** @description Player-facing description of the role's identity and combat style. */
       readonly description: string;
       /** @description Null for primary roles. Set for sub-roles. */
@@ -17805,6 +18004,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Covenant'][];
     };
+    PaginatedCovenantRankList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CovenantRank'][];
+    };
     PaginatedCovenantRiteList: {
       /** @example 123 */
       count: number;
@@ -19335,6 +19549,26 @@ export interface components {
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
+    };
+    /**
+     * @description Serializer for CovenantRank (the per-covenant authority ladder).
+     *
+     *     Read: exposes all rank fields.
+     *     Write: validates tier uniqueness per covenant and capability flags.
+     */
+    PatchedCovenantRankRequest: {
+      covenant?: number;
+      /** @description Player-chosen tier name, e.g. 'Magister'. */
+      name?: string;
+      /** @description Precedence; lower = higher authority (1 = top). */
+      tier?: number;
+      /** @description Optional flavor/ceremony text. */
+      description?: string;
+      can_invite?: boolean;
+      /** @description May remove members of a strictly lower tier. */
+      can_kick?: boolean;
+      /** @description May edit the ladder and assign members. */
+      can_manage_ranks?: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
@@ -21034,6 +21268,13 @@ export interface components {
       fame: components['schemas']['_RenownCardFame'];
       visible_deeds: components['schemas']['_Deed'][];
       visible_reputation: components['schemas']['_SocietyReputation'][];
+    };
+    /** @description Request body for POST /api/covenants/ranks/reorder/. */
+    ReorderRanksRequestRequest: {
+      /** @description PK of the Covenant whose rank ladder is being reordered. */
+      covenant: number;
+      /** @description All rank PKs for this covenant in desired order (index 0 = top authority / tier 1). */
+      ordered_rank_ids: number[];
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -23088,6 +23329,11 @@ export interface components {
      * @enum {string}
      */
     TraitTraitTypeEnum: 'stat' | 'skill' | 'modifier' | 'other';
+    /** @description Request body for POST /api/covenants/ranks/{pk}/transfer-top/. */
+    TransferTopRequestRequest: {
+      /** @description PK of the CharacterCovenantRole that will receive the top rank. */
+      new_top_membership: number;
+    };
     /**
      * @description Full serializer for Transition — guarded episode graph edges.
      *
@@ -23333,6 +23579,12 @@ export interface components {
     /** @description Input serializer for POST /api/narrative/story-mutes/. */
     UserStoryMuteCreateRequest: {
       story: number;
+    };
+    /** @description Inline serializer for the viewer's capabilities in a covenant. */
+    ViewerCapabilities: {
+      can_invite: boolean;
+      can_kick: boolean;
+      can_manage_ranks: boolean;
     };
     /**
      * @description * `default` - Default
@@ -27329,6 +27581,215 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CovenantLevelThreshold'];
+        };
+      };
+    };
+  };
+  covenants_ranks_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCovenantRankList'];
+        };
+      };
+    };
+  };
+  covenants_ranks_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CovenantRankRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'];
+        };
+      };
+    };
+  };
+  covenants_ranks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'];
+        };
+      };
+    };
+  };
+  covenants_ranks_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CovenantRankRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'];
+        };
+      };
+    };
+  };
+  covenants_ranks_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  covenants_ranks_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedCovenantRankRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'];
+        };
+      };
+    };
+  };
+  covenants_ranks_assign_member_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AssignMemberRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_ranks_transfer_top_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransferTopRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'];
+        };
+      };
+    };
+  };
+  covenants_ranks_reorder_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReorderRanksRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRank'][];
         };
       };
     };

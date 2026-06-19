@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -13,15 +14,21 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from world.covenants.exceptions import (
+    CannotTransferToDepartedMemberError,
     CovenantEngagementPrerequisiteNotMetError,
     CovenantExitError,
-    NotACovenantLeaderError,
+    CrossCovenantRankError,
+    IncompleteRankReorderError,
+    LastManagerRankError,
     NotAStandingBattleCovenantError,
+    NotAuthorizedToKickError,
+    NotAuthorizedToManageRanksError,
     SubrolePromotionError,
 )
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
     CovenantFilter,
+    CovenantRankFilter,
     CovenantRiteFilter,
     CovenantRoleFilter,
     GearArchetypeCompatibilityFilter,
@@ -31,28 +38,43 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRank,
     CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
 )
-from world.covenants.permissions import CanKickFromCovenant, IsOwnMembership
+from world.covenants.permissions import (
+    CanKickFromCovenant,
+    IsOwnMembership,
+)
 from world.covenants.serializers import (
+    AssignMemberRequestSerializer,
     CharacterCovenantRoleSerializer,
     CovenantLevelThresholdSerializer,
+    CovenantRankSerializer,
     CovenantRiteSerializer,
     CovenantRolePassivePowerSerializer,
     CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
     PromoteSubroleSerializer,
+    ReorderRanksRequestSerializer,
+    TransferTopRequestSerializer,
 )
 from world.covenants.services import (
+    assign_rank,
     clear_engaged_membership,
+    create_rank,
+    delete_rank,
     kick_member,
     leave_covenant,
     promote_to_subrole,
+    rename_rank,
+    reorder_ranks,
     set_engaged_membership,
+    set_rank_capabilities,
     stand_down_battle_covenant,
+    transfer_top,
 )
 
 
@@ -169,7 +191,10 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     def leave(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave."""
         membership = self.get_object()
-        leave_covenant(membership=membership)
+        try:
+            leave_covenant(membership=membership)
+        except CovenantExitError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(membership).data)
 
     @action(
@@ -178,35 +203,38 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated, CanKickFromCovenant],
     )
     def kick(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+        """POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+        authority (rank tier precedence: actor.rank.tier < target.rank.tier).
 
         The target may be outside the requester's own-scoped get_queryset, so fetch it
         via the full manager and run object permissions explicitly rather than get_object().
         """
         target = get_object_or_404(
-            CharacterCovenantRole.objects.select_related("covenant", "covenant_role"), pk=pk
+            CharacterCovenantRole.objects.select_related("covenant", "covenant_role", "rank"),
+            pk=pk,
         )
         self.check_object_permissions(request, target)
         actor = (
             CharacterCovenantRole.objects.filter(
                 covenant_id=target.covenant_id,
                 left_at__isnull=True,
-                covenant_role__is_leadership=True,
+                rank__can_kick=True,
                 character_sheet__roster_entry__tenures__end_date__isnull=True,
                 character_sheet__roster_entry__tenures__player_data__account=request.user,
             )
             .exclude(pk=target.pk)
-            .select_related("covenant_role")
+            .select_related("rank")
             .first()
         )
         if actor is None:
             return Response(
-                {"detail": NotACovenantLeaderError.user_message},
+                {"detail": NotAuthorizedToKickError.user_message},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
             kick_member(target=target, actor=actor)
         except CovenantExitError as exc:
+            # CannotKickEqualOrHigherRankError (and CannotKickSelfError) arrive here → 400.
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(target).data)
 
@@ -433,3 +461,288 @@ class CovenantLevelThresholdViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CovenantLevelThresholdSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table — no pagination needed.
+
+
+class CovenantRankViewSet(viewsets.ModelViewSet):
+    """ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+    Reads: any active covenant member.
+    Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+    (requester's active membership must have rank.can_manage_ranks=True).
+
+    All rank management operations route through the Task 5 service functions
+    (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+    No business logic lives in the view.
+    """
+
+    serializer_class = CovenantRankSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CovenantsPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CovenantRankFilter
+
+    def get_queryset(self) -> QuerySet[CovenantRank]:
+        qs = CovenantRank.objects.select_related("covenant").order_by("covenant", "tier")
+        if self.request.user.is_staff:
+            return qs
+        # Non-staff: scope to covenants where the user has an active membership.
+        return qs.filter(
+            covenant__memberships__left_at__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__player_data__account=(
+                self.request.user
+            ),
+        ).distinct()
+
+    def _get_actor(self, covenant: Covenant) -> CharacterCovenantRole | None:
+        """Return the requesting user's active can_manage_ranks membership, or None."""
+        return (
+            CharacterCovenantRole.objects.filter(
+                covenant=covenant,
+                left_at__isnull=True,
+                rank__can_manage_ranks=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+            )
+            .select_related("rank")
+            .first()
+        )
+
+    def _any_manager(self, covenant: Covenant) -> CharacterCovenantRole | None:
+        """Return any active can_manage_ranks member (for staff bypass). Or None."""
+        return (
+            CharacterCovenantRole.objects.filter(
+                covenant=covenant, left_at__isnull=True, rank__can_manage_ranks=True
+            )
+            .select_related("rank")
+            .first()
+        )
+
+    def _resolve_actor(
+        self,
+        covenant: Covenant,
+        request: Request,
+    ) -> tuple[CharacterCovenantRole | None, Response | None]:
+        """Return (actor, None) when authorized, or (None, 403 Response) when not.
+
+        For staff: any active manager in the covenant acts as proxy.
+        For non-staff: the requesting user's own active manager membership.
+        Returns (None, None) only in the staff path when NO manager exists in the
+        covenant at all — callers may proceed with a direct-DB fallback.
+        """
+        if request.user.is_staff:
+            return self._any_manager(covenant), None
+        actor = self._get_actor(covenant)
+        if actor is None:
+            return None, Response(
+                {"detail": NotAuthorizedToManageRanksError.user_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return actor, None
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """POST /api/covenants/ranks/ — create a new rank via the service."""
+        ser = CovenantRankSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        covenant = ser.validated_data["covenant"]
+        actor, err = self._resolve_actor(covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            # Staff with no existing manager: direct create.
+            rank = CovenantRank.objects.create(**ser.validated_data)
+            return Response(CovenantRankSerializer(rank).data, status=status.HTTP_201_CREATED)
+        try:
+            rank = create_rank(
+                covenant=covenant,
+                actor=actor,
+                name=ser.validated_data["name"],
+                tier=ser.validated_data["tier"],
+                can_invite=ser.validated_data.get("can_invite", False),
+                can_kick=ser.validated_data.get("can_kick", False),
+                can_manage_ranks=ser.validated_data.get("can_manage_ranks", False),
+            )
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        return Response(CovenantRankSerializer(rank).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """PUT/PATCH — rename and/or set capability flags via service functions."""
+        partial = kwargs.pop("partial", False)
+        rank = self.get_object()
+        ser = CovenantRankSerializer(rank, data=request.data, partial=partial)
+        ser.is_valid(raise_exception=True)
+        actor, err = self._resolve_actor(rank.covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            # Staff with no existing manager: direct update.
+            for field, value in ser.validated_data.items():
+                setattr(rank, field, value)
+            rank.save()
+            return Response(CovenantRankSerializer(rank).data)
+        return self._apply_rank_update(rank, actor, ser.validated_data)
+
+    def _apply_rank_update(
+        self, rank: CovenantRank, actor: CharacterCovenantRole, validated: dict
+    ) -> Response:
+        """Apply rename + capability updates through service functions."""
+        try:
+            if "name" in validated:  # noqa: STRING_LITERAL
+                rank = rename_rank(rank=rank, actor=actor, name=validated["name"])
+            cap_kwargs: dict = {
+                cap: validated[cap]
+                for cap in ("can_invite", "can_kick", "can_manage_ranks")
+                if cap in validated
+            }
+            if cap_kwargs:
+                rank = set_rank_capabilities(rank=rank, actor=actor, **cap_kwargs)
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except LastManagerRankError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CovenantRankSerializer(rank).data)
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """DELETE — requires reassign_to in body; routes through delete_rank service."""
+        rank = self.get_object()
+        reassign_to_id = request.data.get("reassign_to")
+        if reassign_to_id is None:
+            return Response(
+                {"detail": "reassign_to is required when deleting a rank."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reassign_to = get_object_or_404(CovenantRank, pk=reassign_to_id)
+        actor, err = self._resolve_actor(rank.covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            rank.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            delete_rank(rank=rank, actor=actor, reassign_to=reassign_to)
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except (LastManagerRankError, CrossCovenantRankError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        request=ReorderRanksRequestSerializer,
+        responses={200: CovenantRankSerializer(many=True)},
+    )
+    @action(detail=False, methods=["POST"], url_path="reorder", pagination_class=None)
+    def reorder(self, request: Request) -> Response:
+        """POST /api/covenants/ranks/reorder/
+
+        Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
+        Reorders the covenant's ranks — requires can_manage_ranks.
+        """
+        covenant_id = request.data.get("covenant")
+        ordered_rank_ids = request.data.get("ordered_rank_ids")
+        if covenant_id is None or ordered_rank_ids is None:
+            return Response(
+                {"detail": "covenant and ordered_rank_ids are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        covenant = get_object_or_404(Covenant, pk=covenant_id)
+        actor, err = self._resolve_actor(covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            return Response(
+                {"detail": NotAuthorizedToManageRanksError.user_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            ranks = reorder_ranks(covenant=covenant, actor=actor, ordered_rank_ids=ordered_rank_ids)
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except IncompleteRankReorderError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CovenantRankSerializer(ranks, many=True).data)
+
+    @extend_schema(
+        request=AssignMemberRequestSerializer,
+        responses=CharacterCovenantRoleSerializer,
+    )
+    @action(detail=True, methods=["POST"], url_path="assign-member")
+    def assign_member(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/ranks/{pk}/assign-member/
+
+        Body: { "membership": <pk> }
+        Assigns the given membership to this rank — requires can_manage_ranks.
+        """
+        rank = self.get_object()
+        membership_id = request.data.get("membership")
+        if membership_id is None:
+            return Response(
+                {"detail": "membership is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership = get_object_or_404(CharacterCovenantRole, pk=membership_id)
+        actor, err = self._resolve_actor(rank.covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            return Response(
+                {"detail": NotAuthorizedToManageRanksError.user_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            membership = assign_rank(membership=membership, actor=actor, rank=rank)
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except (LastManagerRankError, CrossCovenantRankError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        ser = CharacterCovenantRoleSerializer(membership, context={"request": request})
+        return Response(ser.data)
+
+    @extend_schema(
+        request=TransferTopRequestSerializer,
+        responses=CovenantRankSerializer,
+    )
+    @action(detail=True, methods=["POST"], url_path="transfer-top")
+    def transfer_top_rank(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/ranks/{pk}/transfer-top/
+
+        Body: { "new_top_membership": <pk> }
+        Transfer the top rank (this rank) from the actor to the given membership.
+        Requires can_manage_ranks.
+        """
+        rank = self.get_object()
+        new_top_id = request.data.get("new_top_membership")
+        if new_top_id is None:
+            return Response(
+                {"detail": "new_top_membership is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        new_top_membership = get_object_or_404(CharacterCovenantRole, pk=new_top_id)
+        actor, err = self._resolve_actor(rank.covenant, request)
+        if err is not None:
+            return err
+        if actor is None:
+            return Response(
+                {"detail": NotAuthorizedToManageRanksError.user_message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return self._do_transfer_top(rank, actor, new_top_membership)
+
+    def _do_transfer_top(
+        self,
+        rank: CovenantRank,
+        actor: CharacterCovenantRole,
+        new_top_membership: CharacterCovenantRole,
+    ) -> Response:
+        """Execute transfer_top and map typed exceptions to HTTP responses."""
+        try:
+            transfer_top(covenant=rank.covenant, actor=actor, new_top_membership=new_top_membership)
+        except NotAuthorizedToManageRanksError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except (CrossCovenantRankError, CannotTransferToDepartedMemberError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CovenantRankSerializer(rank).data)

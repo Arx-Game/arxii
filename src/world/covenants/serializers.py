@@ -1,5 +1,6 @@
 """DRF serializers for covenants API."""
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.covenants.handlers import can_engage_membership
@@ -7,6 +8,7 @@ from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantLevelThreshold,
+    CovenantRank,
     CovenantRite,
     CovenantRole,
     GearArchetypeCompatibility,
@@ -32,20 +34,92 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "archetype",
             "archetype_display",
             "speed_rank",
-            "is_leadership",
             "description",
             "parent_role",
         ]
         read_only_fields = fields
 
 
+class CovenantRankSerializer(serializers.ModelSerializer):
+    """Serializer for CovenantRank (the per-covenant authority ladder).
+
+    Read: exposes all rank fields.
+    Write: validates tier uniqueness per covenant and capability flags.
+    """
+
+    class Meta:
+        model = CovenantRank
+        fields = [
+            "id",
+            "covenant",
+            "name",
+            "tier",
+            "description",
+            "can_invite",
+            "can_kick",
+            "can_manage_ranks",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        inst: CovenantRank | None = self.instance  # type: ignore[assignment]
+        covenant = attrs.get("covenant", inst.covenant if inst is not None else None)
+        tier = attrs.get("tier", inst.tier if inst is not None else None)
+        name = attrs.get("name", inst.name if inst is not None else None)
+
+        if covenant is not None and tier is not None:
+            qs = CovenantRank.objects.filter(covenant=covenant, tier=tier)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"tier": "A rank with this tier already exists for this covenant."}
+                )
+
+        if covenant is not None and name is not None:
+            qs = CovenantRank.objects.filter(covenant=covenant, name=name)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"name": "A rank with this name already exists for this covenant."}
+                )
+
+        return attrs
+
+
+class CovenantRankNestedSerializer(serializers.ModelSerializer):
+    """Minimal nested representation of a CovenantRank (id, name, tier) for embedding
+    inside CharacterCovenantRoleSerializer."""
+
+    class Meta:
+        model = CovenantRank
+        fields = ["id", "name", "tier"]
+        read_only_fields = fields
+
+
+class ViewerCapabilitiesSerializer(serializers.Serializer):
+    """Inline serializer for the viewer's capabilities in a covenant."""
+
+    can_invite = serializers.BooleanField()
+    can_kick = serializers.BooleanField()
+    can_manage_ranks = serializers.BooleanField()
+
+
 class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
-    """Read-only serializer for a character's covenant role assignment."""
+    """Read-only serializer for a character's covenant role assignment.
+
+    Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
+    block showing the requesting user's own active membership capabilities in
+    the same covenant (or all-False if the viewer has no active membership).
+    """
 
     covenant_role = CovenantRoleSerializer(read_only=True)
+    rank = CovenantRankNestedSerializer(read_only=True)
     is_active = serializers.SerializerMethodField()
     can_engage = serializers.SerializerMethodField()
     engage_blocked_reason = serializers.SerializerMethodField()
+    viewer_capabilities = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterCovenantRole
@@ -54,12 +128,14 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "character_sheet",
             "covenant",
             "covenant_role",
+            "rank",
             "engaged",
             "joined_at",
             "left_at",
             "is_active",
             "can_engage",
             "engage_blocked_reason",
+            "viewer_capabilities",
         ]
         read_only_fields = fields
 
@@ -79,6 +155,46 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
                 "This battle covenant is dormant — it must be raised again before you can engage."
             )
         return "No covenant members present in this scene."
+
+    @extend_schema_field(ViewerCapabilitiesSerializer)
+    def get_viewer_capabilities(self, obj: CharacterCovenantRole) -> dict:
+        """Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
+        active membership in the same covenant, or all-False when not a member.
+
+        Results are memoized per covenant_id in the serializer context so a list
+        response of N memberships from the same covenant issues only one query
+        rather than one per row.
+        """
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return {"can_invite": False, "can_kick": False, "can_manage_ranks": False}
+
+        # Memoize per-covenant in the serializer context dict.
+        cache_key = f"_viewer_caps_{obj.covenant_id}"
+        if cache_key not in self.context:
+            viewer_membership = (
+                CharacterCovenantRole.objects.filter(
+                    covenant_id=obj.covenant_id,
+                    left_at__isnull=True,
+                    character_sheet__roster_entry__tenures__end_date__isnull=True,
+                    character_sheet__roster_entry__tenures__player_data__account=request.user,
+                )
+                .select_related("rank")
+                .first()
+            )
+            if viewer_membership is None:
+                self.context[cache_key] = {
+                    "can_invite": False,
+                    "can_kick": False,
+                    "can_manage_ranks": False,
+                }
+            else:
+                self.context[cache_key] = {
+                    "can_invite": viewer_membership.rank.can_invite,
+                    "can_kick": viewer_membership.rank.can_kick,
+                    "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
+                }
+        return self.context[cache_key]  # type: ignore[return-value]
 
 
 class CovenantSerializer(serializers.ModelSerializer):
@@ -216,3 +332,41 @@ class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):
             "gear_archetype_display",
         ]
         read_only_fields = fields
+
+
+# ---------------------------------------------------------------------------
+# Action input serializers — used for @extend_schema request bodies only.
+# These are explicit lightweight serializers so drf-spectacular generates
+# accurate OpenAPI request bodies for the three @action endpoints that
+# would otherwise inherit the parent ViewSet's CovenantRankSerializer.
+# ---------------------------------------------------------------------------
+
+
+class AssignMemberRequestSerializer(serializers.Serializer):
+    """Request body for POST /api/covenants/ranks/{pk}/assign-member/."""
+
+    membership = serializers.IntegerField(
+        help_text="PK of the CharacterCovenantRole to assign to this rank.",
+    )
+
+
+class TransferTopRequestSerializer(serializers.Serializer):
+    """Request body for POST /api/covenants/ranks/{pk}/transfer-top/."""
+
+    new_top_membership = serializers.IntegerField(
+        help_text="PK of the CharacterCovenantRole that will receive the top rank.",
+    )
+
+
+class ReorderRanksRequestSerializer(serializers.Serializer):
+    """Request body for POST /api/covenants/ranks/reorder/."""
+
+    covenant = serializers.IntegerField(
+        help_text="PK of the Covenant whose rank ladder is being reordered.",
+    )
+    ordered_rank_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text=(
+            "All rank PKs for this covenant in desired order (index 0 = top authority / tier 1)."
+        ),
+    )

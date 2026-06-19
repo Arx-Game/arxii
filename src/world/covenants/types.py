@@ -17,7 +17,12 @@ class CovenantFounder:
     Covenant formation requires at least two distinct founders — see
     `feedback_covenants_are_group_only.md`. The Sequence of founders passed
     to `create_covenant` becomes the initial set of memberships.
+
+    ``is_leader`` marks this founder as the initial top-rank holder. At most
+    one founder should be flagged; if none are, ``create_covenant`` defaults
+    to the first founder.
     """
 
     character_sheet: CharacterSheet
     role: CovenantRole
+    is_leader: bool = False

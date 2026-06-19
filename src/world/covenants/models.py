@@ -204,14 +204,6 @@ class CovenantRole(SharedMemoryModel):
         blank=True,
         help_text="Player-facing description of the role's identity and combat style.",
     )
-    is_leadership = models.BooleanField(
-        default=False,
-        help_text=(
-            "Staff-authored. Members holding a leadership role may kick non-leader "
-            "members. Leaders cannot kick other leaders. See issue #519."
-        ),
-    )
-
     parent_role = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -325,6 +317,44 @@ class GearArchetypeCompatibility(SharedMemoryModel):
         return f"{self.covenant_role.name} compatible with {self.get_gear_archetype_display()}"
 
 
+class CovenantRank(SharedMemoryModel):
+    """A per-covenant administrative authority tier (the rank ladder).
+
+    Orthogonal to CovenantRole (combat power). Lower ``tier`` = higher
+    authority (1 = top). Capability flags gate invite/kick/manage. See #1027.
+    """
+
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="ranks",
+    )
+    name = models.CharField(max_length=60, help_text="Player-chosen tier name, e.g. 'Magister'.")
+    tier = models.PositiveIntegerField(help_text="Precedence; lower = higher authority (1 = top).")
+    description = models.TextField(blank=True, help_text="Optional flavor/ceremony text.")
+    can_invite = models.BooleanField(default=False)
+    can_kick = models.BooleanField(
+        default=False, help_text="May remove members of a strictly lower tier."
+    )
+    can_manage_ranks = models.BooleanField(
+        default=False, help_text="May edit the ladder and assign members."
+    )
+
+    class Meta:
+        ordering = ["covenant", "tier"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant", "tier"], name="covenants_unique_rank_tier_per_covenant"
+            ),
+            models.UniqueConstraint(
+                fields=["covenant", "name"], name="covenants_unique_rank_name_per_covenant"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} (tier {self.tier}) — {self.covenant.name}"
+
+
 class CharacterCovenantRole(SharedMemoryModel):
     """Per-character record of a covenant role assignment.
 
@@ -370,6 +400,11 @@ class CharacterCovenantRole(SharedMemoryModel):
             "eligibility. See spec 2026-05-09 §3.6."
         ),
     )
+    rank = models.ForeignKey(
+        "covenants.CovenantRank",
+        on_delete=models.PROTECT,
+        related_name="memberships",
+    )
     joined_at = models.DateTimeField(auto_now_add=True)
     left_at = models.DateTimeField(null=True, blank=True)
 
@@ -384,6 +419,10 @@ class CharacterCovenantRole(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.rank_id and self.rank.covenant_id != self.covenant_id:
+            raise ValidationError(
+                {"rank": "Rank must belong to the same covenant as the membership."}
+            )
         if self.engaged and self.left_at is not None:
             raise ValidationError({"engaged": "Engaged row cannot have left_at set."})
         if self.engaged:
