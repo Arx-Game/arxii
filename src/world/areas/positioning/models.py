@@ -114,6 +114,91 @@ class PositionEdge(PositionEdgeBase):
         return f"Edge({self.position_a_id}<->{self.position_b_id})"
 
 
+class PositionBlueprint(SharedMemoryModel):
+    """A reusable template of positions and edges, independent of any room.
+
+    GMs author a blueprint once and apply it to any room, generating a
+    live Position/PositionEdge graph from the template.
+    """
+
+    name = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        app_label = "areas"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class BlueprintPosition(PositionNodeBase):
+    """A position node template that belongs to a PositionBlueprint.
+
+    Mirrors ``Position`` but anchored to a blueprint rather than a room.
+    """
+
+    blueprint = models.ForeignKey(
+        PositionBlueprint, on_delete=models.CASCADE, related_name="positions"
+    )
+
+    class Meta:
+        app_label = "areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blueprint", "name"], name="unique_blueprint_position_per_blueprint"
+            ),
+        ]
+        ordering = ["blueprint", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_kind_display()}) in blueprint:{self.blueprint_id}"
+
+
+class BlueprintEdge(PositionEdgeBase):
+    """Traversable adjacency between two BlueprintPositions in the same blueprint.
+
+    Stored canonically (position_a_id < position_b_id). Mirrors ``PositionEdge``
+    but targets blueprint nodes; the same-room check is replaced by a
+    same-blueprint check.
+    """
+
+    blueprint = models.ForeignKey(PositionBlueprint, on_delete=models.CASCADE, related_name="edges")
+    position_a = models.ForeignKey(
+        BlueprintPosition, on_delete=models.CASCADE, related_name="edges_as_a"
+    )
+    position_b = models.ForeignKey(
+        BlueprintPosition, on_delete=models.CASCADE, related_name="edges_as_b"
+    )
+
+    class Meta:
+        app_label = "areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position_a", "position_b"], name="unique_blueprint_edge"
+            ),
+            models.CheckConstraint(
+                condition=Q(position_a__lt=F("position_b")),
+                name="blueprint_edge_canonical_order",
+            ),
+        ]
+        ordering = ["position_a", "position_b"]
+
+    def clean(self) -> None:
+        super().clean()
+        self._validate_canonical(self.position_a_id, self.position_b_id)
+        if (
+            self.position_a_id is not None
+            and self.position_b_id is not None
+            and self.position_a.blueprint_id != self.position_b.blueprint_id
+        ):
+            msg = "Both positions of a blueprint edge must belong to the same blueprint."
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        return f"BlueprintEdge({self.position_a_id}<->{self.position_b_id})"
+
+
 class ObjectPosition(SharedMemoryModel):
     """Which Position an object currently occupies (OneToOne, like db_location).
 
