@@ -16,7 +16,7 @@ describe('useUseItem', () => {
   it('invalidates the inventory query for the character on success', async () => {
     const qc = new QueryClient();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    vi.mocked(api.useItem).mockResolvedValue({
+    vi.mocked(api.postUseItem).mockResolvedValue({
       charges_remaining: 1,
       destroyed: false,
       soft_deleted: false,
@@ -27,7 +27,7 @@ describe('useUseItem', () => {
       await result.current.mutateAsync(7);
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(api.useItem).toHaveBeenCalledWith(7);
+    expect(api.postUseItem).toHaveBeenCalledWith(7);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['inventory', 42] });
   });
 });

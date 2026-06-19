@@ -133,7 +133,7 @@ export async function listInventory(characterId: number): Promise<ItemInstance[]
   return data.results;
 }
 
-export async function useItem(itemId: number): Promise<UseItemResult> {
+export async function postUseItem(itemId: number): Promise<UseItemResult> {
   const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/use/`, { method: 'POST' });
   if (!res.ok) {
     throw new Error(await readError(res, 'Failed to use item'));
