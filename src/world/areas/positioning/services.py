@@ -14,7 +14,14 @@ from django.db.models import Q
 
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
-from world.areas.positioning.models import ObjectPosition, Position, PositionEdge
+from world.areas.positioning.models import (
+    BlueprintEdge,
+    BlueprintPosition,
+    ObjectPosition,
+    Position,
+    PositionBlueprint,
+    PositionEdge,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -87,6 +94,64 @@ def disconnect_positions(a: Position, b: Position) -> None:
     """Remove the edge between two positions (order-independent)."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
     PositionEdge.objects.filter(position_a=lo, position_b=hi).delete()
+
+
+# ---------------------------------------------------------------------------
+# Blueprint authoring
+# ---------------------------------------------------------------------------
+
+_ERR_BLUEPRINT_CROSS = "Both positions of a blueprint edge must belong to the same blueprint."
+
+
+def create_blueprint(name: str, *, description: str = "") -> PositionBlueprint:
+    """Create and return a new PositionBlueprint."""
+    return PositionBlueprint.objects.create(name=name, description=description)
+
+
+def add_blueprint_position(
+    blueprint: PositionBlueprint,
+    name: str,
+    *,
+    kind: str = PositionKind.FEATURE,
+    description: str = "",
+) -> BlueprintPosition:
+    """Create and return a new BlueprintPosition owned by blueprint."""
+    return BlueprintPosition.objects.create(
+        blueprint=blueprint, name=name, kind=kind, description=description
+    )
+
+
+def connect_blueprint_positions(
+    a: BlueprintPosition,
+    b: BlueprintPosition,
+    *,
+    is_passable: bool = True,
+) -> BlueprintEdge:
+    """Create a traversable edge between two blueprint positions, ordered canonically.
+
+    The smaller-pk position becomes position_a (canonical ordering), mirroring
+    ``connect_positions``. Raises PositionError if a and b belong to different
+    blueprints. Calls full_clean() before save so self-loop / canonical-order
+    constraints fire.
+    """
+    if a.blueprint_id != b.blueprint_id:
+        raise PositionError(_ERR_BLUEPRINT_CROSS)
+    if a.pk > b.pk:
+        a, b = b, a
+    edge = BlueprintEdge(
+        blueprint=a.blueprint,
+        position_a=a,
+        position_b=b,
+        is_passable=is_passable,
+    )
+    edge.full_clean()
+    edge.save()
+    return edge
+
+
+def remove_blueprint(blueprint: PositionBlueprint) -> None:
+    """Delete a blueprint (cascades positions and edges)."""
+    blueprint.delete()
 
 
 # ---------------------------------------------------------------------------
