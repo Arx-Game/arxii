@@ -525,12 +525,13 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     "engaged" with the covenant where they hold the role. Multiple engaged
     roles (e.g., one Durance + one Battle) stack additively.
 
-    Per slot:
-    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus + gear_stat (additive)
-    - Incompatible gear (no row): max(role_bonus, gear_stat) (highest wins)
+    Per slot (marginal blend — combat already counts the gear's base stat directly):
+    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus stacks on top.
+    - Incompatible gear (no row): max(0, role_bonus - gear_stat) — only the role's
+      surplus beyond what the gear already provides; never negative.
 
-    At low character levels gear_stat dominates; incompatible gear costs nothing.
-    At high levels role_bonus dominates; incompatible gear's mundane stat is wasted.
+    At low character levels an incompatible item may fully suppress the role bonus;
+    at high levels role_bonus dominates and the incompatibility cost shrinks.
 
     Args:
         sheet: CharacterSheet instance.
@@ -560,9 +561,13 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
             gear_stat = item_mundane_stat_for_target(item, target)
             archetype = item.template.gear_archetype
             if is_gear_compatible(role, archetype):
-                total += role_bonus + gear_stat
+                total += (
+                    role_bonus  # compatible: role bonus stacks on the gear combat already counts
+                )
             else:
-                total += max(role_bonus, gear_stat)
+                total += max(
+                    0, role_bonus - gear_stat
+                )  # incompatible: only the role's surplus over gear
     return total
 
 

@@ -652,8 +652,8 @@ class CovenantRoleBonusTests(TestCase):
         result = covenant_role_bonus(sheet, target)
         assert result == 0
 
-    def test_compatible_gear_additive(self) -> None:
-        """Patched helpers (role=10, gear=3). One compatible item → 10+3 = 13."""
+    def test_compatible_gear_adds_role_bonus(self) -> None:
+        """Patched helpers (role=10, gear=3). One compatible item → role_bonus = 10."""
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -694,10 +694,10 @@ class CovenantRoleBonusTests(TestCase):
         ):
             result = covenant_role_bonus(sheet, target)
 
-        assert result == 13  # 10 + 3 (additive)
+        assert result == 10  # role_bonus only (combat already counts gear stat)
 
-    def test_incompatible_gear_max(self) -> None:
-        """Patched helpers (role=10, gear=3). No compat row → max(10, 3) = 10."""
+    def test_incompatible_gear_marginal(self) -> None:
+        """Patched helpers (role=10, gear=3). No compat row → max(0, 10-3) = 7."""
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -731,10 +731,10 @@ class CovenantRoleBonusTests(TestCase):
         ):
             result = covenant_role_bonus(sheet, target)
 
-        assert result == 10  # max(10, 3)
+        assert result == 7  # max(0, 10-3) marginal surplus
 
-    def test_incompatible_gear_higher_max_wins(self) -> None:
-        """Patched helpers (role=2, gear=15). No compat row → max(2, 15) = 15."""
+    def test_incompatible_gear_suppressed_when_gear_exceeds_role(self) -> None:
+        """Patched helpers (role=2, gear=15). No compat row → max(0, 2-15) = 0."""
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -766,11 +766,14 @@ class CovenantRoleBonusTests(TestCase):
         ):
             result = covenant_role_bonus(sheet, target)
 
-        assert result == 15  # max(2, 15)
+        assert result == 0  # max(0, 2-15) = 0, gear fully suppresses role
 
     @tag("postgres")
     def test_two_items_aggregate(self) -> None:
-        """Patched helpers (role=5, gear=2). One compatible, one not → (5+2) + max(5,2) = 12.
+        """Patched helpers (role=5, gear=2). One compatible, one not → 5 + max(0,5-2) = 8.
+
+        Compatible slot contributes role_bonus=5. Incompatible slot contributes
+        max(0, 5-2)=3. Total = 8.
 
         PG-only: same equipment-walk SharedMemoryModel idmap pollution path
         as ``PassiveFacetBonusesTests`` (see that class's docstring). The
@@ -833,7 +836,7 @@ class CovenantRoleBonusTests(TestCase):
         ):
             result = covenant_role_bonus(sheet, target)
 
-        assert result == 12  # (5+2) + max(5,2) = 7 + 5
+        assert result == 8  # 5 + max(0, 5-2) = 5 + 3
 
 
 class GetModifierTotalEquipmentWalkTests(TestCase):
