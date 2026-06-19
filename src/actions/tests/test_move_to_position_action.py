@@ -20,6 +20,7 @@ from world.areas.positioning.services import (
     place_in_position,
     position_of,
 )
+from world.mechanics.factories import ChallengeInstanceFactory
 
 
 def _make_character_in_room(room: object) -> object:
@@ -195,7 +196,6 @@ class TestGatedEdgeSurfacing(django.test.TestCase):
             ChallengeTemplateFactory,
             PropertyFactory,
         )
-        from world.mechanics.models import ChallengeInstance
 
         self.room = create_object("typeclasses.rooms.Room", key="GatedRoom", nohome=True)
         self.ground = PositionFactory(room=self.room, name="ground_gs")
@@ -205,12 +205,10 @@ class TestGatedEdgeSurfacing(django.test.TestCase):
         prop = PropertyFactory(name="gs_prop")
         ApplicationFactory(target_property=prop)
         template = ChallengeTemplateFactory(name="The Drawbridge")
-        self.gate = ChallengeInstance.objects.create(
+        self.gate = ChallengeInstanceFactory(
             template=template,
             location=self.room,
             target_object=self.room,
-            is_active=True,
-            is_revealed=True,
         )
         connect_positions(self.ground, self.tower, gating_challenge=self.gate)
 

@@ -28,11 +28,12 @@ from world.mechanics.factories import (
     AerialPropertyFactory,
     ApplicationFactory,
     ChallengeApproachFactory,
+    ChallengeInstanceFactory,
     ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     PropertyFactory,
 )
-from world.mechanics.models import ChallengeInstance, ObjectProperty
+from world.mechanics.models import ObjectProperty
 from world.mechanics.types import CapabilitySource
 
 
@@ -376,12 +377,10 @@ class GatingFarSideEffectTests(TestCase):
         prop = PropertyFactory(name="gfs_prop")
         ApplicationFactory(target_property=prop)
         template = ChallengeTemplateFactory(name="GFS Gate")
-        self.gate = ChallengeInstance.objects.create(
+        self.gate = ChallengeInstanceFactory(
             template=template,
             location=self.room,
             target_object=self.room,
-            is_active=True,
-            is_revealed=True,
         )
         connect_positions(self.courtyard, self.balcony, gating_challenge=self.gate)
         self.consequence = ConsequenceFactory()
@@ -483,12 +482,10 @@ class GatedEdgeCrossingIntegrationTests(TestCase):
         )
 
         # Wire the gating challenge instance onto the edge.
-        self.gate = ChallengeInstance.objects.create(
+        self.gate = ChallengeInstanceFactory(
             template=template,
             location=self.room,
             target_object=self.room,
-            is_active=True,
-            is_revealed=True,
         )
         connect_positions(self.courtyard, self.balcony, gating_challenge=self.gate)
 
