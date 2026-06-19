@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useMagicProgression } from '../magicProgressionQueries';
+import { PathIntentCard } from '../components/PathIntentCard';
 import { StageSection } from '../components/progression/StageSection';
 
 export function MagicProgressionPage() {
@@ -58,6 +59,7 @@ export function MagicProgressionPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Magic Progression</h1>
+      <PathIntentCard characterId={characterSheetId ?? 0} />
       {stages.map((stage) => (
         <StageSection key={stage.stage} stage={stage} />
       ))}
