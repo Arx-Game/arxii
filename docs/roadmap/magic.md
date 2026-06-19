@@ -574,10 +574,19 @@ What was built:
   numeric score (`compute_quality_score`) resolved to a `QualityTier` via
   `QualityTier.for_score` (reusing the existing `numeric_min/numeric_max` ranges).
   Players choose only *which* facet; the server rolls the tier.
-- **`FacetCraftingConfig` singleton** (`check_type` FK + `base_difficulty` +
-  `success_level_step` + `min_success_level`); lazy `get_facet_crafting_config()`.
-  Seeded by `wire_enchanting_crafting()` (Enchanting SKILL trait + CheckType + config) —
-  a FactoryBoy chain doubling as integration-test setUp and seed data.
+- **Generic `CraftingRecipe` framework (#1031).** The old `FacetCraftingConfig`
+  singleton was replaced by per-kind `CraftingRecipe` rows (`kind` =
+  `FACET_ATTACH`/`STYLE_ATTACH`; `check_type` FK + `base_difficulty` +
+  `success_level_step` + `min_success_level` + `skill_trait` + AP/anima costs +
+  `default_cost_consumption`), each with a `CraftingSkillCap` ladder (skill-gated
+  quality clamp), `CraftingMaterialRequirement` rows, and a `CraftingRecipeConsequence`
+  pool. The transactional orchestrator `run_crafting_recipe`
+  (`world.items.crafting.services`) ties pre-validate → affordability → roll →
+  consequence selection → cost consumption → skill-capped tier → attach; the
+  `craft_attach_facet`/`craft_attach_style` wrappers are thin consumers of it.
+  Seeded by `wire_enchanting_crafting()` (Enchanting SKILL trait + CheckType + both
+  recipes + a cap ladder + a small consequence pool) — a FactoryBoy chain doubling as
+  integration-test setUp and seed data.
 - **Endpoint contract change.** `POST /api/items/item-facets/` now takes
   `{item_instance, facet}` (no client-chosen tier) and returns a `FacetCraftResult`
   (rolled outcome + resolved tier + the row); 201 on attach, 200 on a failed roll.

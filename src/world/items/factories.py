@@ -8,7 +8,6 @@ from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.items.models import (
     EquippedItem,
-    FacetCraftingConfig,
     FacetVogueMomentum,
     FashionPresentation,
     FashionStyle,
@@ -289,32 +288,31 @@ class TrendsetterFactory(factory.django.DjangoModelFactory):
     fashion_style = factory.SubFactory(FashionStyleFactory)
 
 
-class FacetCraftingConfigFactory(factory.django.DjangoModelFactory):
-    """Factory for the FacetCraftingConfig singleton (pk=1).
+def wire_enchanting_crafting(*, base_difficulty: int = 0):
+    """Author the Enchanting skill + crafting CheckType + both crafting recipes.
 
-    Prefer wire_enchanting_crafting() when you also need a wired CheckType.
+    FactoryBoy chain doubling as integration-test setUp and seed data. Creates:
+
+    * the Enchanting skill ``Trait`` + ``CheckType`` + ``CheckTypeTrait`` weight,
+    * a ``CraftingRecipe`` for each of FACET_ATTACH and STYLE_ATTACH wired to that
+      check + trait,
+    * a small ``CraftingSkillCap`` ladder per recipe (so quality clamps have data),
+    * a couple of ``CraftingRecipeConsequence`` rows across outcome bands.
+
+    Idempotent: keyed on ``CraftingRecipe.kind`` via ``update_or_create`` so re-runs
+    refresh ``base_difficulty``/``check_type`` rather than silently keeping the
+    original row.
+
+    Returns:
+        The FACET_ATTACH ``CraftingRecipe`` (the primary facet-crafting recipe).
     """
-
-    class Meta:
-        model = FacetCraftingConfig
-        django_get_or_create = ("pk",)
-
-    pk = 1
-    base_difficulty = 0
-    success_level_step = 10
-    min_success_level = 1
-
-
-def wire_enchanting_crafting(*, base_difficulty: int = 0) -> FacetCraftingConfig:
-    """Author the Enchanting skill + crafting CheckType + config singleton.
-
-    FactoryBoy chain doubling as integration-test setUp and seed data.
-    Returns the configured FacetCraftingConfig. Idempotent: uses update_or_create
-    for the singleton so re-runs update base_difficulty and check_type rather than
-    silently keeping the original row (which django_get_or_create would do).
-    """
-    from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
-    from world.traits.factories import TraitFactory
+    from world.checks.factories import (
+        CheckTypeFactory,
+        CheckTypeTraitFactory,
+        ConsequenceFactory,
+    )
+    from world.items.crafting.models import CraftingRecipe
+    from world.traits.factories import CheckOutcomeFactory, TraitFactory
     from world.traits.models import TraitCategory, TraitType
 
     enchanting = TraitFactory(
@@ -322,16 +320,81 @@ def wire_enchanting_crafting(*, base_difficulty: int = 0) -> FacetCraftingConfig
     )
     check_type = CheckTypeFactory(name="Enchanting")
     CheckTypeTraitFactory(check_type=check_type, trait=enchanting, weight=Decimal("1.0"))
-    config, _ = FacetCraftingConfig.objects.update_or_create(
-        pk=1,
+
+    # Quality tiers used to seed the skill-cap ladder. Idempotent on name.
+    common = QualityTierFactory(name="Common", numeric_min=0, numeric_max=29, sort_order=0)
+    fine = QualityTierFactory(name="Fine", numeric_min=30, numeric_max=69, sort_order=1)
+    master = QualityTierFactory(name="Masterwork", numeric_min=70, numeric_max=9999, sort_order=2)
+
+    # Outcome bands for the consequence pool. Idempotent on name.
+    success_tier = CheckOutcomeFactory(name="Enchanting Success", success_level=2)
+    botch_tier = CheckOutcomeFactory(name="Enchanting Botch", success_level=-2)
+
+    facet_recipe, _ = CraftingRecipe.objects.update_or_create(
+        kind=CraftingRecipeKind.FACET_ATTACH,
         defaults={
-            "base_difficulty": base_difficulty,
+            "name": "Attach Facet (Enchanting)",
             "check_type": check_type,
+            "skill_trait": enchanting,
+            "base_difficulty": base_difficulty,
             "success_level_step": 10,
             "min_success_level": 1,
         },
     )
-    return config
+    style_recipe, _ = CraftingRecipe.objects.update_or_create(
+        kind=CraftingRecipeKind.STYLE_ATTACH,
+        defaults={
+            "name": "Attach Style (Enchanting)",
+            "check_type": check_type,
+            "skill_trait": enchanting,
+            "base_difficulty": base_difficulty,
+            "success_level_step": 10,
+            "min_success_level": 1,
+        },
+    )
+
+    for recipe in (facet_recipe, style_recipe):
+        _wire_recipe_caps_and_consequences(
+            recipe=recipe,
+            tiers=(common, fine, master),
+            success_tier=success_tier,
+            botch_tier=botch_tier,
+            consequence_factory=ConsequenceFactory,
+        )
+
+    return facet_recipe
+
+
+def _wire_recipe_caps_and_consequences(
+    *, recipe, tiers, success_tier, botch_tier, consequence_factory
+) -> None:
+    """Seed a skill-cap ladder + a consequence pool for ``recipe`` (idempotent)."""
+    from world.checks.models import Consequence
+    from world.items.crafting.models import CraftingRecipeConsequence, CraftingSkillCap
+
+    common, fine, master = tiers
+    ladder = [(0, common), (40, fine), (80, master)]
+    for min_skill, tier in ladder:
+        CraftingSkillCap.objects.update_or_create(
+            recipe=recipe,
+            min_skill_value=min_skill,
+            defaults={"max_quality_tier": tier},
+        )
+
+    # A consequence per band so integration tests have authored pool rows. Use a
+    # stable label per (recipe, tier) so re-runs reuse the same Consequence row.
+    for tier_outcome, consumption, label in (
+        (success_tier, CostConsumption.FULL, f"{recipe.name}: clean success"),
+        (botch_tier, CostConsumption.PARTIAL, f"{recipe.name}: botched attempt"),
+    ):
+        consequence = Consequence.objects.filter(label=label).first()
+        if consequence is None:
+            consequence = consequence_factory(outcome_tier=tier_outcome, label=label)
+        CraftingRecipeConsequence.objects.update_or_create(
+            recipe=recipe,
+            consequence=consequence,
+            defaults={"cost_consumption": consumption},
+        )
 
 
 class CraftingRecipeFactory(factory.django.DjangoModelFactory):

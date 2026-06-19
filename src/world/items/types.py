@@ -20,6 +20,8 @@ class FacetCraftResult:
     outcome: CheckOutcome | None
     item_facet: ItemFacet | None
     quality_tier: QualityTier | None
+    consumed: dict | None = None
+    consequence_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,8 @@ class StyleCraftResult:
     outcome: CheckOutcome | None
     item_style: ItemStyle | None
     quality_tier: QualityTier | None
+    consumed: dict | None = None
+    consequence_label: str | None = None
 
 
 @dataclass(frozen=True)
