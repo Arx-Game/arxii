@@ -311,7 +311,8 @@ describe('AttachFacetDialog', () => {
   // -------------------------------------------------------------------------
   // CraftingQuotePanel: cost line renders from mocked quote
   // -------------------------------------------------------------------------
-  it('renders cost line and quality cap from a loaded quote', () => {
+  it('renders cost line and quality cap from a loaded quote', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     makeCraftMock();
     makeRemoveMock();
 
@@ -337,16 +338,16 @@ describe('AttachFacetDialog', () => {
       <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
     );
 
-    // The quote panel is shown only when a facet is selected — simulate selecting Spider.
-    // Since the combobox state drives panel visibility, we check directly by setting
-    // the mock to show 'selectedFacetId' truthy. Re-render with a test that bypasses
-    // this: we just check that the panel appears after a facet is chosen.
-    // The panel is rendered only when selectedFacetId is set; use userEvent to select.
-    // (panel shows after selection — tested via integration below)
+    // Select Spider to trigger panel visibility.
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
 
-    // Verify the quote panel text appears in the DOM via the wrapping test
-    // (panel is hidden until facet selected; this test verifies field rendering).
-    expect(screen.queryByTestId('crafting-quote-panel')).not.toBeInTheDocument();
+    const panel = screen.getByTestId('crafting-quote-panel');
+    expect(panel).toBeInTheDocument();
+
+    // Cost line: AP have/need and cap tier name.
+    expect(panel).toHaveTextContent('5/2 AP');
+    expect(panel).toHaveTextContent('Excellent');
   });
 
   it('renders cost/cap/risk panel after facet selection', async () => {
