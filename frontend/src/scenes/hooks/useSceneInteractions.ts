@@ -23,6 +23,14 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     place_name: payload.place_name,
     receiver_persona_ids: payload.receiver_persona_ids ?? [],
     target_persona_ids: payload.target_persona_ids ?? [],
+    // Endorsement fields are not present in WS payloads; initialise as empty.
+    pose_kind: 'STANDARD',
+    endorsee_sheet_id: null,
+    endorsable_resonances: [],
+    pose_endorsers: [],
+    my_pose_endorsement: null,
+    entry_endorsers: [],
+    entry_endorsed_by_me: false,
   };
 }
 

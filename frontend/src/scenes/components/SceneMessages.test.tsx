@@ -27,6 +27,13 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
     receiver_persona_ids: [],
     target_persona_ids: [],
     action_links: [],
+    pose_kind: 'STANDARD',
+    endorsee_sheet_id: null,
+    endorsable_resonances: [],
+    pose_endorsers: [],
+    my_pose_endorsement: null,
+    entry_endorsers: [],
+    entry_endorsed_by_me: false,
     ...overrides,
   };
 }
