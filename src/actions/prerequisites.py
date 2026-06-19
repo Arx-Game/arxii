@@ -114,7 +114,7 @@ class OnUseTargetPrerequisite(Prerequisite):
     external target of that kind is required, reachable, and visible.
     """
 
-    def is_met(  # noqa: C901,PLR0911
+    def is_met(  # noqa: C901,PLR0911,PLR0912
         self,
         actor: ObjectDB,
         target: ObjectDB | None = None,
@@ -149,9 +149,23 @@ class OnUseTargetPrerequisite(Prerequisite):
                 return False, "You can't see that."
             return True, ""
 
-        # CHARACTER / ROOM / PERSONA targets: same-location reachability + visibility.
-        if not _is_visible_to(actor, target):
-            return False, "You can't see that."
-        if actor.location not in (target.location, target):
-            return False, "They aren't here."
-        return True, ""
+        if kind == TargetKind.CHARACTER:
+            if not target.is_typeclass("typeclasses.characters.Character", exact=False):
+                return False, "That can only be used on a character."
+            if actor.location not in (target.location, target):
+                return False, "They aren't here."
+            if not _is_visible_to(actor, target):
+                return False, "You can't see that."
+            return True, ""
+
+        if kind == TargetKind.ROOM:
+            if not target.is_typeclass("typeclasses.rooms.Room", exact=False):
+                return False, "That can only be used on a place."
+            if actor.location not in (target.location, target):
+                return False, "They aren't here."
+            if not _is_visible_to(actor, target):
+                return False, "You can't see that."
+            return True, ""
+
+        # TargetKind.PERSONA and any future unhandled kinds — fail closed.
+        return False, "That can't be used on that."

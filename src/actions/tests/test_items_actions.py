@@ -397,3 +397,43 @@ class OnUseTargetPrereqTests(TestCase):
         item_obj = self._usable_item(actor, TargetKind.CHARACTER)
         met, _ = OnUseTargetPrerequisite().is_met(actor, target=near, context=self._ctx(item_obj))
         assert met is True
+
+    def test_character_kind_rejects_non_character_target(self) -> None:
+        """CHARACTER-kind item targeting a Room in the same location must fail (type guard)."""
+        room = ObjectDBFactory(db_key="OUTTypeRoom", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="OUTTypeActor", location=room)
+        item_obj = self._usable_item(actor, TargetKind.CHARACTER)
+        # Room is in same location as actor — would pass adjacency/visibility — but must fail type.
+        met, reason = OnUseTargetPrerequisite().is_met(
+            actor, target=room, context=self._ctx(item_obj)
+        )
+        assert met is False
+        assert reason == "That can only be used on a character."
+
+    def test_item_kind_reachable_target_passes(self) -> None:
+        """ITEM-kind item targeting a carried item (reachable) must pass."""
+        actor = CharacterFactory(db_key="OUTItemActor")
+        item_obj = self._usable_item(actor, TargetKind.ITEM)
+        target_item_obj = ObjectDBFactory(db_key="OUTItemTarget", location=actor)
+        tpl = ItemTemplateFactory(name="OUTItemTargetTpl")
+        ItemInstanceFactory(template=tpl, game_object=target_item_obj)
+        met, _ = OnUseTargetPrerequisite().is_met(
+            actor, target=target_item_obj, context=self._ctx(item_obj)
+        )
+        assert met is True
+
+    def test_item_kind_unreachable_target_fails(self) -> None:
+        """ITEM-kind item targeting an item in a different room must fail (reachability)."""
+        room_a = ObjectDBFactory(db_key="OUTItemRoomA", db_typeclass_path="typeclasses.rooms.Room")
+        room_b = ObjectDBFactory(db_key="OUTItemRoomB", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="OUTItemFarActor", location=room_a)
+        item_obj = self._usable_item(actor, TargetKind.ITEM)
+        far_item_obj = ObjectDBFactory(db_key="OUTItemFarTarget", location=room_b)
+        ItemInstanceFactory(
+            template=ItemTemplateFactory(name="OUTItemFarTpl"), game_object=far_item_obj
+        )
+        met, reason = OnUseTargetPrerequisite().is_met(
+            actor, target=far_item_obj, context=self._ctx(item_obj)
+        )
+        assert met is False
+        assert reason
