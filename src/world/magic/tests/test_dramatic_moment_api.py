@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterResonanceFactory, DramaticMomentTypeFactory
+from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.scenes.factories import (
     InteractionFactory,
     SceneFactory,
@@ -40,8 +41,6 @@ class DramaticMomentTagApiTest(APITestCase):
     def test_tagged_by_is_request_account(self):
         self.client.force_authenticate(self.gm)
         resp = self.client.post(self.url, self._payload(), format="json")
-        from world.magic.models.dramatic_moment import DramaticMomentTag
-
         tag = DramaticMomentTag.objects.get(pk=resp.data["id"])
         self.assertEqual(tag.tagged_by_id, self.gm.id)
 
@@ -56,6 +55,8 @@ class DramaticMomentTagApiTest(APITestCase):
         self.client.post(self.url, self._payload(), format="json")
         resp = self.client.post(self.url, self._payload(), format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("detail", resp.data)
+        self.assertTrue(resp.data["detail"])
 
     def test_unclaimed_resonance_returns_400(self):
         other_sheet = CharacterSheetFactory()  # no CharacterResonance claimed
@@ -64,6 +65,8 @@ class DramaticMomentTagApiTest(APITestCase):
         payload["character_sheet"] = other_sheet.pk
         resp = self.client.post(self.url, payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("detail", resp.data)
+        self.assertTrue(resp.data["detail"])
 
     def test_owner_can_tag_via_interaction(self):
         owner = AccountFactory()

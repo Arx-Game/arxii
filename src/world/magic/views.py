@@ -2056,6 +2056,8 @@ class DramaticMomentTypeViewSet(mixins.ListModelMixin, GenericViewSet):
     queryset = DramaticMomentType.objects.all()
     serializer_class = DramaticMomentTypeSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # small authored catalog
+    filter_backends = []
 
 
 class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
@@ -2070,6 +2072,7 @@ class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, G
     ).order_by("-tagged_at")
     serializer_class = DramaticMomentTagSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["character_sheet", "scene"]
 
