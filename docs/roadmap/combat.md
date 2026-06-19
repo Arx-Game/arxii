@@ -839,11 +839,52 @@ tied to the combat subsystem.
 **Deferred to follow-up issues:**
 
 - Cross-a-gated-edge-via-approach resolution (approach-resolver + Challenge spawn)
-- GM room terrain-blueprint authoring + non-combat positioning UI
 - Dynamic-reshaping consequence `EffectType`s
 - Implicit aerial positions
 - Occupancy-screening reachability (crowded-position filtering)
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
+
+### Positioning — Blueprints + Non-Combat Scene UI (SHIPPED — #1017)
+
+GM terrain-blueprint authoring and non-combat scene positioning, building on Phase 1.
+
+**Location:** `src/world/areas/positioning/` (models, services, serializers) +
+`src/actions/definitions/positioning.py` + `src/world/scenes/serializers.py` +
+`frontend/src/scenes/components/` + `frontend/src/combat/components/`
+
+**What ships:**
+
+- **Abstract bases:** `PositionNodeBase` (name/kind/description) and `PositionEdgeBase`
+  (`is_passable` + canonical-order validation) — `Position`/`PositionEdge` now inherit them
+- **Blueprint models:** `PositionBlueprint` (GM-authored layout; `name` unique),
+  `BlueprintPosition` (blueprint FK; mirrors `Position` node), `BlueprintEdge`
+  (blueprint FK; mirrors `PositionEdge`)
+- **RoomProfile link:** `RoomProfile.default_blueprint` (nullable FK → `PositionBlueprint`;
+  `evennia_extensions`) — a room's preferred terrain layout
+- **Blueprint authoring services:** `create_blueprint` / `add_blueprint_position` /
+  `connect_blueprint_positions` / `remove_blueprint`
+- **Staging service:** `instantiate_blueprint(blueprint, room, *, replace=False)` —
+  clones a blueprint's position graph into a room's live `Position`/`PositionEdge` graph
+  atomically; refuses if already staged (unless `replace=True`); refuses replace when occupied
+- **Staff action:** `SetTheStageAction` (`registry_key="set_the_stage"`,
+  `StaffOnlyPrerequisite`) — instantiates the room's blueprint via `ActionRef`
+  with a `blueprint_id` field; surfaced via `get_player_actions` when
+  `RoomProfile.default_blueprint` is set
+- **Shared serializers** moved to `positioning/serializers.py`:
+  `PositionSummarySerializer`, `PositionAdjacencyItemSerializer`,
+  `PersonaPositionSerializer` (combat imports these)
+- **Scene API:** `SceneDetailSerializer` gains `positions`, `position_adjacency`,
+  `persona_positions`
+- **Frontend:** `MovementActions` (shared component extracted to
+  `frontend/src/combat/components/`) + `RoomPositionsPanel` (scene detail,
+  `frontend/src/scenes/components/`) — renders positions, persona placement, move
+  action, and staff "Set the stage" control
+
+**Deferred to follow-up (needs `instantiate_situation()`):**
+
+- Gated blueprint edges: `BlueprintEdge` has no `gating_challenge`; the staging service
+  skips gating. Full gated-edge instantiation requires `instantiate_situation()` to mint
+  `ChallengeInstance`s.
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
