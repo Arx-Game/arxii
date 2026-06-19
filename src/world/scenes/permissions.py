@@ -104,6 +104,8 @@ class ReadOnlyOrSceneParticipant(permissions.BasePermission):
     def has_object_permission(self, request: Request, view: APIView, obj: Scene) -> bool:
         # Read permissions for safe methods
         if request.method in permissions.SAFE_METHODS:
+            # DRF types request.user as AbstractBaseUser | AnonymousUser; at runtime it is an
+            # AccountDB (or AnonymousUser), and is_viewable_by handles the anonymous case.
             return obj.is_viewable_by(request.user)  # type: ignore[invalid-argument-type]
 
         # Write permissions require scene participation or staff
