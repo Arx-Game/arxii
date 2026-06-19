@@ -231,8 +231,8 @@ describe('AnimaRitualEditDialog', () => {
     expect(screen.getByText('This ritual cannot be updated right now.')).toBeInTheDocument();
   });
 
-  // 7. Generic error fallback
-  it('displays generic error when error has no message', () => {
+  // 7. Per-site error fallback
+  it('displays per-site fallback error when error has no message', () => {
     const error = new Error();
     vi.mocked(ritualQueries.usePatchRitual).mockReturnValue(makeMutationError(error));
 
@@ -243,7 +243,7 @@ describe('AnimaRitualEditDialog', () => {
       </Wrapper>
     );
 
-    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
+    expect(screen.getByText('Failed to update ritual')).toBeInTheDocument();
   });
 
   // 8. Cancel closes dialog without submitting

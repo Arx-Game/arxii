@@ -102,7 +102,9 @@ export function RitualPerformDialog({
   }
 
   const canSubmit = hasAllRequired(schema, values) && !performMutation.isPending;
-  const errorMessage = performMutation.isError ? extractErrorMessage(performMutation.error) : null;
+  const errorMessage = performMutation.isError
+    ? extractErrorMessage(performMutation.error, 'Failed to perform ritual')
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

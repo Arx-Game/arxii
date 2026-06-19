@@ -12,6 +12,16 @@ describe('extractErrorMessage', () => {
     expect(extractErrorMessage('nope')).toBe('An unexpected error occurred.');
     expect(extractErrorMessage(undefined)).toBe('An unexpected error occurred.');
   });
+  it('uses custom fallback for a non-Error value', () => {
+    expect(extractErrorMessage('nope', 'Custom fallback')).toBe('Custom fallback');
+    expect(extractErrorMessage(undefined, 'Custom fallback')).toBe('Custom fallback');
+  });
+  it('uses custom fallback for an Error with empty message', () => {
+    expect(extractErrorMessage(new Error(''), 'Custom fallback')).toBe('Custom fallback');
+  });
+  it('ignores custom fallback when the Error has a message', () => {
+    expect(extractErrorMessage(new Error('real message'), 'Custom fallback')).toBe('real message');
+  });
 });
 
 describe('readErrorDetail', () => {

@@ -391,14 +391,14 @@ describe('SineatingRequestDialog', () => {
     expect(screen.queryByTestId('sineating-error-banner')).not.toBeInTheDocument();
   });
 
-  it('shows generic error message when error has no message', () => {
+  it('shows per-site fallback error message when error has no message', () => {
     const emptyError = new Error('');
     setupMocks({ isError: true, error: emptyError });
 
     render(<SineatingRequestDialog {...defaultProps} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('sineating-error-banner')).toBeInTheDocument();
-    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
+    expect(screen.getByText('Failed to send Sineating request')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

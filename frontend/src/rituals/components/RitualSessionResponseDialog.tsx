@@ -210,9 +210,9 @@ export function RitualSessionResponseDialog({
   const isPending = acceptMutation.isPending || declineMutation.isPending;
 
   const errorMessage = acceptMutation.isError
-    ? extractErrorMessage(acceptMutation.error)
+    ? extractErrorMessage(acceptMutation.error, 'Operation failed')
     : declineMutation.isError
-      ? extractErrorMessage(declineMutation.error)
+      ? extractErrorMessage(declineMutation.error, 'Operation failed')
       : null;
 
   return (

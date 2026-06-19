@@ -151,7 +151,9 @@ export function AnimaRitualEditDialog({
   }
 
   const canSubmit = isValid(form) && !patchMutation.isPending;
-  const errorMessage = patchMutation.isError ? extractErrorMessage(patchMutation.error) : null;
+  const errorMessage = patchMutation.isError
+    ? extractErrorMessage(patchMutation.error, 'Failed to update ritual')
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

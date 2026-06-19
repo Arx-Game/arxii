@@ -273,8 +273,8 @@ describe('RitualPerformDialog', () => {
     expect(screen.getByText('Test error message from server')).toBeInTheDocument();
   });
 
-  // 9b. Falls back to generic message when error has no detail field and no message
-  it('displays a generic error message when error has no detail or message', () => {
+  // 9b. Falls back to per-site message when error has no detail field and no message
+  it('displays the per-site fallback error message when error has no detail or message', () => {
     const error = new Error();
     vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationError(error));
 
@@ -285,7 +285,7 @@ describe('RitualPerformDialog', () => {
       </Wrapper>
     );
 
-    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
+    expect(screen.getByText('Failed to perform ritual')).toBeInTheDocument();
   });
 
   // 9c. Shows the Error.message when there is no detail field but there is a message

@@ -84,7 +84,9 @@ export function HomecomingDialog({ sanctum, open, onOpenChange }: Readonly<Homec
             />
           </div>
           {mutation.isError ? (
-            <p className="text-sm text-destructive">{extractErrorMessage(mutation.error)}</p>
+            <p className="text-sm text-destructive">
+              {extractErrorMessage(mutation.error, 'Failed to perform Ritual of Homecoming')}
+            </p>
           ) : null}
         </div>
 

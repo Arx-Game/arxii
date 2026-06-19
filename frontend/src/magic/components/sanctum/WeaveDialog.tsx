@@ -85,7 +85,9 @@ export function WeaveDialog({ sanctum, open, onOpenChange }: Readonly<WeaveDialo
             </Select>
           </div>
           {mutation.isError ? (
-            <p className="text-sm text-destructive">{extractErrorMessage(mutation.error)}</p>
+            <p className="text-sm text-destructive">
+              {extractErrorMessage(mutation.error, 'Failed to weave Sanctum thread')}
+            </p>
           ) : null}
         </div>
 

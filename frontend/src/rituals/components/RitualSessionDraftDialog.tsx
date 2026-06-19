@@ -259,7 +259,9 @@ export function RitualSessionDraftDialog({
     // At least one invitee required to form a session
     invitees.length > 0;
 
-  const errorMessage = draftMutation.isError ? extractErrorMessage(draftMutation.error) : null;
+  const errorMessage = draftMutation.isError
+    ? extractErrorMessage(draftMutation.error, 'Failed to draft ritual session')
+    : null;
   const isPending = draftMutation.isPending;
 
   return (

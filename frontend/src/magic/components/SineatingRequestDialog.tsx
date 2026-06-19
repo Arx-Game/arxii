@@ -176,7 +176,9 @@ export function SineatingRequestDialog({
     );
   }
 
-  const errorMessage = requestMutation.isError ? extractErrorMessage(requestMutation.error) : null;
+  const errorMessage = requestMutation.isError
+    ? extractErrorMessage(requestMutation.error, 'Failed to send Sineating request')
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
