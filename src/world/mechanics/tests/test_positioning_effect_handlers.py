@@ -6,12 +6,15 @@ are not deepcopyable and would break setUpTestData.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
+    connect_positions,
     edge_between,
     place_in_position,
     position_of,
@@ -19,9 +22,18 @@ from world.areas.positioning.services import (
 from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
+from world.mechanics.constants import CapabilitySourceType, ResolutionType
 from world.mechanics.effect_handlers import apply_effect
-from world.mechanics.factories import AerialPropertyFactory
-from world.mechanics.models import ObjectProperty
+from world.mechanics.factories import (
+    AerialPropertyFactory,
+    ApplicationFactory,
+    ChallengeApproachFactory,
+    ChallengeTemplateConsequenceFactory,
+    ChallengeTemplateFactory,
+    PropertyFactory,
+)
+from world.mechanics.models import ChallengeInstance, ObjectProperty
+from world.mechanics.types import CapabilitySource
 
 
 class CreatePositionHandlerTests(TestCase):
@@ -331,3 +343,181 @@ class RemoveFlightHandlerTests(TestCase):
         self.assertFalse(
             ObjectProperty.objects.filter(object=self.char, property__name="aerial").exists()
         )
+
+
+def _make_capability_source(capability_id: int) -> CapabilitySource:
+    """Build a minimal CapabilitySource for resolve_challenge calls."""
+    return CapabilitySource(
+        capability_name="fly",
+        capability_id=capability_id,
+        value=10,
+        source_type=CapabilitySourceType.TECHNIQUE,
+        source_name="Test Technique",
+        source_id=1,
+    )
+
+
+class GatingFarSideEffectTests(TestCase):
+    """Unit test: GATING_FAR_SIDE resolves to the far endpoint of the gating edge.
+
+    Exercises _gating_far_side via apply_effect with PositionDestination.GATING_FAR_SIDE.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="GFSRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.courtyard = Position.objects.create(room=self.room, name="courtyard")
+        self.balcony = Position.objects.create(room=self.room, name="balcony")
+        place_in_position(self.char, self.courtyard)
+
+        # Wire a gating challenge (minimal setup — just need a live ChallengeInstance).
+        prop = PropertyFactory(name="gfs_prop")
+        ApplicationFactory(target_property=prop)
+        template = ChallengeTemplateFactory(name="GFS Gate")
+        self.gate = ChallengeInstance.objects.create(
+            template=template,
+            location=self.room,
+            target_object=self.room,
+            is_active=True,
+            is_revealed=True,
+        )
+        connect_positions(self.courtyard, self.balcony, gating_challenge=self.gate)
+        self.consequence = ConsequenceFactory()
+
+    def test_gating_far_side_resolves_opposite_endpoint(self) -> None:
+        """MOVE_TO_POSITION/GATING_FAR_SIDE moves the actor to the far side of the gate edge."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.GATING_FAR_SIDE,
+            target=EffectTarget.SELF,
+        )
+        ctx = ResolutionContext(character=self.char, challenge_instance=self.gate)
+        result = apply_effect(effect, ctx)
+        self.assertTrue(result.applied)
+        self.assertEqual(position_of(self.char).pk, self.balcony.pk)
+
+    def test_gating_far_side_no_challenge_instance_skips(self) -> None:
+        """GATING_FAR_SIDE with no challenge_instance on context returns applied=False."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.GATING_FAR_SIDE,
+            target=EffectTarget.SELF,
+        )
+        ctx = ResolutionContext(character=self.char)  # no challenge_instance
+        result = apply_effect(effect, ctx)
+        self.assertFalse(result.applied)
+
+    def test_gating_far_side_from_balcony_returns_courtyard(self) -> None:
+        """GATING_FAR_SIDE resolves symmetrically — from balcony, the far side is courtyard."""
+        place_in_position(self.char, self.balcony)
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.GATING_FAR_SIDE,
+            target=EffectTarget.SELF,
+        )
+        ctx = ResolutionContext(character=self.char, challenge_instance=self.gate)
+        apply_effect(effect, ctx)
+        self.assertEqual(position_of(self.char).pk, self.courtyard.pk)
+
+
+class GatedEdgeCrossingIntegrationTests(TestCase):
+    """Integration: resolving an approach with GATING_FAR_SIDE crosses the gated edge.
+
+    Author a challenge whose SUCCESS-tier approach consequence carries
+    MOVE_TO_POSITION / GATING_FAR_SIDE / SELF with ResolutionType.PERSONAL
+    (gate stays up for others). Patching perform_check to force a success outcome.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import CapabilityTypeFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        self.room = create_object("typeclasses.rooms.Room", key="GECRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.courtyard = Position.objects.create(room=self.room, name="courtyard_gec")
+        self.balcony = Position.objects.create(room=self.room, name="balcony_gec")
+        place_in_position(self.char, self.courtyard)
+
+        # Build the challenge authoring chain.
+        self.outcome_success = CheckOutcomeFactory(name="Success_gec", success_level=1)
+        self.check_type = CheckTypeFactory()
+        capability = CapabilityTypeFactory(name="fly_gec")
+        self.capability_source = _make_capability_source(capability.pk)
+
+        prop = PropertyFactory(name="gec_prop")
+        app = ApplicationFactory(capability=capability, target_property=prop)
+        template = ChallengeTemplateFactory(name="Gated Crossing")
+        template.properties.add(prop)
+        self.approach = ChallengeApproachFactory(
+            challenge_template=template,
+            application=app,
+            check_type=self.check_type,
+            display_name="Fly across",
+        )
+
+        # SUCCESS-tier consequence: MOVE_TO_POSITION / GATING_FAR_SIDE / PERSONAL
+        success_consequence = ConsequenceFactory(
+            outcome_tier=self.outcome_success,
+            label="Crossed the gap",
+            weight=1,
+        )
+        ConsequenceEffectFactory(
+            consequence=success_consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.GATING_FAR_SIDE,
+            target=EffectTarget.SELF,
+        )
+        # Link consequence to template with PERSONAL resolution (gate stays active).
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=template,
+            consequence=success_consequence,
+            resolution_type=ResolutionType.PERSONAL,
+        )
+
+        # Wire the gating challenge instance onto the edge.
+        self.gate = ChallengeInstance.objects.create(
+            template=template,
+            location=self.room,
+            target_object=self.room,
+            is_active=True,
+            is_revealed=True,
+        )
+        connect_positions(self.courtyard, self.balcony, gating_challenge=self.gate)
+
+    def test_cross_gated_edge_via_approach(self) -> None:
+        """Resolving the approach moves the actor to the far side; gate stays up (PERSONAL)."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        mock_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        with patch(
+            "world.mechanics.challenge_resolution.perform_check",
+            return_value=mock_result,
+        ):
+            resolve_challenge(self.char, self.gate, self.approach, self.capability_source)
+
+        # Actor crossed to balcony.
+        self.assertEqual(position_of(self.char).pk, self.balcony.pk)
+
+        # PERSONAL resolution — gate stays active for others.
+        self.gate.refresh_from_db()
+        self.assertTrue(self.gate.is_active)
