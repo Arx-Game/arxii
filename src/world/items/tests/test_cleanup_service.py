@@ -92,3 +92,57 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         with override_settings(ITEM_SOFT_DELETE_GRACE_DAYS=30):
             purge_expired_soft_deleted_items()  # no grace arg → settings
         self.assertFalse(ItemInstance.objects.filter(pk=inst.pk).exists())
+
+    def test_mantle_referenced_instance_excluded_sibling_purged(self):
+        """A Mantle-referenced instance is excluded; a plain sibling is purged."""
+        from world.items.factories import MantleFactory
+        from world.items.models import ItemInstance
+        from world.items.services.cleanup import purge_expired_soft_deleted_items
+
+        protected_inst = self._soft_deleted(age_days=40, custom_name="Mantle Item")
+        plain_inst = self._soft_deleted(age_days=40, custom_name="Plain Item")
+        # Attach a Mantle to the protected instance so it has a PROTECT FK.
+        MantleFactory(item_instance=protected_inst)
+
+        purged = purge_expired_soft_deleted_items(grace=timedelta(days=30))
+
+        self.assertEqual(purged, 1)
+        # The plain sibling must be gone.
+        self.assertFalse(ItemInstance.objects.filter(pk=plain_inst.pk).exists())
+        # The Mantle-referenced instance must survive.
+        self.assertTrue(ItemInstance.objects.filter(pk=protected_inst.pk).exists())
+
+    def test_per_item_protected_error_skips_row_not_whole_batch(self):
+        """A ProtectedError on one item skips it; the next item is still purged."""
+        from unittest.mock import patch
+
+        from django.db.models import ProtectedError
+
+        from world.items.models import ItemInstance
+        from world.items.services.cleanup import purge_expired_soft_deleted_items
+
+        inst_a = self._soft_deleted(age_days=40, custom_name="Protected A")
+        inst_b = self._soft_deleted(age_days=40, custom_name="Plain B")
+        pk_a = inst_a.pk
+        pk_b = inst_b.pk
+
+        call_count = {"n": 0}
+
+        def _side_effect(instance):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                msg = "test ProtectedError"
+                raise ProtectedError(msg, set())
+
+        with patch(
+            "world.items.services.cleanup.hard_delete_item_instance",
+            side_effect=_side_effect,
+        ):
+            purged = purge_expired_soft_deleted_items(grace=timedelta(days=30))
+
+        # Only one deletion succeeded (the second call).
+        self.assertEqual(purged, 1)
+        # Both rows still exist in the DB because the mock never actually deleted.
+        # The key invariant is that no exception escaped the function.
+        self.assertTrue(ItemInstance.objects.filter(pk=pk_a).exists())
+        self.assertTrue(ItemInstance.objects.filter(pk=pk_b).exists())
