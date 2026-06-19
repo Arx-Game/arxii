@@ -6,6 +6,7 @@ import contextlib
 
 from django.db import transaction
 from django.utils import timezone
+from evennia.objects.models import ObjectDB
 
 from world.checks.consequence_resolution import (
     apply_pool_deterministically,
@@ -18,6 +19,20 @@ from world.items.constants import OwnershipEventType
 from world.items.exceptions import ItemNotUsable, NoChargesRemaining
 from world.items.models import EquippedItem, ItemInstance, OwnershipEvent
 from world.items.types import UseItemResult
+
+
+def hard_delete_item_instance(item_instance: ItemInstance) -> None:
+    """Permanently remove an instance and its whole footprint: its own ledger
+    rows first (so no OwnershipEvent is orphaned to a null FK), then the backing
+    game_object if present (CASCADE removes the row) else the row directly.
+
+    Used by both the destruction-at-0-charges path (#509) and the time-based
+    soft-delete cleanup (#1025). Caller owns the transaction."""
+    item_instance.ownership_events.all().delete()
+    if item_instance.game_object_id is not None:
+        item_instance.game_object.delete()  # CASCADE removes the ItemInstance row
+    else:
+        item_instance.delete()
 
 
 def _invalidate_caches(item_instance: ItemInstance) -> None:
@@ -68,21 +83,16 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
                 notes="Consumed — final charge spent (preserved).",
             )
         else:
-            OwnershipEvent.objects.create(
-                item_instance=locked,
-                event_type=OwnershipEventType.CONSUMED,
-                from_character_sheet=locked.holder_character_sheet,
-                notes=f"Consumed and destroyed: {locked.display_name} ({locked.template.name}).",
-            )
-            if locked.game_object_id is not None:
-                locked.game_object.delete()  # CASCADE removes the ItemInstance row
-            else:
-                locked.delete()
+            # Bare throwaway: nothing worth preserving — remove the whole
+            # footprint (no dangling CONSUMED row). #1025 convergence.
+            hard_delete_item_instance(locked)
     return locked
 
 
 @transaction.atomic
-def use_item(*, item_instance: ItemInstance, user, target=None) -> UseItemResult:
+def use_item(
+    *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None = None
+) -> UseItemResult:
     """Use a consumable: apply its on-use pool's effects (deterministic when the
     template has no on_use_check_type, else check-gated) and spend one charge.
     The charge is spent regardless of check outcome. user/target are ObjectDBs."""

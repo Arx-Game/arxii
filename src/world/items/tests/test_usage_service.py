@@ -39,8 +39,9 @@ class ConsumeItemChargesTests(TestCase):
         with self.assertRaises(NoChargesRemaining):
             consume_item_charges(item_instance=self._consumable(charges=0))
 
-    def test_hard_delete_bare_instance_at_zero(self):
-        from world.items.constants import OwnershipEventType
+    def test_hard_delete_bare_instance_removes_whole_footprint(self):
+        # #1025: perma-delete of a bare throwaway now removes its ledger rows
+        # too — no dangling CONSUMED row with a nulled FK.
         from world.items.models import ItemInstance, OwnershipEvent
         from world.items.services.usage import consume_item_charges
 
@@ -49,16 +50,19 @@ class ConsumeItemChargesTests(TestCase):
         pk = inst.pk
         consume_item_charges(item_instance=inst, amount=1)
         self.assertFalse(ItemInstance.objects.filter(pk=pk).exists())
-        # The CONSUMED event survives the hard-delete via SET_NULL: its
-        # item_instance FK is nulled, but the ledger row persists. Read the
-        # FK column straight from the DB via .values() — the idmapper-cached
-        # event object isn't touched by the DB-side cascade.
-        fk = (
-            OwnershipEvent.objects.filter(event_type=OwnershipEventType.CONSUMED)
-            .values_list("item_instance_id", flat=True)
-            .get()
-        )
-        self.assertIsNone(fk)
+        self.assertFalse(OwnershipEvent.objects.exists())
+
+    def test_hard_delete_helper_removes_instance_and_ledger(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance, OwnershipEvent
+        from world.items.services.usage import hard_delete_item_instance
+
+        inst = self._consumable(charges=0)
+        OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.CONSUMED)
+        pk = inst.pk
+        hard_delete_item_instance(inst)
+        self.assertFalse(ItemInstance.objects.filter(pk=pk).exists())
+        self.assertFalse(OwnershipEvent.objects.exists())
 
     def test_soft_delete_when_prior_ownership_event_exists(self):
         from world.items.constants import OwnershipEventType
