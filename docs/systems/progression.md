@@ -94,6 +94,12 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 |-------|---------|------------|
 | `CharacterPathHistory` | Tracks which path a character selected at each stage milestone | `character`, `path`, `selected_at` |
 
+### Path Intent
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `PathIntent` | Player's declared preferred next path — one per character sheet | `character_sheet` (OneToOne FK → `CharacterSheet`), `intended_path` (FK → `Path`) |
+
 ---
 
 ## Key Methods
@@ -259,6 +265,22 @@ transactions = award_scene_development_points(scene, participants, awards)
 ---
 
 ## API Endpoints
+
+### Path Options (transition-generic)
+
+- `GET /api/progression/path-options/?character_id={id}` — Returns `{ current_path, options }` (`PathOptionsSerializer`)
+  - `current_path` — the character's current `Path` from `CharacterPathHistory`, or `null`
+  - `options` — active child paths at the next stage (or all top-level paths if no current path)
+  - **Transition-generic:** reused beyond Audere Majora; any feature needing "what can this character pick next?" should use this endpoint
+  - **Selectors:** `current_path_for_character(character)` + `next_path_options(character)` in `world.progression.selectors`
+
+### Path Intent
+
+- `GET /api/progression/path-intent/?character_id={id}` — Returns `{ intent: { id, intended_path: { id, name, stage, stage_display, description }, declared_at } | null }`
+- `PUT /api/progression/path-intent/` — Declare intent; body `{ character_id, path_id }`; upserts one `PathIntent` row per character sheet
+- `DELETE /api/progression/path-intent/?character_id={id}` — Clear declared intent
+
+**Crossing pre-selection wire:** `PendingAudereMajoraOfferSerializer.get_intended_path_id` (`src/world/magic/serializers.py:2353`) reads the character's `PathIntent` and returns `intended_path_id` only when it is among the offer's `eligible_paths` — ensuring the Audere Majora dialog pre-selects the declared path.
 
 ### Account Progression Dashboard
 - `GET /api/progression/account/` - Current user's XP balance, kudos balance, recent transactions, and claim options

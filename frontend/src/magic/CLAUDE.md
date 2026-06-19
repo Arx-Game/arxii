@@ -77,6 +77,14 @@ emits real components; re-exported instead of hand-rolled so they can't drift):
 - `AudereMajoraRespondRequest` / `AudereMajoraCrossingResult` — `audere-majora/respond/` request + result
 - `EligiblePath` / `PendingAudereMajoraOffer` / `PaginatedPendingAudereMajoraOfferList` —
   the Crossing offer list (`eligible_paths` typed via `@extend_schema_field` on the serializer)
+- `PathOptions` — `components['schemas']['PathOptions']` — `{ current_path: PathListItem | null, options: PathListItem[] }`
+  returned by `GET /api/progression/path-options/`; reused beyond Audere Majora (transition-generic)
+- `PathListItem` — `components['schemas']['PathList']` — a single path item: `{ id, name, stage, stage_display, description, ... }`
+
+**PathIntent local types** (hand-rolled; no generated schema component):
+
+- `PathIntentDetail` — `{ id: number, intended_path: EligiblePath & Record<string, unknown>, declared_at: string }` — a declared intent row
+- `PathIntentResponse` — `{ intent: PathIntentDetail | null }` — GET /api/progression/path-intent/ response
 
 **Local types** (no 1:1 serializer to re-export):
 
@@ -140,6 +148,16 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `performRescue(body)` — POST `/api/magic/soul-tether/rescue/` → `RescueOutcome`
 - `respondToStageAdvance(body)` — POST `/api/magic/soul-tether/stage-advance/respond/` → `StageAdvanceBonusResult`
 
+**PathIntent reads (progression, #954):**
+
+- `getPathIntent(characterId)` — GET `/api/progression/path-intent/?character_id={id}` → `PathIntentResponse`
+- `getNextPathOptions(characterId)` — GET `/api/progression/path-options/?character_id={id}` → `PathOptions`
+
+**PathIntent mutations (progression, #954):**
+
+- `putPathIntent(characterId, pathId)` — PUT `/api/progression/path-intent/` → `PathIntentResponse` (declare intent)
+- `deletePathIntent(characterId)` — DELETE `/api/progression/path-intent/?character_id={id}` → `void` (clear intent)
+
 **Test helper:**
 
 - `__resetImbuingRitualIdCacheForTests()` — resets the imbuing-ritual-id module cache;
@@ -163,6 +181,8 @@ React Query hooks with a `magicKeys` query key factory.
 - `magicKeys.threadHubSummary()` → `['magic', 'thread-hub-summary']`
 - `magicKeys.characterResonanceList()` → `['magic', 'character-resonances', 'list']`
 - `magicKeys.teachingOffers()` → `['magic', 'teaching-offers', 'list']`
+- `magicKeys.pathOptions(characterId)` → `['magic', 'path-options', characterId]`
+- `magicKeys.pathIntent(characterId)` → `['magic', 'path-intent', characterId]`
 
 **Alteration read hooks:**
 
@@ -183,6 +203,9 @@ React Query hooks with a `magicKeys` query key factory.
 - `useCharacterResonances()` — replaces the inline hook in ResonancePickerField (TODO follow-up)
 - `useThreadHubSummary(characterSheetId?)` — optional alt-guard param
 - `useTeachingOffers()`
+- `usePathIntent(characterId)` — GET `/api/progression/path-intent/`; disabled when `characterId ≤ 0`
+- `useNextPathOptions(characterId)` — GET `/api/progression/path-options/`; returns `PathOptions`
+  (current path + active next-stage children); disabled when `characterId ≤ 0`
 
 **Mutation hooks:**
 
@@ -201,6 +224,10 @@ React Query hooks with a `magicKeys` query key factory.
 - `useCommitPull()` — invalidates `threadHubSummary`, `characterResonanceList`
 - `useAcceptTeachingOffer()` — takes `{ offerId, body? }`;
   invalidates `teachingOffers`, `threadHubSummary`
+- `useDeclarePathIntent()` — takes `{ characterId, pathId }`; calls `api.putPathIntent`;
+  invalidates `pathIntent(characterId)` on success
+- `useClearPathIntent()` — takes `characterId`; calls `api.deletePathIntent`;
+  invalidates `pathIntent(characterId)` on success
 
 **Note:** `previewPull` is NOT a hook — it's a plain `api.previewPull(body)` async function.
 Pull previews are user-driven and ephemeral; components should debounce calls manually.
@@ -323,6 +350,30 @@ Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachin
 Early thread list component — renders a flat list of threads filtered by optional `targetKind`.
 No longer imported by any page or component; retained for its unit test coverage. Candidate
 for removal once the hub/detail pages are confirmed stable.
+
+### `components/PathIntentCard.tsx` (#954)
+
+Card rendered on `MagicProgressionPage` that shows the character's current Path and lets
+them declare which next-stage path they intend to pursue. Consumes `useNextPathOptions(characterId)`
+and `usePathIntent(characterId)`. Framed as **"Your Path"** in all player-facing copy — never
+"Audere Majora" (keep the transition name out of the UI). When `options` is empty the card
+renders a "nothing to choose yet" sentinel (`data-testid="path-options-empty"`); when no
+current path exists, the card renders nothing. Selecting an option and confirming calls
+`useDeclarePathIntent`; "Clear" calls `useClearPathIntent`. The declared option shows a
+"declared" badge.
+
+### `pages/MagicProgressionPage.tsx` (#954)
+
+Landing page for the player's magic progression surface, at `/magic/progression` (lazy-loaded
+via `React.lazy`). Hosts `PathIntentCard` and future progression widgets. `PathIntentCard` is
+passed the active character-sheet id from the account context (rendered as `<PathIntentCard characterId={characterSheetId ?? 0} />`; disabled when `characterSheetId` is null).
+
+### `__tests__/PathIntentCard.test.tsx` (#954)
+
+5 unit tests (real hooks + mocked `../api`). Covers: no render when no current path
+(`OPTIONS_NONE`); current path + selectable options rendered + no "Audere Majora" text; empty
+message for terminal path (no further options); declare calls `putPathIntent(characterId, pathId)`;
+Clear calls `deletePathIntent(characterId)` and shows "declared" badge.
 
 ## Data Flow
 
