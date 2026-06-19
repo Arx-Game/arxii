@@ -45,7 +45,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `owner` (FK to AccountDB), `crafter` (FK to AccountDB) |
+| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at` |
 | `EquippedItem` | Tracks equipped item at a body slot | `character` (FK to ObjectDB), `item_instance` (FK), `body_region`, `equipment_layer`. Unique on (character, body_region, equipment_layer) |
 
 ### Economy & History
@@ -53,7 +53,7 @@ from world.items.constants import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `OwnershipEvent` | Ownership transition ledger (append-only during play; purged alongside non-lore-critical items on cleanup) | `item_instance` (FK, SET_NULL), `event_type`, `from_character_sheet` (FK), `to_character_sheet` (FK), `notes`, `created_at` |
-| `CurrencyBalance` | Per-account gold balance | `account` (OneToOne to AccountDB), `gold` |
+| `CurrencyBalance` | Per-character gold balance | `character` (OneToOne to ObjectDB), `gold` |
 
 ---
 
