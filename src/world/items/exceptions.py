@@ -225,6 +225,24 @@ class OutfitIncomplete(InventoryError):
 # ---------------------------------------------------------------------------
 
 
+class CraftingCostUnaffordable(ItemError):
+    """Raised when a crafter cannot afford the AP, Anima, or material cost of a recipe.
+
+    Raised by ``stage_and_assert_affordable`` when any resource is short.
+    The ``user_message`` is surfaced directly to the player via the API layer.
+    """
+
+    user_message = "You cannot afford the cost of this crafting attempt."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You cannot afford the cost of this crafting attempt."},
+    )
+
+    def __init__(self, message: str | None = None) -> None:
+        if message is not None:
+            self.user_message = message
+        super().__init__(message or self.user_message)
+
+
 class InsufficientMaterials(ItemError):
     """Raised when a material-consumption check finds an unsatisfied requirement.
 
