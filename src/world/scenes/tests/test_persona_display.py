@@ -41,15 +41,15 @@ class ComposeSdescTests(TestCase):
 
         sheet.gender = _gender("male")
         sheet.save(update_fields=["gender"])
-        assert compose_sdesc(mask) == "a man in a stag mask"
+        assert compose_sdesc(mask) == "a man wearing a stag mask"
 
         sheet.gender = _gender("female")
         sheet.save(update_fields=["gender"])
-        assert compose_sdesc(mask) == "a woman in a stag mask"
+        assert compose_sdesc(mask) == "a woman wearing a stag mask"
 
         sheet.gender = _gender("nonbinary")
         sheet.save(update_fields=["gender"])
-        assert compose_sdesc(mask) == "a person in a stag mask"
+        assert compose_sdesc(mask) == "a person wearing a stag mask"
 
 
 class PersonaDisplayApiTests(APITestCase):
@@ -75,7 +75,7 @@ class PersonaDisplayApiTests(APITestCase):
         _played_character(viewer)
         self.client.force_authenticate(user=viewer)
         response = self.client.get(reverse("interaction-list"))
-        assert self._persona_name(response, pose.pk) == "a man in a stag mask"
+        assert self._persona_name(response, pose.pk) == "a man wearing a stag mask"
 
     def test_owner_is_never_restricted_from_their_own_face(self) -> None:
         owner = AccountFactory()

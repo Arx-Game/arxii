@@ -26,18 +26,24 @@ if TYPE_CHECKING:
 
     from world.scenes.models import Persona
 
-# PLACEHOLDER — the spec'd anonymous-face short description format (#1109). Apparent gender
-# comes from the character's real gender; non-binary / unset render as "person". The mask
-# label is the player-authored persona name. Player-facing wording, kept simple and editable.
+# Apparent gender for the anonymous-face short description (#1109): from the character's real
+# gender; non-binary / unset render as "person". (A slice-3 disguise that conceals gender will
+# force "person" regardless — e.g. a feature-concealing robe.)
 _GENDER_NOUN = {"male": "man", "female": "woman"}
 
 
 def compose_sdesc(persona: Persona) -> str:
-    """An anonymous face's short description: ``"a man/woman/person in a <mask name>"``."""
+    """An anonymous face's short description: ``"a man/woman/person wearing a <mask name>"``.
+
+    This is the *mask* case — the mask label is the player-authored persona name. Slice 3
+    (disguises) will let other concealment types supply their own phrasing and conceal traits
+    (e.g. ``"a person wearing a feature-concealing robe"``), continuing into the trait-driven
+    auto-description; for now an anonymous persona is rendered as a worn mask.
+    """
     sheet = persona.character_sheet
     gender_key = sheet.gender.key if sheet.gender_id is not None else None
     noun = _GENDER_NOUN.get(gender_key, "person")
-    return f"a {noun} in a {persona.name}"
+    return f"a {noun} wearing a {persona.name}"
 
 
 def build_persona_display_map(
