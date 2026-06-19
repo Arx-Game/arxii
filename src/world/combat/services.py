@@ -372,7 +372,9 @@ class CombatTechniqueResolver:
             effective_power=eff_intensity,
             success_level=sl,
         )
-        budget, profile_damage_type = _weapon_augmented_budget(profile, budget, weapon)
+        budget, profile_damage_type = _weapon_augmented_budget(
+            profile, budget, weapon, self.participant.character_sheet
+        )
         return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
@@ -4174,6 +4176,33 @@ def declare_clash_contribution(
 # decrement task can reuse the same selection.
 
 
+def _combat_target_bonus(sheet: object, target_name: str) -> int:
+    """get_modifier_total for a named combat ModifierTarget; 0 if the row isn't seeded.
+
+    Combat never hard-depends on seed order (mirrors covenant_level_bonus's
+    config-is-None → 0). The target's stat category routes the covenant-role
+    equipment walk into the total.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    try:
+        target = ModifierTarget.objects.get(name=target_name)
+    except ModifierTarget.DoesNotExist:
+        return 0
+    return get_modifier_total(sheet, target)
+
+
+def _covenant_armor_soak_bonus(character: Character) -> int:
+    """Covenant-role armor-soak bonus for ``character``; 0 if no sheet or no target row."""
+    from world.items.constants import ARMOR_SOAK_TARGET_NAME  # noqa: PLC0415
+
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+    if sheet is None:
+        return 0
+    return _combat_target_bonus(sheet, ARMOR_SOAK_TARGET_NAME)
+
+
 def effective_soak_from_armor(character: Character) -> int:
     """Sum effective armor soak across the character's equipped armor pieces."""
     from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
@@ -4187,13 +4216,14 @@ def effective_soak_from_armor(character: Character) -> int:
 
 
 def apply_equipped_armor_soak(character: Character, damage: int) -> int:
-    """Reduce ``damage`` by equipped-armor soak, wearing pieces that absorbed it.
+    """Reduce ``damage`` by equipped-armor soak plus the covenant-role soak bonus.
 
-    PCs have no authored soak field; worn armor is their only soak source. Each
-    armor piece that contributes positive soak takes one point of durability wear
-    on a hit it helps absorb. Returns the post-soak damage (floored at 0).
+    The covenant-role bonus is derived on read via ``_covenant_armor_soak_bonus``
+    and added to the raw armor soak; durability wear is applied only to physical
+    armor pieces (covenant bonuses are intangible). Returns the post-soak damage
+    (floored at 0).
     """
-    soak = effective_soak_from_armor(character)
+    soak = effective_soak_from_armor(character) + _covenant_armor_soak_bonus(character)
     if soak <= 0 or damage <= 0:
         return damage
 
@@ -4252,17 +4282,24 @@ def _weapon_augmented_budget(
     profile: TechniqueDamageProfile,
     budget: int,
     weapon: WeaponContribution | None,
+    sheet: object | None = None,
 ) -> tuple[int, DamageType | None]:
     """Fold an equipped weapon's contribution into a damage profile's budget.
 
     For a ``uses_equipped_weapon`` profile with an equipped weapon, adds the
-    weapon's damage to the formula budget; if the profile authored no damage_type
-    of its own, the weapon's type is used. Returns ``(budget, damage_type)``;
-    non-weapon profiles (or an unarmed attacker) pass through unchanged.
+    weapon's damage to the formula budget, then the covenant-role weapon-damage
+    bonus (via ``_combat_target_bonus``) when a sheet is supplied. If the
+    profile authored no damage_type of its own, the weapon's type is used.
+    Returns ``(budget, damage_type)``; non-weapon profiles (or an unarmed
+    attacker) pass through unchanged.
     """
     profile_damage_type = profile.damage_type
     if profile.uses_equipped_weapon and weapon is not None:
         budget += weapon.damage
+        if sheet is not None:
+            from world.items.constants import WEAPON_DAMAGE_TARGET_NAME  # noqa: PLC0415
+
+            budget += _combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)
         if profile_damage_type is None:
             profile_damage_type = weapon.damage_type
     return budget, profile_damage_type
