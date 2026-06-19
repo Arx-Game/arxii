@@ -14,8 +14,7 @@
 
 import { useState, useMemo } from 'react';
 import { useThreads, useCharacterResonances } from '@/magic/queries';
-import type { Thread } from '@/magic/types';
-import type { ApplicablePullsRequest } from '@/magic/types';
+import type { Thread, ApplicablePullsRequest } from '@/magic/types';
 import type { CastableTechnique, CastPullRequestBody } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------

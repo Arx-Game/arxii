@@ -21,6 +21,7 @@ import type {
   AvailableEnhancement,
   CastableTechnique,
   CastResponse,
+  CastPullRequestBody,
 } from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
@@ -102,7 +103,7 @@ export function ActionPanel({ sceneId }: Props) {
       technique_id: number;
       target_persona?: number | null;
       strain_commitment?: number;
-      pull?: import('../actionTypes').CastPullRequestBody;
+      pull?: CastPullRequestBody;
     }) =>
       castTechnique(sceneId, {
         initiator_persona: initiatorPersonaId!,
