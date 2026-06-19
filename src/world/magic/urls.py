@@ -18,6 +18,8 @@ from world.magic.views import (
     CharacterAuraViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
+    DramaticMomentTagViewSet,
+    DramaticMomentTypeViewSet,
     EffectTypeViewSet,
     FacetViewSet,
     GiftViewSet,
@@ -108,6 +110,16 @@ router.register(
     "resonance-grants",
     ResonanceGrantViewSet,
     basename="resonance-grant",
+)
+router.register(
+    "dramatic-moment-types",
+    DramaticMomentTypeViewSet,
+    basename="dramatic-moment-type",
+)
+router.register(
+    "dramatic-moment-tags",
+    DramaticMomentTagViewSet,
+    basename="dramatic-moment-tag",
 )
 
 # Plan 4 §F — Sanctum (Subsystem F) surface

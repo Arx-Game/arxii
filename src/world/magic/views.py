@@ -77,6 +77,7 @@ from world.magic.models import (
     Thread,
     ThreadWeavingTeachingOffer,
 )
+from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
@@ -97,6 +98,8 @@ from world.magic.serializers import (
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     DissolveSerializer,
+    DramaticMomentTagSerializer,
+    DramaticMomentTypeSerializer,
     EffectTypeSerializer,
     FacetSerializer,
     FacetTreeSerializer,
@@ -2037,3 +2040,48 @@ class ApplicablePullsView(APIView):
         )
         rows = compute_thread_applicability(sheet, context)
         return Response(ThreadApplicabilitySerializer(rows, many=True).data)
+
+
+# =============================================================================
+# Dramatic Moment Tagging — GM/staff endpoint (#1139)
+# =============================================================================
+
+# Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
+_ERR_DRAMATIC_MOMENT_PERMISSION = "Only the scene's GM, owner, or staff may tag dramatic moments."
+
+
+class DramaticMomentTypeViewSet(mixins.ListModelMixin, GenericViewSet):
+    """Read-only list of authored dramatic-moment types for the tag picker (#1139)."""
+
+    queryset = DramaticMomentType.objects.all()
+    serializer_class = DramaticMomentTypeSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
+    """Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+
+    POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
+    GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+    """
+
+    queryset = DramaticMomentTag.objects.select_related(
+        "moment_type", "character_sheet", "scene", "interaction"
+    ).order_by("-tagged_at")
+    serializer_class = DramaticMomentTagSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["character_sheet", "scene"]
+
+    def perform_create(self, serializer: DramaticMomentTagSerializer) -> None:
+        from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
+
+        scene = serializer.validated_data.get("scene")
+        interaction = serializer.validated_data.get("interaction")
+        if scene is None and interaction is not None:
+            scene = interaction.scene
+        if scene is None or not IsSceneGMOrOwnerOrStaff().has_object_permission(
+            self.request, self, scene
+        ):
+            raise PermissionDenied(_ERR_DRAMATIC_MOMENT_PERMISSION)
+        serializer.save(tagged_by=self.request.user)
