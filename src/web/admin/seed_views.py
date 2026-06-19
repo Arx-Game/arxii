@@ -8,10 +8,11 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 
 @staff_member_required
+@require_GET
 def seed_confirm(request: HttpRequest) -> HttpResponse:
     """Render a confirm page describing what seeding will do."""
     return render(request, "admin/seed_confirm.html", {"title": "Load sane defaults"})
