@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
+import { MovementActions } from '../components/MovementActions';
 import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
 import {
   Select,
@@ -653,36 +654,7 @@ export function YourTurn({
       )}
 
       {/* Move-to-position actions (#532) — shown when adjacent open positions exist */}
-      {moveActions.length > 0 && (
-        <div className="space-y-2" data-testid="movement-section">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Move
-          </p>
-          {moveActions.map((action) => {
-            const positionId = action.ref.position_id;
-            return (
-              <button
-                key={positionId ?? action.display_name}
-                type="button"
-                disabled={isLocked}
-                data-testid={`move-btn-${positionId ?? 'unknown'}`}
-                onClick={() => {
-                  dispatchAction({ ref: action.ref, kwargs: {} }).catch(() => {});
-                }}
-                className={cn(
-                  'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-amber-500/40 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10'
-                )}
-              >
-                {action.display_name}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <MovementActions actions={moveActions} isLocked={isLocked} dispatchAction={dispatchAction} />
 
       {/* Passive slots — only non-focused-category slots */}
       {visiblePassiveSlots.length > 0 && (
