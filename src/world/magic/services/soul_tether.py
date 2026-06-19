@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.utils import timezone
 
+from flows.constants import EventName
+from flows.emit import emit_event
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.constants import SoulTetherRole, TargetKind
@@ -37,12 +39,14 @@ from world.magic.exceptions import (
 )
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Resonance
+from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.services.threads import weave_thread
 from world.magic.types.aura import AffinityType
 from world.magic.types.soul_tether import (
     RescueOutcome,
     SineatingOffer,
     SineatingResult,
+    SoulTetherDissolvedPayload,
     SoulTetherRole as SoulTetherRoleEnum,
     StageAdvanceBonusOffer,
     StageAdvanceBonusResult,
@@ -51,6 +55,18 @@ from world.relationships.models import CharacterRelationship, RelationshipCapsto
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
+
+# =============================================================================
+# Config getter
+# =============================================================================
+
+
+def get_soul_tether_config() -> SoulTetherConfig:
+    """Get-or-create the Soul Tether tuning config singleton (pk=1)."""
+    with transaction.atomic():
+        cfg, _ = SoulTetherConfig.objects.get_or_create(pk=1)
+        return cfg
+
 
 # =============================================================================
 # Internal helpers
@@ -391,6 +407,10 @@ def dissolve_soul_tether(
             target=raw.source,
         )
 
+    dissolved_sinner_sheet: CharacterSheet | None = None
+    dissolved_sineater_sheet: CharacterSheet | None = None
+    dissolved_relationship: CharacterRelationship | None = None
+
     with transaction.atomic():
         # Re-fetch with locks to prevent races.
         outgoing = CharacterRelationship.objects.select_for_update().get(pk=outgoing.pk)
@@ -400,8 +420,14 @@ def dissolve_soul_tether(
         if not outgoing.is_soul_tether:
             return
 
-        # The Sinner is the source of the outgoing (SINNER) row.
+        # The Sinner is the source of the outgoing (SINNER) row; Sineater is the target.
         sinner_sheet: CharacterSheet = outgoing.source
+        sineater_sheet: CharacterSheet = outgoing.target
+
+        # Capture for post-atomic emit.
+        dissolved_sinner_sheet = sinner_sheet
+        dissolved_sineater_sheet = sineater_sheet
+        dissolved_relationship = outgoing
 
         # 1. Flip flags on both directional rows.
         for rel in (outgoing, incoming):
@@ -447,22 +473,24 @@ def dissolve_soul_tether(
     # NOTE: Sineating and SoulTetherRescue audit rows persist (immutable history).
     # NOTE: Trigger rows are cascade-deleted with ConditionInstance; invalidate() above
     #       drops them from the in-memory cache on commit.
-    # TODO: Phase 15 — emit SOUL_TETHER_DISSOLVED reactive event when event infrastructure
-    #   supports cross-character location resolution.
+
+    # Emit the dissolution event after the atomic block so the DB state is visible
+    # to any reactive subscribers.  Resolve location from the Sinner's current position.
+    if dissolved_sinner_sheet is not None:
+        sinner_character = dissolved_sinner_sheet.character
+        location = getattr(sinner_character, "location", None)  # noqa: GETATTR_LITERAL
+        if location is not None:
+            dissolved_payload = SoulTetherDissolvedPayload(
+                sinner_sheet=dissolved_sinner_sheet,
+                sineater_sheet=dissolved_sineater_sheet,  # type: ignore[arg-type]
+                relationship=dissolved_relationship,  # type: ignore[arg-type]
+            )
+            emit_event(EventName.SOUL_TETHER_DISSOLVED, dissolved_payload, location=location)
 
 
 # =============================================================================
 # Sineating helpers
 # =============================================================================
-
-#: Anima deducted per accepted unit (tunable — Phase 12 may adjust).
-_ANIMA_COST_PER_UNIT: int = 2
-
-#: Social fatigue added per accepted unit (tunable — Phase 12 may adjust).
-_FATIGUE_COST_PER_UNIT: int = 1
-
-#: Hard upper limit on units per scene (tunable baseline; formula below may lower it).
-_PER_SCENE_CAP_HARD_MAX: int = 20
 
 
 def _get_sinner_tether_thread(
@@ -494,9 +522,11 @@ def _compute_per_scene_sineating_cap(
 ) -> int:
     """Compute how many units can be Sineated in one scene.
 
-    Formula (tunable — values are placeholders pending Phase 12 tuning):
-        cap = min(_PER_SCENE_CAP_HARD_MAX, thread.level * 2 + 5)
+    Formula (tunable via SoulTetherConfig singleton):
+        cap = min(cfg.per_scene_cap_hard_max,
+                  thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base)
 
+    Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
     The ``relationship`` parameter is accepted for future formula tuning
     (e.g., capping on ``developed_absolute_value``).
@@ -512,14 +542,20 @@ def _compute_per_scene_sineating_cap(
     """
     if sinner_thread is None:
         return 0
-    return min(_PER_SCENE_CAP_HARD_MAX, sinner_thread.level * 2 + 5)
+    cfg = get_soul_tether_config()
+    return min(
+        cfg.per_scene_cap_hard_max,
+        sinner_thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base,
+    )
 
 
 def _compute_hollow_max(sinner_thread: Thread) -> int:
     """Compute the Hollow's theoretical maximum for a given Thread.
 
-    Placeholder formula (tunable — Phase 12 may adjust):
-        hollow_max = thread.level * 10
+    Formula (tunable via SoulTetherConfig singleton):
+        hollow_max = thread.level * cfg.hollow_max_level_mult
+
+    Default multiplier is 10, reproducing the original behaviour.
 
     Args:
         sinner_thread: The Sinner's RELATIONSHIP_CAPSTONE Thread.
@@ -527,7 +563,8 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     Returns:
         The maximum number of units the Hollow can hold.
     """
-    return max(0, sinner_thread.level * 10)
+    cfg = get_soul_tether_config()
+    return max(0, sinner_thread.level * cfg.hollow_max_level_mult)
 
 
 def _increment_stat_safe(
@@ -535,11 +572,12 @@ def _increment_stat_safe(
     stat_key: str,
     amount: int = 1,
 ) -> None:
-    """Increment an achievement stat by key, no-op if StatDefinition not seeded yet.
+    """Increment an achievement stat by key, no-op if StatDefinition is absent.
 
-    Phase 12 seeds StatDefinition rows for sineating.* stats.
-    Until then this wrapper swallows DoesNotExist so the rest of the
-    Sineating loop can proceed without the seed data.
+    StatDefinition rows for sineating.* stats are seeded via
+    ``wire_soul_tether_stat_definitions`` in factories.  The DoesNotExist guard
+    below is a defensive wrapper for environments where that seed data has not
+    been loaded (e.g. minimal test setups); it does not indicate pending work.
 
     Args:
         character_sheet: The character whose stat to increment.
@@ -552,7 +590,7 @@ def _increment_stat_safe(
     try:
         stat_def = StatDefinition.objects.get(key=stat_key)
     except StatDefinition.DoesNotExist:
-        return  # Phase 12 will seed the row; skip until then
+        return  # Defensive guard: seed data not loaded in this environment; skip.
     increment_stat(character_sheet, stat_def, amount)
 
 
@@ -645,6 +683,7 @@ def request_sineating(
     #    rather than raising an integrity error on repeat requests.
     from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
 
+    cfg = get_soul_tether_config()
     SineatingPendingOffer.objects.update_or_create(
         sinner_sheet=sinner_sheet,
         sineater_sheet=sineater_sheet,
@@ -653,8 +692,8 @@ def request_sineating(
             "scene": scene,
             "resonance": resonance,
             "units_offered": max_units_offered,
-            "anima_cost_per_unit": _ANIMA_COST_PER_UNIT,
-            "fatigue_cost_per_unit": _FATIGUE_COST_PER_UNIT,
+            "anima_cost_per_unit": cfg.anima_cost_per_unit,
+            "fatigue_cost_per_unit": cfg.fatigue_cost_per_unit,
         },
     )
 
@@ -667,11 +706,12 @@ def request_sineating(
         relationship=relationship,
         resonance=resonance,
         max_units_offered=max_units_offered,
-        anima_cost_per_unit=_ANIMA_COST_PER_UNIT,
-        fatigue_cost_per_unit=_FATIGUE_COST_PER_UNIT,
+        anima_cost_per_unit=cfg.anima_cost_per_unit,
+        fatigue_cost_per_unit=cfg.fatigue_cost_per_unit,
         current_hollow=current_hollow,
         hollow_max=hollow_max,
-        sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
+        sineater_current_strain_stage=sineater_sheet.get_tether_strain_stage(),
+        scene=scene,
     )
 
 
@@ -825,8 +865,9 @@ def resolve_sineating(
                 anima_row.save(update_fields=["current"])
                 anima_deducted = anima_cost
             except CharacterAnima.DoesNotExist:
-                # Sineater has no anima row yet — skip deduction, log TODO.
-                # TODO: Phase 12 — ensure CharacterAnima row is seeded at CG completion.
+                # Defensive guard: CharacterAnima is seeded at CG completion via
+                # finalize_magic_data; this branch is unreachable for post-CG characters
+                # but protects against environments where CG seeding was not run.
                 pass
 
             # 2. Deduct social fatigue from Sineater.
@@ -844,8 +885,9 @@ def resolve_sineating(
                 pool.save(update_fields=["social_current"])
                 fatigue_deducted = fatigue_cost
             except FatiguePool.DoesNotExist:
-                # Sineater has no fatigue pool yet — skip deduction, log TODO.
-                # TODO: Phase 12 — ensure FatiguePool row is seeded at CG completion.
+                # Defensive guard: FatiguePool is seeded at CG completion via
+                # get_or_create_fatigue_pool; this branch is unreachable for post-CG
+                # characters but protects against environments where CG seeding was not run.
                 pass
 
             # 3. Increment Sinner's Thread.hollow_current (clamp to hollow_max).
@@ -878,7 +920,7 @@ def resolve_sineating(
             sinner_sheet=offer.sinner_sheet,
             sineater_sheet=offer.sineater_sheet,
             relationship=offer.relationship,
-            scene=None,  # TODO: Phase 7 — pass scene through offer payload
+            scene=offer.scene,
             resonance=offer.resonance,
             units_offered=offer.max_units_offered,
             units_accepted=units,
@@ -981,7 +1023,8 @@ def resolve_sineating_from_db(
         fatigue_cost_per_unit=pending.fatigue_cost_per_unit,
         current_hollow=current_hollow,
         hollow_max=hollow_max,
-        sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
+        sineater_current_strain_stage=pending.sineater_sheet.get_tether_strain_stage(),
+        scene=pending.scene,
     )
 
     # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
@@ -1198,16 +1241,6 @@ _RESCUE_MIN_STAGE: int = 3
 #: Terminal corruption stage at which protagonism is locked (mirrors corruption.py).
 _RESCUE_TERMINAL_STAGE: int = 5
 
-#: Strain severity cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
-#: Stage 3 = moderate, Stage 4 = heavy, Stage 5 = severe.
-_RESCUE_STRAIN_COST: dict[int, int] = {3: 5, 4: 10, 5: 18}
-
-#: Resonance balance cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
-_RESCUE_RESONANCE_COST: dict[int, int] = {3: 10, 4: 20, 5: 35}
-
-#: Corruption severity budget base per stage (tunable — TODO Phase 14).
-_RESCUE_BUDGET_BASE: dict[int, int] = {3: 60, 4: 120, 5: 250}
-
 #: Success level constants mirroring anima.py pattern.
 _RESCUE_CRIT_SUCCESS_LEVEL = 2
 _RESCUE_SUCCESS_LEVEL = 1
@@ -1217,8 +1250,8 @@ _RESCUE_PARTIAL_LEVEL = 0
 def _compute_strain_cost(sinner_stage: int) -> int:
     """Return Strain severity the Sineater takes for a rescue at *sinner_stage*.
 
-    Tuning placeholder values (TODO Phase 14):
-        stage 3 = 5, stage 4 = 10, stage 5 = 18
+    Values are read from the ``SoulTetherConfig`` singleton (pk=1), defaulting to
+    stage 3 = 5, stage 4 = 10, stage 5 = 18.
 
     Args:
         sinner_stage: Corruption stage (3-5) the Sinner is at.
@@ -1226,14 +1259,19 @@ def _compute_strain_cost(sinner_stage: int) -> int:
     Returns:
         Strain severity amount to apply to the Sineater.
     """
-    return _RESCUE_STRAIN_COST.get(sinner_stage, _RESCUE_STRAIN_COST[5])
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_strain_stage3
+    if sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_strain_stage4
+    return cfg.rescue_strain_stage5
 
 
 def _compute_resonance_cost(sinner_stage: int) -> int:
     """Return Resonance balance cost the Sineater pays for a rescue at *sinner_stage*.
 
-    Tuning placeholder values (TODO Phase 14):
-        stage 3 = 10, stage 4 = 20, stage 5 = 35
+    Values are read from the ``SoulTetherConfig`` singleton (pk=1), defaulting to
+    stage 3 = 10, stage 4 = 20, stage 5 = 35.
 
     Args:
         sinner_stage: Corruption stage (3-5) the Sinner is at.
@@ -1241,7 +1279,12 @@ def _compute_resonance_cost(sinner_stage: int) -> int:
     Returns:
         Resonance balance amount to deduct from the Sineater.
     """
-    return _RESCUE_RESONANCE_COST.get(sinner_stage, _RESCUE_RESONANCE_COST[5])
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_resonance_stage3
+    if sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_resonance_stage4
+    return cfg.rescue_resonance_stage5
 
 
 def _compute_rescue_budget(
@@ -1251,8 +1294,9 @@ def _compute_rescue_budget(
 ) -> int:
     """Compute severity-reduction budget for the rescue ritual outcome.
 
-    Tuning placeholder formula (TODO Phase 14 — surface via SoulTetherConfig):
-        base = _RESCUE_BUDGET_BASE[stage]  (60 / 120 / 250)
+    All tuning knobs are read from the ``SoulTetherConfig`` singleton (pk=1).
+    Default formula (reproduces original behaviour):
+        base = {3: 60, 4: 120, 5: 250}[stage]
         multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
         budget = max(1, int(base * multiplier))
 
@@ -1270,8 +1314,18 @@ def _compute_rescue_budget(
     Returns:
         Integer severity budget to pass to reduce_corruption.
     """
-    base = _RESCUE_BUDGET_BASE.get(sinner_stage, _RESCUE_BUDGET_BASE[5])
-    multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        base = cfg.rescue_budget_base_stage3
+    elif sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        base = cfg.rescue_budget_base_stage4
+    else:
+        base = cfg.rescue_budget_base_stage5
+    multiplier = (
+        cfg.rescue_budget_base_mult_tenths / 10
+        + success_level * cfg.rescue_budget_success_mult_tenths / 10
+        + thread_level * cfg.rescue_budget_thread_mult_hundredths / 100
+    )
     return max(1, int(base * multiplier))
 
 

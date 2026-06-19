@@ -669,6 +669,26 @@ class CharacterSheet(SharedMemoryModel):
             return 0
         return instance.current_stage.stage_order
 
+    def get_tether_strain_stage(self) -> int:
+        """Return the Sineater's current Tether Strain condition stage (0-5).
+
+        0 = no condition instance exists or no current stage. 1-5 = current_stage.stage_order.
+        ``sheet.character`` is the ObjectDB target for ConditionInstance rows.
+        """
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        instance = (
+            ConditionInstance.objects.filter(
+                target=self.character,
+                condition__name="Tether Strain",
+            )
+            .select_related("current_stage")
+            .first()
+        )
+        if instance is None or instance.current_stage is None:
+            return 0
+        return instance.current_stage.stage_order
+
     @cached_property
     def saved_outfits(self) -> CharacterSheetOutfitsHandler:
         """Cached handler for this sheet's saved outfit definitions.

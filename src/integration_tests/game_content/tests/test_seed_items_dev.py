@@ -143,7 +143,6 @@ class SeedFacetThreadUnlockCreationTests(TestCase):
         unlock = self.result.unlock
         self.assertIsNone(unlock.unlock_trait_id)
         self.assertIsNone(unlock.unlock_gift_id)
-        self.assertIsNone(unlock.unlock_room_property_id)
         self.assertIsNone(unlock.unlock_track_id)
 
 

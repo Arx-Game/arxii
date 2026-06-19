@@ -23,7 +23,6 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
 )
 from world.magic.models import ThreadWeavingUnlock
-from world.mechanics.factories import PropertyFactory
 from world.relationships.factories import RelationshipTrackFactory
 from world.traits.factories import TraitFactory
 
@@ -58,11 +57,11 @@ class ThreadWeavingUnlockPartialUniqueTests(TestCase):
             target_kind=TargetKind.TRAIT,
             unlock_trait=TraitFactory(),
         )
-        # ROOM uses a FK, not a string path
+        # A different discriminator (RELATIONSHIP_TRACK) coexists with the TRAIT unlock.
         ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.ROOM,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
             unlock_trait=None,
-            unlock_room_property=PropertyFactory(name="Consecrated"),
+            unlock_track=RelationshipTrackFactory(name="Consecrated"),
         )
 
 
@@ -80,15 +79,6 @@ class ThreadWeavingUnlockDisplayNameTests(TestCase):
             unlock_gift=gift,
         )
         self.assertEqual(u.display_name, "ThreadWeaving: Gift of Blade")
-
-    def test_room_display_name(self) -> None:
-        prop = PropertyFactory(name="Consecrated")
-        u = ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.ROOM,
-            unlock_trait=None,
-            unlock_room_property=prop,
-        )
-        self.assertEqual(u.display_name, "ThreadWeaving: Consecrated spaces")
 
     def test_relationship_track_display_name(self) -> None:
         track = RelationshipTrackFactory(name="Romantic")

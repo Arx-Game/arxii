@@ -77,6 +77,8 @@ export const magicKeys = {
   audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
 
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
+
+  pathOptions: (characterId: number) => [...magicKeys.all, 'path-options', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -713,5 +715,14 @@ export function useClearPathIntent() {
     onSuccess: (_data, characterId) => {
       qc.invalidateQueries({ queryKey: magicKeys.pathIntent(characterId) }).catch(() => {});
     },
+  });
+}
+
+/** Current path + selectable next paths for the character. Disabled when id ≤ 0. */
+export function useNextPathOptions(characterId: number) {
+  return useQuery({
+    queryKey: magicKeys.pathOptions(characterId),
+    queryFn: () => api.getNextPathOptions(characterId),
+    enabled: characterId > 0,
   });
 }

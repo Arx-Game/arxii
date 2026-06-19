@@ -556,12 +556,14 @@ def _make_tethered_pair(
     return sinner, sineater, resonance, relationship
 
 
-def _make_sineating_offer(
+def _make_sineating_offer(  # noqa: PLR0913
     sinner: object,
     sineater: object,
     resonance: object,
     relationship: object,
     max_units: int = 5,
+    *,
+    scene: object,
 ) -> SineatingOffer:
     """Build a SineatingOffer directly, bypassing scene validation.
 
@@ -569,23 +571,20 @@ def _make_sineating_offer(
     request_sineating validation.  The SineatingOffer is the frozen
     dataclass accepted by resolve_sineating — constructing it manually
     allows us to skip the roster/scene-participation lookup chain.
+    ``scene`` is required; pass a real ``SceneFactory()`` instance.
     """
-    from world.magic.services.soul_tether import (
-        _ANIMA_COST_PER_UNIT,
-        _FATIGUE_COST_PER_UNIT,
-    )
-
     return SineatingOffer(
         sinner_sheet=sinner,  # type: ignore[arg-type]
         sineater_sheet=sineater,  # type: ignore[arg-type]
         relationship=relationship,  # type: ignore[arg-type]
         resonance=resonance,  # type: ignore[arg-type]
         max_units_offered=max_units,
-        anima_cost_per_unit=_ANIMA_COST_PER_UNIT,
-        fatigue_cost_per_unit=_FATIGUE_COST_PER_UNIT,
+        anima_cost_per_unit=2,  # default from SoulTetherConfig
+        fatigue_cost_per_unit=1,  # default from SoulTetherConfig
         current_hollow=0,
         hollow_max=0,
         sineater_current_strain_stage=0,
+        scene=scene,
     )
 
 
@@ -677,6 +676,36 @@ class RequestSineatingValidationTests(TestCase):
             )
         self.assertIn("not one the Sinner accrues", ctx.exception.user_message)
 
+    def test_offer_carries_scene(self) -> None:
+        """Phase 7: the returned SineatingOffer.scene must equal the scene passed in."""
+        from world.scenes.factories import SceneFactory
+
+        # Form tether so the tether check passes.
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        # Seed a CharacterResonance so the resonance gate passes.
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+        scene = SceneFactory()
+        with patch(
+            "world.magic.services.soul_tether._both_in_scene",
+            return_value=True,
+        ):
+            offer = request_sineating(
+                sinner_sheet=self.sinner,
+                sineater_sheet=self.sineater,
+                resonance=self.resonance,
+                max_units=5,
+                scene=scene,
+            )
+        self.assertEqual(offer.scene, scene)
+
 
 # ---------------------------------------------------------------------------
 # 5.2  resolve_sineating happy path (units > 0)
@@ -703,12 +732,15 @@ class ResolveSineatingHappyPathTests(TestCase):
         CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
 
     def _build_offer(self, max_units: int = 5) -> SineatingOffer:
+        from world.scenes.factories import SceneFactory
+
         return _make_sineating_offer(
             self.sinner,
             self.sineater,
             self.resonance,
             self.relationship,
             max_units=max_units,
+            scene=SceneFactory(),
         )
 
     def test_returns_sineating_result_with_correct_units(self) -> None:
@@ -786,6 +818,22 @@ class ResolveSineatingHappyPathTests(TestCase):
         result = resolve_sineating(offer, units_accepted=999)
         self.assertEqual(result.units_accepted, 5)
 
+    def test_audit_row_scene_matches_offer_scene(self) -> None:
+        """Phase 7: Sineating audit row.scene is taken from offer.scene."""
+        from world.scenes.factories import SceneFactory
+
+        scene = SceneFactory()
+        offer = _make_sineating_offer(
+            self.sinner,
+            self.sineater,
+            self.resonance,
+            self.relationship,
+            scene=scene,
+        )
+        resolve_sineating(offer, units_accepted=2)
+        row = Sineating.objects.get(sineater_sheet=self.sineater)
+        self.assertEqual(row.scene, scene)
+
 
 # ---------------------------------------------------------------------------
 # 5.3  resolve_sineating decline path (units == 0)
@@ -809,11 +857,14 @@ class ResolveSineatingDeclineTests(TestCase):
         CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
 
     def _build_offer(self) -> SineatingOffer:
+        from world.scenes.factories import SceneFactory
+
         return _make_sineating_offer(
             self.sinner,
             self.sineater,
             self.resonance,
             self.relationship,
+            scene=SceneFactory(),
         )
 
     def test_decline_returns_declined_true(self) -> None:
@@ -1482,7 +1533,11 @@ def _form_tether_and_resolve(
     units: int = 3,
 ) -> None:
     """Accept a tether and resolve a Sineating to make hollow_current > 0."""
-    offer = _make_sineating_offer(sinner, sineater, resonance, relationship, max_units=units)
+    from world.scenes.factories import SceneFactory
+
+    offer = _make_sineating_offer(
+        sinner, sineater, resonance, relationship, max_units=units, scene=SceneFactory()
+    )
     resolve_sineating(offer, units_accepted=units)
 
 
@@ -1525,8 +1580,15 @@ class DissolveSoulTetherSingleTests(TestCase):
 
         # Seed some sineating so hollow_current > 0 (optional — dissolution retires
         # threads regardless, but this validates hollow doesn't interfere).
+        from world.scenes.factories import SceneFactory
+
         offer = _make_sineating_offer(
-            self.sinner, self.sineater, self.resonance, self.relationship, max_units=3
+            self.sinner,
+            self.sineater,
+            self.resonance,
+            self.relationship,
+            max_units=3,
+            scene=SceneFactory(),
         )
         resolve_sineating(offer, units_accepted=3)
 
@@ -1791,6 +1853,100 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
         # Second capstone's Thread must still be active.
         for row in Thread.objects.filter(pk__in=thread2_pks).values("pk", "retired_at"):
             self.assertIsNone(row["retired_at"], f"Thread {row['pk']} should still be active")
+
+
+# =============================================================================
+# Phase 15: dissolve_soul_tether emits SOUL_TETHER_DISSOLVED
+# =============================================================================
+
+
+class DissolveSoulTetherEmitTests(TestCase):
+    """Phase 15 — dissolve_soul_tether emits SOUL_TETHER_DISSOLVED with correct payload."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.track = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+        self.sinner, self.sineater = _make_eligible_pair(track=self.track)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
+        CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
+
+        CharacterAnimaFactory(character=self.sineater.character, current=20, maximum=20)
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            writeup="A bond is formed.",
+            ritual_components=[],
+        )
+        self.relationship = CharacterRelationship.objects.get(
+            source=self.sinner, target=self.sineater
+        )
+
+    def test_emit_called_with_soul_tether_dissolved_event(self) -> None:
+        """dissolve_soul_tether emits SOUL_TETHER_DISSOLVED with sinner+sineater sheets."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from flows.constants import EventName
+        from world.magic.services.soul_tether import dissolve_soul_tether
+        from world.magic.types.soul_tether import SoulTetherDissolvedPayload
+
+        room = RoomProfileFactory().objectdb
+        self.sinner.character.db_location = room
+        self.sinner.character.save(update_fields=["db_location"])
+
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_called_once()
+        event_name, payload = mock_emit.call_args.args
+        self.assertEqual(event_name, EventName.SOUL_TETHER_DISSOLVED)
+        self.assertIsInstance(payload, SoulTetherDissolvedPayload)
+        self.assertEqual(payload.sinner_sheet, self.sinner)
+        self.assertEqual(payload.sineater_sheet, self.sineater)
+        self.assertEqual(payload.relationship, self.relationship)
+        self.assertEqual(mock_emit.call_args.kwargs["location"], room)
+
+    def test_emit_skipped_when_sinner_has_no_location(self) -> None:
+        """dissolve_soul_tether does not emit when the Sinner has no current location."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        # Default test characters have db_location=None.
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_not_called()
+
+    def test_emit_not_called_when_already_dissolved(self) -> None:
+        """dissolve_soul_tether is idempotent — no emit on a second call."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        room = RoomProfileFactory().objectdb
+        self.sinner.character.db_location = room
+        self.sinner.character.save(update_fields=["db_location"])
+
+        dissolve_soul_tether(
+            relationship_id=self.relationship.pk,
+            initiator_sheet=self.sinner,
+        )
+
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_not_called()
 
 
 # =============================================================================

@@ -194,8 +194,7 @@ export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingO
 // ---------------------------------------------------------------------------
 // Room Brief
 //
-// GET /api/magic/rooms-by-property/ — schema now correct via @extend_schema.
-// Re-export the generated shape.
+// Re-export of the generated shape. Endpoint tracked for frontend removal in #1199.
 // ---------------------------------------------------------------------------
 
 export type RoomBrief = components['schemas']['RoomBrief'];
@@ -323,6 +322,9 @@ export type PaginatedPendingAudereMajoraOfferList =
 
 export type AudereMajoraRespondRequest = components['schemas']['AudereMajoraRespondRequest'];
 export type AudereMajoraCrossingResult = components['schemas']['AudereMajoraCrossingResult'];
+
+export type PathOptions = components['schemas']['PathOptions'];
+export type PathListItem = components['schemas']['PathList'];
 
 /** A declared path intent as returned by GET /api/progression/path-intent/. */
 export interface PathIntentDetail {

@@ -18,6 +18,7 @@ from world.magic.audere import (
     soulfray_stage_order_snapshot,
 )
 from world.magic.models.renown_config import RenownAwardConfig
+from world.progression.selectors import current_path_for_character
 
 
 class AudereMajoraThreshold(RenownAwardConfig):
@@ -200,21 +201,6 @@ def _has_active_condition(character: ObjectDB, condition_name: str) -> bool:
         target=character,
         condition__name=condition_name,
     ).exists()
-
-
-def current_path_for_character(character: ObjectDB):
-    """Return the Path from the latest CharacterPathHistory row, or None."""
-    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
-
-    history = (
-        CharacterPathHistory.objects.filter(character=character)
-        .select_related("path")
-        .order_by("-selected_at")
-        .first()
-    )
-    if history is None:
-        return None
-    return history.path
 
 
 def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThreshold) -> list:

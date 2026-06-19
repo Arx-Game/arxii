@@ -39,6 +39,7 @@ import type {
   PaginatedTeachingOfferList,
   PaginatedThreadList,
   PathIntentResponse,
+  PathOptions,
   PatchThreadRequest,
   PendingStageAdvanceOffer,
   PullCommitRequest,
@@ -47,7 +48,6 @@ import type {
   PullPreviewResponse,
   RescueOutcome,
   RescueRequest,
-  RoomBrief,
   SineatingOffer,
   SineatingPendingOffer,
   SineatingRequest,
@@ -100,12 +100,12 @@ const THREAD_HUB_SUMMARY_URL = '/api/magic/thread-hub-summary/';
 const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
 const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
-const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
 const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
 const PATH_INTENT_URL = '/api/progression/path-intent/';
+const PATH_OPTIONS_URL = '/api/progression/path-options/';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -670,24 +670,6 @@ export async function acceptTeachingOffer(
 }
 
 // ---------------------------------------------------------------------------
-// Rooms by property
-// ---------------------------------------------------------------------------
-
-/**
- * GET /api/magic/rooms-by-property/?property_id=N&property_id=M...
- *
- * Returns rooms that have all specified property tags.
- * Used by the thread-weaving room picker.
- */
-export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBrief[]> {
-  const params = propertyIds.map((id) => `property_id=${id}`).join('&');
-  const url = params ? `${ROOMS_BY_PROPERTY_URL}?${params}` : ROOMS_BY_PROPERTY_URL;
-  const res = await apiFetch(url);
-  if (!res.ok) throw new Error('Failed to load rooms by property');
-  return res.json() as Promise<RoomBrief[]>;
-}
-
-// ---------------------------------------------------------------------------
 // Pending alterations (Mage Scars), #877
 // ---------------------------------------------------------------------------
 
@@ -884,6 +866,18 @@ export async function deletePathIntent(characterId: number): Promise<void> {
   if (!res.ok) {
     await parseErrorDetail(res, 'Failed to clear path intent');
   }
+}
+
+/**
+ * GET /api/progression/path-options/
+ * Current path + selectable next-stage paths for the character (X-Character-ID).
+ */
+export async function getNextPathOptions(characterId: number): Promise<PathOptions> {
+  const res = await apiFetch(PATH_OPTIONS_URL, {
+    headers: { 'X-Character-ID': String(characterId) },
+  });
+  if (!res.ok) throw new Error('Failed to load path options');
+  return res.json() as Promise<PathOptions>;
 }
 
 // ---------------------------------------------------------------------------

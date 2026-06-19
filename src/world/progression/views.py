@@ -12,6 +12,7 @@ from http import HTTPMethod
 from typing import Any, cast
 
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -37,12 +38,14 @@ from world.progression.models import (
     WeeklyVoteBudget,
     XPTransaction,
 )
+from world.progression.selectors import current_path_for_character, next_path_options
 from world.progression.serializers import (
     AccountProgressionSerializer,
     CastVoteResponseSerializer,
     CastVoteSerializer,
     PathIntentDeclareSerializer,
     PathIntentSerializer,
+    PathOptionsSerializer,
     RandomSceneTargetSerializer,
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
@@ -382,6 +385,32 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         RandomSceneTarget.flush_instance_cache()
         serializer = RandomSceneTargetSerializer(updated_target)
         return Response(serializer.data)
+
+
+# --- PathOptions view ---
+
+
+class PathOptionsView(CharacterContextMixin, APIView):
+    """GET /path-options/ — the calling character's current path + selectable next paths.
+
+    Transition-generic (not Audere-specific): the same options drive the level-3
+    pick and future path switches. Character resolved via the X-Character-ID header.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=PathOptionsSerializer)
+    def get(self, request: Request) -> Response:
+        character = self._get_character(request)
+        if character is None:
+            return Response(
+                {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
+            )
+        payload = {
+            "current_path": current_path_for_character(character),
+            "options": next_path_options(character),
+        }
+        return Response(PathOptionsSerializer(payload).data)
 
 
 # --- PathIntent view ---

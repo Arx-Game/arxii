@@ -512,62 +512,6 @@ class WeaveThreadTests(TestCase):
         self.assertEqual(thread.target_covenant_role, role)
         self.assertEqual(thread.name, "Vanguard Thread")
 
-    def test_weave_thread_room_happy_path(self) -> None:
-        """Character with ROOM weaving unlock matching a room's property can weave a ROOM thread.
-
-        Regression test for the ROOM branch of _has_weaving_unlock: the original
-        code called target.properties.all() which does not exist on ObjectDB.
-        The fix uses target.object_properties.values_list("property_id", flat=True).
-        """
-        from evennia_extensions.factories import ObjectDBFactory
-        from world.magic.models import ThreadWeavingUnlock
-        from world.mechanics.factories import ObjectPropertyFactory, PropertyFactory
-
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-
-        # Create a room (ObjectDB) with a property tag
-        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        prop = PropertyFactory()
-        ObjectPropertyFactory(object=room, property=prop)
-
-        # Create a ROOM weaving unlock keyed to that property
-        unlock = ThreadWeavingUnlock.objects.create(
-            target_kind=TargetKind.ROOM,
-            unlock_room_property=prop,
-            xp_cost=100,
-        )
-        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
-
-        thread = weave_thread(sheet, TargetKind.ROOM, room, res, name="Sanctum Thread")
-        self.assertEqual(thread.owner, sheet)
-        self.assertEqual(thread.resonance, res)
-        self.assertEqual(thread.target_kind, TargetKind.ROOM)
-        self.assertEqual(thread.target_object, room)
-        self.assertEqual(thread.name, "Sanctum Thread")
-
-    def test_weave_thread_room_no_matching_property_raises(self) -> None:
-        """Room without the unlock's property → WeavingUnlockMissing (regression)."""
-        from evennia_extensions.factories import ObjectDBFactory
-        from world.magic.models import ThreadWeavingUnlock
-        from world.mechanics.factories import PropertyFactory
-
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-
-        # Room has no object_properties at all
-        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-        prop = PropertyFactory()
-        unlock = ThreadWeavingUnlock.objects.create(
-            target_kind=TargetKind.ROOM,
-            unlock_room_property=prop,
-            xp_cost=100,
-        )
-        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
-
-        with self.assertRaises(WeavingUnlockMissing):
-            weave_thread(sheet, TargetKind.ROOM, room, res)
-
 
 class UpdateThreadNarrativeTests(TestCase):
     def test_update_name_and_description(self) -> None:
@@ -758,28 +702,10 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
         )
         self.assertEqual(compute_anchor_cap(thread), 30)
 
-    def test_item_kind_dropped_from_target_kind(self) -> None:
-        """ITEM is gone from TargetKind; ROOM still raises AnchorCapNotImplemented."""
-        from world.magic.exceptions import AnchorCapNotImplemented
-        from world.magic.models import Thread
-        from world.magic.services.threads import compute_anchor_cap
-
+    def test_item_and_room_kinds_dropped_from_target_kind(self) -> None:
+        """ITEM and the superseded bare ROOM are both gone from TargetKind."""
         self.assertNotIn("ITEM", TargetKind.values)
-
-        # Any ObjectDB works as target_object; AnchorCapNotImplemented fires
-        # before the target is inspected.
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-        obj = sheet.character
-        thread = Thread.objects.create(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ROOM,
-            target_object=obj,
-            name="Test Room Thread",
-        )
-        with self.assertRaises(AnchorCapNotImplemented):
-            compute_anchor_cap(thread)
+        self.assertNotIn("ROOM", TargetKind.values)
 
 
 # =============================================================================

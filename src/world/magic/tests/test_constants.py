@@ -17,7 +17,6 @@ class TargetKindTests(SimpleTestCase):
                 "TRAIT",
                 "TECHNIQUE",
                 "FACET",
-                "ROOM",
                 "RELATIONSHIP_TRACK",
                 "RELATIONSHIP_CAPSTONE",
                 "COVENANT_ROLE",

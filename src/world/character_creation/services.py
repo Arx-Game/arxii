@@ -874,7 +874,9 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     selected cantrip, optionally CharacterTradition, applies tradition codex
     grants, and creates CharacterAura.
     """
+    from world.fatigue.services import get_or_create_fatigue_pool  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
+        CharacterAnima,
         CharacterAura,
         CharacterTradition,
     )
@@ -904,7 +906,15 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     aura.full_clean()
     aura.save()
 
-    # 5. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
+    # 5. Seed CharacterAnima + FatiguePool (idempotent — skip if already present).
+    #    These must exist for Soul Tether sineating/rescue deductions to apply.
+    CharacterAnima.objects.get_or_create(
+        character=sheet.character,
+        defaults={"current": 10, "maximum": 10},
+    )
+    get_or_create_fatigue_pool(sheet)
+
+    # 6. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
     _finalize_anima_ritual(draft, sheet)
 
 

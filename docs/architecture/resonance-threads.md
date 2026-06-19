@@ -89,8 +89,8 @@ pattern (not a GFK and not a pseudo-GFK with `(target_type, target_id)` ints).
 owner                     FK CharacterSheet
 resonance                 FK Resonance
 target_kind               CharField choices:
-                            TRAIT | TECHNIQUE | ITEM | ROOM |
-                            RELATIONSHIP_TRACK | RELATIONSHIP_CAPSTONE
+                            TRAIT | TECHNIQUE | FACET | RELATIONSHIP_TRACK |
+                            RELATIONSHIP_CAPSTONE | COVENANT_ROLE | MANTLE | SANCTUM
 
 # Player-authored narrative — optional but UI-encouraged
 name                      CharField max_length=120 blank=True
@@ -117,18 +117,20 @@ created_at, updated_at
 # Typed target FKs — exactly one populated, keyed by target_kind
 target_trait              FK Trait                      null=True on_delete=PROTECT
 target_technique          FK Technique                  null=True on_delete=PROTECT
-target_object             FK ObjectDB                   null=True on_delete=PROTECT
-                                                        # carries ITEM and ROOM
+target_facet              FK Facet                      null=True on_delete=PROTECT
 target_relationship_track FK RelationshipTrackProgress  null=True on_delete=PROTECT
 target_capstone           FK RelationshipCapstone       null=True on_delete=PROTECT
+target_covenant_role      FK CovenantRole               null=True on_delete=PROTECT
+target_sanctum_details    FK SanctumDetails             null=True on_delete=PROTECT
+                                                        # SANCTUM room anchor; cap =
+                                                        # sanctum.feature_instance.level × 10
 ```
 
-**Six target_kinds, five FK columns.** STAT and SKILL collapse into TRAIT (the `Trait`
-table's own `trait_type` disambiguates). ITEM and ROOM share `target_object` (ObjectDB)
-and are split at the discriminator level for authorial intent — ThreadPullEffect rows
-can be scoped differently for items vs. rooms without typeclass introspection at read
-time. Gifts are NOT thread anchors; they appear only as unlock scopes in
-`ThreadWeavingUnlock`.
+**STAT and SKILL collapse into TRAIT** (the `Trait` table's own `trait_type` disambiguates).
+SANCTUM is the leveled room anchor; its anchor cap is `sanctum.feature_instance.level × 10`.
+Gifts are NOT thread anchors; they appear only as unlock scopes in `ThreadWeavingUnlock`.
+The bare ROOM `target_kind` (with `target_object` FK to ObjectDB) was removed; use SANCTUM
+for room-anchored threads.
 
 **All deletes are PROTECT.** Nothing with character history gets hard-deleted in this
 project; retirement flows through an explicit service, not cascades.
@@ -335,10 +337,11 @@ ThreadWeavingUnlock
                                                               # at save; covers all
                                                               # item subclasses by
                                                               # typeclass inheritance
-  unlock_room_property      FK Property           null=True   # ROOM: any room with
-                                                              #   this property
   unlock_track              FK RelationshipTrack  null=True   # RELATIONSHIP_TRACK:
                                                               #   per track type
+  # SANCTUM threads do not need a separate unlock row — a character may weave a
+  # SANCTUM thread on any SanctumDetails they are associated with. The anchor cap
+  # (sanctum.feature_instance.level × 10) is enforced at imbue time.
 
   xp_cost                 PositiveIntegerField
   paths                   M2M Path                 # which Paths treat as in-band
@@ -362,8 +365,6 @@ def display_name(self) -> str:
         return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
     if self.target_kind == TargetKind.ITEM:
         return f"ThreadWeaving: {self.unlock_item_typeclass_path.rsplit('.', 1)[-1]}"
-    if self.target_kind == TargetKind.ROOM:
-        return f"ThreadWeaving: {self.unlock_room_property.name} spaces"
     if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
         return f"ThreadWeaving: {self.unlock_track.name} bonds"
 ```
@@ -390,11 +391,6 @@ class Meta:
             name="unique_threadweaving_unlock_item",
         ),
         UniqueConstraint(
-            fields=["unlock_room_property"],
-            condition=Q(target_kind="ROOM"),
-            name="unique_threadweaving_unlock_room",
-        ),
-        UniqueConstraint(
             fields=["unlock_track"],
             condition=Q(target_kind="RELATIONSHIP_TRACK"),
             name="unique_threadweaving_unlock_track",
@@ -419,8 +415,10 @@ Granularity by target_kind:
   is the natural fit. Allowed paths are registered (small registry) and validated at
   save. If we ever need orthogonal categories that don't match typeclass boundaries,
   add an `ItemCategory` model later — the discriminator can carry both.
-- `ROOM` — one unlock per Property. "ThreadWeaving for Consecrated Spaces" lets the
-  character weave threads into any room tagged with that property.
+- `SANCTUM` — no separate unlock row needed. Characters may weave SANCTUM threads
+  on any SanctumDetails they are associated with. The anchor cap
+  (`sanctum.feature_instance.level × 10`) is the gate; Imbuing raises it as the
+  Sanctum levels up.
 - `RELATIONSHIP_TRACK` — one unlock per RelationshipTrack type. "ThreadWeaving for
   Romantic Bonds" / "for Antagonistic Bonds" / "for Mentorship Bonds." Capstones
   inherit from the parent track's unlock.
@@ -451,8 +449,7 @@ Eligibility check when a player attempts to weave a new thread on an anchor:
 - ITEM → `CharacterThreadWeavingUnlock(unlock__unlock_item_typeclass_path=p)` exists
   for some `p` such that `anchor.db_typeclass_path` is `p` or a subclass of it
   (typeclass-inheritance walk)
-- ROOM → `CharacterThreadWeavingUnlock(unlock__unlock_room_property in
-  anchor.properties)` exists
+- SANCTUM → no unlock row required; character must be associated with the Sanctum
 - RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE →
   `CharacterThreadWeavingUnlock(unlock__unlock_track=anchor.track_type)` exists
 
@@ -634,13 +631,17 @@ investment can this carry?" to the common scale:
   - **RELATIONSHIP_CAPSTONE** — `cap = path_stage × 10` (path-derived). Capstones
     are rare and earned; the path stage is the only meaningful gate beyond the
     fact of having earned the capstone at all.
+  - **SANCTUM** — `cap = sanctum.feature_instance.level × 10`. SANCTUM is the
+    leveled room anchor; as the Sanctum is upgraded its Thread can be imbued
+    further. A SANCTUM Thread is also pull-applicable ("in-sanctum boost") while
+    the character is physically inside the Sanctum's room.
   - **ITEM** — TBD (deferred to Spec D). Spec D's ritual-grade item authoring
     introduces "magical significance" as a first-class concept; the cap formula
     lands there. Until Spec D ships, the spend service rejects ITEM-anchored
-    Imbuing with `AnchorCapNotImplemented`. Threads may still be woven on items
-    (free) and pulled (existing tier-0/1/2/3 mechanics work because effects are
-    authored, not derived from level), but level is pinned at 0.
-  - **ROOM** — TBD (deferred to Spec D), same rationale and behavior as ITEM.
+    Imbuing. Threads may still be woven on items (free) and pulled (existing
+    tier-0/1/2/3 mechanics work because effects are authored, not derived from
+    level), but level is pinned at 0.
+  - **Bare ROOM** — removed. Room-anchored threads use the SANCTUM `target_kind`.
 
 #### Path cap (universal ceiling)
 
@@ -669,16 +670,12 @@ component values so players see *which* gate is the active one ("path-locked"
 vs. "anchor-locked").
 - `CharacterResonance.balance ≥ 0` — enforced at spend sites.
 - `Thread` uniqueness: one thread per (owner, target, resonance) triple, via partial
-  unique indexes keyed to `target_kind`. Six partial uniques in total — one per
-  `target_kind` value, each constraining the matching `target_*` FK column. ITEM
-  and ROOM both key off `target_object` but with different `target_kind` discriminator
-  values, so a player can simultaneously have an ITEM thread on object X and a (very
-  unusual) ROOM thread on the same object X without colliding. In practice ObjectDB
-  has one typeclass and only one of those reads as valid, but the constraint is
-  per-discriminator anyway. **Note:** Capstone *threads* still get their own partial
-  unique (`target_capstone` keyed to `target_kind="RELATIONSHIP_CAPSTONE"`) even
-  though capstone *unlocks* are inherited from the parent track per §6.5 — unlock
-  inheritance and thread uniqueness are independent concerns.
+  unique indexes keyed to `target_kind`. One partial unique per `target_kind` value,
+  each constraining the matching `target_*` FK column. **Note:** Capstone *threads* still
+  get their own partial unique (`target_capstone` keyed to
+  `target_kind="RELATIONSHIP_CAPSTONE"`) even though capstone *unlocks* are inherited
+  from the parent track per §6.5 — unlock inheritance and thread uniqueness are
+  independent concerns.
 
 ---
 
@@ -966,9 +963,9 @@ established pattern (`character.traits` → `TraitHandler`, etc.).
 
 - **`character.threads`** → `CharacterThreadHandler`
   - `.all()` — `Thread.objects.filter(owner=...).select_related(resonance,
-    target_trait, target_technique, target_object,
-    target_relationship_track, target_capstone)` cached as a list on first
-    access via `@cached_property`
+    target_trait, target_technique, target_facet, target_relationship_track,
+    target_capstone, target_covenant_role, target_sanctum_details)` cached as a
+    list on first access via `@cached_property`
   - `.by_resonance(resonance)` — filtered view, cached per resonance
   - `.with_anchor_involved(action_context)` — returns the threads whose
     anchors are in scope for an action (per §5.2 rules); used by both
@@ -1335,7 +1332,7 @@ Layout:
       is below `effective_cap` (links to in-game ritual flow which calls
       `spend_resonance_for_imbuing`)
     - "Capped" badge — if at `effective_cap`, with hover text explaining the
-      gate (path stage / anchor value / Spec D pending for ITEM/ROOM)
+      gate (path stage / anchor value / Spec D pending for ITEM)
   - Pull-tier cost preview (informational only; pulls happen in action UI),
     annotated with "scales with thread level (Lv {n} = ×{n} multiplier)" so
     players see the level investment paying off
@@ -1420,7 +1417,8 @@ only when the thread's anchor is "involved in the action." Definitions per kind:
 - **TRAIT** — the trait is checked or contributes to the check. Direct.
 - **TECHNIQUE** — the technique is being used in the action. Direct.
 - **ITEM** — the item is wielded/equipped/being used in the action. Direct.
-- **ROOM** — the action is happening in the room. Direct.
+- **SANCTUM** — the action is happening inside the Sanctum's room. The pull is
+  also applicable ("in-sanctum boost") when the character is in that room.
 - **RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE** — hybrid (Q20=d):
   - **Tier-0 passive** auto-applies when the relationship's other party is a
     participant in the scene (present and engaged). Clean system trigger.
@@ -1741,8 +1739,9 @@ effects" authoring burden.)
 |---|---|---|
 | TRAIT | per specific Trait | "ThreadWeaving for Seduction" |
 | TECHNIQUE | per Gift (covers all techniques under it) | "ThreadWeaving for the Gift of the Blade" |
+| FACET | per Facet | "ThreadWeaving for the Spider facet" |
 | ITEM | per item typeclass path (with inheritance) | "ThreadWeaving for Swords" |
-| ROOM | per Property | "ThreadWeaving for Consecrated Spaces" |
+| SANCTUM | per SanctumDetails | "ThreadWeaving for this Sanctum" (cap = sanctum level × 10) |
 | RELATIONSHIP_TRACK | per RelationshipTrack type | "ThreadWeaving for Romantic Bonds" |
 | RELATIONSHIP_CAPSTONE | (no separate unlock — inherits from track) | n/a |
 
@@ -1754,32 +1753,27 @@ This is a starter catalog for the five Prospect Paths. Authors can extend.
 - TRAIT: Strength, Stamina, Endurance
 - TECHNIQUE: Gift of the Blade, Gift of the Bow, Gift of Endurance
 - ITEM: Swords, Polearms, Heavy Armor
-- ROOM: Battlefield (Property), Training Grounds (Property)
 
 **Whispers (Subtle style)** — intrigue/social manipulation:
 - TRAIT: Seduction, Subterfuge, Intuition
 - TECHNIQUE: Gift of Veiled Words, Gift of Shadow
 - ITEM: Daggers, Concealable Items
-- ROOM: Salons (Property), Crossroads (Property)
 - RELATIONSHIP_TRACK: Romantic Bonds, Antagonistic Bonds
 
 **Voice (Performance style)** — oratory/influence:
 - TRAIT: Charisma, Performance, Composure
 - TECHNIQUE: Gift of Voice, Gift of Presence
-- ROOM: Courts (Property), Stages (Property)
 - RELATIONSHIP_TRACK: Mentorship Bonds, Followership Bonds
 
 **Chosen (Prayer style)** — religious/divine:
 - TRAIT: Faith, Theology, Composure
 - TECHNIQUE: Gift of Prayer, Gift of Sacrament
 - ITEM: Holy Symbols, Vestments
-- ROOM: Consecrated (Property), Ancestral (Property)
 
 **Tome (Incantation style)** — scholarly/arcane:
 - TRAIT: Intellect, Lore, Memory
 - TECHNIQUE: Gift of Symbol, Gift of Cipher
 - ITEM: Tomes, Foci
-- ROOM: Libraries (Property), Sanctums (Property)
 
 These are starter authoring; staff add/remove unlocks freely. The 5×N catalog is
 **authored content seeded via FactoryBoy** (for tests) and an **out-of-band seeding
@@ -2001,8 +1995,8 @@ Service functions to add in `world/magic/services.py`:
 - `compute_thread_weaving_xp_cost(unlock, learner)` — Path-multiplier resolver
 - `compute_anchor_cap(thread)` — returns the §2.4 anchor cap for a Thread,
   with per-`target_kind` normalization to the common scale (TRAIT direct,
-  TECHNIQUE × 10, etc.). Raises `AnchorCapNotImplemented` for ITEM/ROOM
-  pending Spec D.
+  TECHNIQUE × 10, SANCTUM = sanctum.feature_instance.level × 10, etc.). ITEM
+  is pending Spec D.
 - `compute_path_cap(character)` — `path_stage × 10`, defaulting to 10 for
   characters with no path history yet
 - `compute_effective_cap(thread)` — `min(compute_path_cap(owner),
@@ -2117,8 +2111,8 @@ Service functions to remove (tied to deleted models):
     boundary already crossed (idempotency), boundary above effective_cap
   - cap normalization (`compute_anchor_cap`):
     TRAIT cap = trait_value (no multiplier), TECHNIQUE cap = level × 10,
-    RELATIONSHIP_TRACK cap = tier_index × 10, RELATIONSHIP_CAPSTONE cap =
-    path_stage × 10, ITEM/ROOM raise `AnchorCapNotImplemented`
+    SANCTUM cap = sanctum.feature_instance.level × 10, RELATIONSHIP_TRACK cap =
+    tier_index × 10, RELATIONSHIP_CAPSTONE cap = path_stage × 10, ITEM pending Spec D
   - `compute_path_cap`: stage 0 → 10, stage N → N × 10, no path history → 10
   - `compute_effective_cap`: chooses the tighter of path/anchor; surfaces
     which gate is active
@@ -2313,12 +2307,12 @@ Spec D owns:
 
 - Ritual-grade item authoring — the ItemTemplate provenance system that makes
   "a Liar's Promise" authorable as an item with creation requirements.
-- **ITEM and ROOM anchor-cap formulas** — Spec D's "magical significance"
-  authoring (on ItemTemplate / ItemInstance / RoomProfile) is the natural
-  source for these caps. Spec A's `compute_anchor_cap` implementation raises
-  `AnchorCapNotImplemented` for ITEM and ROOM; Spec D extends it with the
-  appropriate normalized formula (matching the common × 10 scale used by
-  TECHNIQUE / RELATIONSHIP_TRACK so the math composes uniformly).
+- **ITEM anchor-cap formula** — Spec D's "magical significance" authoring (on
+  ItemTemplate / ItemInstance) is the natural source for the ITEM cap. Until Spec D
+  ships, ITEM-anchored Imbuing is rejected; Spec D extends `compute_anchor_cap` with
+  the appropriate normalized formula (matching the common × 10 scale used by
+  TECHNIQUE / RELATIONSHIP_TRACK so the math composes uniformly). ROOM is handled via
+  SANCTUM; there is no separate bare-ROOM `target_kind`.
 - Hedge-magic rules for Quiescent characters (when hedge_accessible rituals are
   attemptable, what they can do, what they cost a Quiescent).
 - Glimpse-triggering integration (when does a glimpse_eligible ritual actually

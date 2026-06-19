@@ -10041,6 +10041,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/path-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /path-options/ — the calling character's current path + selectable next paths.
+     *
+     *     Transition-generic (not Audere-specific): the same options drive the level-3
+     *     pick and future path switches. Character resolved via the X-Character-ID header.
+     */
+    get: operations['progression_path_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/random-scenes/': {
     parameters: {
       query?: never;
@@ -12710,7 +12732,6 @@ export interface components {
       character_sheet_id: number;
       technique_id?: number | null;
       effect_type_id?: number | null;
-      target_object_id?: number | null;
       target_persona_id?: number | null;
       scene_id?: number | null;
     };
@@ -19987,9 +20008,8 @@ export interface components {
      *
      *     Read-only computed fields (SerializerMethodFields):
      *     - path_cap: the path-side cap (compute_path_cap)
-     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-     *       (AnchorCapNotImplemented is not yet spec'd)
-     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
+     *     - effective_cap: min(path_cap, anchor_cap)
      */
     PatchedThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -20000,7 +20020,6 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
@@ -20145,6 +20164,11 @@ export interface components {
       icon_name?: string;
       /** @description Display order within stage (lower = first) */
       sort_order?: number;
+    };
+    /** @description Read serializer for GET /path-options/: current path + selectable children. */
+    PathOptions: {
+      current_path: components['schemas']['PathList'] | null;
+      options: components['schemas']['PathList'][];
     };
     /** @description Serializer for Path in CG context. */
     PathRequest: {
@@ -22592,7 +22616,6 @@ export interface components {
      * @description * `TRAIT` - Trait
      *     * `TECHNIQUE` - Technique
      *     * `FACET` - Facet
-     *     * `ROOM` - Room
      *     * `RELATIONSHIP_TRACK` - Relationship Track
      *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
      *     * `COVENANT_ROLE` - Covenant Role
@@ -22604,7 +22627,6 @@ export interface components {
       | 'TRAIT'
       | 'TECHNIQUE'
       | 'FACET'
-      | 'ROOM'
       | 'RELATIONSHIP_TRACK'
       | 'RELATIONSHIP_CAPSTONE'
       | 'COVENANT_ROLE'
@@ -22775,9 +22797,8 @@ export interface components {
      *
      *     Read-only computed fields (SerializerMethodFields):
      *     - path_cap: the path-side cap (compute_path_cap)
-     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-     *       (AnchorCapNotImplemented is not yet spec'd)
-     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
+     *     - effective_cap: min(path_cap, anchor_cap)
      */
     Thread: {
       readonly id: number;
@@ -22792,7 +22813,6 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
@@ -22810,10 +22830,10 @@ export interface components {
       readonly developed_points: number;
       /** @description Return the path-side cap for this thread's owner. */
       readonly path_cap: number;
-      /** @description Return the anchor-side cap, or None for ROOM threads (not yet implemented). */
-      readonly anchor_cap: number | null;
-      /** @description Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable. */
-      readonly effective_cap: number | null;
+      /** @description Return the anchor-side cap for this thread. */
+      readonly anchor_cap: number;
+      /** @description Return min(path_cap, anchor_cap). */
+      readonly effective_cap: number;
       /**
        * Format: date-time
        * @description Set when owner soft-retires this thread; retired threads are excluded from list/detail views and from all pull / passive paths.
@@ -22906,9 +22926,8 @@ export interface components {
      *
      *     Read-only computed fields (SerializerMethodFields):
      *     - path_cap: the path-side cap (compute_path_cap)
-     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-     *       (AnchorCapNotImplemented is not yet spec'd)
-     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap)
+     *     - effective_cap: min(path_cap, anchor_cap)
      */
     ThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -22919,7 +22938,6 @@ export interface components {
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
        *     * `FACET` - Facet
-       *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        *     * `COVENANT_ROLE` - Covenant Role
@@ -37898,6 +37916,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  progression_path_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PathOptions'];
+        };
       };
     };
   };

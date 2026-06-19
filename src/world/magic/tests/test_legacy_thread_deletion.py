@@ -38,6 +38,5 @@ class LegacyThreadFamilyDeletionTests(SimpleTestCase):
         self.assertIn("developed_points", field_names)
         self.assertIn("target_trait", field_names)
         self.assertIn("target_technique", field_names)
-        self.assertIn("target_object", field_names)
         self.assertIn("target_relationship_track", field_names)
         self.assertIn("target_capstone", field_names)

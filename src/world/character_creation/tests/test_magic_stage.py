@@ -8,8 +8,9 @@ from world.character_creation.services import finalize_magic_data
 from world.character_creation.validators import compute_magic_errors
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
+from world.fatigue.models import FatiguePool
 from world.magic.factories import CantripFactory, FacetFactory
-from world.magic.models import Technique
+from world.magic.models import CharacterAnima, Technique
 
 
 class MagicFinalizationActionCategoryTest(TestCase):
@@ -96,3 +97,64 @@ class MagicStageValidationTest(TestCase):
         )
         errors = compute_magic_errors(draft)
         assert len(errors) > 0
+
+
+class MagicFinalizationCGSeedingTest(TestCase):
+    """finalize_magic_data seeds CharacterAnima and FatiguePool at CG completion (Phase 12)."""
+
+    def _make_draft_and_sheet(self):
+        cantrip = CantripFactory()
+        sheet = CharacterSheetFactory()
+        draft = CharacterDraftFactory(
+            draft_data={"selected_cantrip_id": cantrip.id},
+        )
+        return draft, sheet
+
+    def test_finalize_seeds_character_anima_row(self):
+        """finalize_magic_data creates a CharacterAnima row for the new character."""
+        draft, sheet = self._make_draft_and_sheet()
+        self.assertFalse(
+            CharacterAnima.objects.filter(character=sheet.character).exists(),
+            "CharacterAnima must not exist before finalize",
+        )
+        finalize_magic_data(draft, sheet)
+        self.assertTrue(
+            CharacterAnima.objects.filter(character=sheet.character).exists(),
+            "CharacterAnima should be seeded by finalize_magic_data",
+        )
+
+    def test_finalize_seeds_fatigue_pool_row(self):
+        """finalize_magic_data creates a FatiguePool row for the new character sheet."""
+        draft, sheet = self._make_draft_and_sheet()
+        self.assertFalse(
+            FatiguePool.objects.filter(character_sheet=sheet).exists(),
+            "FatiguePool must not exist before finalize",
+        )
+        finalize_magic_data(draft, sheet)
+        self.assertTrue(
+            FatiguePool.objects.filter(character_sheet=sheet).exists(),
+            "FatiguePool should be seeded by finalize_magic_data",
+        )
+
+    def test_finalize_character_anima_defaults(self):
+        """Seeded CharacterAnima has sensible defaults (current=10, maximum=10)."""
+        draft, sheet = self._make_draft_and_sheet()
+        finalize_magic_data(draft, sheet)
+        anima = CharacterAnima.objects.get(character=sheet.character)
+        self.assertEqual(anima.current, 10)
+        self.assertEqual(anima.maximum, 10)
+
+    def test_seeding_is_idempotent_via_get_or_create(self):
+        """CharacterAnima and FatiguePool use get_or_create — second call is a no-op."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        draft, sheet = self._make_draft_and_sheet()
+        finalize_magic_data(draft, sheet)
+        # Calling the seeding helpers again must not raise or create duplicates.
+        CharacterAnima.objects.get_or_create(
+            character=sheet.character,
+            defaults={"current": 10, "maximum": 10},
+        )
+        get_or_create_fatigue_pool(sheet)
+        self.assertEqual(CharacterAnima.objects.filter(character=sheet.character).count(), 1)
+        self.assertEqual(FatiguePool.objects.filter(character_sheet=sheet).count(), 1)

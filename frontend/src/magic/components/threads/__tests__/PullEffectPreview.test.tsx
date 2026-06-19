@@ -190,8 +190,8 @@ describe('PullEffectPreview', () => {
     expect(screen.getByTestId('pull-now-button')).toBeDisabled();
   });
 
-  it('disables Pull Now button for ROOM anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'ROOM' })} />, {
+  it('disables Pull Now button for SANCTUM anchor kind', () => {
+    render(<PullEffectPreview thread={makeThread({ target_kind: 'SANCTUM' })} />, {
       wrapper: createWrapper(),
     });
     expect(screen.getByTestId('pull-now-button')).toBeDisabled();

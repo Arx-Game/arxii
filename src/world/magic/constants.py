@@ -85,7 +85,6 @@ class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
     FACET = "FACET", "Facet"
-    ROOM = "ROOM", "Room"
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"

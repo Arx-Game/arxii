@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 import uuid
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import Sineating, SoulTetherRescue
 from world.relationships.models import CharacterRelationship
+
+if TYPE_CHECKING:
+    from world.scenes.models import Scene
 
 
 class SoulTetherRole(str, Enum):
@@ -33,6 +37,7 @@ class SineatingOffer:
     current_hollow: int
     hollow_max: int
     sineater_current_strain_stage: int
+    scene: Scene
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,3 +91,12 @@ class StageAdvanceBonusResult:
     hollow_drained: int
     strain_severity_added: int
     declined: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SoulTetherDissolvedPayload:
+    """Reactive event payload emitted when a Soul Tether bond dissolves (Spec B §13, Phase 15)."""
+
+    sinner_sheet: CharacterSheet
+    sineater_sheet: CharacterSheet
+    relationship: CharacterRelationship

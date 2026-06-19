@@ -503,6 +503,75 @@ class AnchorInActionTests(TestCase):
         ctx = PullActionContext(combat_encounter=None, participant=None)
         self.assertFalse(_anchor_in_action(thread, ctx))
 
+    def test_sanctum_thread_applicable_when_in_sanctum_room(self) -> None:
+        """SANCTUM thread is in-action when the sanctum's room object id is in involved_objects."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.constants import SanctumSlotKind
+        from world.magic.models import SanctumDetails, SanctumOwnerMode
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        room_profile = RoomProfileFactory()
+        sanctum_kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.SANCTUM,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile,
+            feature_kind=sanctum_kind,
+        )
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=instance,
+            resonance_type=resonance,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.SANCTUM,
+            target_sanctum_details=sanctum,
+            target_trait=None,
+            slot_kind=SanctumSlotKind.HELPER,
+        )
+        room_obj_id = sanctum.feature_instance.room_profile.objectdb_id
+        ctx = PullActionContext(involved_objects=(room_obj_id,))
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+    def test_sanctum_thread_not_applicable_elsewhere(self) -> None:
+        """SANCTUM thread is not in-action when the sanctum's room is not in involved_objects."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.constants import SanctumSlotKind
+        from world.magic.models import SanctumDetails, SanctumOwnerMode
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        room_profile = RoomProfileFactory()
+        sanctum_kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.SANCTUM,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=room_profile,
+            feature_kind=sanctum_kind,
+        )
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=instance,
+            resonance_type=resonance,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.SANCTUM,
+            target_sanctum_details=sanctum,
+            target_trait=None,
+            slot_kind=SanctumSlotKind.HELPER,
+        )
+        ctx = PullActionContext(involved_objects=())
+        self.assertFalse(_anchor_in_action(thread, ctx))
+
 
 class FacetWornItemsGateTests(TestCase):
     """Tests for the FACET worn-items gate in spend_resonance_for_pull."""

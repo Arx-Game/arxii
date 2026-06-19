@@ -28,6 +28,7 @@ import {
   useCrossXPLock,
   useCommitPull,
   useAcceptTeachingOffer,
+  useNextPathOptions,
   magicKeys,
 } from '../queries';
 import { __resetImbuingRitualIdCacheForTests } from '../api';
@@ -58,6 +59,7 @@ vi.mock('../api', () => ({
   commitPull: vi.fn(),
   acceptTeachingOffer: vi.fn(),
   __resetImbuingRitualIdCacheForTests: vi.fn(),
+  getNextPathOptions: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -903,5 +905,19 @@ describe('useAcceptTeachingOffer', () => {
     });
 
     expect(api.acceptTeachingOffer).toHaveBeenCalledWith(1, undefined);
+  });
+});
+
+describe('useNextPathOptions', () => {
+  it('useNextPathOptions fetches options for the character', async () => {
+    const options = {
+      current_path: { id: 1, name: 'Prospect' },
+      options: [{ id: 2, name: 'Next' }],
+    };
+    vi.mocked(api.getNextPathOptions).mockResolvedValue(options as never);
+    const { result } = renderHook(() => useNextPathOptions(7), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(api.getNextPathOptions).toHaveBeenCalledWith(7);
+    expect(result.current.data).toEqual(options);
   });
 });

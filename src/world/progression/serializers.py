@@ -224,6 +224,16 @@ class RandomSceneTargetSerializer(serializers.ModelSerializer):
         ]
 
 
+# --- PathOptions serializer ---
+
+
+class PathOptionsSerializer(serializers.Serializer):
+    """Read serializer for GET /path-options/: current path + selectable children."""
+
+    current_path = PathListSerializer(allow_null=True)
+    options = PathListSerializer(many=True)
+
+
 # --- PathIntent serializers ---
 
 
