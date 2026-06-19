@@ -324,11 +324,22 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
 def leave_covenant(*, membership: CharacterCovenantRole) -> None:
     """A member voluntarily leaves a covenant. Soft-ends the membership, then
     auto-dissolves the covenant if active membership falls below the minimum.
-    Idempotent: leaving an already-ended membership is a no-op."""
+    Idempotent: leaving an already-ended membership is a no-op.
+
+    Raises LastManagerRankError if the member holds the last can_manage_ranks rank
+    and the covenant would survive the departure (i.e. enough members remain).
+    """
     if membership.left_at is not None:
         return
     covenant = membership.covenant
     departed_sheet = membership.character_sheet
+    # Check dissolution: if the covenant will survive this departure, guard against
+    # removing the last manager.  Count remaining members excluding this one.
+    active_count_after = (
+        covenant.memberships.filter(left_at__isnull=True).exclude(pk=membership.pk).count()
+    )
+    if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
+        _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=False)
@@ -361,6 +372,12 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
         return
     covenant = target.covenant
     departed_sheet = target.character_sheet
+    # Guard against management lock-out when the covenant will survive the kick.
+    active_count_after = (
+        covenant.memberships.filter(left_at__isnull=True).exclude(pk=target.pk).count()
+    )
+    if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
+        _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=True)
@@ -573,6 +590,28 @@ def _assert_keeps_a_manager(
     if exclude_rank is not None:
         qs = qs.exclude(rank=exclude_rank)
     if not qs.exists():
+        raise LastManagerRankError
+
+
+def _assert_keeps_a_manager_excluding_membership(
+    covenant: Covenant, exclude_membership_pk: int
+) -> None:
+    """Raise LastManagerRankError if removing the given membership would leave zero
+    active members holding a can_manage_ranks rank.
+
+    Used by leave_covenant and kick_member to prevent management lock-out when the
+    covenant has enough remaining members to survive (i.e. will not dissolve).
+    """
+    has_other_manager = (
+        CharacterCovenantRole.objects.filter(
+            covenant=covenant,
+            left_at__isnull=True,
+            rank__can_manage_ranks=True,
+        )
+        .exclude(pk=exclude_membership_pk)
+        .exists()
+    )
+    if not has_other_manager:
         raise LastManagerRankError
 
 

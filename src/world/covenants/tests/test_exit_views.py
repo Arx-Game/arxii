@@ -215,3 +215,59 @@ class KickActionTests(TestCase):
         """Kicking a nonexistent pk returns 404 (get_object_or_404)."""
         response = self.leader_client.post("/api/covenants/character-roles/999999/kick/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class LeaveLastManagerViewTests(TestCase):
+    """The leave action returns 400 (not 500) when LastManagerRankError fires."""
+
+    def setUp(self) -> None:
+        self.manager_user = _make_user("leave_mgr_user")
+        self.manager_sheet = _setup_user_with_sheet(self.manager_user)
+
+        self.cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # Sole can_manage_ranks rank for the covenant.
+        self.manager_rank = CovenantManagerRankFactory(covenant=self.cov, tier=1)
+        self.non_manager_rank = CovenantRankFactory(
+            covenant=self.cov,
+            tier=2,
+            can_kick=False,
+            can_invite=False,
+            can_manage_ranks=False,
+        )
+
+        # 3-member covenant so it survives a departure and the guard fires.
+        self.sole_manager_membership = CharacterCovenantRoleFactory(
+            character_sheet=self.manager_sheet,
+            covenant=self.cov,
+            covenant_role=self.role,
+            rank=self.manager_rank,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=self.role,
+            rank=self.non_manager_rank,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=self.role,
+            rank=self.non_manager_rank,
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.manager_user)
+
+    def test_leave_last_manager_returns_400_not_500(self) -> None:
+        """Leaving as the sole manager when the covenant survives returns 400 with
+        LastManagerRankError.user_message rather than a 500 server error."""
+        from world.covenants.exceptions import LastManagerRankError
+
+        response = self.client.post(
+            f"/api/covenants/character-roles/{self.sole_manager_membership.pk}/leave/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+        self.assertEqual(response.data["detail"], LastManagerRankError.user_message)

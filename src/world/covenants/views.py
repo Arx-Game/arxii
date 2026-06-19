@@ -191,7 +191,10 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     def leave(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/covenants/character-roles/{id}/leave/ — voluntary self-leave."""
         membership = self.get_object()
-        leave_covenant(membership=membership)
+        try:
+            leave_covenant(membership=membership)
+        except CovenantExitError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(membership).data)
 
     @action(
@@ -200,7 +203,8 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated, CanKickFromCovenant],
     )
     def kick(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+        """POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+        authority (rank tier precedence: actor.rank.tier < target.rank.tier).
 
         The target may be outside the requester's own-scoped get_queryset, so fetch it
         via the full manager and run object permissions explicitly rather than get_object().

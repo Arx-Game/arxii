@@ -1498,3 +1498,91 @@ class RankManagementTests(TestCase):
                 actor=self.manager_member,
                 ordered_rank_ids=[self.base_rank.pk],
             )
+
+
+class LockOutInvariantTests(TestCase):
+    """Ensure leave_covenant and kick_member block management lock-out when the covenant
+    survives, but allow dissolution to proceed even if the last manager exits."""
+
+    def _make_member(self, cov, rank):
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        return CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov, covenant_role=role, rank=rank
+        )
+
+    def test_kick_last_manager_raises_when_covenant_survives(self) -> None:
+        """Kicking the sole can_manage_ranks member when 2+ will remain raises LastManagerRankError.
+
+        Rank setup:
+          actor_rank: tier=1, can_kick=True, can_manage_ranks=False
+          manager_rank: tier=2, can_kick=False, can_manage_ranks=True  (sole manager)
+        3 members → 2 remain after kick → covenant survives → guard fires.
+        """
+        cov = CovenantFactory()
+        actor_rank = CovenantRankFactory(
+            covenant=cov, tier=1, can_kick=True, can_invite=False, can_manage_ranks=False
+        )
+        manager_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=True
+        )
+        actor = self._make_member(cov, actor_rank)
+        sole_manager = self._make_member(cov, manager_rank)
+        self._make_member(cov, actor_rank)  # third member keeps covenant alive after kick
+
+        with self.assertRaises(LastManagerRankError):
+            kick_member(target=sole_manager, actor=actor)
+
+    def test_leave_last_manager_raises_when_covenant_survives(self) -> None:
+        """A sole can_manage_ranks member leaving when 2+ will remain raises
+        LastManagerRankError."""
+        cov = CovenantFactory()
+        manager_rank = CovenantManagerRankFactory(covenant=cov, tier=1)
+        non_manager_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=False
+        )
+        sole_manager = self._make_member(cov, manager_rank)
+        self._make_member(cov, non_manager_rank)
+        self._make_member(cov, non_manager_rank)
+
+        with self.assertRaises(LastManagerRankError):
+            leave_covenant(membership=sole_manager)
+
+    def test_kick_that_triggers_dissolution_allowed_even_if_last_manager(self) -> None:
+        """Kicking the sole manager when only MINIMUM_FOUNDERS members exist dissolves the
+        covenant without raising LastManagerRankError — dissolution takes priority."""
+        cov = CovenantFactory()
+        # actor: tier=1 (higher authority), can_kick but not manager
+        actor_rank = CovenantRankFactory(
+            covenant=cov, tier=1, can_kick=True, can_invite=False, can_manage_ranks=False
+        )
+        # target: tier=2, sole manager
+        manager_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=True
+        )
+        actor = self._make_member(cov, actor_rank)
+        sole_manager = self._make_member(cov, manager_rank)
+        # Only 2 members total (= MINIMUM_FOUNDERS) → kicking one drops to 1 → dissolution.
+
+        # Should not raise — dissolution is allowed.
+        kick_member(target=sole_manager, actor=actor)
+
+        cov.refresh_from_db()
+        self.assertIsNotNone(cov.dissolved_at)
+
+    def test_leave_that_triggers_dissolution_allowed_even_if_last_manager(self) -> None:
+        """A sole manager leaving when only MINIMUM_FOUNDERS members exist dissolves the
+        covenant without raising LastManagerRankError."""
+        cov = CovenantFactory()
+        manager_rank = CovenantManagerRankFactory(covenant=cov, tier=1)
+        non_manager_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=False
+        )
+        sole_manager = self._make_member(cov, manager_rank)
+        self._make_member(cov, non_manager_rank)
+        # Only 2 members total (= MINIMUM_FOUNDERS) → leaving drops to 1 → dissolution.
+
+        # Should not raise.
+        leave_covenant(membership=sole_manager)
+
+        cov.refresh_from_db()
+        self.assertIsNotNone(cov.dissolved_at)
