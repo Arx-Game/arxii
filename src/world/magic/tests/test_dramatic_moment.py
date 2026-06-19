@@ -44,6 +44,21 @@ class DramaticMomentTagModelTest(TestCase):
         tag = DramaticMomentTagFactory()
         self.assertIn("DramaticMomentTag", str(tag))
 
+    def test_tag_can_anchor_to_interaction(self):
+        from world.scenes.factories import InteractionFactory, SceneFactory
+
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+        tag = DramaticMomentTagFactory(
+            scene=scene,
+            interaction=interaction,
+            interaction_timestamp=interaction.timestamp,
+        )
+        self.assertEqual(tag.interaction_id, interaction.id)
+        self.assertEqual(tag.interaction_timestamp, interaction.timestamp)
+        # Back-relation resolves.
+        self.assertIn(tag, list(interaction.dramatic_moment_tags.all()))
+
 
 class CreateDramaticMomentTagServiceTest(TestCase):
     def setUp(self):
