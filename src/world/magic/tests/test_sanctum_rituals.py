@@ -628,6 +628,50 @@ class PurgingGradedCheckTests(TestCase):
         # 100 × 0.5 = 50 retained
         self.assertEqual(result.sum_after_drain, 50)
 
+    def test_botch_clamps_effective_retention_at_zero(self) -> None:
+        """retention=0.2 − 0.30 botch modifier = −0.10, clamped to the 0.0 lower bound.
+
+        The lower clamp is the only guard against a negative retention fraction
+        amplifying values inside ``drain_homecoming_for_purge``.
+        """
+        from decimal import Decimal
+        from unittest.mock import patch
+
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            result = perform_purging_ritual(
+                sanctum,
+                owner,
+                new_resonance=new_resonance,
+                resonance_sacrificed=100,
+                retention=Decimal("0.2"),
+            )
+
+        # −0.10 clamps to 0.0; 100 × 0.0 = 0 retained (nothing amplified below zero).
+        self.assertEqual(result.sum_after_drain, 0)
+
+    def test_crit_clamps_effective_retention_at_one(self) -> None:
+        """retention=0.9 + 0.25 crit modifier = 1.15, clamped to the 1.0 upper bound."""
+        from decimal import Decimal
+        from unittest.mock import patch
+
+        sanctum, owner, _old_resonance, new_resonance = _setup_graded_purging(balance=500)
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            result = perform_purging_ritual(
+                sanctum,
+                owner,
+                new_resonance=new_resonance,
+                resonance_sacrificed=100,
+                retention=Decimal("0.9"),
+            )
+
+        # 1.15 clamps to 1.0; 100 × 1.0 = 100 retained (no amplification past full).
+        self.assertEqual(result.sum_after_drain, 100)
+
     def test_missing_config_raises(self) -> None:
         from world.magic.exceptions import RitualCheckConfigMissing
         from world.magic.models import RitualCheckConfig

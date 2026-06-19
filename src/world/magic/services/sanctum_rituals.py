@@ -29,22 +29,16 @@ from world.magic.seeds_sanctum import HOMECOMING_RITUAL_NAME, PURGING_RITUAL_NAM
 from world.magic.services.ritual_checks import OutcomeTier, perform_ritual_check
 from world.magic.services.sanctum_lvm import (
     apply_homecoming_gain,
+    compute_homecoming_cap,
     drain_homecoming_for_purge,
     retag_homecoming_for_new_resonance,
     sum_homecoming_value,
 )
-from world.progression.services.skill_development import get_character_path_level
 
 if TYPE_CHECKING:
     from world.magic.models import Resonance, SanctumDetails
     from world.scenes.models import Persona
 
-
-PATH_LEVEL_CAP_MULTIPLIER = 10
-"""Per-Path-level cap multiplier for personal Sanctum's Homecoming.
-
-`cap = owner_character_path_level * PATH_LEVEL_CAP_MULTIPLIER`. Tunable.
-"""
 
 HOMECOMING_EFFICIENCY = 100
 """Resonance-sacrifice : base-resonance-gained ratio. Spec §F principle 1.1
@@ -96,23 +90,35 @@ class PurgingResonanceTypeUnchangedError(PurgingValidationError):
 
 @dataclass(frozen=True)
 class HomecomingResult:
-    """Frozen return shape for Homecoming runs."""
+    """Frozen return shape for Homecoming runs.
+
+    ``tier`` is the graded OutcomeTier value string (``crit``/``success``/
+    ``fail``/``botch``) so the API seam can distinguish outcomes without
+    re-deriving the private tier boundaries.
+    """
 
     base_resonance_added: int
     overflow_escrowed: int
     new_homecoming_sum: int
     new_cap: int
     success_level: int
+    tier: str
 
 
 @dataclass(frozen=True)
 class PurgingResult:
-    """Frozen return shape for Purging runs."""
+    """Frozen return shape for Purging runs.
+
+    ``tier`` is the graded OutcomeTier value string (``crit``/``success``/
+    ``fail``/``botch``) so the API seam can distinguish outcomes without
+    re-deriving the private tier boundaries.
+    """
 
     new_resonance_id: int
     sum_after_drain: int
     sacrifice_paid: int
     success_level: int
+    tier: str
 
 
 # ---------------------------------------------------------------------------
@@ -167,39 +173,6 @@ def _validate_leader_for_sanctum(sanctum: SanctumDetails, leader_persona: Person
         raise HomecomingLeaderNotCovenantMemberError(msg)
 
 
-def _compute_cap(sanctum: SanctumDetails) -> int:
-    """Per-Sanctum cap on Homecoming-grown resonance.
-
-    Personal: ``owner_path_level × 10``. Covenant interim: sum of active
-    member Path levels × 10 (will shift to ``Covenant.level`` when Slice D's
-    level work ships per the spec note).
-    """
-    room = sanctum.feature_instance.room_profile.objectdb
-    ownership = effective_owner(room)
-    if ownership is None:
-        return 0
-
-    if sanctum.owner_mode == SanctumOwnerMode.PERSONAL:
-        owner_persona = ownership.holder_persona
-        character = owner_persona.character_sheet.character
-        return get_character_path_level(character) * PATH_LEVEL_CAP_MULTIPLIER
-
-    covenant = ownership.holder_organization.covenant
-    active_sheets = CharacterCovenantRole.objects.filter(
-        covenant=covenant,
-        left_at__isnull=True,
-    ).values_list("character_sheet", flat=True)
-    if not active_sheets:
-        return 0
-    total = 0
-    for sheet_id in active_sheets:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-        sheet = CharacterSheet.objects.get(pk=sheet_id)
-        total += get_character_path_level(sheet.character)
-    return total * PATH_LEVEL_CAP_MULTIPLIER
-
-
 def _spend_from_leader_pool(leader_persona: Persona, resonance: Resonance, amount: int) -> None:
     """Deduct ``amount`` from leader's CharacterResonance balance. Raises if low."""
     cr = (
@@ -250,7 +223,7 @@ def perform_homecoming_ritual(
     )
     base_gain = resonance_sacrificed // HOMECOMING_EFFICIENCY
     gain = int(Decimal(base_gain) * HOMECOMING_GAIN_MULTIPLIERS[roll.tier])
-    cap = _compute_cap(sanctum)
+    cap = compute_homecoming_cap(sanctum)
     applied, overflow = apply_homecoming_gain(sanctum, gain, cap)
 
     sanctum.last_homecoming_ritual_at = timezone.now()
@@ -266,6 +239,7 @@ def perform_homecoming_ritual(
         new_homecoming_sum=sum_homecoming_value(sanctum),
         new_cap=cap,
         success_level=roll.success_level,
+        tier=roll.tier.value,
     )
 
 
@@ -330,4 +304,5 @@ def perform_purging_ritual(  # noqa: PLR0913
         sum_after_drain=sum_homecoming_value(sanctum),
         sacrifice_paid=resonance_sacrificed,
         success_level=roll.success_level,
+        tier=roll.tier.value,
     )

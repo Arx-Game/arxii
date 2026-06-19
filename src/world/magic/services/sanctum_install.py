@@ -119,7 +119,10 @@ class SanctificationResult:
 
     On a failed or botched check, ``fizzled=True`` and ``sanctum_id=None`` —
     no state change occurred. On success or crit, ``fizzled=False`` and
-    ``sanctum_id`` is the new SanctumDetails pk.
+    ``sanctum_id`` is the new SanctumDetails pk. ``tier`` is the graded
+    OutcomeTier value string (``crit``/``success``/``fail``/``botch``) so the
+    API seam can tell a fizzle (FAIL) from a botch without re-deriving the
+    private tier boundaries.
     """
 
     sanctum_id: int | None
@@ -127,6 +130,7 @@ class SanctificationResult:
     resonance_type_id: int
     founder_character_sheet_id: int
     success_level: int
+    tier: str
     fizzled: bool = False
 
 
@@ -137,12 +141,31 @@ class DissolutionResult:
     ``is_botch`` is True when the outcome tier is BOTCH (success_level ≤ −2).
     Callers wanting to surface "something bad happened" can read this flag;
     consequence content (status effects, magical mishaps) is future work.
+    ``tier`` is the graded OutcomeTier value string for the API seam.
     """
 
     sanctum_id: int
     success_level: int
     recovered_amount: int
     is_botch: bool
+    tier: str
+
+
+def sanctification_fizzle_detail(tier: str) -> str:
+    """User-facing copy for a fizzled Sanctification, darker on a botch.
+
+    ``tier`` is an :class:`OutcomeTier` value string (``roll.tier.value``).
+    A BOTCH earns ominous copy — the rite went *wrong*, not merely failed to
+    catch — while an ordinary FAIL gets the gentler "failed to take hold" line.
+    """
+    from world.magic.services.ritual_checks import OutcomeTier  # noqa: PLC0415
+
+    if tier == OutcomeTier.BOTCH.value:
+        return (
+            "The ritual recoils — the rite goes wrong, the gathered power scatters "
+            "and sours, and no Sanctum takes shape."
+        )
+    return "The ritual fails to take hold; the Sanctum was not created."
 
 
 @dataclass(frozen=True)
@@ -253,6 +276,7 @@ def perform_sanctification(
             resonance_type_id=resonance_type.pk,
             founder_character_sheet_id=founder_sheet.pk,
             success_level=roll.success_level,
+            tier=roll.tier.value,
             fizzled=True,
         )
 
@@ -282,10 +306,14 @@ def perform_sanctification(
         raise SanctificationFounderHasPersonalSanctumError(msg) from exc
 
     if roll.tier is OutcomeTier.CRIT:
-        from world.magic.services.sanctum_lvm import apply_homecoming_gain  # noqa: PLC0415
-        from world.magic.services.sanctum_rituals import _compute_cap  # noqa: PLC0415
+        from world.magic.services.sanctum_lvm import (  # noqa: PLC0415
+            apply_homecoming_gain,
+            compute_homecoming_cap,
+        )
 
-        apply_homecoming_gain(details, SANCTIFICATION_CRIT_BONUS_IMBUE, _compute_cap(details))
+        apply_homecoming_gain(
+            details, SANCTIFICATION_CRIT_BONUS_IMBUE, compute_homecoming_cap(details)
+        )
 
     return SanctificationResult(
         sanctum_id=details.pk,
@@ -293,6 +321,7 @@ def perform_sanctification(
         resonance_type_id=details.resonance_type_id,
         founder_character_sheet_id=founder_sheet.pk,
         success_level=roll.success_level,
+        tier=roll.tier.value,
         fizzled=False,
     )
 
@@ -402,6 +431,7 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         success_level=success_level,
         recovered_amount=recovered_amount,
         is_botch=is_botch,
+        tier=roll.tier.value,
     )
 
 

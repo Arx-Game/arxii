@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
@@ -509,6 +509,7 @@ class PerformSanctificationGradedCheckTests(TestCase):
         self.assertTrue(result.fizzled)
         self.assertIsNone(result.sanctum_id)
         self.assertEqual(result.success_level, 0)
+        self.assertEqual(result.tier, "fail")
         # No SanctumDetails or RoomFeatureInstance should have been created
         self.assertFalse(
             SanctumDetails.objects.filter(founder_character_sheet=owner.character_sheet).exists()
@@ -530,6 +531,7 @@ class PerformSanctificationGradedCheckTests(TestCase):
 
         self.assertTrue(result.fizzled)
         self.assertIsNone(result.sanctum_id)
+        self.assertEqual(result.tier, "botch")
 
     def test_success_creates_sanctum_and_fizzled_false(self) -> None:
         from unittest.mock import patch
@@ -551,8 +553,10 @@ class PerformSanctificationGradedCheckTests(TestCase):
         from unittest.mock import patch
 
         from world.magic.services.sanctum_install import SANCTIFICATION_CRIT_BONUS_IMBUE
-        from world.magic.services.sanctum_lvm import sum_homecoming_value
-        from world.magic.services.sanctum_rituals import _compute_cap
+        from world.magic.services.sanctum_lvm import (
+            compute_homecoming_cap,
+            sum_homecoming_value,
+        )
 
         room_profile, owner, resonance = _build_sanctification_room_with_seeds()
 
@@ -564,7 +568,7 @@ class PerformSanctificationGradedCheckTests(TestCase):
 
         self.assertFalse(result.fizzled)
         sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
-        cap = _compute_cap(sanctum)
+        cap = compute_homecoming_cap(sanctum)
         expected_imbue = min(SANCTIFICATION_CRIT_BONUS_IMBUE, cap)
         self.assertEqual(sum_homecoming_value(sanctum), expected_imbue)
 
@@ -578,3 +582,20 @@ class PerformSanctificationGradedCheckTests(TestCase):
             perform_sanctification(
                 room_profile, owner, resonance, owner_mode=SanctumOwnerMode.PERSONAL
             )
+
+
+class SanctificationFizzleDetailTests(SimpleTestCase):
+    """The fizzle detail copy differs by outcome tier — a botch reads darker."""
+
+    def test_fail_and_botch_copy_differ(self) -> None:
+        from world.magic.services.ritual_checks import OutcomeTier
+        from world.magic.services.sanctum_install import sanctification_fizzle_detail
+
+        fail_copy = sanctification_fizzle_detail(OutcomeTier.FAIL.value)
+        botch_copy = sanctification_fizzle_detail(OutcomeTier.BOTCH.value)
+
+        self.assertNotEqual(fail_copy, botch_copy)
+        # The ordinary failure keeps the gentle "take hold" framing.
+        self.assertIn("take hold", fail_copy)
+        # The botch is the darker branch — the rite goes wrong, not merely short.
+        self.assertIn("wrong", botch_copy)
