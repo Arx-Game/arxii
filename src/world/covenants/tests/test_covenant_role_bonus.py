@@ -23,3 +23,23 @@ class CovenantRoleBonusModelTests(TestCase):
         config = CovenantRoleBonusFactory(bonus_per_level=4)
         self.assertEqual(config.bonus_per_level, 4)
         self.assertIn(str(config.bonus_per_level), str(config))
+
+
+class RoleBaseBonusForTargetTests(TestCase):
+    def test_returns_level_times_coefficient(self) -> None:
+        from world.mechanics.services import role_base_bonus_for_target
+
+        config = CovenantRoleBonusFactory(bonus_per_level=3)
+        self.assertEqual(
+            role_base_bonus_for_target(
+                config.covenant_role, config.modifier_target, character_level=4
+            ),
+            12,
+        )
+
+    def test_returns_zero_when_no_row(self) -> None:
+        from world.mechanics.services import role_base_bonus_for_target
+
+        role = CovenantRoleFactory()
+        target = ModifierTargetFactory(name="NoRoleBonusTarget")
+        self.assertEqual(role_base_bonus_for_target(role, target, character_level=9), 0)

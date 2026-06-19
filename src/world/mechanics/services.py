@@ -613,12 +613,23 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
 
 
 def role_base_bonus_for_target(
-    role: CovenantRole,  # noqa: ARG001
-    target: ModifierTarget,  # noqa: ARG001
-    character_level: int,  # noqa: ARG001
+    role: CovenantRole,
+    target: ModifierTarget,
+    character_level: int,
 ) -> int:
-    """PLACEHOLDER — returns 0 in PR1. PR3 wires authored values."""
-    return 0
+    """Authored covenant-role bonus for ``target``, scaled by character level (#985).
+
+    Reads the ``CovenantRoleBonus`` row for ``(role, target)`` and returns
+    ``character_level * bonus_per_level``. No row → 0 (most targets). Mirrors
+    ``covenant_level_bonus``'s authored-config lookup; reached only after
+    ``covenant_role_bonus``'s engaged-roles early-out.
+    """
+    from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
+
+    config = CovenantRoleBonus.objects.filter(covenant_role=role, modifier_target=target).first()
+    if config is None:
+        return 0
+    return character_level * config.bonus_per_level
 
 
 def item_mundane_stat_for_target(
