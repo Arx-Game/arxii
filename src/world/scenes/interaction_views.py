@@ -86,6 +86,9 @@ class InteractionViewSet(
         context = super().get_serializer_context()
         entries = get_account_roster_entries(self.request)
         context["roster_entry_ids"] = {e.pk for e in entries} if entries else set()
+        # The viewer's own character sheets — who their PersonaDiscovery rows belong to,
+        # for per-viewer persona-name resolution (#1109).
+        context["viewer_sheet_ids"] = {e.character_sheet_id for e in entries} if entries else set()
         # Per-viewer my_reaction on reaction windows (#904) — context, never
         # Prefetch(to_attr) on the shared instances.
         context["persona_ids"] = set(get_account_personas(self.request))
@@ -99,6 +102,7 @@ class InteractionViewSet(
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
             "persona__character_sheet__roster_entry",
+            "persona__character_sheet__gender",  # #1109: apparent gender for anonymous sdesc
             "persona",
             "scene",
             "place",

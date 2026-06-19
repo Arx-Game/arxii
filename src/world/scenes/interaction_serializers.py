@@ -115,12 +115,38 @@ class InteractionListSerializer(serializers.ModelSerializer):
         ]
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
-        p = obj.persona
-        return PersonaPayload(
-            id=p.pk,
-            name=p.name,
-            thumbnail_url=p.thumbnail_url or "",
+        # Per-viewer name resolution (#1109): own faces and named-public faces render real;
+        # discovered anonymous faces reveal "<real> (as <mask>)"; undiscovered anonymous faces
+        # render a composed sdesc. Resolved once for the whole page (see _persona_display_map).
+        name, _is_discovered = self._persona_display_map().get(
+            obj.persona_id, (obj.persona.name, False)
         )
+        return PersonaPayload(
+            id=obj.persona_id,
+            name=name,
+            thumbnail_url=obj.persona.thumbnail_url or "",
+        )
+
+    def _persona_display_map(self) -> dict[int, tuple[str, bool]]:
+        """Cache the page's persona-display resolution on the shared context (O(1) queries)."""
+        cached = self.context.get("_persona_display_map")
+        if cached is not None:
+            return cached
+        from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
+
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        display_map = build_persona_display_map(
+            [row.persona for row in rows],
+            viewer_persona_ids=set(self.context.get("persona_ids", set())),
+            viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
+        )
+        self.context["_persona_display_map"] = display_map
+        return display_map
 
     def get_receiver_persona_ids(self, obj: Interaction) -> list[int]:
         return [r.persona_id for r in obj.cached_receivers]
