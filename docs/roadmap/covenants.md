@@ -517,13 +517,17 @@ additively while combat speed precedence goes to the Battle role.
 
 **Deferred (future seams):**
 
-- Structured `Story` link for CAMPAIGN dissolution — `Story.covenant` FK
-  and `Story.status`/`completed_at` exist as the hook; auto-dissolve on
-  story completion is not wired.
+- ~~Structured `Story` link for CAMPAIGN dissolution~~ — **SHIPPED (#759/#1185).**
+  A dedicated `Covenant.campaign_story` FK names the defining story; completing
+  that story (via the new `complete_story` primitive) dissolves the linked
+  CAMPAIGN covenant through the existing `dissolve_covenant` path. STANDING
+  covenants are untouched. This also required building the story-completion
+  primitive itself (#1185): `complete_story` + `POST /stories/{id}/complete/`
+  set `Story.status=COMPLETED`/`completed_at` and honestly foreclose in-flight
+  progress (new `ProgressStatus.FORECLOSED`) rather than orphaning or
+  falsely-completing it. (Returning-player wrap-up of foreclosed threads is a
+  tracked follow-up.)
 - Battle auto-engage on roster join (Slice B §629 hook).
-- CAMPAIGN auto-dissolve on Story completion (the generic exit lifecycle —
-  leave/kick/below-2 auto-dissolve — shipped in #519; the Story-driven trigger
-  for CAMPAIGN battle covenants remains a future seam).
 - Battle covenant frontend (#518).
 - Group abilities (#516, Slice F).
 

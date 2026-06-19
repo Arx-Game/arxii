@@ -38,3 +38,10 @@ class FrontierTests(TestCase):
         progress.refresh_from_db()
         self.assertEqual(progress.status, ProgressStatus.COMPLETED)
         self.assertFalse(progress.is_active)
+
+    def test_foreclosed_is_terminal(self):
+        _, _, progress = self._story_with_episode(StoryMaturity.PLOT)
+        set_progress_status(progress, ProgressStatus.FORECLOSED)
+        progress.refresh_from_db()
+        self.assertEqual(progress.status, ProgressStatus.FORECLOSED)
+        self.assertFalse(progress.is_active)

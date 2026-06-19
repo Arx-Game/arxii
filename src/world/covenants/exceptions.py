@@ -84,6 +84,17 @@ class BattleBindingNotAllowedError(CovenantFormationError):
     )
 
 
+class CampaignStoryNotAllowedError(CovenantFormationError):
+    """Raised when a non-CAMPAIGN covenant is given a campaign_story link."""
+
+    user_message = "Only CAMPAIGN battle covenants may set a campaign_story."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only CAMPAIGN battle covenants may set a campaign_story.",
+        }
+    )
+
+
 class CovenantEngagementPrerequisiteNotMetError(CovenantError):
     """Raised when attempting scene engagement without members present."""
 

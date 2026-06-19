@@ -11503,6 +11503,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/complete/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/complete/ — conclude a story.
+     *
+     *     Lead GM on the story (or staff) marks the story COMPLETED; in-flight
+     *     progress is foreclosed (see complete_story). Idempotent. No request
+     *     body; permission gating is the only access control.
+     */
+    post: operations['stories_complete_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/detach-from-table/': {
     parameters: {
       query?: never;
@@ -39859,6 +39882,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_complete_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

@@ -603,6 +603,26 @@ class StoryViewSet(viewsets.ModelViewSet):
         )
         return Response(StoryGMOfferSerializer(offer).data, status=status.HTTP_201_CREATED)
 
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="complete",
+        permission_classes=[IsLeadGMOnStoryOrStaff],
+    )
+    def complete(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/complete/ — conclude a story.
+
+        Lead GM on the story (or staff) marks the story COMPLETED; in-flight
+        progress is foreclosed (see complete_story). Idempotent. No request
+        body; permission gating is the only access control.
+        """
+        from world.stories.services.completion import complete_story  # noqa: PLC0415
+
+        story = self.get_object()
+        complete_story(story=story)
+        serializer = self.get_serializer(story)
+        return Response(serializer.data)
+
 
 class StoryParticipationViewSet(viewsets.ModelViewSet):
     """

@@ -19262,6 +19262,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/StoryDetail'
           description: ''
+  /api/stories/{id}/complete/:
+    post:
+      operationId: stories_complete_create
+      description: |-
+        POST /api/stories/{id}/complete/ — conclude a story.
+
+        Lead GM on the story (or staff) marks the story COMPLETED; in-flight
+        progress is foreclosed (see complete_story). Idempotent. No request
+        body; permission gating is the only access control.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this story.
+        required: true
+      tags:
+      - stories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryDetail'
+          description: ''
   /api/stories/{id}/detach-from-table/:
     post:
       operationId: stories_detach_from_table_create
