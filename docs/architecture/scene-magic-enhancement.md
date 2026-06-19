@@ -70,10 +70,14 @@ gives all social actions:
 - `ConsequenceEffect` application (conditions, property changes, etc.)
 - Character loss filtering (always applied)
 
-The six existing social actions (intimidate, persuade, deceive, flirt,
-perform, entrance) each have an `ActionTemplate` with `check_type` and
-`consequence_pool` FKs. The consequence pools determine what happens
-on success/failure — these are authored content, not code concerns.
+The seven social actions (intimidate, persuade, deceive, flirt,
+perform, entrance, and `restore_sense` — the #567 Restore-to-Sense
+ally-recovery action) each have an `ActionTemplate` with `check_type`
+(and, for most, a `consequence_pool`) FK. The consequence pools
+determine what happens on success/failure — these are authored content,
+not code concerns. `restore_sense` additionally carries a
+`RemoveConditionOnCheckConfig` dispatched via `Action.dispatch_effects`
+(see #1172).
 
 `resolve_scene_action()` remains available for any future callers that
 need the lightweight path but is no longer used by scene actions.
@@ -118,10 +122,14 @@ pattern.
 
 **ActionTemplate must be non-null:** `start_action_resolution()`
 requires a valid `ActionTemplate` with `check_type` FK.
-`create_action_request()` must validate that an `ActionTemplate`
-exists for the given `action_key` at creation time, rejecting the
-request early if not. This prevents null `action_template` from
-reaching the resolution pipeline.
+`create_action_request()` resolves and persists `action_template` at
+creation time from the registry action's `template_name`
+(`Action.template_name` → `ActionTemplate.objects.filter(name=…)`,
+#1172) — an `ActionTemplate` has only a unique `name`, no key/slug
+column. Action keys without a registry-backed template (standalone
+casts, rituals) leave `action_template` null and resolve via their own
+pipeline. This is what makes social actions live-dispatchable on the
+consent path.
 
 **How the technique modifies the action check:** The technique's
 runtime stats (intensity, control) can feed `extra_modifiers` into

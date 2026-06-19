@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from actions.constants import ActionCategory, TargetKind
     from actions.models import ActionEnhancement
     from actions.types import TargetFilters
+    from flows.scene_data_manager import SceneDataManager
 
 
 @dataclass
@@ -71,6 +72,13 @@ class Action:
     intent_event: str | None = None
     result_event: str | None = None
 
+    # Name of the ActionTemplate this action resolves through, if any. Set by
+    # registry-backed, data-driven actions (the social actions) so the scene
+    # layer can map a request's ``action_key`` back to its ActionTemplate — an
+    # ActionTemplate has only a unique ``name``, no key/slug column (#1172).
+    # Empty for actions that are not ActionTemplate-backed.
+    template_name: str = ""
+
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset()
 
     def get_prerequisites(self) -> list[Prerequisite]:
@@ -100,6 +108,26 @@ class Action:
             Structured result of the action.
         """
         raise NotImplementedError
+
+    def dispatch_effects(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        scene_data: SceneDataManager | None = None,
+    ) -> None:
+        """Dispatch this action's inherent, target-gated effect configs.
+
+        Default no-op. Actions with built-in effects (e.g. the social
+        ``RestoreSenseAction`` removing a Berserk condition) override this to
+        dispatch their ``ActionEnhancement`` effect configs against *target*.
+
+        Called from two places so the effects fire exactly once regardless of
+        dispatch route: the action's own ``execute()`` (the registry/``run()``
+        path) and the scene consent resolution (``_resolve_action_against_persona``
+        in ``world.scenes.action_services``), which resolves the check chain
+        directly and never reaches ``execute()``. A single live dispatch only
+        ever travels one of those routes, so there is no double-application.
+        """
 
     def check_availability(
         self,

@@ -59,8 +59,7 @@ from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
-# Social singletons are plain classes (not Action subclasses) but share the same interface.
-_ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
+_ALL_ACTIONS: list[Action] = [
     LookAction(),
     LookAtItemAction(),
     InventoryAction(),
@@ -116,6 +115,17 @@ ACTIONS_BY_KEY: dict[str, Action] = {a.key: a for a in _ALL_ACTIONS}
 ACTIONS_BY_TARGET_TYPE: dict[TargetType, list[Action]] = {}
 for _action in _ALL_ACTIONS:
     ACTIONS_BY_TARGET_TYPE.setdefault(_action.target_type, []).append(_action)
+
+# Social ActionTemplate-backed singletons indexed by their ``template_name``.
+# An ActionTemplate has only a unique ``name`` (no key/slug column), so the scene
+# layer uses this map to translate a template name back to its registry action —
+# both to derive the dispatch ``action_key`` (#1172: "Restore to Sense" → the
+# "restore_sense" key, which a naive ``name.lower()`` would mangle) and to resolve
+# the ActionTemplate for a consent request.
+SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
+    a.template_name: a
+    for a in (intimidate, persuade, deceive, flirt, perform, entrance, restore_sense)
+}
 
 
 def get_action(key: str) -> Action | None:
