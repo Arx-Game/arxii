@@ -162,6 +162,7 @@ class ActionRegistryTests(TestCase):
             "traverse_exit",
             "home",
             "activate_permit",
+            "use_item",
             "move_to_position",
             "set_the_stage",
             "start_round",

@@ -12,6 +12,7 @@ from actions.definitions.items import (
     PutInAction,
     TakeOutAction,
     UnequipAction,
+    UseItemAction,
 )
 from actions.prerequisites import (
     HoldsItemPrerequisite,
@@ -437,3 +438,89 @@ class OnUseTargetPrereqTests(TestCase):
         )
         assert met is False
         assert reason
+
+
+# ---------------------------------------------------------------------------
+# UseItemAction tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_use_result():
+    from world.items.types import UseItemResult
+
+    return UseItemResult(
+        applied_effects=[],
+        charges_remaining=1,
+        destroyed=False,
+        soft_deleted=False,
+        check_result=None,
+    )
+
+
+def _pool_with_condition_effect():
+    """Build a ConsequencePool with one apply_condition effect (target=self).
+
+    Mirrors the construction used in world/items/tests/test_item_instance_views.py
+    for the use-endpoint tests.
+    """
+    from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+    from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+    from world.conditions.factories import ConditionTemplateFactory
+
+    pool = ConsequencePoolFactory()
+    consequence = ConsequenceFactory(label="UseItemActionEffect")
+    ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+    ConsequenceEffectFactory(
+        consequence=consequence,
+        effect_type="apply_condition",
+        target="self",
+        condition_template=ConditionTemplateFactory(),
+    )
+    return pool
+
+
+class UseItemActionTests(TestCase):
+    def test_run_blocks_when_not_holding(self) -> None:
+        room = ObjectDBFactory(db_key="UseRoom", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="UseAlice", location=room)
+        item_obj = ObjectDBFactory(db_key="UseLoose", location=room)  # not held
+        ItemInstanceFactory(template=ItemTemplateFactory(name="UseLoose"), game_object=item_obj)
+        result = UseItemAction().run(actor, item=item_obj)
+        assert result.success is False
+
+    def test_happy_path_self_use_calls_service(self) -> None:
+        actor = CharacterFactory(db_key="UseBob")
+        item_obj = ObjectDBFactory(db_key="UseHeld", location=actor)
+        template = ItemTemplateFactory(
+            name="UsePotion",
+            is_consumable=True,
+            max_charges=2,
+            on_use_pool=_pool_with_condition_effect(),
+            on_use_check_type=None,
+        )
+        ItemInstanceFactory(template=template, game_object=item_obj, charges=2)
+        with patch("actions.definitions.items.use_item") as mock_use:
+            mock_use.return_value = _fake_use_result()
+            result = UseItemAction().run(actor, item=item_obj)
+        assert result.success is True
+        mock_use.assert_called_once()
+        assert mock_use.call_args.kwargs["target"] is None  # self-use
+
+    def test_happy_path_targeted_use_passes_validated_target(self) -> None:
+        actor = CharacterFactory(db_key="UseCarl")
+        near = CharacterFactory(db_key="UseNear", location=actor.location)
+        item_obj = ObjectDBFactory(db_key="UseSalve", location=actor)
+        template = ItemTemplateFactory(
+            name="UseSalve",
+            on_use_target_kind="character",
+            is_consumable=True,
+            max_charges=2,
+            on_use_pool=_pool_with_condition_effect(),
+            on_use_check_type=None,
+        )
+        ItemInstanceFactory(template=template, game_object=item_obj, charges=2)
+        with patch("actions.definitions.items.use_item") as mock_use:
+            mock_use.return_value = _fake_use_result()
+            result = UseItemAction().run(actor, item=item_obj, target=near)
+        assert result.success is True
+        assert mock_use.call_args.kwargs["target"] == near
