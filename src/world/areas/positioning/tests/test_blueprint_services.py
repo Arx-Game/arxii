@@ -9,11 +9,19 @@ from django.test import TestCase
 
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.exceptions import PositionError
-from world.areas.positioning.models import BlueprintEdge, BlueprintPosition, PositionBlueprint
+from world.areas.positioning.models import (
+    BlueprintEdge,
+    BlueprintPosition,
+    Position,
+    PositionBlueprint,
+    PositionEdge,
+)
 from world.areas.positioning.services import (
     add_blueprint_position,
     connect_blueprint_positions,
     create_blueprint,
+    instantiate_blueprint,
+    place_in_position,
     remove_blueprint,
 )
 
@@ -148,3 +156,71 @@ class RemoveBlueprintTests(TestCase):
         remove_blueprint(bp)
         self.assertFalse(BlueprintPosition.objects.filter(pk__in=[p1_pk, p2_pk]).exists())
         self.assertFalse(BlueprintEdge.objects.filter(blueprint_id=bp.pk).exists())
+
+
+class InstantiateBlueprintTests(TestCase):
+    """TDD tests for instantiate_blueprint — written RED-first."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="TestRoom", nohome=True)
+        self.bp = create_blueprint("Tavern")
+        self.h = add_blueprint_position(self.bp, "Hearth")
+        self.b = add_blueprint_position(self.bp, "Bar")
+        connect_blueprint_positions(self.h, self.b)
+
+    def test_instantiate_clones_graph(self):
+        positions = instantiate_blueprint(self.bp, self.room)
+        self.assertEqual({p.name for p in positions}, {"Hearth", "Bar"})
+        self.assertEqual(PositionEdge.objects.filter(position_a__room=self.room).count(), 1)
+
+    def test_instantiate_returns_position_instances(self):
+        positions = instantiate_blueprint(self.bp, self.room)
+        for pos in positions:
+            self.assertIsInstance(pos, Position)
+            self.assertEqual(pos.room_id, self.room.pk)
+
+    def test_instantiate_carries_kind_and_description(self):
+        bp2 = create_blueprint("Dungeon2")
+        add_blueprint_position(bp2, "Altar", kind=PositionKind.ELEVATED, description="Raised dais.")
+        from evennia import create_object
+
+        room3 = create_object("typeclasses.rooms.Room", key="Room3", nohome=True)
+        positions = instantiate_blueprint(bp2, room3)
+        self.assertEqual(len(positions), 1)
+        self.assertEqual(positions[0].kind, PositionKind.ELEVATED)
+        self.assertEqual(positions[0].description, "Raised dais.")
+
+    def test_instantiate_refuses_already_staged(self):
+        instantiate_blueprint(self.bp, self.room)
+        with self.assertRaises(PositionError) as ctx:
+            instantiate_blueprint(self.bp, self.room)
+        self.assertIn("already staged", str(ctx.exception))
+
+    def test_replace_refuses_when_occupied(self):
+        from evennia import create_object
+
+        room2 = create_object("typeclasses.rooms.Room", key="OccupiedRoom", nohome=True)
+        char = create_object(
+            "typeclasses.characters.Character", key="TestChar", location=room2, nohome=True
+        )
+        positions = instantiate_blueprint(self.bp, room2)
+        hearth = next(p for p in positions if p.name == "Hearth")
+        place_in_position(char, hearth)
+        with self.assertRaises(PositionError) as ctx:
+            instantiate_blueprint(self.bp, room2, replace=True)
+        self.assertIn("occupied", str(ctx.exception))
+
+    def test_replace_succeeds_when_empty(self):
+        instantiate_blueprint(self.bp, self.room)
+        # No occupants — replace=True should succeed and produce fresh positions.
+        positions2 = instantiate_blueprint(self.bp, self.room, replace=True)
+        self.assertEqual({p.name for p in positions2}, {"Hearth", "Bar"})
+        # Exactly the new set — old positions were deleted and replaced.
+        self.assertEqual(Position.objects.filter(room=self.room).count(), 2)
+
+    def test_replace_edge_reproduced(self):
+        instantiate_blueprint(self.bp, self.room)
+        instantiate_blueprint(self.bp, self.room, replace=True)
+        self.assertEqual(PositionEdge.objects.filter(position_a__room=self.room).count(), 1)
