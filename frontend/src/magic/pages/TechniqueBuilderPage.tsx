@@ -14,6 +14,7 @@
  * isStaff is read from the Redux account store (same pattern as CharacterCreationPage).
  */
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -23,7 +24,9 @@ import { useTechniqueStyles, useEffectTypes } from '@/character-creation/queries
 import { getGifts } from '@/character-creation/api';
 import type { components } from '@/generated/api';
 import { useDamageTypes } from '@/conditions/queries';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { TechniqueBuilderForm } from '../components/TechniqueBuilderForm';
+import { CharacterAuthorSelect } from '../components/CharacterAuthorSelect';
 import type { CapabilityType } from '../components/TechniquePayloadEditors';
 
 // ---------------------------------------------------------------------------
@@ -55,6 +58,12 @@ export function TechniqueBuilderPage() {
   const navigate = useNavigate();
   const account = useAccount();
   const isStaff = account?.is_staff ?? false;
+
+  // Acting character (#774): multi-alt accounts pick which character authors;
+  // single-character accounts fall through to the backend's auto-resolution.
+  const { data: rosterEntries = [] } = useMyRosterEntriesQuery();
+  const [pickedCharacterId, setPickedCharacterId] = useState<number | null>(null);
+  const effectiveCharacterId = pickedCharacterId ?? rosterEntries[0]?.character_id;
 
   // Lookup lists
   const { data: giftsData = [], isLoading: giftsLoading } = useQuery({
@@ -112,6 +121,12 @@ export function TechniqueBuilderPage() {
         </p>
       </div>
 
+      <CharacterAuthorSelect
+        entries={rosterEntries}
+        value={effectiveCharacterId ?? null}
+        onChange={setPickedCharacterId}
+      />
+
       <TechniqueBuilderForm
         mode={isStaff ? 'staff' : 'player'}
         gifts={gifts}
@@ -120,6 +135,7 @@ export function TechniqueBuilderPage() {
         capabilities={capabilitiesData}
         damageTypes={damageTypesData}
         conditions={conditions}
+        characterId={effectiveCharacterId}
         onSuccess={() => navigate('/threads')}
       />
     </div>
