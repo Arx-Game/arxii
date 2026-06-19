@@ -27348,7 +27348,7 @@ components:
           type: number
           format: double
         zone:
-          type: string
+          $ref: '#/components/schemas/ZoneEnum'
       required:
       - capacity
       - current
@@ -42250,6 +42250,20 @@ components:
       required:
       - choice
       - persona_id
+    ZoneEnum:
+      enum:
+      - fresh
+      - strained
+      - tired
+      - overexerted
+      - exhausted
+      type: string
+      description: |-
+        * `fresh` - Fresh
+        * `strained` - Strained
+        * `tired` - Tired
+        * `overexerted` - Overexerted
+        * `exhausted` - Exhausted
     _CategoryPolish:
       type: object
       description: One polish category's value + derived tier label for a building.

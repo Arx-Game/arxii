@@ -4,7 +4,7 @@
  * Mocks useCharacterAnima. Provides encounter with participants.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -35,6 +35,19 @@ function createWrapper() {
 }
 
 const mockedUseCharacterAnima = magicQueries.useCharacterAnima as ReturnType<typeof vi.fn>;
+
+// Bars render via the shared StatBar (Radix Progress). The colored fill is the
+// indicator child of the role="progressbar" element; the fill amount is exposed
+// as aria-valuenow rather than an inline width.
+function progressFor(testId: string): HTMLElement {
+  return within(screen.getByTestId(testId)).getByRole('progressbar');
+}
+function fillIndicatorFor(testId: string): HTMLElement {
+  return progressFor(testId).firstElementChild as HTMLElement;
+}
+function fillClassesFor(testId: string): string {
+  return fillIndicatorFor(testId).className ?? '';
+}
 
 function makeParticipant(overrides: Partial<Participant> = {}): Participant {
   return {
@@ -114,7 +127,7 @@ describe('VitalPools', () => {
     expect(screen.getByTestId('vital-health-bar')).toBeInTheDocument();
     expect(screen.getByText('Health')).toBeInTheDocument();
     // 8/10 visible
-    expect(screen.getByText('8')).toBeInTheDocument();
+    expect(screen.getByTestId('vital-health-bar')).toHaveTextContent('8 / 10');
   });
 
   it('shows amber fill when health is below 50%', () => {
@@ -125,8 +138,7 @@ describe('VitalPools', () => {
     });
 
     // health = 4/10 = 40% → wounded (amber)
-    const fillBar = screen.getByTestId('vital-health-bar-fill');
-    expect(fillBar.className).toContain('bg-amber-500');
+    expect(fillClassesFor('vital-health-bar')).toContain('bg-amber-500');
   });
 
   it('shows green fill when health is at or above 50%', () => {
@@ -136,8 +148,7 @@ describe('VitalPools', () => {
       wrapper: createWrapper(),
     });
 
-    const fillBar = screen.getByTestId('vital-health-bar-fill');
-    expect(fillBar.className).toContain('bg-emerald-500');
+    expect(fillClassesFor('vital-health-bar')).toContain('bg-emerald-500');
   });
 
   it('renders the anima bar with correct values', () => {
@@ -149,7 +160,7 @@ describe('VitalPools', () => {
 
     expect(screen.getByTestId('vital-anima-bar')).toBeInTheDocument();
     expect(screen.getByText('Anima')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByTestId('vital-anima-bar')).toHaveTextContent('5 / 10');
   });
 
   it('renders three fatigue bars with real values', () => {
@@ -207,10 +218,14 @@ describe('VitalPools', () => {
       wrapper: createWrapper(),
     });
 
-    const physicalFill = screen.getByTestId('vital-fatigue-physical-bar-fill');
-    expect(physicalFill).toHaveStyle({ width: '100%' });
-    const socialFill = screen.getByTestId('vital-fatigue-social-bar-fill');
-    expect(socialFill).toHaveStyle({ width: '0%' });
+    // over-capacity clamps to 100% (indicator fully shown → translateX(-0%)),
+    // divide-by-zero clamps to 0% (indicator hidden → translateX(-100%)).
+    expect(fillIndicatorFor('vital-fatigue-physical-bar')).toHaveStyle({
+      transform: 'translateX(-0%)',
+    });
+    expect(fillIndicatorFor('vital-fatigue-social-bar')).toHaveStyle({
+      transform: 'translateX(-100%)',
+    });
   });
 
   it('hides fatigue bars when fatigue is null (no vitals permission)', () => {

@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from world.fatigue.constants import FatigueZone
 from world.vitals.constants import (
     DERIVED_STATUS_ALIVE,
     DERIVED_STATUS_DEAD,
@@ -16,7 +17,7 @@ class FatiguePoolStatusSerializer(serializers.Serializer):
     current = serializers.IntegerField()
     capacity = serializers.IntegerField()
     percentage = serializers.FloatField()
-    zone = serializers.CharField()
+    zone = serializers.ChoiceField(choices=FatigueZone.choices)
 
 
 class VitalsFatigueSerializer(serializers.Serializer):
