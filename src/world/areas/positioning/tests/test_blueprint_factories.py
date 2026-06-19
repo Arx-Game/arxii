@@ -99,6 +99,8 @@ class BlueprintEdgeFactoryTests(TestCase):
 class TavernBlueprintTests(TestCase):
     """Integration test: tavern_blueprint() → instantiate_blueprint() → live graph."""
 
+    # setUp (not setUpTestData): Evennia create_object uses SharedMemoryModel/idmapper;
+    # fixtures created in setUpTestData get copy.Error(DbHolder) under CI shard runs.
     def setUp(self):
         from evennia import create_object
 

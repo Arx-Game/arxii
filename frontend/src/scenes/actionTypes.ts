@@ -37,6 +37,8 @@ export interface ActionRef {
   clash_action_slot?: string | null;
   /** Destination position PK — present on move_to_position registry actions (#532). */
   position_id?: number | null;
+  /** Blueprint PK — present on set_the_stage registry actions (#1017). */
+  blueprint_id?: number | null; // #1017
 }
 
 // ---------------------------------------------------------------------------

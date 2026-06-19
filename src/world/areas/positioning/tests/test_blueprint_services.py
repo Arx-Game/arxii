@@ -153,9 +153,10 @@ class RemoveBlueprintTests(TestCase):
         p2 = add_blueprint_position(bp, "Node2")
         connect_blueprint_positions(p1, p2)
         p1_pk, p2_pk = p1.pk, p2.pk
+        bp_pk = bp.pk  # capture before delete (bp.pk → None post-delete)
         remove_blueprint(bp)
         self.assertFalse(BlueprintPosition.objects.filter(pk__in=[p1_pk, p2_pk]).exists())
-        self.assertFalse(BlueprintEdge.objects.filter(blueprint_id=bp.pk).exists())
+        self.assertFalse(BlueprintEdge.objects.filter(blueprint_id=bp_pk).exists())
 
 
 class InstantiateBlueprintTests(TestCase):
