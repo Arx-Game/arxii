@@ -497,3 +497,23 @@ def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPositi
         defaults={"position": target},
     )
     return obj_pos
+
+
+def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
+    """Emit FELL if *position* is a CHASM. Returns whether an event was emitted.
+
+    The reactive catch/plummet consumer is deferred to the #1018 follow-up; this
+    only opens the seam.
+    """
+    if position.kind != PositionKind.CHASM:
+        return False
+    from flows.constants import EventName
+    from flows.emit import emit_event
+    from flows.events.payloads import FallEvent
+
+    emit_event(
+        EventName.FELL,
+        FallEvent(faller=objectdb, position=position),
+        location=objectdb.location,
+    )
+    return True
