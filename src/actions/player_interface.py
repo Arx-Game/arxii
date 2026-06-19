@@ -348,10 +348,9 @@ def _combat_actions(
 
     Candidate set: techniques the character knows that are combat-usable
     (``technique.action_template is not None``).  This is the SAME gate
-    ``DeclareActionSerializer.validate`` enforces — availability surfaces
-    candidates only; authoritative per-target / passive-slot / status
-    validation happens at declare/dispatch time (``DeclareActionSerializer.validate``
-    / ``CombatRoundContext.record_declaration``).
+    the dispatch path enforces — availability surfaces candidates only;
+    authoritative per-target / passive-slot / status validation happens
+    at dispatch time (``CombatRoundContext.record_declaration``).
 
     Args:
         character: The character's ``ObjectDB`` instance.
