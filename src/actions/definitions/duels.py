@@ -59,7 +59,7 @@ def _consent_blocked(target_sheet: CharacterSheet, actor_sheet: CharacterSheet) 
     if target_tenure is None:
         return False  # No active tenure → no consent preference → allow
     actor_tenure = _active_tenure(actor_sheet)
-    return _tenure_blocks_actor(target_tenure, actor_tenure)
+    return _tenure_blocks_actor(target_tenure, actor_tenure, category=None)
 
 
 def create_challenge(
