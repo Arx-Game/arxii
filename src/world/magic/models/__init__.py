@@ -126,6 +126,7 @@ from world.magic.models.soul_tether import (
     SineatingPendingOffer,
     SoulTetherRescue,
 )
+from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
@@ -270,6 +271,7 @@ __all__ = [
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
     "SineatingPendingOffer",
+    "SoulTetherConfig",
     "SoulTetherRescue",
     "SoulfrayConfig",
     # endorsement (Spec C style presentation — #1152)

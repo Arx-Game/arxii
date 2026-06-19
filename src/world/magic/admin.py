@@ -38,6 +38,7 @@ from world.magic.models import (
     RitualComponentRequirement,
     SceneEntryEndorsement,
     SoulfrayConfig,
+    SoulTetherConfig,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
@@ -697,3 +698,25 @@ class MagicProgressionMilestoneAdmin(admin.ModelAdmin):
     list_display = ("stage", "kind", "codex_entry", "sort_order")
     list_filter = ("stage", "kind")
     autocomplete_fields = ("codex_entry",)
+
+
+@admin.register(SoulTetherConfig)
+class SoulTetherConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the Soul Tether bond mechanic — one row per environment."""
+
+    list_display = (
+        "pk",
+        "anima_cost_per_unit",
+        "fatigue_cost_per_unit",
+        "per_scene_cap_hard_max",
+        "rescue_strain_stage3",
+        "rescue_strain_stage4",
+        "rescue_strain_stage5",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not SoulTetherConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

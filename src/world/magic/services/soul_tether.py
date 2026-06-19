@@ -37,6 +37,7 @@ from world.magic.exceptions import (
 )
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Resonance
+from world.magic.models.soul_tether_config import SoulTetherConfig
 from world.magic.services.threads import weave_thread
 from world.magic.types.aura import AffinityType
 from world.magic.types.soul_tether import (
@@ -51,6 +52,18 @@ from world.relationships.models import CharacterRelationship, RelationshipCapsto
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
+
+# =============================================================================
+# Config getter
+# =============================================================================
+
+
+def get_soul_tether_config() -> SoulTetherConfig:
+    """Get-or-create the Soul Tether tuning config singleton (pk=1)."""
+    with transaction.atomic():
+        cfg, _ = SoulTetherConfig.objects.get_or_create(pk=1)
+        return cfg
+
 
 # =============================================================================
 # Internal helpers
