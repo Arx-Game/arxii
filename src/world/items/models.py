@@ -17,7 +17,13 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
+from world.items.constants import (
+    PROVENANCE_EVENT_TYPES,
+    BodyRegion,
+    EquipmentLayer,
+    GearArchetype,
+    OwnershipEventType,
+)
 
 # Cross-app FK strings used by multiple fields below. Centralized to avoid the
 # duplicated-literal SonarCloud smell (python:S1192).
@@ -631,6 +637,18 @@ class ItemInstance(SharedMemoryModel):
         if self.cached_item_facets:
             return True
         return self.ownership_events.exclude(event_type=OwnershipEventType.CREATED).exists()
+
+    @property
+    def is_lore_critical(self) -> bool:
+        """True if this instance must never be auto-purged by the soft-delete
+        cleanup: it carries material ``lore_value``, facets, or transfer
+        provenance (it changed hands). Subset of ``differs_from_template`` —
+        cosmetic-only data (custom name / quality tier) is NOT lore-critical."""
+        if self.lore_value:
+            return True
+        if self.cached_item_facets:
+            return True
+        return self.ownership_events.filter(event_type__in=PROVENANCE_EVENT_TYPES).exists()
 
     def _quality_multiplier(self) -> Decimal:
         if self.quality_tier is None:

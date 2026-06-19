@@ -184,6 +184,10 @@ SITE_URL = env("SITE_URL", default="https://arxmush.org")
 GITHUB_ISSUE_REPO = env("GITHUB_ISSUE_REPO", default="Arx-Game/arxii")
 GITHUB_ISSUE_TOKEN = env("GITHUB_ISSUE_TOKEN", default=env("GH_TOKEN", default=""))
 
+# Days a soft-deleted, non-lore-critical ItemInstance lingers (recoverable)
+# before the daily cleanup hard-deletes it (#1025).
+ITEM_SOFT_DELETE_GRACE_DAYS = env.int("ITEM_SOFT_DELETE_GRACE_DAYS", default=30)
+
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",

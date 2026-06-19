@@ -56,6 +56,19 @@ class OwnershipEventType(models.TextChoices):
     CONSUMED = "consumed", "Consumed"  # item destroyed by use (e.g. permit absorbed into project)
 
 
+# Ownership events that represent the item changing hands — the lore-relevant
+# provenance the soft-delete cleanup must never destroy (#1025). Deliberately
+# excludes CREATED (origin) and ACTIVATED/CONSUMED (every consumed item has
+# these, so counting them would make the purge a no-op).
+PROVENANCE_EVENT_TYPES = frozenset(
+    {
+        OwnershipEventType.GIVEN,
+        OwnershipEventType.STOLEN,
+        OwnershipEventType.TRANSFERRED,
+    }
+)
+
+
 class GearArchetype(models.TextChoices):
     """Gear categorization for covenant role compatibility.
 
