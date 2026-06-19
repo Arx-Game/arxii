@@ -69,9 +69,15 @@ function setupResonances(
 }
 
 const baseParams = {
-  selectedTechnique: { id: 42, name: 'Flamecall', strain_cost: 1 } as Parameters<
-    typeof useCastPullSelection
-  >[0]['selectedTechnique'],
+  selectedTechnique: {
+    id: 42,
+    name: 'Flamecall',
+    anima_cost: 1,
+    tier: 1,
+    intensity: 1,
+    control: 1,
+    hostile: false,
+  } as Parameters<typeof useCastPullSelection>[0]['selectedTechnique'],
   characterId: 7,
   castTargetPersonaId: null,
   sceneId: '99',
