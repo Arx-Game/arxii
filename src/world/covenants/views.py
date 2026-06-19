@@ -15,8 +15,8 @@ from rest_framework.response import Response
 from world.covenants.exceptions import (
     CovenantEngagementPrerequisiteNotMetError,
     CovenantExitError,
-    NotACovenantLeaderError,
     NotAStandingBattleCovenantError,
+    NotAuthorizedToKickError,
     SubrolePromotionError,
 )
 from world.covenants.filters import (
@@ -201,7 +201,7 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         )
         if actor is None:
             return Response(
-                {"detail": NotACovenantLeaderError.user_message},
+                {"detail": NotAuthorizedToKickError.user_message},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:

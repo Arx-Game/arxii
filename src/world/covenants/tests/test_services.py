@@ -6,34 +6,50 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CovenantType
+from world.covenants.constants import (
+    DEFAULT_FOUNDER_RANK_NAME,
+    DEFAULT_MEMBER_RANK_NAME,
+    CovenantType,
+)
 from world.covenants.exceptions import (
-    CannotKickLeaderError,
+    CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
+    CrossCovenantRankError,
     DuplicateFounderError,
     InsufficientFoundersError,
-    NotACovenantLeaderError,
+    LastManagerRankError,
+    NotAuthorizedToKickError,
+    NotAuthorizedToManageRanksError,
 )
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
+    CovenantManagerRankFactory,
+    CovenantRankFactory,
     CovenantRoleFactory,
     GearArchetypeCompatibilityFactory,
 )
-from world.covenants.models import CharacterCovenantRole
+from world.covenants.models import CharacterCovenantRole, CovenantRank
 from world.covenants.services import (
     add_member,
     assign_covenant_role,
+    assign_rank,
     change_role,
     clear_engaged_for_type,
     clear_engaged_membership,
     create_covenant,
+    create_rank,
+    delete_rank,
     dissolve_covenant,
     end_covenant_role,
     is_gear_compatible,
     kick_member,
     leave_covenant,
+    rename_rank,
+    reorder_ranks,
     set_engaged_membership,
+    set_rank_capabilities,
+    transfer_top,
 )
 from world.covenants.types import CovenantFounder
 from world.items.constants import GearArchetype
@@ -62,6 +78,86 @@ class CreateCovenantTests(TestCase):
         for membership in (membership_a, membership_b):
             self.assertIsNone(membership.left_at)
             self.assertFalse(membership.engaged)
+
+    def test_formation_builds_default_rank_ladder(self) -> None:
+        """Default (not flat) formation creates Founder + Member ranks."""
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov = create_covenant(
+            name="Ladder Test",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="Build a ladder.",
+            founders=[
+                CovenantFounder(character_sheet=sheet_a, role=role, is_leader=True),
+                CovenantFounder(character_sheet=sheet_b, role=role),
+            ],
+        )
+        ranks = list(CovenantRank.objects.filter(covenant=cov).order_by("tier"))
+        self.assertEqual(len(ranks), 2)
+        founder_rank = ranks[0]
+        member_rank = ranks[1]
+        self.assertEqual(founder_rank.name, DEFAULT_FOUNDER_RANK_NAME)
+        self.assertEqual(founder_rank.tier, 1)
+        self.assertTrue(founder_rank.can_invite)
+        self.assertTrue(founder_rank.can_kick)
+        self.assertTrue(founder_rank.can_manage_ranks)
+        self.assertEqual(member_rank.name, DEFAULT_MEMBER_RANK_NAME)
+        self.assertEqual(member_rank.tier, 2)
+        self.assertFalse(member_rank.can_invite)
+        self.assertFalse(member_rank.can_kick)
+        self.assertFalse(member_rank.can_manage_ranks)
+
+        m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
+        m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
+        self.assertEqual(m_a.rank, founder_rank)  # leader gets Founder
+        self.assertEqual(m_b.rank, member_rank)  # others get Member
+
+    def test_formation_flat_creates_single_member_rank(self) -> None:
+        """Flat formation creates one Member rank; all founders assigned to it."""
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov = create_covenant(
+            name="Flat Cov",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="Keep it flat.",
+            founders=[
+                CovenantFounder(character_sheet=sheet_a, role=role),
+                CovenantFounder(character_sheet=sheet_b, role=role),
+            ],
+            flat=True,
+        )
+        ranks = list(CovenantRank.objects.filter(covenant=cov))
+        self.assertEqual(len(ranks), 1)
+        self.assertEqual(ranks[0].name, DEFAULT_MEMBER_RANK_NAME)
+        self.assertFalse(ranks[0].can_manage_ranks)
+
+        m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
+        m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
+        self.assertEqual(m_a.rank, ranks[0])
+        self.assertEqual(m_b.rank, ranks[0])
+
+    def test_formation_defaults_first_founder_to_leader(self) -> None:
+        """If no founder is flagged is_leader, the first founder gets the Founder rank."""
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov = create_covenant(
+            name="Default Leader",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="Who leads?",
+            founders=[
+                CovenantFounder(character_sheet=sheet_a, role=role),
+                CovenantFounder(character_sheet=sheet_b, role=role),
+            ],
+        )
+        founder_rank = CovenantRank.objects.get(covenant=cov, name=DEFAULT_FOUNDER_RANK_NAME)
+        member_rank = CovenantRank.objects.get(covenant=cov, name=DEFAULT_MEMBER_RANK_NAME)
+        m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
+        m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
+        self.assertEqual(m_a.rank, founder_rank)  # first founder = leader
+        self.assertEqual(m_b.rank, member_rank)
 
     def test_rejects_single_founder(self) -> None:
         """Covenant formation requires ≥2 founders; solo formation is a programmer error."""
@@ -104,14 +200,27 @@ class CreateCovenantTests(TestCase):
 class AddMemberTests(TestCase):
     def test_creates_active_membership(self) -> None:
         cov = CovenantFactory()
+        # add_member requires at least one rank on the covenant (base rank).
+        CovenantRankFactory(covenant=cov, tier=1)
         sheet = CharacterSheetFactory()
         role = CovenantRoleFactory(covenant_type=cov.covenant_type)
         membership = add_member(covenant=cov, character_sheet=sheet, role=role)
         self.assertIsNone(membership.left_at)
         self.assertEqual(membership.covenant, cov)
 
+    def test_add_member_assigns_base_rank(self) -> None:
+        """New members get the covenant's base rank (highest tier = lowest authority)."""
+        cov = CovenantFactory()
+        CovenantRankFactory(covenant=cov, tier=1)
+        base = CovenantRankFactory(covenant=cov, tier=2)
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        membership = add_member(covenant=cov, character_sheet=sheet, role=role)
+        self.assertEqual(membership.rank, base)
+
     def test_duplicate_active_raises_integrity_error(self) -> None:
         cov = CovenantFactory()
+        CovenantRankFactory(covenant=cov, tier=1)
         sheet = CharacterSheetFactory()
         role = CovenantRoleFactory(covenant_type=cov.covenant_type)
         add_member(covenant=cov, character_sheet=sheet, role=role)
@@ -177,6 +286,7 @@ class AssignCovenantRoleTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.cov = CovenantFactory()
         cls.role = CovenantRoleFactory(slug="vanguard", covenant_type=cls.cov.covenant_type)
+        cls.rank = CovenantRankFactory(covenant=cls.cov, tier=1)
 
     def test_assign_creates_active_row(self) -> None:
         assignment = assign_covenant_role(
@@ -191,6 +301,7 @@ class AssignCovenantRoleTests(TestCase):
         _ = list(self.sheet.character.covenant_roles.currently_engaged_roles())
 
         new_cov = CovenantFactory()
+        CovenantRankFactory(covenant=new_cov, tier=1)
         new_role = CovenantRoleFactory(slug="anchor", covenant_type=new_cov.covenant_type)
         assign_covenant_role(character_sheet=self.sheet, covenant=new_cov, covenant_role=new_role)
 
@@ -379,6 +490,7 @@ class ClearEngagedForTypeTests(TestCase):
 class MemberRosterInvalidationTests(TestCase):
     def test_add_member_invalidates_member_roster(self) -> None:
         cov = CovenantFactory()
+        CovenantRankFactory(covenant=cov, tier=1)
         # Warm the roster cache:
         _ = cov.member_roster.active_memberships
         sheet = CharacterSheetFactory()
@@ -415,6 +527,7 @@ class MemberRosterInvalidationTests(TestCase):
 
     def test_assign_covenant_role_invalidates_member_roster(self) -> None:
         cov = CovenantFactory()
+        CovenantRankFactory(covenant=cov, tier=1)
         sheet = CharacterSheetFactory()
         role = CovenantRoleFactory(covenant_type=cov.covenant_type)
         # Warm the roster cache:
@@ -989,21 +1102,38 @@ class LeaveCovenantTests(TestCase):
 
 
 class KickMemberTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.leader_role = CovenantRoleFactory(slug="kick-leader", is_leadership=True)
-        cls.member_role = CovenantRoleFactory(slug="kick-member", is_leadership=False)
+    """Rank-based kick authorization tests.
 
-    def _row(self, cov, role):
+    Tier convention: lower tier number = higher authority (tier 1 = top).
+    can_kick=True allows removing members with a strictly higher tier number.
+    """
+
+    def _setup_cov_with_ranks(self):
+        """Return (cov, top_rank, mid_rank, base_rank)."""
+        cov = CovenantFactory()
+        top_rank = CovenantRankFactory(
+            covenant=cov, tier=1, can_kick=True, can_invite=True, can_manage_ranks=True
+        )
+        mid_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=True, can_invite=False, can_manage_ranks=False
+        )
+        base_rank = CovenantRankFactory(
+            covenant=cov, tier=3, can_kick=False, can_invite=False, can_manage_ranks=False
+        )
+        return cov, top_rank, mid_rank, base_rank
+
+    def _row(self, cov, rank):
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
         return CharacterCovenantRoleFactory(
-            character_sheet=CharacterSheetFactory(), covenant=cov, covenant_role=role
+            character_sheet=CharacterSheetFactory(), covenant=cov, covenant_role=role, rank=rank
         )
 
-    def test_kick_member_by_leader(self) -> None:
-        cov = CovenantFactory()
-        actor = self._row(cov, self.leader_role)
-        target = self._row(cov, self.member_role)
-        self._row(cov, self.member_role)  # third member keeps covenant alive
+    def test_kick_lower_tier_member_succeeds(self) -> None:
+        """Higher-authority (lower tier) actor with can_kick removes lower-authority target."""
+        cov, top_rank, _mid, base_rank = self._setup_cov_with_ranks()
+        actor = self._row(cov, top_rank)
+        target = self._row(cov, base_rank)
+        self._row(cov, base_rank)  # third member keeps covenant alive
 
         kick_member(target=target, actor=actor)
 
@@ -1012,34 +1142,49 @@ class KickMemberTests(TestCase):
         cov.refresh_from_db()
         self.assertIsNone(cov.dissolved_at)
 
-    def test_kick_by_non_leader_rejected(self) -> None:
-        cov = CovenantFactory()
-        actor = self._row(cov, self.member_role)
-        target = self._row(cov, self.member_role)
-        self._row(cov, self.member_role)
+    def test_kick_equal_tier_rejected(self) -> None:
+        """Kicking a member of equal tier raises CannotKickEqualOrHigherRankError."""
+        cov, top_rank, _mid, _base = self._setup_cov_with_ranks()
+        actor = self._row(cov, top_rank)
+        target = self._row(cov, top_rank)
+        self._row(cov, top_rank)
 
-        with self.assertRaises(NotACovenantLeaderError):
+        with self.assertRaises(CannotKickEqualOrHigherRankError):
             kick_member(target=target, actor=actor)
 
         target.refresh_from_db()
         self.assertIsNone(target.left_at)
 
-    def test_kick_leader_by_leader_rejected(self) -> None:
-        cov = CovenantFactory()
-        actor = self._row(cov, self.leader_role)
-        target = self._row(cov, self.leader_role)
-        self._row(cov, self.member_role)
+    def test_kick_higher_rank_tier_rejected(self) -> None:
+        """Kicking a member with lower tier (higher authority) raises the error."""
+        cov, top_rank, _mid, base_rank = self._setup_cov_with_ranks()
+        # mid_rank has can_kick, but cannot kick top_rank (higher authority)
+        actor = self._row(cov, base_rank)
+        target = self._row(cov, top_rank)
+        self._row(cov, base_rank)
 
-        with self.assertRaises(CannotKickLeaderError):
+        # actor has no can_kick, so NotAuthorizedToKickError fires first
+        with self.assertRaises(NotAuthorizedToKickError):
+            kick_member(target=target, actor=actor)
+
+    def test_kick_without_can_kick_rejected(self) -> None:
+        """Actor without can_kick raises NotAuthorizedToKickError."""
+        cov, _top_rank, _mid, base_rank = self._setup_cov_with_ranks()
+        actor = self._row(cov, base_rank)  # can_kick=False
+        target = self._row(cov, base_rank)
+        self._row(cov, base_rank)
+
+        with self.assertRaises(NotAuthorizedToKickError):
             kick_member(target=target, actor=actor)
 
         target.refresh_from_db()
         self.assertIsNone(target.left_at)
 
     def test_kick_self_rejected(self) -> None:
-        cov = CovenantFactory()
-        actor = self._row(cov, self.leader_role)
-        self._row(cov, self.member_role)
+        """Actor cannot kick themselves regardless of rank."""
+        cov, top_rank, _mid, _base = self._setup_cov_with_ranks()
+        actor = self._row(cov, top_rank)
+        self._row(cov, top_rank)
 
         with self.assertRaises(CannotKickSelfError):
             kick_member(target=actor, actor=actor)
@@ -1047,24 +1192,43 @@ class KickMemberTests(TestCase):
         actor.refresh_from_db()
         self.assertIsNone(actor.left_at)
 
-    def test_kick_cross_covenant_rejected(self) -> None:
-        # An actor leading covenant A cannot kick a member of covenant B.
-        cov_a = CovenantFactory()
-        cov_b = CovenantFactory()
-        actor = self._row(cov_a, self.leader_role)
-        target = self._row(cov_b, self.member_role)
-        self._row(cov_b, self.member_role)
+    def test_kick_departed_actor_rejected(self) -> None:
+        """Actor who has already left the covenant cannot kick."""
+        cov, top_rank, _mid, base_rank = self._setup_cov_with_ranks()
+        actor = self._row(cov, top_rank)
+        target = self._row(cov, base_rank)
+        self._row(cov, base_rank)
 
-        with self.assertRaises(NotACovenantLeaderError):
+        # Manually depart the actor.
+        from django.utils import timezone
+
+        actor.left_at = timezone.now()
+        actor.save(update_fields=["left_at"])
+
+        with self.assertRaises(NotAuthorizedToKickError):
+            kick_member(target=target, actor=actor)
+
+        target.refresh_from_db()
+        self.assertIsNone(target.left_at)
+
+    def test_kick_cross_covenant_rejected(self) -> None:
+        """Actor in covenant A cannot kick a member of covenant B."""
+        cov_a, top_a, _mid_a, _base_a = self._setup_cov_with_ranks()
+        cov_b, _top_b, _mid_b, base_b = self._setup_cov_with_ranks()
+        actor = self._row(cov_a, top_a)
+        target = self._row(cov_b, base_b)
+        self._row(cov_b, base_b)
+
+        with self.assertRaises(NotAuthorizedToKickError):
             kick_member(target=target, actor=actor)
 
         target.refresh_from_db()
         self.assertIsNone(target.left_at)
 
     def test_kick_dropping_below_two_auto_dissolves(self) -> None:
-        cov = CovenantFactory()
-        actor = self._row(cov, self.leader_role)
-        target = self._row(cov, self.member_role)
+        cov, top_rank, _mid, base_rank = self._setup_cov_with_ranks()
+        actor = self._row(cov, top_rank)
+        target = self._row(cov, base_rank)
 
         kick_member(target=target, actor=actor)
 
@@ -1074,3 +1238,200 @@ class KickMemberTests(TestCase):
         actor.refresh_from_db()
         self.assertIsNotNone(target.left_at)
         self.assertIsNotNone(actor.left_at)
+
+
+class RankManagementTests(TestCase):
+    """Tests for rank management service functions (Task 5)."""
+
+    def setUp(self) -> None:
+        self.cov = CovenantFactory()
+        self.manager_rank = CovenantManagerRankFactory(covenant=self.cov, tier=1)
+        self.base_rank = CovenantRankFactory(
+            covenant=self.cov, tier=2, can_invite=False, can_kick=False, can_manage_ranks=False
+        )
+        role = CovenantRoleFactory(covenant_type=self.cov.covenant_type)
+        self.manager_member = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=role,
+            rank=self.manager_rank,
+        )
+        self.base_member = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=role,
+            rank=self.base_rank,
+        )
+
+    # --- create_rank ---
+
+    def test_create_rank_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            create_rank(covenant=self.cov, actor=self.base_member, name="Elite", tier=3)
+
+    def test_create_rank_succeeds_for_manager(self) -> None:
+        rank = create_rank(
+            covenant=self.cov,
+            actor=self.manager_member,
+            name="Elite",
+            tier=3,
+            can_kick=True,
+        )
+        self.assertIsInstance(rank, CovenantRank)
+        self.assertEqual(rank.name, "Elite")
+        self.assertEqual(rank.tier, 3)
+        self.assertTrue(rank.can_kick)
+
+    # --- rename_rank ---
+
+    def test_rename_rank_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            rename_rank(rank=self.base_rank, actor=self.base_member, name="Renamed")
+
+    def test_rename_rank_succeeds(self) -> None:
+        rename_rank(rank=self.base_rank, actor=self.manager_member, name="Initiate")
+        self.base_rank.refresh_from_db()
+        self.assertEqual(self.base_rank.name, "Initiate")
+
+    # --- set_rank_capabilities ---
+
+    def test_set_rank_capabilities_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            set_rank_capabilities(rank=self.base_rank, actor=self.base_member, can_invite=True)
+
+    def test_set_rank_capabilities_updates_flags(self) -> None:
+        set_rank_capabilities(
+            rank=self.base_rank,
+            actor=self.manager_member,
+            can_invite=True,
+            can_kick=True,
+        )
+        self.base_rank.refresh_from_db()
+        self.assertTrue(self.base_rank.can_invite)
+        self.assertTrue(self.base_rank.can_kick)
+
+    def test_set_rank_capabilities_lockout_last_manager(self) -> None:
+        """Removing can_manage_ranks from the only manager rank raises LastManagerRankError."""
+        with self.assertRaises(LastManagerRankError):
+            set_rank_capabilities(
+                rank=self.manager_rank, actor=self.manager_member, can_manage_ranks=False
+            )
+
+    # --- reorder_ranks ---
+
+    def test_reorder_ranks_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            reorder_ranks(
+                covenant=self.cov,
+                actor=self.base_member,
+                ordered_rank_ids=[self.base_rank.pk, self.manager_rank.pk],
+            )
+
+    def test_reorder_ranks_rewrites_tiers_atomically(self) -> None:
+        # Swap manager_rank (tier 1) and base_rank (tier 2).
+        reorder_ranks(
+            covenant=self.cov,
+            actor=self.manager_member,
+            ordered_rank_ids=[self.base_rank.pk, self.manager_rank.pk],
+        )
+        self.manager_rank.refresh_from_db()
+        self.base_rank.refresh_from_db()
+        self.assertEqual(self.base_rank.tier, 1)
+        self.assertEqual(self.manager_rank.tier, 2)
+
+    # --- assign_rank ---
+
+    def test_assign_rank_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            assign_rank(membership=self.base_member, actor=self.base_member, rank=self.manager_rank)
+
+    def test_assign_rank_cross_covenant_raises(self) -> None:
+        other_cov = CovenantFactory()
+        other_rank = CovenantRankFactory(covenant=other_cov, tier=1)
+        with self.assertRaises(CrossCovenantRankError):
+            assign_rank(membership=self.base_member, actor=self.manager_member, rank=other_rank)
+
+    def test_assign_rank_promotes_member(self) -> None:
+        assign_rank(membership=self.base_member, actor=self.manager_member, rank=self.manager_rank)
+        self.base_member.refresh_from_db()
+        self.assertEqual(self.base_member.rank, self.manager_rank)
+
+    def test_assign_rank_lockout_last_manager(self) -> None:
+        """Demoting the last manager to a non-manager rank raises LastManagerRankError."""
+        with self.assertRaises(LastManagerRankError):
+            assign_rank(
+                membership=self.manager_member, actor=self.manager_member, rank=self.base_rank
+            )
+
+    # --- transfer_top ---
+
+    def test_transfer_top_requires_manage_ranks(self) -> None:
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            transfer_top(
+                covenant=self.cov,
+                actor=self.base_member,
+                new_top_membership=self.manager_member,
+            )
+
+    def test_transfer_top_swaps_ranks(self) -> None:
+        transfer_top(
+            covenant=self.cov,
+            actor=self.manager_member,
+            new_top_membership=self.base_member,
+        )
+        self.manager_member.refresh_from_db()
+        self.base_member.refresh_from_db()
+        self.assertEqual(self.base_member.rank, self.manager_rank)
+        self.assertEqual(self.manager_member.rank, self.base_rank)
+
+    def test_transfer_top_cross_covenant_raises(self) -> None:
+        other_cov = CovenantFactory()
+        other_rank = CovenantRankFactory(covenant=other_cov, tier=1)
+        other_role = CovenantRoleFactory(covenant_type=other_cov.covenant_type)
+        other_member = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=other_cov,
+            covenant_role=other_role,
+            rank=other_rank,
+        )
+        with self.assertRaises(CrossCovenantRankError):
+            transfer_top(
+                covenant=self.cov,
+                actor=self.manager_member,
+                new_top_membership=other_member,
+            )
+
+    # --- delete_rank ---
+
+    def test_delete_rank_requires_manage_ranks(self) -> None:
+        extra_rank = CovenantRankFactory(covenant=self.cov, tier=3)
+        with self.assertRaises(NotAuthorizedToManageRanksError):
+            delete_rank(rank=extra_rank, actor=self.base_member, reassign_to=self.base_rank)
+
+    def test_delete_rank_reassigns_members(self) -> None:
+        """Members of a deleted rank are reassigned to reassign_to."""
+        extra_rank = CovenantRankFactory(covenant=self.cov, tier=3)
+        role = CovenantRoleFactory(covenant_type=self.cov.covenant_type)
+        extra_member = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(),
+            covenant=self.cov,
+            covenant_role=role,
+            rank=extra_rank,
+        )
+        delete_rank(rank=extra_rank, actor=self.manager_member, reassign_to=self.base_rank)
+        extra_member.refresh_from_db()
+        self.assertEqual(extra_member.rank, self.base_rank)
+
+    def test_delete_rank_cross_covenant_reassign_raises(self) -> None:
+        extra_rank = CovenantRankFactory(covenant=self.cov, tier=3)
+        other_cov = CovenantFactory()
+        other_rank = CovenantRankFactory(covenant=other_cov, tier=1)
+        with self.assertRaises(CrossCovenantRankError):
+            delete_rank(rank=extra_rank, actor=self.manager_member, reassign_to=other_rank)
+
+    def test_delete_rank_lockout_last_manager(self) -> None:
+        """Deleting the only manager rank (non-manager reassign_to) raises LastManagerRankError."""
+        with self.assertRaises(LastManagerRankError):
+            delete_rank(
+                rank=self.manager_rank, actor=self.manager_member, reassign_to=self.base_rank
+            )
