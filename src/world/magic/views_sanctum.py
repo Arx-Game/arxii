@@ -38,6 +38,7 @@ from world.magic.services.sanctum_install import (
     absorb_sanctum_pool,
     perform_dissolution,
     perform_sanctification,
+    sanctification_fizzle_detail,
 )
 from world.magic.services.sanctum_rituals import (
     HomecomingValidationError,
@@ -156,6 +157,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 "new_homecoming_sum": result.new_homecoming_sum,
                 "new_cap": result.new_cap,
                 "success_level": result.success_level,
+                "tier": result.tier,
             }
         )
 
@@ -183,6 +185,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 "sum_after_drain": result.sum_after_drain,
                 "sacrifice_paid": result.sacrifice_paid,
                 "success_level": result.success_level,
+                "tier": result.tier,
             }
         )
 
@@ -235,7 +238,8 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 {
                     "fizzled": True,
                     "success_level": result.success_level,
-                    "detail": "The ritual failed to take hold; the Sanctum was not created.",
+                    "tier": result.tier,
+                    "detail": sanctification_fizzle_detail(result.tier),
                 },
                 status=status.HTTP_200_OK,
             )
@@ -245,6 +249,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 **SanctumDetailsSerializer(sanctum, context={"request": request}).data,
                 "fizzled": False,
                 "success_level": result.success_level,
+                "tier": result.tier,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -269,6 +274,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 "success_level": result.success_level,
                 "recovered_amount": result.recovered_amount,
                 "is_botch": result.is_botch,
+                "tier": result.tier,
             }
         )
 

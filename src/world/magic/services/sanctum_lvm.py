@@ -23,10 +23,61 @@ from django.db import transaction
 from django.db.models import Sum
 
 from world.locations.models import LocationValueModifier
-from world.locations.services import upsert_room_resonance_modifier
+from world.locations.services import effective_owner, upsert_room_resonance_modifier
 
 if TYPE_CHECKING:
     from world.magic.models import Resonance, SanctumDetails
+
+
+PATH_LEVEL_CAP_MULTIPLIER = 10
+"""Per-Path-level cap multiplier for a Sanctum's Homecoming-grown resonance.
+
+``cap = owner_character_path_level * PATH_LEVEL_CAP_MULTIPLIER`` (Personal);
+aggregate active-member Path levels × this (Covenant interim). Tunable.
+"""
+
+
+def compute_homecoming_cap(sanctum: SanctumDetails) -> int:
+    """Per-Sanctum cap on Homecoming-grown resonance.
+
+    Personal: ``owner_path_level × PATH_LEVEL_CAP_MULTIPLIER``. Covenant
+    interim: sum of active member Path levels × the multiplier (will shift
+    to ``Covenant.level`` when Slice D's level work ships per the spec note).
+
+    Lives here in ``sanctum_lvm`` — the module that owns ``apply_homecoming_gain``,
+    the cap's only consumer — so callers no longer reach across modules for a
+    private helper.
+    """
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+    from world.magic.models import SanctumOwnerMode  # noqa: PLC0415
+    from world.progression.services.skill_development import (  # noqa: PLC0415
+        get_character_path_level,
+    )
+
+    room = sanctum.feature_instance.room_profile.objectdb
+    ownership = effective_owner(room)
+    if ownership is None:
+        return 0
+
+    if sanctum.owner_mode == SanctumOwnerMode.PERSONAL:
+        owner_persona = ownership.holder_persona
+        character = owner_persona.character_sheet.character
+        return get_character_path_level(character) * PATH_LEVEL_CAP_MULTIPLIER
+
+    covenant = ownership.holder_organization.covenant
+    active_sheets = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+    ).values_list("character_sheet", flat=True)
+    if not active_sheets:
+        return 0
+    total = 0
+    for sheet_id in active_sheets:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheet = CharacterSheet.objects.get(pk=sheet_id)
+        total += get_character_path_level(sheet.character)
+    return total * PATH_LEVEL_CAP_MULTIPLIER
 
 
 def homecoming_source_tag(sanctum: SanctumDetails) -> str:

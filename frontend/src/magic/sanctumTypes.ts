@@ -12,6 +12,14 @@ import type { components } from '@/generated/api';
 
 export type SanctumDetails = components['schemas']['SanctumDetails'];
 
+/**
+ * Graded ritual outcome tier, mirrored from `OutcomeTier` in
+ * `world/magic/services/ritual_checks.py`. Surfaced on every Sanctum ritual
+ * result so the UI can distinguish a crit / success / fail / botch without
+ * re-deriving the server's private success_level boundaries.
+ */
+export type SanctumOutcomeTier = 'crit' | 'success' | 'fail' | 'botch';
+
 export interface HomecomingRequest {
   resonance_sacrificed: number;
   narrative_text?: string;
@@ -22,6 +30,8 @@ export interface HomecomingResult {
   overflow_escrowed: number;
   new_homecoming_sum: number;
   new_cap: number;
+  success_level: number;
+  tier: SanctumOutcomeTier;
 }
 
 export interface PurgingRequest {
@@ -33,6 +43,8 @@ export interface PurgingResult {
   new_resonance_id: number;
   sum_after_drain: number;
   sacrifice_paid: number;
+  success_level: number;
+  tier: SanctumOutcomeTier;
 }
 
 export type SanctumSlotKind = 'PERSONAL_OWN' | 'COVENANT' | 'HELPER';
