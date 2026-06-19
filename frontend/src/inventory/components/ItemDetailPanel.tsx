@@ -187,7 +187,10 @@ function ItemContent({
   function handleUse() {
     useMutation.mutate(item.id, {
       onSuccess: (result) => setUseResult(result),
-      onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to use item.'),
+      onError: (err) => {
+        setUseResult(null);
+        toast.error(err instanceof Error ? err.message : 'Failed to use item.');
+      },
     });
   }
 

@@ -387,6 +387,39 @@ describe('ItemDetailPanel', () => {
     expect(screen.queryByTestId('use-result')).toBeNull();
   });
 
+  it('clears the use-result block when a subsequent use of the same item fails', () => {
+    let callCount = 0;
+    const mutate = vi.fn((_id, opts) => {
+      callCount += 1;
+      if (callCount === 1) {
+        opts.onSuccess({
+          charges_remaining: 2,
+          destroyed: false,
+          soft_deleted: false,
+          applied_effect_count: 0,
+        });
+      } else {
+        opts.onError(new Error('No uses left'));
+      }
+    });
+    vi.mocked(useUseItem).mockReturnValue({ mutate, isPending: false } as unknown as ReturnType<
+      typeof useUseItem
+    >);
+
+    const item = makeItem({
+      is_usable: true,
+      charges: 3,
+      template: { ...makeItem().template, is_consumable: true },
+    });
+    render(<ItemDetailPanel item={item} characterId={1} open onOpenChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(screen.getByTestId('use-result')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(screen.queryByTestId('use-result')).toBeNull();
+  });
+
   it('calls removeMutation.mutate when remove button is clicked', () => {
     const mutate = vi.fn();
     vi.mocked(itemFacetsHooks.useRemoveItemFacet).mockReturnValue({
