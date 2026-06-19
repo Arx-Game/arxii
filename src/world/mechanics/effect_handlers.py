@@ -599,6 +599,55 @@ def _create_position(
     )
 
 
+def _sever_edge(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Remove the edge between two named positions in the actor's room."""
+    from world.areas.positioning.services import disconnect_positions, edge_between  # noqa: PLC0415
+
+    a = _resolve_position(effect, context, role=_ROLE_NAMED)
+    b = _resolve_position(effect, context, role=_ROLE_NAMED_B)
+    if a is None or b is None or edge_between(a, b) is None:
+        return AppliedEffect(
+            effect_type=EffectType.SEVER_EDGE,
+            description="No edge to sever",
+            applied=False,
+            skip_reason="Endpoints/edge not found",
+        )
+    disconnect_positions(a, b)
+    return AppliedEffect(
+        effect_type=EffectType.SEVER_EDGE,
+        description=f"Severed edge {a.name}<->{b.name}",
+        applied=True,
+    )
+
+
+def _connect_edge(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Create an edge between two named positions in the actor's room (idempotent)."""
+    from world.areas.positioning.services import connect_positions, edge_between  # noqa: PLC0415
+
+    a = _resolve_position(effect, context, role=_ROLE_NAMED)
+    b = _resolve_position(effect, context, role=_ROLE_NAMED_B)
+    if a is None or b is None:
+        return AppliedEffect(
+            effect_type=EffectType.CONNECT_EDGE,
+            description="Endpoints not found",
+            applied=False,
+            skip_reason="Named endpoints not found",
+        )
+    if edge_between(a, b) is None:
+        connect_positions(a, b)
+    return AppliedEffect(
+        effect_type=EffectType.CONNECT_EDGE,
+        description=f"Connected {a.name}<->{b.name}",
+        applied=True,
+    )
+
+
 def _move_to_position(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -760,4 +809,6 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.RESCUE_CAPTIVE: _apply_rescue_captive,
     EffectType.CREATE_POSITION: _create_position,
     EffectType.MOVE_TO_POSITION: _move_to_position,
+    EffectType.SEVER_EDGE: _sever_edge,
+    EffectType.CONNECT_EDGE: _connect_edge,
 }

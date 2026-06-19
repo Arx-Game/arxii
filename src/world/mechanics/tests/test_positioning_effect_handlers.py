@@ -138,3 +138,112 @@ class MoveToPositionHandlerTests(TestCase):
         result = apply_effect(effect, ResolutionContext(character=self.char))
         self.assertFalse(result.applied)
         self.assertIsNotNone(result.skip_reason)
+
+
+class SeverEdgeHandlerTests(TestCase):
+    """Tests for the SEVER_EDGE effect handler."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.positioning.services import connect_positions
+
+        self.room = create_object("typeclasses.rooms.Room", key="SEHandlerRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.pos_a = Position.objects.create(room=self.room, name="courtyard")
+        self.pos_b = Position.objects.create(room=self.room, name="gate")
+        connect_positions(self.pos_a, self.pos_b)
+        place_in_position(self.char, self.pos_a)
+        self.consequence = ConsequenceFactory()
+
+    def test_sever_removes_existing_edge(self) -> None:
+        """SEVER_EDGE removes the edge between two named positions."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.SEVER_EDGE,
+            position_name="courtyard",
+            position_name_b="gate",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(result.applied)
+        self.assertIsNone(edge_between(self.pos_a, self.pos_b))
+
+    def test_sever_skips_when_no_edge(self) -> None:
+        """SEVER_EDGE returns applied=False when there is no edge to sever."""
+        from world.areas.positioning.services import disconnect_positions
+
+        disconnect_positions(self.pos_a, self.pos_b)
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.SEVER_EDGE,
+            position_name="courtyard",
+            position_name_b="gate",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertFalse(result.applied)
+        self.assertIsNotNone(result.skip_reason)
+
+    def test_sever_skips_when_endpoint_missing(self) -> None:
+        """SEVER_EDGE returns applied=False when a named position does not exist."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.SEVER_EDGE,
+            position_name="courtyard",
+            position_name_b="nonexistent_position",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertFalse(result.applied)
+        self.assertIsNotNone(result.skip_reason)
+
+
+class ConnectEdgeHandlerTests(TestCase):
+    """Tests for the CONNECT_EDGE effect handler."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="CEHandlerRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.pos_a = Position.objects.create(room=self.room, name="tower")
+        self.pos_b = Position.objects.create(room=self.room, name="bridge")
+        place_in_position(self.char, self.pos_a)
+        self.consequence = ConsequenceFactory()
+
+    def test_connect_creates_missing_edge(self) -> None:
+        """CONNECT_EDGE creates an edge between two unconnected named positions."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.CONNECT_EDGE,
+            position_name="tower",
+            position_name_b="bridge",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(result.applied)
+        self.assertIsNotNone(edge_between(self.pos_a, self.pos_b))
+
+    def test_connect_idempotent_already_connected(self) -> None:
+        """CONNECT_EDGE returns applied=True even when the edge already exists."""
+        from world.areas.positioning.services import connect_positions
+
+        connect_positions(self.pos_a, self.pos_b)
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.CONNECT_EDGE,
+            position_name="tower",
+            position_name_b="bridge",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(result.applied)
+        self.assertIsNotNone(edge_between(self.pos_a, self.pos_b))
+
+    def test_connect_skips_when_endpoint_missing(self) -> None:
+        """CONNECT_EDGE returns applied=False when a named position does not exist."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.CONNECT_EDGE,
+            position_name="tower",
+            position_name_b="nonexistent_position",
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertFalse(result.applied)
+        self.assertIsNotNone(result.skip_reason)
