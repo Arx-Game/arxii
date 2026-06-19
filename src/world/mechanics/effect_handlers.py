@@ -749,6 +749,38 @@ def _apply_escape_captivity(
     )
 
 
+def _grant_flight(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Move the resolved target to the aerial layer above their current position."""
+    from world.areas.positioning.services import enter_aerial  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    enter_aerial(target)
+    return AppliedEffect(
+        effect_type=EffectType.GRANT_FLIGHT,
+        description=f"{target.db_key} took to the air",
+        applied=True,
+    )
+
+
+def _remove_flight(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Return the resolved target from the aerial layer back to the ground."""
+    from world.areas.positioning.services import leave_aerial  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    leave_aerial(target)
+    return AppliedEffect(
+        effect_type=EffectType.REMOVE_FLIGHT,
+        description=f"{target.db_key} returned to the ground",
+        applied=True,
+    )
+
+
 def _apply_rescue_captive(
     _effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -811,4 +843,6 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.MOVE_TO_POSITION: _move_to_position,
     EffectType.SEVER_EDGE: _sever_edge,
     EffectType.CONNECT_EDGE: _connect_edge,
+    EffectType.GRANT_FLIGHT: _grant_flight,
+    EffectType.REMOVE_FLIGHT: _remove_flight,
 }

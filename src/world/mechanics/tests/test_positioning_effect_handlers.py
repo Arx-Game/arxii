@@ -1,4 +1,4 @@
-"""Tests for CREATE_POSITION and MOVE_TO_POSITION effect handlers.
+"""Tests for CREATE_POSITION, MOVE_TO_POSITION, GRANT_FLIGHT, and REMOVE_FLIGHT effect handlers.
 
 Built using setUp (not setUpTestData) — Evennia ObjectDB instances (DbHolder)
 are not deepcopyable and would break setUpTestData.
@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     edge_between,
@@ -19,6 +20,8 @@ from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.mechanics.effect_handlers import apply_effect
+from world.mechanics.factories import AerialPropertyFactory
+from world.mechanics.models import ObjectProperty
 
 
 class CreatePositionHandlerTests(TestCase):
@@ -247,3 +250,84 @@ class ConnectEdgeHandlerTests(TestCase):
         result = apply_effect(effect, ResolutionContext(character=self.char))
         self.assertFalse(result.applied)
         self.assertIsNotNone(result.skip_reason)
+
+
+class GrantFlightHandlerTests(TestCase):
+    """Tests for the GRANT_FLIGHT effect handler."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        AerialPropertyFactory()
+        self.room = create_object("typeclasses.rooms.Room", key="GFHandlerRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.ground = Position.objects.create(
+            room=self.room, name="ground", kind=PositionKind.PRIMARY
+        )
+        place_in_position(self.char, self.ground)
+        self.consequence = ConsequenceFactory()
+
+    def test_grant_flight_moves_to_aerial_position(self) -> None:
+        """GRANT_FLIGHT places the character in an AERIAL position."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.GRANT_FLIGHT,
+            target=EffectTarget.SELF,
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(result.applied)
+        self.assertEqual(position_of(self.char).kind, PositionKind.AERIAL)
+
+    def test_grant_flight_sets_aerial_property(self) -> None:
+        """GRANT_FLIGHT sets the 'aerial' ObjectProperty on the character."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.GRANT_FLIGHT,
+            target=EffectTarget.SELF,
+        )
+        apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(
+            ObjectProperty.objects.filter(object=self.char, property__name="aerial").exists()
+        )
+
+
+class RemoveFlightHandlerTests(TestCase):
+    """Tests for the REMOVE_FLIGHT effect handler."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        from world.areas.positioning.services import enter_aerial
+
+        AerialPropertyFactory()
+        self.room = create_object("typeclasses.rooms.Room", key="RFHandlerRoom", nohome=True)
+        self.char = CharacterFactory(location=self.room)
+        self.ground = Position.objects.create(
+            room=self.room, name="ground", kind=PositionKind.PRIMARY
+        )
+        place_in_position(self.char, self.ground)
+        enter_aerial(self.char)
+        self.consequence = ConsequenceFactory()
+
+    def test_remove_flight_returns_to_ground_position(self) -> None:
+        """REMOVE_FLIGHT returns the character to a ground (non-AERIAL) position."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.REMOVE_FLIGHT,
+            target=EffectTarget.SELF,
+        )
+        result = apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertTrue(result.applied)
+        self.assertNotEqual(position_of(self.char).kind, PositionKind.AERIAL)
+
+    def test_remove_flight_clears_aerial_property(self) -> None:
+        """REMOVE_FLIGHT removes the 'aerial' ObjectProperty from the character."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.REMOVE_FLIGHT,
+            target=EffectTarget.SELF,
+        )
+        apply_effect(effect, ResolutionContext(character=self.char))
+        self.assertFalse(
+            ObjectProperty.objects.filter(object=self.char, property__name="aerial").exists()
+        )
