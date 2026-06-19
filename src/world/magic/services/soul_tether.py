@@ -678,7 +678,7 @@ def request_sineating(
         fatigue_cost_per_unit=cfg.fatigue_cost_per_unit,
         current_hollow=current_hollow,
         hollow_max=hollow_max,
-        sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
+        sineater_current_strain_stage=sineater_sheet.get_tether_strain_stage(),
     )
 
 
@@ -988,7 +988,7 @@ def resolve_sineating_from_db(
         fatigue_cost_per_unit=pending.fatigue_cost_per_unit,
         current_hollow=current_hollow,
         hollow_max=hollow_max,
-        sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
+        sineater_current_strain_stage=pending.sineater_sheet.get_tether_strain_stage(),
     )
 
     # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
