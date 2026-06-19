@@ -6,6 +6,7 @@ import contextlib
 
 from django.db import transaction
 from django.utils import timezone
+from evennia.objects.models import ObjectDB
 
 from world.checks.consequence_resolution import (
     apply_pool_deterministically,
@@ -82,15 +83,18 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
 
 
 @transaction.atomic
-def use_item(*, item_instance: ItemInstance, user, target=None) -> UseItemResult:
-    """Use a consumable: apply its on-use pool's effects (deterministic when the
-    template has no on_use_check_type, else check-gated) and spend one charge.
-    The charge is spent regardless of check outcome. user/target are ObjectDBs."""
+def use_item(
+    *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None = None
+) -> UseItemResult:
+    """Use an item with an on-use pool: apply its effects (deterministic when the
+    template has no on_use_check_type, else check-gated). Consumables spend one
+    charge (regardless of check outcome) and are destroyed at zero; non-consumable
+    usable items are reusable and keep their charges. user/target are ObjectDBs."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
-    if not template.is_consumable or template.on_use_pool_id is None:
+    if template.on_use_pool_id is None:
         raise ItemNotUsable
-    if locked.charges <= 0:
+    if template.is_consumable and locked.charges <= 0:
         raise NoChargesRemaining
 
     context = ResolutionContext(character=user, target=target)
@@ -107,11 +111,27 @@ def use_item(*, item_instance: ItemInstance, user, target=None) -> UseItemResult
         applied = apply_resolution(pending, context)
         check_result = pending.check_result
 
-    consumed = consume_item_charges(item_instance=locked, amount=1)
+    if template.is_consumable:
+        consumed = consume_item_charges(item_instance=locked, amount=1)
+        charges_remaining = consumed.charges
+        destroyed = consumed.charges == 0
+        soft_deleted = destroyed and consumed.destroyed_at is not None
+    else:
+        # Reusable on-use item: record activation, keep the item, spend no charge.
+        OwnershipEvent.objects.create(
+            item_instance=locked,
+            event_type=OwnershipEventType.ACTIVATED,
+            from_character_sheet=locked.holder_character_sheet,
+        )
+        _invalidate_caches(locked)
+        charges_remaining = locked.charges
+        destroyed = False
+        soft_deleted = False
+
     return UseItemResult(
         applied_effects=applied,
-        charges_remaining=consumed.charges,
-        destroyed=(consumed.charges == 0),
-        soft_deleted=(consumed.charges == 0 and consumed.destroyed_at is not None),
+        charges_remaining=charges_remaining,
+        destroyed=destroyed,
+        soft_deleted=soft_deleted,
         check_result=check_result,
     )
