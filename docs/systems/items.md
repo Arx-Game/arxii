@@ -93,7 +93,8 @@ This supports investigation mechanics, theft tracking, and provenance queries.
 
 ### Usable vs Consumable Items
 An item is **usable** iff its template has an `on_use_pool` FK set (`template.on_use_pool_id is not None`).
-This is the single gate checked by `use_item` and exposed as the `is_usable` field on `ItemInstanceRead`.
+`ItemTemplate.is_usable` is the canonical property for this predicate; `use_item`, `ItemUsablePrerequisite`,
+and `ItemInstanceReadSerializer.get_is_usable` all delegate to it.
 
 **Consumable** items are the *subset* of usable items where `template.is_consumable` is True:
 - Each use spends one charge (atomic `select_for_update`).
@@ -110,6 +111,38 @@ The `use_item` service (`world/items/services/usage.py`) dispatches both branche
 authored as `checks.Consequence` → `ConsequenceEffect` grouped into an `actions.ConsequencePool`
 on `ItemTemplate.on_use_pool`; `on_use_check_type` and `on_use_difficulty` gate the optional
 skill check. Both consumable and reusable items return a `UseItemResult` dataclass.
+
+### on_use_target_kind — Validated Targeted Use
+`ItemTemplate.on_use_target_kind` (nullable `TargetKind` CharField) controls whether the item
+requires an external target and, if so, what kind:
+
+| Value | Meaning |
+|-------|---------|
+| `null` | Self-use only — a supplied target is rejected. |
+| `CHARACTER` | Requires a character target in the same room. |
+| `ITEM` | Requires an item target that is reachable. |
+| `ROOM` | Requires a room target in the same location. |
+
+`PERSONA` and any unhandled `TargetKind` values fail closed.
+
+**Visibility proxy (MVP):** reachability is confirmed via `_is_visible_to` in
+`actions/prerequisites.py`, which checks same-location presence (`target.location in
+(actor.location, actor)`). This is an MVP placeholder — there is no perception, stealth, or
+darkness system. A real visibility system will replace it when built.
+
+### UseItemAction (Action Layer)
+`UseItemAction` (`key="use_item"`, `src/actions/definitions/items.py`) is the action-layer entry
+point for using items. It converges with equip/unequip on `action.run()`, so both telnet and the
+web dispatcher go through the same prerequisites and service call.
+
+- **kwargs:** `item` (held `ItemInstance` object), `target` (optional effect-target, or `None` for
+  self-use).
+- **Prerequisites (enforced by `run()`):** `HoldsItemPrerequisite`, `ItemUsablePrerequisite`,
+  `OnUseTargetPrerequisite` — all checked after enhancements, before `execute()`.
+- **execute():** calls `use_item(item_instance=..., user=actor, target=<validated or None>)`.
+
+Telnet: `CmdUse` (`src/commands/evennia_overrides/items.py`), grammar:
+`use <item>` / `use <item> on <target>`. Alias: `apply`.
 
 ### is_usable Serializer Field
 `ItemInstanceReadSerializer` exposes `is_usable` (a `SerializerMethodField`) equal to
@@ -163,7 +196,6 @@ See `docs/systems/magic.md` for the full thread and ritual model lineup.
 - **ItemCapabilityGrant model** — links items to capabilities (parallel to TechniqueCapabilityGrant)
 - **Equipment source collector** — `_get_equipment_sources()` for `get_capability_sources_for_character()`
 - **Unified action aggregation** — frontend layer merging challenge actions, item interactions, and basic actions
-- **use-item Action class** — action-layer `UseItemAction` in `actions/definitions/` converging on
-  `action.run()` alongside equip/unequip; the REST endpoint (`POST /api/items/inventory/<pk>/use/`)
-  currently handles frontend use-item requests directly
+- **Real perception/visibility system** — `_is_visible_to` in `prerequisites.py` is a same-location
+  MVP proxy; perception, stealth, and darkness mechanics will replace it
 - **Time-based cleanup** — cron purge of soft-deleted, non-lore-critical item instances

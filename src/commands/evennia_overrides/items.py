@@ -1,4 +1,4 @@
-"""Telnet commands for item-specific actions: equip, unequip, put_in, take_out."""
+"""Telnet commands for item-specific actions: equip, unequip, put_in, take_out, use."""
 
 from __future__ import annotations
 

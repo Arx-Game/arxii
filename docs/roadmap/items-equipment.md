@@ -206,9 +206,9 @@ What landed:
 - **REST:** `POST /api/items/inventory/<pk>/use/` — a `use` action on `ItemInstanceViewSet`,
   owner-or-staff gated, `ItemError` → HTTP 400; list/retrieve filter `.in_play()`.
 
-Deferred follow-ups: use-item *Action* (`actions/definitions/`) converging on `action.run()`
-alongside equip/unequip; time-based cleanup of soft-deleted, non-lore-critical instances;
-durability-on-use (#508) integration; quantity/stack consumption.
+Deferred follow-ups (at time of #509): use-item *Action* (shipped in #1024 — see below),
+time-based cleanup of soft-deleted, non-lore-critical instances; durability-on-use (#508)
+integration; quantity/stack consumption.
 
 ## Use-Item Frontend UI (DONE, #1026)
 
@@ -232,6 +232,37 @@ What landed:
   "Used" with any authored result text and no charge counter.
 - **Generated types** — `ItemInstanceRead.is_usable` (bool) and `UseItemResult` wired into
   the frontend API schema.
+
+## Use-Item Action + Enforced Prerequisites (DONE, #1024)
+
+**Branch:** `feature-1024-use-item-action`
+
+Action-layer `UseItemAction` converging on `action.run()` alongside equip/unequip, plus
+hardened prerequisite enforcement in `Action.run()` itself.
+
+What shipped:
+
+- **`ItemTemplate.on_use_target_kind`** (nullable `TargetKind` CharField) — null = self-use
+  only; CHARACTER / ITEM / ROOM = requires a validated external target of that kind. PERSONA and
+  unknown kinds fail closed. Migration added to `world/items/`.
+- **`Action.run()` now enforces prerequisites** — `check_availability()` is called after
+  enhancements are applied; any unmet prerequisite returns a failure `ActionResult` without
+  ever reaching `execute()`. Previously prerequisites were returned by `get_prerequisites()` but
+  only evaluated by callers that remembered to call `check_availability()` first.
+  `PemitAction`'s old inline staff check was removed (the prerequisite gate covers it).
+- **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — kwargs: `item`
+  (held `ItemInstance`) + optional `target` (effect-target). Prerequisites:
+  `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite` (all three
+  enforced by the new prerequisite gate). `execute()` calls `use_item(item_instance=...,
+  user=actor, target=<validated or None>)`. Registered in `actions/registry.py`.
+- **`ItemTemplate.is_usable` as canonical predicate** — `ItemUsablePrerequisite` and
+  `ItemInstanceReadSerializer.get_is_usable` (from #1026) both delegate to
+  `template.on_use_pool_id is not None` via `is_usable`. Single source of truth.
+- **Visibility proxy (MVP):** `_is_visible_to` in `prerequisites.py` checks same-location
+  presence. This is an explicit MVP proxy — there is no perception/stealth/darkness system.
+  A follow-up will replace it when that system is built.
+- **`CmdUse` telnet command** (`src/commands/evennia_overrides/items.py`) — grammars:
+  `use <item>` and `use <item> on <target>`. Alias: `apply`.
 
 ## Inventory Service Functions (DONE)
 
@@ -530,6 +561,7 @@ Explicitly NOT in this slice (parked):
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - ~~Item interaction service functions — using items, consuming charges~~ — **done** (#509: `use_item` service, `on_use_pool` schema, soft/hard delete, `POST /api/items/inventory/<pk>/use/`)
 - ~~Frontend "use item" UI~~ — **done** (#1026: `is_usable` serializer field, `useUseItem` hook, Use button in `ItemDetailPanel` with inline result block; reusable and consumable branches both handled)
+- ~~Use-item Action class~~ — **done** (#1024: `UseItemAction` + `CmdUse` telnet command + `on_use_target_kind` validated targeted use + enforced prerequisite gate in `Action.run()`)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
 - ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; scene-derived society + combat surfacing delivered in Spec D PR4 / #512 via `societies_for_scene` + `collect_check_modifiers`)
 - ~~Outfits Phase C (Modeling)~~ — **done** (#514: `FashionPresentation` + peer `PresentationEndorsement`, `Event.host_society`, `prestige_from_fashion` axis, `FacetVogueMomentum` + seasonal trendsetter ceremony rewriting `Society.current_fashion_style`, `RankingType.FASHION` leaderboard reusing #676, present/judge API + event-detail UI)
