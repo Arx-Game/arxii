@@ -75,7 +75,7 @@ def _is_visible_to(actor, target) -> bool:
     """Whether ``actor`` can perceive ``target``.
 
     MVP proxy: same-location presence (you perceive what is in your room).
-    TODO(#<perception-followup>): replace with a real perception/visibility
+    TODO(#1225): replace with a real perception/visibility
     system (darkness, stealth, line-of-sight).
     """
     return target.location in (actor.location, actor)
@@ -152,7 +152,7 @@ class OnUseTargetPrerequisite(Prerequisite):
         if kind == TargetKind.CHARACTER:
             if not target.is_typeclass("typeclasses.characters.Character", exact=False):
                 return False, "That can only be used on a character."
-            if actor.location not in (target.location, target):
+            if target.location != actor.location:
                 return False, "They aren't here."
             if not _is_visible_to(actor, target):
                 return False, "You can't see that."

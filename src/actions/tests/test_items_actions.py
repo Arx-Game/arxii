@@ -506,6 +506,31 @@ class UseItemActionTests(TestCase):
         mock_use.assert_called_once()
         assert mock_use.call_args.kwargs["target"] is None  # self-use
 
+    def test_item_error_maps_to_failure_result(self) -> None:
+        """ItemError raised by use_item is caught and returned as ActionResult(success=False).
+
+        This covers the ``except ItemError as exc:`` branch in UseItemAction.execute().
+        If that clause were removed, the exception would propagate uncaught and the
+        test would error rather than seeing success=False.
+        """
+        from world.items.exceptions import ItemNotUsable
+
+        actor = CharacterFactory(db_key="UseItemErrorActor")
+        item_obj = ObjectDBFactory(db_key="UseItemErrorItem", location=actor)
+        template = ItemTemplateFactory(
+            name="UseItemErrorPotion",
+            is_consumable=True,
+            max_charges=1,
+            on_use_pool=_pool_with_condition_effect(),
+            on_use_check_type=None,
+            on_use_target_kind=None,
+        )
+        ItemInstanceFactory(template=template, game_object=item_obj, charges=1)
+        with patch("actions.definitions.items.use_item", side_effect=ItemNotUsable):
+            result = UseItemAction().run(actor, item=item_obj)
+        assert result.success is False
+        assert result.message == ItemNotUsable.user_message
+
     def test_happy_path_targeted_use_passes_validated_target(self) -> None:
         actor = CharacterFactory(db_key="UseCarl")
         near = CharacterFactory(db_key="UseNear", location=actor.location)
