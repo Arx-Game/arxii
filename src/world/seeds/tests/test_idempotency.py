@@ -14,7 +14,7 @@ class TestSeedIdempotency(TestCase):
         from world.magic.models import Resonance
 
         seed_dev_database()
-        res = Resonance.objects.first()
+        res = Resonance.objects.order_by("pk").first()
         assert res is not None
         res.description = "STAFF-EDITED — must survive re-seed"
         res.save()

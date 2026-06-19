@@ -17,8 +17,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument("target", choices=["dev"], help="What to seed (dev)")  # noqa: STRING_LITERAL
 
-    def handle(self, *_args: Any, **options: Any) -> None:
-        _target = options["target"]  # argparse choices=["dev"] guards unknown values
+    def handle(self, *_args: Any, **_options: Any) -> None:
+        # The single positional arg is constrained to "dev" by argparse
+        # choices=["dev"], so there is nothing to branch on yet.
         from world.seeds.database import seed_dev_database  # noqa: PLC0415
 
         report = seed_dev_database(verbose=True)

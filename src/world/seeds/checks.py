@@ -2,11 +2,15 @@
 
 Seeds the rows ``perform_check`` needs to turn a roll into a real
 ``CheckOutcome``: the point-conversion ranges, the rank ladder, the result
-charts (with their per-roll outcome bands), and the outcome catalog. Values are
-promoted verbatim from the integration-test setup (``CheckSystemSetupFactory``
-and the ``CheckRank``/``PointConversionRange`` rows built in
-``world/checks/tests`` and ``world/traits/tests``) — they are the initial sane
-defaults, not new tuning numbers (Phase B #1221 makes them tunable).
+charts (with their per-roll outcome bands), and the outcome catalog. This module
+is the SINGLE authority for the global resolution charts/outcomes keyed by
+``rank_difference`` — other clusters (e.g. magic) ensure the spine exists by
+calling :func:`seed_check_resolution_tables` rather than defining their own
+``ResultChart`` rows (which previously collided on ``rank_difference=0``).
+
+Values are selected as initial sane defaults, aligned with the integration-test
+setup (``PerformCheckTests`` / the traits tests) — they are not new tuning
+numbers (Phase B #1221 makes them tunable).
 
 Everything here is create-if-missing (``get_or_create`` on stable natural keys),
 so re-runs are no-ops and staff edits to existing rows survive a re-seed —
@@ -36,7 +40,8 @@ _CONVERSION_RANGES: tuple[tuple[str, int, int, int], ...] = (
 )
 
 # --- Rank ladder (point thresholds -> rank) ---
-# Promoted from world/traits/tests.py + the checks service tests.
+# Initial sane defaults, aligned with the checks service tests (PerformCheckTests
+# uses min_points 10/25/50).
 _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
     (0, 0, "Incompetent"),
     (1, 10, "Novice"),
@@ -45,8 +50,12 @@ _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
 )
 
 # --- Outcome catalog (name -> success_level) ---
-# Promoted from CheckSystemSetupFactory.
+# Initial sane defaults aligned with the integration-test setup. "Critical
+# Failure" is included so the magic cluster's backfire consequence pools (which
+# fetch a CheckOutcome named "Critical Failure") resolve against the canonical
+# spine rather than seeding their own outcome rows.
 _OUTCOMES: tuple[tuple[str, int], ...] = (
+    ("Critical Failure", -2),
     ("Failure", -1),
     ("Partial Success", 0),
     ("Success", 1),
@@ -54,8 +63,9 @@ _OUTCOMES: tuple[tuple[str, int], ...] = (
 )
 
 # --- Result charts: rank_difference -> ordered (outcome_name, min_roll, max_roll) ---
-# Promoted verbatim from CheckSystemSetupFactory (diffs -2..2). Easy diffs lean
-# toward success, hard diffs toward failure; diff 0 is the even baseline.
+# Initial sane defaults (diffs -2..2). Easy diffs lean toward success, hard diffs
+# toward failure; diff 0 is the even baseline. This is the single source of the
+# global resolution charts (see module docstring).
 _EASY_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 20),
     ("Success", 21, 90),

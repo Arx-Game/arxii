@@ -482,70 +482,31 @@ class MagicContent:
 
 
 def _seed_endure_hallowed_ground_check() -> None:
-    """Seed the endure_hallowed_ground CheckType + a placeholder ResultChart.
+    """Seed the endure_hallowed_ground CheckType and ensure the resolution spine.
 
-    Phase 2 task 2F replaces the placeholder tuning with real production
-    values. For this slice, just enough rows exist so perform_check resolves
-    `endure_hallowed_ground` deterministically (the pipeline test uses
-    force_check_outcome to bypass the dice).
+    The global resolution charts/outcomes (the ``ResultChart`` rows keyed by
+    ``rank_difference`` and the ``CheckOutcome`` catalog they reference) are owned
+    by ``world.seeds.checks`` — this helper no longer defines its own
+    ``rank_difference=0`` chart (which previously collided with the spine's diff=0
+    chart). It calls :func:`seed_check_resolution_tables` so the canonical spine
+    (including the "Critical Failure" outcome the magic backfire pools fetch)
+    exists even when ``seed_magic_dev()`` is run standalone in integration tests.
 
-    The Magic CheckCategory and endure_hallowed_ground CheckType are seeded
-    via ``world.magic.seeds_checks.ensure_magic_check_types()`` (#709).
-    CheckOutcome rows are not migration-seeded; this helper creates them via
-    get_or_create so repeated calls are idempotent.
+    The Magic CheckCategory and endure_hallowed_ground CheckType are seeded via
+    ``world.magic.seeds_checks.ensure_magic_check_types()`` (#709). The pipeline
+    test uses ``force_check_outcome`` to bypass the dice, so it depends only on
+    the CheckOutcome rows existing, not on specific chart bands.
     """
     from world.magic.seeds_checks import ensure_magic_check_types  # noqa: PLC0415
-    from world.traits.models import CheckOutcome, ResultChart, ResultChartOutcome  # noqa: PLC0415
+    from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
 
     # --- Ensure the "Magic" CheckCategory + all Magic CheckTypes (incl. endure_hallowed_ground) ---
     ensure_magic_check_types()
 
-    # --- Canonical CheckOutcome rows (not migration-seeded; idempotent) ---
-    canonical_outcomes: dict[str, int] = {
-        _CRITICAL_SUCCESS: 2,
-        "Success": 1,
-        "Failure": -1,
-        _CRITICAL_FAILURE: -2,
-    }
-    outcome_instances: dict[str, CheckOutcome] = {}
-    for name, success_level in canonical_outcomes.items():
-        outcome, _ = CheckOutcome.objects.get_or_create(
-            name=name,
-            defaults={
-                "success_level": success_level,
-                "description": "",
-                "display_template": "",
-            },
-        )
-        outcome_instances[name] = outcome
-
-    # --- ResultChart (rank_difference=0, baseline placeholder) ---
-    chart, _ = ResultChart.objects.get_or_create(
-        rank_difference=0,
-        defaults={"name": "Even Match (placeholder)"},
-    )
-
-    # --- Four ResultChartOutcome rows ---
-    # Natural key is (chart, min_roll). Ranges are placeholder; Phase 2 replaces.
-    #   1–15  → Critical Failure
-    #   16–50 → Failure
-    #   51–85 → Success
-    #   86–100 → Critical Success
-    outcome_specs: list[tuple[int, int, str]] = [
-        (1, 15, _CRITICAL_FAILURE),
-        (16, 50, "Failure"),
-        (51, 85, "Success"),
-        (86, 100, _CRITICAL_SUCCESS),
-    ]
-    for min_roll, max_roll, outcome_name in outcome_specs:
-        ResultChartOutcome.objects.get_or_create(
-            chart=chart,
-            min_roll=min_roll,
-            defaults={
-                "max_roll": max_roll,
-                "outcome": outcome_instances[outcome_name],
-            },
-        )
+    # --- Ensure the canonical resolution spine (charts + outcomes) exists ---
+    # The checks spine is the single authority for global resolution charts; this
+    # keeps seed_magic_dev() self-sufficient when run standalone.
+    seed_check_resolution_tables()
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +675,8 @@ def _seed_resonance_environment_consequence_pools() -> None:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
     - _seed_affinity_interactions()    (9 AffinityInteraction rows)
     - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows)
-    - _seed_endure_hallowed_ground_check() (CheckOutcome rows)
+    - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
+      CheckOutcome rows via seed_check_resolution_tables)
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
@@ -728,7 +690,8 @@ def _seed_resonance_environment_consequence_pools() -> None:
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
-    # --- Fetch CheckOutcome tiers (created by _seed_endure_hallowed_ground_check) ---
+    # --- Fetch CheckOutcome tiers (seeded by the resolution spine via
+    # _seed_endure_hallowed_ground_check -> seed_check_resolution_tables) ---
     outcome_map: dict[str, CheckOutcome] = {}
     for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
@@ -2283,7 +2246,8 @@ def seed_starter_magic_story() -> None:
       B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
       C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
                                                 (needs reaction conditions)
-      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
+      A. _seed_endure_hallowed_ground_check() — CheckType + resolution spine
+                                                (via seed_check_resolution_tables)
      RC4. _seed_resonance_environment_rooms() — 3 cascade rooms (needs resonances)
       F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
 

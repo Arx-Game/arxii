@@ -34,10 +34,13 @@ def _seed_checks() -> None:
 
 
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
+    # The checks spine owns the global resolution charts/outcomes; seed it first
+    # so the canonical rows exist before the other clusters run. (Idempotency
+    # holds regardless of order — magic also ensures the spine itself.)
+    "checks": _seed_checks,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
-    "checks": _seed_checks,
 }
 
 
