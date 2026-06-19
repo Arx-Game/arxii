@@ -88,17 +88,33 @@ class TriggerHandler:
 
     # ---- sync hooks (called by service functions) ----
 
+    def invalidate(self) -> None:
+        """Drop the cache on commit so the next access re-reads from the DB.
+
+        Defers to ``transaction.on_commit`` rather than mutating ``_by_event``
+        in place. This makes the cache rollback-safe (#964): if the enclosing
+        transaction rolls back, the callback is discarded and a never-committed
+        trigger never enters the cache; in autocommit the callback runs at once.
+
+        Sibling cached handlers (``ConditionHandler.invalidate`` et al.) drop
+        their cache synchronously, but trigger dispatch must be rollback-safe —
+        a phantom trigger *double-fires* (actively wrong), whereas a stale
+        read-cache merely re-queries and self-heals on the next mutation.
+        """
+        from django.db import transaction  # noqa: PLC0415
+
+        transaction.on_commit(self._reset)
+
+    def _reset(self) -> None:
+        """Clear the populated index so the next ``triggers_for`` re-reads."""
+        self._by_event.clear()
+        self._populated = False
+
     def on_trigger_added(self, trigger: "Trigger") -> None:
-        if not self._populated:
-            return  # lazy — will populate on first use
-        event_name = trigger.trigger_definition.event_name
-        self._by_event[event_name].append(trigger)
+        self.invalidate()
 
     def on_trigger_removed(self, trigger_pk: int) -> None:
-        if not self._populated:
-            return
-        for event_name, triggers in self._by_event.items():
-            self._by_event[event_name] = [t for t in triggers if t.pk != trigger_pk]
+        self.invalidate()
 
     def on_stage_changed(self, condition_pk: int, new_stage: Any) -> None:
         """No structural change — ``_is_active`` re-checks on each dispatch."""

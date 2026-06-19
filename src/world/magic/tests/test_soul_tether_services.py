@@ -1620,6 +1620,26 @@ class DissolveSoulTetherSingleTests(TestCase):
         rel_in = CharacterRelationship.objects.get(source=self.sineater, target=self.sinner)
         self.assertEqual(rel_in.soul_tether_role, "")
 
+    def test_dissolution_invalidates_trigger_handler_cache(self) -> None:
+        # Populate the Sinner's handler so it caches the tether redirect trigger.
+        handler = self.sinner.character.trigger_handler
+        self.assertGreater(
+            len(handler.triggers_for("corruption_accruing")),
+            0,
+            "tether redirect trigger should be cached before dissolution",
+        )
+
+        # Dissolution cascade-deletes the Trigger rows; the cache must drop them
+        # on commit (#964), not keep dispatching phantom triggers.
+        with self.captureOnCommitCallbacks(execute=True):
+            self._dissolve()
+
+        self.assertEqual(
+            len(handler.triggers_for("corruption_accruing")),
+            0,
+            "dissolve left a stale tether trigger in the cache",
+        )
+
     def test_sinner_thread_retired_at_set(self) -> None:
         # Capture thread PK before dissolution so we can re-query by PK afterward.
         # Use .values() to avoid SharedMemoryModel identity-map returning a cached

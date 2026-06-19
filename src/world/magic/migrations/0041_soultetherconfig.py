@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0038_remove_thread_uniq_thread_room_and_more"),
+        ("magic", "0040_remove_thread_uniq_thread_room_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

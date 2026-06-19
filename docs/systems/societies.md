@@ -59,6 +59,16 @@ tier.range_description                       # "+250 to +499"
 | `LegendEntry` | A deed that earns legend for a persona | `persona`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
 | `LegendSpread` | An instance of spreading/embellishing a deed | `legend_entry`, `spreader_persona`, `value_added`, `description`, `method`, `societies_reached` (M2M) |
 
+**Audere Majora crossing → deed.** When a character completes an Audere Majora
+threshold crossing (`world/magic/audere_majora.py`), `_mint_crossing_deed` calls
+`fire_renown_award` using the threshold's authored `RenownAwardConfig` fields
+(magnitude/risk/reach/archetypes). This creates a `LegendEntry` attributed to the
+crosser's primary persona (and fires fame/prestige/society-reputation awards). The
+resulting entry is linked back via `AudereMajoraCrossing.legend_entry` (OneToOneField,
+related_name `audere_majora_crossing`). Personas present in the scene are recorded as
+`WITNESSED` via `grant_deed_knowledge`. No `LegendEntry` is created when
+`threshold.risk == NONE`.
+
 ---
 
 ## Principles System

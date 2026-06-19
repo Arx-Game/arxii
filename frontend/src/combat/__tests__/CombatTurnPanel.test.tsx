@@ -137,8 +137,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     current_round_actions: [],
     clashes: [],
     created_at: '2026-05-24T00:00:00Z',
-    // Runtime sends "" until completion; the generated enum omits the blank.
-    outcome: '' as EncounterDetail['outcome'],
+    outcome: '',
     completed_at: null,
     escalation_curve_name: null,
     escalation_start_round: null,
@@ -488,7 +487,7 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
   it('falls back to Abandoned for a completed encounter with an empty outcome', () => {
     mockEncounter({
       status: 'completed',
-      outcome: '' as EncounterDetail['outcome'],
+      outcome: '',
       completed_at: '2026-06-12T00:00:00Z',
     });
 

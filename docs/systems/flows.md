@@ -52,13 +52,13 @@ PRE-event payloads are mutable dataclasses. `MODIFY_PAYLOAD` flow steps can amen
 - `source_stage` — optional. Makes the trigger active only while the source condition is at that stage.
 - `additional_filter_condition` — JSON DSL evaluated per dispatch; restricts which payloads match. **This is how you express self-vs-target-vs-bystander semantics** — there is no `scope` field. See Filter Idioms below.
 
-Service functions install triggers from `ConditionTemplate.reactive_triggers` (M2M to `TriggerDefinition`) when `apply_condition` runs and call `handler.on_trigger_added(...)` to keep the cached handler in sync.
+Service functions install triggers from `ConditionTemplate.reactive_triggers` (M2M to `TriggerDefinition`) when `apply_condition` runs and call `handler.on_trigger_added(...)` to invalidate the cached handler (on commit) so the next read re-picks up the new row.
 
 ### TriggerHandler (per-owner cache)
 
 Installed as `cached_property` on Character/Room/Object via `ObjectParent`. First access populates from the DB once and joins event/flow/condition/stage in a single query. Subsequent calls are O(active triggers for event_name) with zero queries.
 
-The handler is a **pure provider**: its sole public method is `triggers_for(event_name) -> list[Trigger]`. It does not dispatch. `emit_event` queries the handler on every owner in the location walk, concatenates results, priority-sorts globally, and dispatches itself. Sync hooks (`on_trigger_added`, `on_trigger_removed`, `on_stage_changed`) keep the cache fresh — service functions must call them after persisting the row.
+The handler is a **pure provider**: its sole public method is `triggers_for(event_name) -> list[Trigger]`. It does not dispatch. `emit_event` queries the handler on every owner in the location walk, concatenates results, priority-sorts globally, and dispatches itself. Sync hooks (`on_trigger_added`, `on_trigger_removed`, `on_stage_changed`) keep the cache fresh — service functions must call them after persisting the row. The add/remove hooks call `invalidate()`, which registers a `transaction.on_commit` callback to drop the cache; the next read re-populates from committed rows. Deferring to commit makes the cache rollback-safe (#964) — a phantom trigger would double-fire, so the cache must never retain an uncommitted or rolled-back row. (Within a `TestCase`, wrap install-then-dispatch in `transaction.captureOnCommitCallbacks(execute=True)`.)
 
 ### Filter DSL
 

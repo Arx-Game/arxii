@@ -22,6 +22,16 @@ The central spine connecting every system in the game. Characters develop throug
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
 - **Frontend:** XP/Kudos page in progression section
 - **Audere Majora / Crossing the Threshold (#543):** the unified tier-crossing event. Per-boundary `AudereMajoraThreshold` rows (levels 5/10/15/20) gate a cast-time offer (intensity tier + deep Soulfray + engagement + active Audere + eligible next-stage path). Accepting atomically advances the level boundary, writes `CharacterPathHistory`, records an irreversible `AudereMajoraCrossing` receipt, and applies the Audere Majora power-spike condition (DeathDeferred — consequences resolve when the blaze ends). Ceremony content is DB-authored and spoiler-private. `PathIntent` lets players pre-declare their next path; the offer pre-selects it. REST + React offer surfaces mirror the Audere offer family
+- **Audere Majora legend-deed minting (#953):** `cross_threshold` now mints a full
+  renown deed for the crosser. `AudereMajoraThreshold` inherits the new abstract
+  `RenownAwardConfig` base (shared with `DramaticMomentType`), which carries
+  `magnitude` / `risk` / `reach` / `archetypes` used by `fire_renown_award`. The
+  threshold's `deed_title` field (public, non-spoiler) provides the deed name;
+  blank falls back to a generic composed title. `AudereMajoraCrossing.legend_entry`
+  (OneToOneField → `societies.LegendEntry`) is the permanent link between receipt
+  and deed. Personas present in the scene are recorded as `WITNESSED` via
+  `grant_deed_knowledge` + `scene_witness_personas`. No deed is created when
+  `threshold.risk == NONE` or the character has no primary persona.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

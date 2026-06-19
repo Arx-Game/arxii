@@ -9326,11 +9326,20 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for managing personas within scenes */
+    /**
+     * @description Read + actions over a character's personas (#1127 hardening).
+     *
+     *     Deliberately **not** a ``ModelViewSet``: the raw create/update/destroy were an
+     *     undesigned, identity-security-critical surface (a player could POST any
+     *     ``persona_type`` / ``is_fake_name`` and mint arbitrary alt identities). Personas are
+     *     created by the system (PRIMARY at character creation) and, in future, by designed IC
+     *     flows (mask command / disguise kit / formal alternate-identity process) that call the
+     *     creation at the service layer with their own gating and consequences. This viewset only
+     *     exposes reads + the player-facing actions (``set-active``, renown, spread, …).
+     */
     get: operations['personas_list'];
     put?: never;
-    /** @description ViewSet for managing personas within scenes */
-    post: operations['personas_create'];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -9344,17 +9353,24 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for managing personas within scenes */
+    /**
+     * @description Read + actions over a character's personas (#1127 hardening).
+     *
+     *     Deliberately **not** a ``ModelViewSet``: the raw create/update/destroy were an
+     *     undesigned, identity-security-critical surface (a player could POST any
+     *     ``persona_type`` / ``is_fake_name`` and mint arbitrary alt identities). Personas are
+     *     created by the system (PRIMARY at character creation) and, in future, by designed IC
+     *     flows (mask command / disguise kit / formal alternate-identity process) that call the
+     *     creation at the service layer with their own gating and consequences. This viewset only
+     *     exposes reads + the player-facing actions (``set-active``, renown, spread, …).
+     */
     get: operations['personas_retrieve'];
-    /** @description ViewSet for managing personas within scenes */
-    put: operations['personas_update'];
+    put?: never;
     post?: never;
-    /** @description ViewSet for managing personas within scenes */
-    delete: operations['personas_destroy'];
+    delete?: never;
     options?: never;
     head?: never;
-    /** @description ViewSet for managing personas within scenes */
-    patch: operations['personas_partial_update'];
+    patch?: never;
     trace?: never;
   };
   '/api/personas/{id}/deed-stories/': {
@@ -14709,15 +14725,9 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
-      /**
-       * @description Typed result recorded at completion (#876); empty until completed.
-       *
-       *     * `victory` - Victory
-       *     * `defeat` - Defeat
-       *     * `fled` - Fled
-       *     * `abandoned` - Abandoned
-       */
-      readonly outcome: components['schemas']['Outcome88eEnum'];
+      readonly outcome:
+        | components['schemas']['Outcome88eEnum']
+        | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
@@ -14813,15 +14823,9 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
-      /**
-       * @description Typed result recorded at completion (#876); empty until completed.
-       *
-       *     * `victory` - Victory
-       *     * `defeat` - Defeat
-       *     * `fled` - Fled
-       *     * `abandoned` - Abandoned
-       */
-      readonly outcome: components['schemas']['Outcome88eEnum'];
+      readonly outcome:
+        | components['schemas']['Outcome88eEnum']
+        | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
@@ -19821,26 +19825,6 @@ export interface components {
       /** @description The NPCServiceOffer row this details model decorates. */
       offer?: number;
     };
-    PatchedPersonaRequest: {
-      /** @description The character sheet this persona belongs to. */
-      character_sheet?: number;
-      /** @description Display name for this persona */
-      name?: string;
-      /** @description True when this persona obscures the character's identity */
-      is_fake_name?: boolean;
-      /**
-       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
-       *
-       *     * `primary` - Primary
-       *     * `established` - Established
-       *     * `temporary` - Temporary
-       */
-      persona_type?: components['schemas']['PersonaTypeEnum'];
-      /** @description Physical description text */
-      description?: string;
-      /** Format: uri */
-      thumbnail_url?: string;
-    };
     /** @description Read serializer for staff review. */
     PatchedPlayerFeedbackDetailRequest: {
       /** @description The persona the submitter was wearing when they submitted. */
@@ -20347,26 +20331,6 @@ export interface components {
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;
-    };
-    PersonaRequest: {
-      /** @description The character sheet this persona belongs to. */
-      character_sheet: number;
-      /** @description Display name for this persona */
-      name: string;
-      /** @description True when this persona obscures the character's identity */
-      is_fake_name?: boolean;
-      /**
-       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
-       *
-       *     * `primary` - Primary
-       *     * `established` - Established
-       *     * `temporary` - Temporary
-       */
-      persona_type?: components['schemas']['PersonaTypeEnum'];
-      /** @description Physical description text */
-      description?: string;
-      /** Format: uri */
-      thumbnail_url?: string;
     };
     /**
      * @description * `primary` - Primary
@@ -36762,29 +36726,6 @@ export interface operations {
       };
     };
   };
-  personas_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['PersonaRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Persona'];
-        };
-      };
-    };
-  };
   personas_retrieve: {
     parameters: {
       query?: never;
@@ -36796,79 +36737,6 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Persona'];
-        };
-      };
-    };
-  };
-  personas_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this persona. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['PersonaRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Persona'];
-        };
-      };
-    };
-  };
-  personas_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this persona. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  personas_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this persona. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedPersonaRequest'];
-      };
-    };
     responses: {
       200: {
         headers: {

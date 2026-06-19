@@ -200,6 +200,15 @@ What was built:
   declaration pose is the public moment. REST inbox/respond at
   `/api/magic/audere-majora/` + amber combat-panel ceremony dialog. Encounter cleanup
   ends the condition and deletes unanswered offers.
+- **Audere Majora legend-deed minting (#953)** — `cross_threshold` now fires a full
+  renown award for the crosser. `AudereMajoraThreshold` inherits the new abstract
+  `RenownAwardConfig` base (carries `magnitude` / `risk` / `reach` / `archetypes`;
+  shared with `DramaticMomentType`). `_mint_crossing_deed` resolves the primary
+  persona, calls `fire_renown_award`, records witnesses via `grant_deed_knowledge` +
+  `scene_witness_personas` (WITNESSED source, #916), and stores the `LegendEntry` on
+  `AudereMajoraCrossing.legend_entry`. The threshold's `deed_title` field (public,
+  non-spoiler) titles the deed; blank falls back to a generic composed title. No deed
+  is created when `threshold.risk == NONE` or the sheet has no primary persona.
 
 Documented for future (hook points built, logic not implemented):
 - Resonance/affinity bonuses (needs fashion, environment, Gift-resonance filter)

@@ -165,53 +165,35 @@ class PersonaPermissionsTestCase(APITestCase):
         )
         cls.persona = _create_owned_persona(cls.participant)
 
-    @suppress_permission_errors
-    def test_create_persona_participant_only(self):
-        """Only scene participants can create personas"""
-        # Create identity owned by participant
+    def test_persona_create_is_locked_down(self):
+        """The raw create surface is gone (#1127). Even staff — who pass the create
+        permission — get method-not-allowed, proving the endpoint itself is removed, not
+        merely permission-gated. Personas come from the system / future designed IC flows."""
         identity = CharacterSheetFactory()
-        player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
-            account=self.participant,
-        )
-        roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
-        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
-
         url = reverse("persona-list")
-        data = {
-            "name": "Test Persona",
-            "character_sheet": identity.character.sheet_data.pk,
-        }
+        data = {"name": "Test Persona", "character_sheet": identity.character.sheet_data.pk}
 
-        # Outsider cannot create persona (doesn't own the character)
-        self.client.force_authenticate(user=self.outsider)
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Participant can create persona (owns the character)
-        self.client.force_authenticate(user=self.participant)
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_201_CREATED, response.data
-
-    @suppress_permission_errors
-    def test_modify_persona_participant_permission(self):
-        """Only character owners and staff can modify personas"""
-        url = reverse("persona-detail", kwargs={"pk": self.persona.pk})
-        data = {"name": "Updated Persona"}
-
-        # Outsider cannot modify
-        self.client.force_authenticate(user=self.outsider)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Character owner can modify
-        self.client.force_authenticate(user=self.participant)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_200_OK
-
-        # Staff can modify
         self.client.force_authenticate(user=self.staff)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_200_OK
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+    def test_persona_update_and_delete_are_locked_down(self):
+        """No raw update/destroy either — persona management goes through designed flows,
+        not the REST surface. Method-not-allowed for owner and staff alike."""
+        url = reverse("persona-detail", kwargs={"pk": self.persona.pk})
+
+        self.client.force_authenticate(user=self.participant)
+        assert (
+            self.client.patch(url, {"name": "x"}, format="json").status_code
+            == status.HTTP_405_METHOD_NOT_ALLOWED
+        )
+        assert self.client.delete(url).status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+        self.client.force_authenticate(user=self.staff)
+        assert (
+            self.client.patch(url, {"name": "x"}, format="json").status_code
+            == status.HTTP_405_METHOD_NOT_ALLOWED
+        )
 
 
 class SceneCreationPermissionsTestCase(APITestCase):
