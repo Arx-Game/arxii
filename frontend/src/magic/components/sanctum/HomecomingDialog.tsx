@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { extractErrorMessage } from '@/lib/errors';
 
 import { useHomecoming } from '../../sanctumQueries';
 import type { SanctumDetails } from '../../sanctumTypes';
@@ -27,11 +28,6 @@ export interface HomecomingDialogProps {
   sanctum: SanctumDetails;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to perform Ritual of Homecoming';
 }
 
 export function HomecomingDialog({ sanctum, open, onOpenChange }: Readonly<HomecomingDialogProps>) {
@@ -88,7 +84,9 @@ export function HomecomingDialog({ sanctum, open, onOpenChange }: Readonly<Homec
             />
           </div>
           {mutation.isError ? (
-            <p className="text-sm text-destructive">{extractErrorMessage(mutation.error)}</p>
+            <p className="text-sm text-destructive">
+              {extractErrorMessage(mutation.error, 'Failed to perform Ritual of Homecoming')}
+            </p>
           ) : null}
         </div>
 

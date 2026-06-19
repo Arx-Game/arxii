@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { extractErrorMessage } from '@/lib/errors';
 import { RitualForm } from './RitualForm';
 import { usePerformRitual } from '@/rituals/queries';
 import type { RitualWithSchema, RitualInputSchema, PerformRitualResponse } from '../types';
@@ -29,15 +30,6 @@ export interface RitualPerformDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (response: PerformRitualResponse) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Error shape helpers
-// ---------------------------------------------------------------------------
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to perform ritual';
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +102,9 @@ export function RitualPerformDialog({
   }
 
   const canSubmit = hasAllRequired(schema, values) && !performMutation.isPending;
-  const errorMessage = performMutation.isError ? extractErrorMessage(performMutation.error) : null;
+  const errorMessage = performMutation.isError
+    ? extractErrorMessage(performMutation.error, 'Failed to perform ritual')
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
