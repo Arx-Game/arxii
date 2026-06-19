@@ -1,0 +1,172 @@
+/**
+ * EndorsementControl (#1138) — resonance-picker + endorser badge strip for
+ * both pose endorsements (weekly PoseEndorsement) and scene-entry endorsements
+ * (immediate SceneEntryEndorsement). Mounts inside PoseUnit.
+ *
+ * Props:
+ *   interaction — the full Interaction payload including endorsement state.
+ *   sceneId     — forwarded to mutation hooks for cache invalidation.
+ *   kind        — 'pose' | 'entry'; drives which mutation fires and which
+ *                 badge list / retract affordance is shown.
+ *
+ * Hidden entirely when:
+ *   - endorsable_resonances is empty (nothing to endorse with)
+ *   - the pose belongs to the viewer (self-endorsement guard)
+ *   - mode === 'WHISPER' or visibility === 'VERY_PRIVATE'
+ */
+
+import { useMemo } from 'react';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  useCreatePoseEndorsement,
+  useDeletePoseEndorsement,
+  useCreateSceneEntryEndorsement,
+} from '../queries';
+import type { Interaction, EndorserBadge } from '../types';
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+export interface EndorsementControlProps {
+  interaction: Interaction;
+  sceneId: string;
+  kind: 'pose' | 'entry';
+}
+
+// ---------------------------------------------------------------------------
+// Endorser badge chip
+// ---------------------------------------------------------------------------
+
+interface BadgeChipProps {
+  badge: EndorserBadge;
+  resonanceName: string;
+}
+
+function BadgeChip({ badge, resonanceName }: BadgeChipProps) {
+  return (
+    <span
+      title={`${badge.persona_name} endorsed with ${resonanceName}`}
+      className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-300"
+    >
+      {badge.persona_name}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EndorsementControl
+// ---------------------------------------------------------------------------
+
+export function EndorsementControl({ interaction, sceneId, kind }: EndorsementControlProps) {
+  // Resolve the viewer's active persona to detect self-pose.
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const viewerPersonaId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.primary_persona_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+
+  // Mutation hooks
+  const createPose = useCreatePoseEndorsement(sceneId);
+  const deletePose = useDeletePoseEndorsement(sceneId);
+  const createEntry = useCreateSceneEntryEndorsement(sceneId);
+
+  // ----- Guard conditions — render nothing --------------------------------
+  const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
+
+  if (
+    interaction.endorsable_resonances.length === 0 ||
+    isSelfPose ||
+    interaction.mode === 'WHISPER' ||
+    interaction.visibility === 'VERY_PRIVATE'
+  ) {
+    return null;
+  }
+
+  // ----- Data for this kind -----------------------------------------------
+  const isPose = kind === 'pose';
+  const endorsers: EndorserBadge[] = isPose
+    ? interaction.pose_endorsers
+    : interaction.entry_endorsers;
+
+  // Map resonance id → name for badge tooltips
+  const resonanceMap = new Map(interaction.endorsable_resonances.map((r) => [r.id, r.name]));
+
+  // ----- Handlers ---------------------------------------------------------
+  function handlePickResonance(resonanceId: number) {
+    if (isPose) {
+      createPose.mutate({ interaction: interaction.id, resonance: resonanceId });
+    } else {
+      createEntry.mutate({
+        endorsee_sheet: interaction.endorsee_sheet_id as number,
+        scene: Number(sceneId),
+        resonance: resonanceId,
+      });
+    }
+  }
+
+  // ----- Render -----------------------------------------------------------
+  const isPending = isPose ? createPose.isPending : createEntry.isPending;
+  const myEndorsement = isPose ? interaction.my_pose_endorsement : null;
+  const isEndorsed = myEndorsement != null;
+  const label = isPose ? 'Endorse' : 'Endorse entry';
+
+  return (
+    <div
+      data-testid={`endorsement-control-${kind}`}
+      className="mt-1 flex flex-wrap items-center gap-1.5"
+    >
+      {/* Resonance picker or retract affordance */}
+      {isEndorsed ? (
+        <button
+          type="button"
+          disabled={myEndorsement.settled || deletePose.isPending}
+          onClick={() => deletePose.mutate(myEndorsement.id)}
+          className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+            myEndorsement.settled
+              ? 'cursor-not-allowed border-muted-foreground/20 opacity-50'
+              : 'border-amber-500 bg-amber-500/10 font-medium hover:bg-amber-500/20'
+          }`}
+        >
+          Retract
+        </button>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={isPending}
+              className="rounded-full border border-muted-foreground/30 px-2 py-0.5 text-xs transition-colors hover:border-amber-500/60 disabled:opacity-50"
+            >
+              {label}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {interaction.endorsable_resonances.map((r) => (
+              <DropdownMenuItem key={r.id} onClick={() => handlePickResonance(r.id)}>
+                {r.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* Endorser badges */}
+      {endorsers.map((badge) => (
+        <BadgeChip
+          key={badge.persona_id}
+          badge={badge}
+          resonanceName={resonanceMap.get(badge.resonance_id) ?? String(badge.resonance_id)}
+        />
+      ))}
+    </div>
+  );
+}
