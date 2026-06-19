@@ -333,6 +333,28 @@ class AudereMajoraPathError(AudereMajoraOfferError):
 
 
 # =============================================================================
+# Entry flourish offer exceptions (#1140)
+# =============================================================================
+
+
+class EntryFlourishOfferError(Exception):
+    """Base for entry-flourish offer resolution failures."""
+
+    user_message: str = "Could not resolve the entry flourish."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+
+class EntryFlourishOfferNotFoundError(EntryFlourishOfferError):
+    user_message = "No pending entry flourish offer found."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class EntryFlourishOfferStaleError(EntryFlourishOfferError):
+    user_message = "That resonance is no longer available for your flourish."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+# =============================================================================
 # Dramatic moment exceptions (#544)
 # =============================================================================
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db import models
+from django.db import models, transaction
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 if TYPE_CHECKING:
@@ -83,3 +83,50 @@ class EntryFlourishResult:
     resonance_name: str
     granted_amount: int
     scene_id: int | None
+
+
+def resolve_entry_flourish_offer(offer_id: int, *, resonance_id: int) -> EntryFlourishResult:
+    """Two-phase resolve: staleness re-check outside the txn; locked grant inside.
+
+    Phase 1 (outside transaction): fetch offer, validate resonance is claimed by the sheet.
+    If offer missing → EntryFlourishOfferNotFoundError.
+    If resonance unclaimed → delete offer + EntryFlourishOfferStaleError.
+
+    Phase 2 (inside transaction.atomic with select_for_update): re-fetch offer,
+    call create_entry_flourish, delete locked offer row, return EntryFlourishResult.
+    """
+    from world.magic.exceptions import (  # noqa: PLC0415
+        EntryFlourishOfferNotFoundError,
+        EntryFlourishOfferStaleError,
+    )
+    from world.magic.models import CharacterResonance, Resonance  # noqa: PLC0415
+    from world.magic.services.gain import create_entry_flourish  # noqa: PLC0415
+
+    offer = PendingEntryFlourishOffer.objects.filter(pk=offer_id).first()
+    if offer is None:
+        raise EntryFlourishOfferNotFoundError
+    sheet = offer.character_sheet
+    scene = offer.scene
+    resonance = Resonance.objects.filter(pk=resonance_id).first()
+    if (
+        resonance is None
+        or not CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance=resonance
+        ).exists()
+    ):
+        offer.delete()
+        raise EntryFlourishOfferStaleError
+
+    with transaction.atomic():
+        locked = PendingEntryFlourishOffer.objects.select_for_update().filter(pk=offer_id).first()
+        if locked is None:
+            raise EntryFlourishOfferNotFoundError
+        record = create_entry_flourish(sheet, resonance, scene=scene)
+        locked.delete()
+
+    return EntryFlourishResult(
+        resonance_id=resonance.pk,
+        resonance_name=resonance.name,
+        granted_amount=record.granted_amount,
+        scene_id=scene.pk if scene is not None else None,
+    )

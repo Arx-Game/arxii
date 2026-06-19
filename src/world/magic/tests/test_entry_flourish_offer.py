@@ -3,7 +3,11 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.entry_flourish import PendingEntryFlourishOffer, maybe_create_entry_flourish_offer
-from world.magic.factories import CharacterResonanceFactory, EntryFlourishRecordFactory
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    EntryFlourishRecordFactory,
+    ResonanceFactory,
+)
 from world.scenes.factories import SceneFactory
 
 
@@ -47,6 +51,49 @@ class PendingEntryFlourishOfferModelTest(TestCase):
         PendingEntryFlourishOffer.objects.create(character_sheet=self.sheet)
         with self.assertRaises(IntegrityError):
             PendingEntryFlourishOffer.objects.create(character_sheet=self.sheet)
+
+
+class ResolveOfferTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.claimed = CharacterResonanceFactory(character_sheet=cls.sheet)
+        cls.scene = SceneFactory()
+
+    def test_resolve_fires_grant_and_deletes_offer(self):
+        from world.magic.entry_flourish import resolve_entry_flourish_offer
+        from world.magic.models import EntryFlourishRecord
+
+        offer = PendingEntryFlourishOffer.objects.create(
+            character_sheet=self.sheet, scene=self.scene
+        )
+        result = resolve_entry_flourish_offer(offer.pk, resonance_id=self.claimed.resonance_id)
+        self.assertEqual(result.resonance_id, self.claimed.resonance_id)
+        self.assertFalse(PendingEntryFlourishOffer.objects.filter(pk=offer.pk).exists())
+        self.assertTrue(
+            EntryFlourishRecord.objects.filter(
+                character_sheet=self.sheet, scene=self.scene
+            ).exists()
+        )
+
+    def test_resolve_unclaimed_resonance_is_stale(self):
+        from world.magic.entry_flourish import resolve_entry_flourish_offer
+        from world.magic.exceptions import EntryFlourishOfferStaleError
+
+        other = ResonanceFactory()
+        offer = PendingEntryFlourishOffer.objects.create(
+            character_sheet=self.sheet, scene=self.scene
+        )
+        with self.assertRaises(EntryFlourishOfferStaleError):
+            resolve_entry_flourish_offer(offer.pk, resonance_id=other.pk)
+        self.assertFalse(PendingEntryFlourishOffer.objects.filter(pk=offer.pk).exists())
+
+    def test_resolve_missing_offer_raises_not_found(self):
+        from world.magic.entry_flourish import resolve_entry_flourish_offer
+        from world.magic.exceptions import EntryFlourishOfferNotFoundError
+
+        with self.assertRaises(EntryFlourishOfferNotFoundError):
+            resolve_entry_flourish_offer(999999, resonance_id=self.claimed.resonance_id)
 
 
 class EntryFlourishRecordUniquenessTest(TestCase):
