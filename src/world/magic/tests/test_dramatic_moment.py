@@ -131,6 +131,22 @@ class CreateDramaticMomentTagServiceTest(TestCase):
                 scene=None,
             )
 
+    def test_persists_interaction_and_denormalized_timestamp(self):
+        from world.magic.services.gain import create_dramatic_moment_tag
+        from world.scenes.factories import InteractionFactory, SceneFactory
+
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+        tag = create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=scene,
+            interaction=interaction,
+        )
+        self.assertEqual(tag.interaction_id, interaction.id)
+        self.assertEqual(tag.interaction_timestamp, interaction.timestamp)
+
 
 class DramaticMomentCapTest(TestCase):
     def setUp(self):
