@@ -144,6 +144,8 @@ class ActionRef:
     # Non-ObjectDB target pk for REGISTRY actions that operate on non-ObjectDB models
     # (e.g. move_to_position uses position_id to identify the target Position).
     position_id: int | None = None
+    # Blueprint pk for set_the_stage: identifies which PositionBlueprint to instantiate.
+    blueprint_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:

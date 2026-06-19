@@ -9,12 +9,13 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
+from actions.prerequisites import StaffOnlyPrerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
 from world.areas.positioning.exceptions import PositionError
-from world.areas.positioning.models import Position
-from world.areas.positioning.services import move_to_position
+from world.areas.positioning.models import Position, PositionBlueprint
+from world.areas.positioning.services import instantiate_blueprint, move_to_position
 
 
 @dataclass
@@ -60,6 +61,59 @@ class MoveToPositionAction(Action):
 
         try:
             move_to_position(actor, target)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        send_room_state(actor_state)
+
+        return ActionResult(success=True)
+
+
+@dataclass
+class SetTheStageAction(Action):
+    """Staff-only action: instantiate a PositionBlueprint into the actor's current room.
+
+    Dispatch convention
+    -------------------
+    REGISTRY ActionRef: ``registry_key="set_the_stage"``,
+    ``blueprint_id=<PositionBlueprint.pk>``, optional ``replace`` kwarg (bool).
+
+    The dispatch layer passes ``ref.blueprint_id`` as a kwarg; this action
+    resolves it to a ``PositionBlueprint`` instance and delegates to
+    ``services.instantiate_blueprint``.
+    """
+
+    key: str = "set_the_stage"
+    name: str = "Set the Stage"
+    icon: str = "map"
+    category: str = "gm"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list:
+        return [StaffOnlyPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        blueprint_id = kwargs.get("blueprint_id")
+        if blueprint_id is None:
+            return ActionResult(success=False, message="Set the stage with which blueprint?")
+
+        try:
+            blueprint = PositionBlueprint.objects.get(pk=blueprint_id)
+        except PositionBlueprint.DoesNotExist:
+            return ActionResult(success=False, message="That blueprint does not exist.")
+
+        replace = bool(kwargs.get("replace", False))
+
+        try:
+            instantiate_blueprint(blueprint, actor.location, replace=replace)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
