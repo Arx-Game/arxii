@@ -496,8 +496,8 @@ Decoupling: Standalone. Does NOT depend on Scope 5.5 (reactive layer) or Scope 6
 (Soulfray recovery). Shipped on the `resonance-spec-c-gain-surfaces` branch.
 
 Not in Spec C (authored separately): Spec B (Relational Resilience, Soul Tether,
-Ritual Capstones), Spec D (Ritual-grade items + ITEM / ROOM anchor cap formulas —
-Imbuing against ITEM/ROOM currently raises `AnchorCapNotImplemented`).
+Ritual Capstones), Spec D (Ritual-grade items + ITEM anchor cap formula — Imbuing
+against ITEM is pending Spec D. SANCTUM room anchor cap (level × 10) is live).
 
 **Resonance Pivot — Spec D PR1 (Fashion Facets + Covenant Gear) — DONE:**
 
@@ -542,9 +542,9 @@ Decoupling: Depends on Items (EquippedItem + ItemFacet models) and Covenants
 (CharacterCovenantRole). Does NOT depend on Spec B. Shipped on the
 `spec-d-items-fashion-mantles-design` branch.
 
-Deferred to PR3–PR4: ITEM/ROOM anchor cap formulas
-(still raises `AnchorCapNotImplemented`), mantle system (covenant group attunement),
-fashion combat integration.
+Deferred to PR3–PR4: ITEM anchor cap formula (pending Spec D "magical significance"
+authoring), mantle system (covenant group attunement), fashion combat integration.
+SANCTUM room anchor cap is live (level × 10); bare ROOM removed.
 
 **Resonance Pivot — Spec D PR2 (Crafting UI for attaching facets) — DONE:**
 
@@ -1205,6 +1205,45 @@ Interim status notes:
   manual skill lookup rather than a `reconcile_beginnings()` reconciliation pass.
   Option B (reconciliation) remains a possible follow-up if Beginnings logic grows more
   complex.
+
+**#879 — SANCTUM anchor cap + Soul Tether hardening (DONE):**
+
+**Issue:** #879
+
+What was built (closes Phase 6 / Phase 7 / Phase 12 / Phase 15 items):
+
+- **SANCTUM as the leveled room anchor** — Bare `TargetKind.ROOM` (with shared `target_object` FK)
+  was removed. `TargetKind.SANCTUM` is the room anchor. Anchor cap =
+  `thread.target_sanctum_details.feature_instance.level × 10` — the thread can be imbued
+  further as the Sanctum levels up. SANCTUM threads are pull-applicable (in-sanctum boost)
+  while the character is inside the Sanctum's room. `Thread.target_sanctum_details` FK replaces
+  the former `Thread.target_object` FK. `ThreadWeavingUnlock.unlock_room_property` FK and
+  `ThreadWeavingUnlock` ROOM rows removed; no separate unlock row is needed for SANCTUM threads.
+  `AnchorCapNotImplemented` is no longer raised for this case.
+
+- **`SoulTetherConfig` singleton** (`world/magic/models/soul_tether_config.py`,
+  `models/__init__.py`). All Soul Tether tuning knobs — sineating anima/fatigue costs per unit,
+  per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, and
+  rescue budget bases + multipliers — are read from the `SoulTetherConfig` singleton (pk=1) via
+  `get_soul_tether_config()` in `services/soul_tether.py`, not from module constants. Staff can
+  adjust any knob via the Django admin without a code change. Admin registered as
+  `SoulTetherConfigAdmin` in `magic/admin.py`.
+
+- **Real Sineater Strain-stage lookup** — `CharacterSheet.get_tether_strain_stage() -> int`
+  added to `world/character_sheets/models.py`. `request_sineating` and
+  `refresh_sineating_pending_offer` now call this method to populate
+  `sineater_current_strain_stage` in the `SineatingOffer` payload, replacing the former
+  placeholder value.
+
+- **`SOUL_TETHER_DISSOLVED` emission** — `dissolve_soul_tether` now emits the
+  `SOUL_TETHER_DISSOLVED` event (defined in `flows/constants.py`) after tearing the bond
+  and soft-retiring both sides' Threads, giving flows and reactive subscribers a hook for
+  dissolution events.
+
+- **`CharacterAnima` / `FatiguePool` seeded at CG** — both pools are now created for every
+  finalized character so that the first Sineating cost-deduction can safely call
+  `anima.current` without a `DoesNotExist` guard. `SineatingOffer` now threads the
+  scene reference through to `resolve_sineating` so audit rows capture the scene FK.
 
 **Magic-in-combat API fixes + unified player-action interface (DONE — branch `unified-action-interface`):**
 

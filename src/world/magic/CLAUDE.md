@@ -10,10 +10,10 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
 - **Threads**: Per-character attachments anchored to a trait/technique/facet/
-  relationship-track/relationship-capstone/covenant-role. Each Thread channels a
-  single Resonance (currency) and accrues `developed_points` → `level` via the
-  Imbuing ritual. The legacy 5-axis Thread family was removed and replaced in
-  Phase 4 of the resonance pivot.
+  relationship-track/relationship-capstone/covenant-role/sanctum. Each Thread
+  channels a single Resonance (currency) and accrues `developed_points` → `level`
+  via the Imbuing ritual. The legacy 5-axis Thread family was removed and replaced
+  in Phase 4 of the resonance pivot.
 - **Resonance currency**: `CharacterResonance.balance` is spendable currency
   earned via `grant_resonance` (Spec C surfaces will write here) and spent
   via `spend_resonance_for_imbuing` (advances Thread level) or
@@ -54,6 +54,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `CharacterTechnique` - Links characters to known Techniques
 - `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
 - `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
+- `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: sineating anima/fatigue costs per unit, per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, rescue budget bases and multipliers. All fields are integers; multipliers encoded as integer-tenths or integer-hundredths. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`.
 
 ### Technique authoring (budget builder)
 
@@ -156,8 +157,10 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   enforce payload/effect_kind shape.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
-  `unlock_gift`,
-  `unlock_track`. `xp_cost` + M2M to `Path` (in-band) + `out_of_path_multiplier`.
+  `unlock_gift`, `unlock_track`. `xp_cost` + M2M to `Path` (in-band) +
+  `out_of_path_multiplier`. SANCTUM threads do not require a
+  `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
+  is the only gate at imbue time.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
 - `Ritual` - Authored magical procedure with dual dispatch
@@ -170,12 +173,17 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
   `target_trait`, `target_technique`, `target_facet`,
-  `target_relationship_track`, `target_capstone`, `target_covenant_role`.
-  Fields: `owner` (FK CharacterSheet), `resonance` (FK Resonance), `name`,
-  `description`, `developed_points`, `level`, timestamps, `retired_at`
-  (soft-retire). All typed FKs use `on_delete=PROTECT`. Three layers of
-  integrity: `clean()`, per-kind CheckConstraints, per-kind partial
-  UniqueConstraints.
+  `target_relationship_track`, `target_capstone`, `target_covenant_role`,
+  `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
+  (FK Resonance), `name`, `description`, `developed_points`, `level`, timestamps,
+  `retired_at` (soft-retire), `slot_kind` (required for SANCTUM threads —
+  `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER). All typed FKs use
+  `on_delete=PROTECT`. Three layers of integrity: `clean()`, per-kind
+  CheckConstraints, per-kind partial UniqueConstraints.
+  **SANCTUM anchor:** `Thread.target_sanctum_details` (FK to `SanctumDetails`).
+  Anchor cap = `sanctum.feature_instance.level × 10`. The thread is pull-applicable
+  ("in-sanctum boost") while the character is inside the Sanctum's room.
+  **Bare ROOM `target_kind` removed** — use SANCTUM for room-anchored threads.
 - `ThreadLevelUnlock` - Per-thread XP-locked-boundary receipt. Unique per
   `(thread, unlocked_level)`. Records that a thread paid XP to cross a
   specific boundary (20, 30, ...).
@@ -298,6 +306,15 @@ during Sineating actions, which refills the Hollow's capacity.
   `NoSoulTetherUnlockError`, `SoulTetherFormationError`, `SineatingValidationError`,
   `RescueValidationError`, `StageAdvanceBonusError`.
 - `SOUL_TETHER_FORMED` / `SOUL_TETHER_DISSOLVED` event names in `flows/constants.py`.
+  `SOUL_TETHER_DISSOLVED` is emitted by `dissolve_soul_tether` after the bond is torn.
+
+**CharacterSheet integration:**
+- `CharacterSheet.get_tether_strain_stage() -> int` — returns the Sineater's current
+  Tether Strain stage for the character's active resonance. Used by `request_sineating`
+  and `refresh_sineating_pending_offer` to populate `sineater_current_strain_stage` in
+  the `SineatingOffer` payload so the Sineater can see their Strain level before deciding.
+- `CharacterAnima` and `FatiguePool` are seeded at CG finalization so they exist for all
+  finalized characters that Sineating cost-deduction can safely read from on first call.
 
 **Authored content (factories, not migrations):**
 - `TetherStrainTemplate` — ConditionTemplate applied to the Sineater at dramatic moments
@@ -324,7 +341,10 @@ All wired via `wire_soul_tether_content()` in `factories.py`.
   Thread auto-weave (RELATIONSHIP_CAPSTONE), installs `SoulTetherActive` ConditionInstance
   and trigger rows on the Sinner.
 - `dissolve_soul_tether(sinner_sheet, sineater_sheet)` — Tears bond: retires tether Threads,
-  removes ConditionInstance + triggers, emits `SOUL_TETHER_DISSOLVED`.
+  removes ConditionInstance + triggers, emits `SOUL_TETHER_DISSOLVED` event.
+- `get_soul_tether_config() -> SoulTetherConfig` — Lazy-creates the singleton (pk=1).
+  All rescue and sineating cost calculations read from this config rather than module
+  constants, making them staff-tunable via admin without a code change.
 - `request_sineating(sinner_sheet, scene, resonance, units_offered)` — Sinner-initiated offer;
   enforces per-scene cap and hollow-max; fires `PROMPT_PLAYER` to Sineater with
   `SineatingOffer` payload.

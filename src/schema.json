@@ -21467,9 +21467,6 @@ components:
         effect_type_id:
           type: integer
           nullable: true
-        target_object_id:
-          type: integer
-          nullable: true
         target_persona_id:
           type: integer
           nullable: true
@@ -35642,9 +35639,8 @@ components:
 
         Read-only computed fields (SerializerMethodFields):
         - path_cap: the path-side cap (compute_path_cap)
-        - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-          (AnchorCapNotImplemented is not yet spec'd)
-        - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+        - anchor_cap: the anchor-side cap (compute_anchor_cap)
+        - effective_cap: min(path_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -35658,7 +35654,6 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `ROOM` - Room
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
@@ -40782,7 +40777,6 @@ components:
       - TRAIT
       - TECHNIQUE
       - FACET
-      - ROOM
       - RELATIONSHIP_TRACK
       - RELATIONSHIP_CAPSTONE
       - COVENANT_ROLE
@@ -40793,7 +40787,6 @@ components:
         * `TRAIT` - Trait
         * `TECHNIQUE` - Technique
         * `FACET` - Facet
-        * `ROOM` - Room
         * `RELATIONSHIP_TRACK` - Relationship Track
         * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
         * `COVENANT_ROLE` - Covenant Role
@@ -41159,9 +41152,8 @@ components:
 
         Read-only computed fields (SerializerMethodFields):
         - path_cap: the path-side cap (compute_path_cap)
-        - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-          (AnchorCapNotImplemented is not yet spec'd)
-        - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+        - anchor_cap: the anchor-side cap (compute_anchor_cap)
+        - effective_cap: min(path_cap, anchor_cap)
       properties:
         id:
           type: integer
@@ -41185,7 +41177,6 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `ROOM` - Room
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role
@@ -41211,15 +41202,11 @@ components:
           readOnly: true
         anchor_cap:
           type: integer
-          nullable: true
-          description: Return the anchor-side cap, or None for ROOM threads (not yet
-            implemented).
+          description: Return the anchor-side cap for this thread.
           readOnly: true
         effective_cap:
           type: integer
-          nullable: true
-          description: Return min(path_cap, anchor_cap), or None when anchor_cap is
-            unavailable.
+          description: Return min(path_cap, anchor_cap).
           readOnly: true
         retired_at:
           type: string
@@ -41430,9 +41417,8 @@ components:
 
         Read-only computed fields (SerializerMethodFields):
         - path_cap: the path-side cap (compute_path_cap)
-        - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-          (AnchorCapNotImplemented is not yet spec'd)
-        - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+        - anchor_cap: the anchor-side cap (compute_anchor_cap)
+        - effective_cap: min(path_cap, anchor_cap)
       properties:
         resonance:
           type: integer
@@ -41446,7 +41432,6 @@ components:
             * `TRAIT` - Trait
             * `TECHNIQUE` - Technique
             * `FACET` - Facet
-            * `ROOM` - Room
             * `RELATIONSHIP_TRACK` - Relationship Track
             * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
             * `COVENANT_ROLE` - Covenant Role

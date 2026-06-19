@@ -649,7 +649,7 @@ If a tether dissolves (§13) and one or both characters later wish to reform wit
 
 ## 13. Dissolution (MVP Stub)
 
-Dissolution is **out of MVP scope** as a designed surface. The MVP exposes only the primitive: setting `is_soul_tether=False` on the `CharacterRelationship` triggers soft-retire on both sides' active `RELATIONSHIP_CAPSTONE` Threads (`retired_at` set per Spec A). API endpoint accepts the flip; either side may call it without the other's consent.
+Dissolution is **out of MVP scope** as a designed surface. The MVP exposes only the primitive: setting `is_soul_tether=False` on the `CharacterRelationship` triggers soft-retire on both sides' active `RELATIONSHIP_CAPSTONE` Threads (`retired_at` set per Spec A) and emits the `SOUL_TETHER_DISSOLVED` event (defined in `flows/constants.py`). API endpoint accepts the flip; either side may call it without the other's consent.
 
 Persistence on dissolution:
 - Sineater's `lifetime_helped` counters persist. They earned the resistance; they keep it.
@@ -757,6 +757,30 @@ Audit row per §14.1.
 #### `magic.TetherStrainTemplate`
 Not a new model class — an authored `ConditionTemplate` row. Migration creates it; admin/seeds may extend stage-entry effects later.
 
+#### `magic.SoulTetherConfig` (singleton tuning surface)
+
+SharedMemoryModel singleton (pk=1). All Soul Tether tuning knobs — rescue and sineating
+costs, caps, and budget formulas — are read from this row rather than from module
+constants, so staff can adjust them via the admin without a code change. Lazy-created via
+`get_soul_tether_config()` in `world/magic/services/soul_tether.py`.
+
+Fields:
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `anima_cost_per_unit` | 2 | Sineater anima cost per Sineating unit |
+| `fatigue_cost_per_unit` | 1 | Sineater fatigue cost per unit |
+| `per_scene_cap_hard_max` | 20 | Absolute ceiling on units accepted per scene |
+| `per_scene_cap_level_mult` | 2 | Per-Thread-level multiplier for per-scene cap |
+| `per_scene_cap_base` | 5 | Base per-scene cap before level scaling |
+| `hollow_max_level_mult` | 10 | Multiplier on Thread level for max Hollow capacity |
+| `rescue_strain_stage3/4/5` | 5/10/18 | Strain thresholds for rescue at each Sinner stage |
+| `rescue_resonance_stage3/4/5` | 10/20/35 | Resonance cost for rescue at each Sinner stage |
+| `rescue_budget_base_stage3/4/5` | 60/120/250 | Base severity-reduction budget per stage |
+| `rescue_budget_base_mult_tenths` | 10 (→ 1.0) | Base multiplier in tenths |
+| `rescue_budget_success_mult_tenths` | 5 (→ 0.5) | Success-level multiplier in tenths |
+| `rescue_budget_thread_mult_hundredths` | 5 (→ 0.05) | Thread-level multiplier in hundredths |
+
 ### 15.2 Modifications to existing models
 
 #### `magic.Thread`
@@ -799,6 +823,7 @@ All in `world/magic/services/soul_tether.py` unless noted.
 | `compute_hollow_max(thread)` | Derived from Thread level + relationship cap. §4.3. |
 | `active_soul_tethers_for(sheet)` | Helper: returns the character's active tethers (either side). |
 | `find_sineater_in_scene(sinner_sheet, tethers, scene)` | Helper used by stage-advance subscriber. |
+| `get_soul_tether_config() -> SoulTetherConfig` | Lazy-create the singleton (pk=1). All rescue and sineating cost calculations read from this rather than module constants. |
 
 ---
 

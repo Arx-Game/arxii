@@ -61,6 +61,13 @@
   - condition -> conditions.ConditionTemplate [FK]
   - immunity_condition -> conditions.ConditionTemplate [FK] (nullable)
 
+### RemoveConditionOnCheckConfig
+**Foreign Keys:**
+  - enhancement -> actions.ActionEnhancement [FK]
+  - check_type -> checks.CheckType [FK]
+  - resistance_check_type -> checks.CheckType [FK] (nullable)
+  - condition -> conditions.ConditionTemplate [FK]
+
 ### ActionEnhancement
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK] (nullable)
@@ -70,6 +77,7 @@
   - modifykwargsconfig_configs <- actions.ModifyKwargsConfig
   - addmodifierconfig_configs <- actions.AddModifierConfig
   - conditiononcheckconfig_configs <- actions.ConditionOnCheckConfig
+  - removeconditiononcheckconfig_configs <- actions.RemoveConditionOnCheckConfig
 
 ### Service Functions
 - `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' — Resume a paused pipeline after player decision.`
@@ -713,6 +721,8 @@
   - sceneentryendorsement_received <- magic.SceneEntryEndorsement
   - presentationendorsement_given <- magic.PresentationEndorsement
   - presentationendorsement_received <- magic.PresentationEndorsement
+  - stylepresentationendorsement_given <- magic.StylePresentationEndorsement
+  - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
@@ -761,9 +771,12 @@
   - mantle_clearances <- items.MantleLevelClearance
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - duels_won <- combat.CombatEncounter
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
+  - duel_challenges_issued <- combat.DuelChallenge
+  - duel_challenges_received <- combat.DuelChallenge
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - detected_traps <- room_features.Trap
 
@@ -1211,7 +1224,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x758839f3d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x73b727209550>, default_factory=<dataclasses._MISSING_TYPE object at 0x73b727209550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x73b727209550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1484,6 +1497,7 @@
   - dramatic_moment_types <- magic.DramaticMomentType
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
+  - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonancegrant_set <- magic.ResonanceGrant
   - motif_resonances <- magic.MotifResonance
@@ -1720,6 +1734,16 @@
   - persona_snapshot -> scenes.Persona [FK] (nullable)
   - presentation -> items.FashionPresentation [FK]
 
+### StylePresentationEndorsement
+**Foreign Keys:**
+  - endorser_sheet -> character_sheets.CharacterSheet [FK]
+  - endorsee_sheet -> character_sheets.CharacterSheet [FK]
+  - persona_snapshot -> scenes.Persona [FK] (nullable)
+  - scene -> scenes.Scene [FK]
+  - resonance -> magic.Resonance [FK]
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
 ### EntryFlourishRecord
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -1727,6 +1751,10 @@
   - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+
+### FuryTier
+
+### FuryConfig
 
 ### ResonanceGainConfig
 **Foreign Keys:**
@@ -1745,6 +1773,7 @@
   - source_project -> projects.Project [FK] (nullable)
   - source_entry_flourish -> magic.EntryFlourishRecord [FK] (nullable)
   - source_dramatic_moment -> magic.DramaticMomentTag [FK] (nullable)
+  - source_style_presentation_endorsement -> magic.StylePresentationEndorsement [FK] (nullable)
 
 ### BeginningsRitualGrant
 **Foreign Keys:**
@@ -1947,6 +1976,10 @@
   - resonance -> magic.Resonance [FK]
   - check_outcome -> traits.CheckOutcome [FK]
 
+### SoulTetherConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
 ### SoulfrayConfig
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
@@ -1974,7 +2007,6 @@
   - resonance -> magic.Resonance [FK]
   - target_trait -> traits.Trait [FK] (nullable)
   - target_technique -> magic.Technique [FK] (nullable)
-  - target_object -> objects.ObjectDB [FK] (nullable)
   - target_relationship_track -> relationships.RelationshipTrackProgress [FK] (nullable)
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - target_facet -> magic.Facet [FK] (nullable)
@@ -1997,7 +2029,6 @@
 **Foreign Keys:**
   - unlock_trait -> traits.Trait [FK] (nullable)
   - unlock_gift -> magic.Gift [FK] (nullable)
-  - unlock_room_property -> mechanics.Property [FK] (nullable)
   - unlock_track -> relationships.RelationshipTrack [FK] (nullable)
 **Pointed to by:**
   - character_purchases <- magic.CharacterThreadWeavingUnlock
@@ -2018,20 +2049,20 @@
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
 - `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' — Derive affinity counts from a set of resonances.`
-- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
-- `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig') -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
+- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0, lethal: 'bool' = True) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
+- `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
 - `compute_anchor_cap(thread: 'Thread') -> 'int' — Return the anchor-side cap for this thread (Spec A §2.4).`
 - `compute_effective_cap(thread: 'Thread') -> 'int' — Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
 - `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' — Return the path-side cap for a character (Spec A §2.4).`
 - `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' — Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).`
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' — Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' — Pay XP to unlock an XP-locked level boundary on a thread.`
-- `deduct_anima(character: 'ObjectDB', effective_cost: 'int') -> 'int' — Deduct anima from character, returning the overburn deficit.`
+- `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' — Deduct anima from character, returning the overburn deficit.`
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -2047,7 +2078,7 @@
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -2109,7 +2140,6 @@
   - resonances <- magic.Resonance
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
-  - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - personas <- scenes.Persona
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
@@ -2514,7 +2544,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x758839f3d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x758839f3d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x73b727209550>, default_factory=<dataclasses._MISSING_TYPE object at 0x73b727209550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x73b727209550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -2984,6 +3014,7 @@
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - entry_endorsements <- magic.SceneEntryEndorsement
+  - style_presentation_endorsements <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -3028,6 +3059,7 @@
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - presentationendorsement_set <- magic.PresentationEndorsement
+  - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - discoveries_as_subject <- scenes.PersonaDiscovery
   - discoveries_as_linked <- scenes.PersonaDiscovery
   - interactions_written <- scenes.Interaction
@@ -3037,6 +3069,7 @@
   - initiated_action_requests <- scenes.SceneActionRequest
   - received_action_requests <- scenes.SceneActionRequest
   - delivery_scoped_action_requests <- scenes.SceneActionRequest
+  - action_target_rows <- scenes.SceneActionTarget
   - place_presences <- scenes.PlacePresence
   - interactions_received <- scenes.InteractionReceiver
   - window_reactions <- scenes.WindowReaction
@@ -3091,6 +3124,7 @@
   - persona -> scenes.Persona [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - place -> scenes.Place [FK] (nullable)
+  - fury_committed -> magic.FuryTier [FK] (nullable)
 **Pointed to by:**
   - endorsements <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
@@ -3166,6 +3200,8 @@
 ### SceneActionRequest
 **Foreign Keys:**
   - pull_declaration -> scenes.SceneCastPullDeclaration [OneToOne] (nullable)
+  - fury_commitment -> magic.FuryTier [FK] (nullable)
+  - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK]
   - initiator_persona -> scenes.Persona [FK]
   - target_persona -> scenes.Persona [FK] (nullable)
@@ -3180,6 +3216,14 @@
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
   - action_interaction -> scenes.Interaction [OneToOne] (nullable)
+**Pointed to by:**
+  - additional_targets <- scenes.SceneActionTarget
+
+### SceneActionTarget
+**Foreign Keys:**
+  - action_request -> scenes.SceneActionRequest [FK]
+  - target_persona -> scenes.Persona [FK]
+  - result_interaction -> scenes.Interaction [OneToOne] (nullable)
 
 ### SceneCastPullDeclaration
 **Foreign Keys:**
@@ -3272,13 +3316,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7588360d7990>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x73b7233ffdc0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
-- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
+- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7588360d7990>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x73b7233ffdc0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
