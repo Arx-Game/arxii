@@ -659,7 +659,7 @@ def _move_to_position(
     )
 
     target = _resolve_target(effect, context)
-    destination = _resolve_position(effect, context, role="destination")
+    destination = _resolve_position(effect, context, role=_ROLE_DESTINATION)
     if destination is None:
         return AppliedEffect(
             effect_type=EffectType.MOVE_TO_POSITION,

@@ -11,6 +11,7 @@ from django.test import TestCase
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
+    edge_between,
     enter_aerial,
     force_move_to_position,
     leave_aerial,
@@ -63,9 +64,15 @@ class AerialLifecycleTests(TestCase):
     def test_horizontal_flight_over_gated_edge(self) -> None:
         """Aerial move to the twin above the far side of a gated edge must not raise."""
         enter_aerial(self.char)
+        above_courtyard = position_of(self.char)
         above_balcony = Position.objects.get(room=self.room, name="Above balcony")
         move_to_position(self.char, above_balcony)  # must NOT raise
         self.assertEqual(position_of(self.char).pk, above_balcony.pk)
+        # Direct invariant: the mirrored aerial edge must be passable and ungated.
+        aerial_edge = edge_between(above_courtyard, above_balcony)
+        self.assertIsNotNone(aerial_edge, "Aerial edge between twins must exist")
+        self.assertTrue(aerial_edge.is_passable, "Aerial edge must be passable")
+        self.assertIsNone(aerial_edge.gating_challenge_id, "Aerial edge must not be gated")
 
     def test_descend_to_anchor(self) -> None:
         """leave_aerial returns char to elevation_anchor and clears aerial property."""
