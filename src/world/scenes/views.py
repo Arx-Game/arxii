@@ -85,6 +85,8 @@ class SceneViewSet(viewsets.ModelViewSet):
         # entry.character_sheet.character.db_key — the second character_sheet
         # hop hits the SharedMemoryModel identity map for free, so we only
         # need to chain as far as roster_entry plus the character ObjectDB.
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+
         interactions_prefetch = Prefetch(
             "interactions",
             queryset=Interaction.objects.select_related(
@@ -94,8 +96,16 @@ class SceneViewSet(viewsets.ModelViewSet):
             ),
             to_attr="cached_interactions",
         )
+        drama_tags_prefetch = Prefetch(
+            "dramatic_moment_tags",
+            queryset=DramaticMomentTag.objects.only("character_sheet_id", "scene_id"),
+            to_attr="cached_scene_drama_tags",
+        )
         queryset = (
-            super().get_queryset().order_by("-date_started").prefetch_related(interactions_prefetch)
+            super()
+            .get_queryset()
+            .order_by("-date_started")
+            .prefetch_related(interactions_prefetch, drama_tags_prefetch)
         )
         if self.action == "list":
             user = self.request.user
@@ -209,9 +219,10 @@ class SceneViewSet(viewsets.ModelViewSet):
         Endpoint that matches frontend expectations: /api/scenes/spotlight/
         Returns in_progress and recent scenes
         """
-        # Spotlight reuses SceneListSerializer, so the same prefetch is
-        # required to keep get_participants from firing a per-scene
-        # Persona query.
+        # Spotlight reuses SceneListSerializer, so the same prefetches are
+        # required to keep get_participants from firing per-scene queries.
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+
         interactions_prefetch = Prefetch(
             "interactions",
             queryset=Interaction.objects.select_related(
@@ -221,12 +232,17 @@ class SceneViewSet(viewsets.ModelViewSet):
             ),
             to_attr="cached_interactions",
         )
+        drama_tags_prefetch = Prefetch(
+            "dramatic_moment_tags",
+            queryset=DramaticMomentTag.objects.only("character_sheet_id", "scene_id"),
+            to_attr="cached_scene_drama_tags",
+        )
 
         # Get active scenes
         active_scenes = Scene.objects.filter(
             is_active=True,
             privacy_mode=ScenePrivacyMode.PUBLIC,
-        ).prefetch_related(interactions_prefetch)[:10]
+        ).prefetch_related(interactions_prefetch, drama_tags_prefetch)[:10]
 
         # Get recently finished scenes (last 7 days)
         seven_days_ago = timezone.now() - timedelta(days=7)
@@ -237,7 +253,7 @@ class SceneViewSet(viewsets.ModelViewSet):
                 date_finished__gte=seven_days_ago,
             )
             .order_by("-date_finished")
-            .prefetch_related(interactions_prefetch)[:10]
+            .prefetch_related(interactions_prefetch, drama_tags_prefetch)[:10]
         )
 
         # Prepare data for serializer

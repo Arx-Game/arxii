@@ -6239,6 +6239,51 @@ export interface paths {
     patch: operations['magic_character_resonances_partial_update'];
     trace?: never;
   };
+  '/api/magic/dramatic-moment-tags/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+     *
+     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
+     *     GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+     */
+    get: operations['magic_dramatic_moment_tags_list'];
+    put?: never;
+    /**
+     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+     *
+     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
+     *     GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+     */
+    post: operations['magic_dramatic_moment_tags_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/dramatic-moment-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of authored dramatic-moment types for the tag picker (#1139). */
+    get: operations['magic_dramatic_moment_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/effect-types/': {
     parameters: {
       query?: never;
@@ -14659,6 +14704,56 @@ export interface components {
       distinctions: components['schemas']['DraftDistinctionEntry'][];
     };
     /**
+     * @description Create + read dramatic-moment tags (#1139).
+     *
+     *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
+     *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
+     *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+     */
+    DramaticMomentTag: {
+      readonly id: number;
+      moment_type: number;
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      scene?: number | null;
+      /** @description The pose that earned this moment; nullable for non-pose tags. */
+      interaction?: number | null;
+      /** @description Account that tagged this moment. PROTECT because provenance must be kept. */
+      readonly tagged_by: number;
+      /** Format: date-time */
+      readonly tagged_at: string;
+    };
+    /**
+     * @description Create + read dramatic-moment tags (#1139).
+     *
+     *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
+     *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
+     *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+     */
+    DramaticMomentTagRequest: {
+      moment_type: number;
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description Scene context; nullable for resilience to scene cleanup. */
+      scene?: number | null;
+      /** @description The pose that earned this moment; nullable for non-pose tags. */
+      interaction?: number | null;
+    };
+    /** @description Read-only catalog of authored dramatic-moment types (for the tag picker). */
+    DramaticMomentType: {
+      readonly id: number;
+      /** @description Display name used as the renown deed title (e.g. 'Grand Entrance'). */
+      label: string;
+      description?: string;
+      /** @description Resonance granted when this moment type is tagged. */
+      resonance: number;
+      /** @description Flat resonance units granted to the tagged character. */
+      resonance_amount?: number;
+      /** @description Maximum number of times this moment type may be awarded to a given character within a single scene. */
+      per_scene_cap?: number;
+    };
+    /**
      * @description * `menu` - Menu
      *     * `pool` - Pool
      * @enum {string}
@@ -16083,6 +16178,9 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      readonly dramatic_moment_tags: {
+        [key: string]: unknown;
+      }[];
       readonly receivers: components['schemas']['InteractionReceiver'][];
     };
     InteractionFavorite: {
@@ -16152,6 +16250,9 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      readonly dramatic_moment_tags: {
+        [key: string]: unknown;
+      }[];
     };
     InteractionListRequest: {
       /** @description Scene container if one was active */
@@ -17849,6 +17950,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['DraftApplication'][];
+    };
+    PaginatedDramaticMomentTagList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DramaticMomentTag'][];
     };
     PaginatedEncounterListList: {
       /** @example 123 */
@@ -21590,6 +21706,7 @@ export interface components {
       readonly location: string;
       readonly participants: string;
       readonly is_owner: string;
+      readonly viewer_can_gm: boolean;
       /** Format: date-time */
       date_finished?: string | null;
       is_active?: boolean;
@@ -21682,6 +21799,7 @@ export interface components {
         [key: string]: unknown;
       }[];
       readonly is_owner: string;
+      readonly viewer_can_gm: boolean;
     };
     SceneSummaryRevision: {
       readonly id: number;
@@ -31886,6 +32004,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterResonance'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_tags_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDramaticMomentTagList'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_tags_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DramaticMomentTagRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentTag'];
+        };
+      };
+    };
+  };
+  magic_dramatic_moment_types_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DramaticMomentType'][];
         };
       };
     };
