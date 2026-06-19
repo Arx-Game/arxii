@@ -6,13 +6,18 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from actions.constants import TargetKind
 from actions.definitions.items import (
     EquipAction,
     PutInAction,
     TakeOutAction,
     UnequipAction,
 )
-from actions.prerequisites import HoldsItemPrerequisite, ItemUsablePrerequisite
+from actions.prerequisites import (
+    HoldsItemPrerequisite,
+    ItemUsablePrerequisite,
+    OnUseTargetPrerequisite,
+)
 from evennia_extensions.factories import (
     AccountFactory,
     CharacterFactory,
@@ -337,3 +342,58 @@ class UseItemPrereqTests(TestCase):
         met, reason = ItemUsablePrerequisite().is_met(actor, context=self._ctx(item_obj))
         assert met is False
         assert reason
+
+
+class OnUseTargetPrereqTests(TestCase):
+    def _ctx(self, item_obj):
+        return {"kwargs": {"item": item_obj}}
+
+    def _usable_item(self, actor, kind):
+        item_obj = ObjectDBFactory(db_key=f"OUT-{kind}", location=actor)
+        template = ItemTemplateFactory(name=f"OUT-{kind}", on_use_target_kind=kind)
+        ItemInstanceFactory(template=template, game_object=item_obj)
+        return item_obj
+
+    def test_self_only_rejects_supplied_target(self) -> None:
+        actor = CharacterFactory(db_key="OUTAlice")
+        other = CharacterFactory(db_key="OUTOther", location=actor.location)
+        item_obj = self._usable_item(actor, None)  # on_use_target_kind null
+        met, reason = OnUseTargetPrerequisite().is_met(
+            actor, target=other, context=self._ctx(item_obj)
+        )
+        assert met is False
+        assert reason
+
+    def test_self_only_passes_without_target(self) -> None:
+        actor = CharacterFactory(db_key="OUTBob")
+        item_obj = self._usable_item(actor, None)
+        met, _ = OnUseTargetPrerequisite().is_met(actor, target=None, context=self._ctx(item_obj))
+        assert met is True
+
+    def test_character_kind_requires_target(self) -> None:
+        actor = CharacterFactory(db_key="OUTCarl")
+        item_obj = self._usable_item(actor, TargetKind.CHARACTER)
+        met, reason = OnUseTargetPrerequisite().is_met(
+            actor, target=None, context=self._ctx(item_obj)
+        )
+        assert met is False
+        assert reason
+
+    def test_character_target_in_other_room_fails(self) -> None:
+        room_a = ObjectDBFactory(db_key="OUTRoomA", db_typeclass_path="typeclasses.rooms.Room")
+        room_b = ObjectDBFactory(db_key="OUTRoomB", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="OUTDan", location=room_a)
+        far = CharacterFactory(db_key="OUTFar", location=room_b)
+        item_obj = self._usable_item(actor, TargetKind.CHARACTER)
+        met, reason = OnUseTargetPrerequisite().is_met(
+            actor, target=far, context=self._ctx(item_obj)
+        )
+        assert met is False
+        assert reason
+
+    def test_character_target_same_room_passes(self) -> None:
+        actor = CharacterFactory(db_key="OUTErin")
+        near = CharacterFactory(db_key="OUTNear", location=actor.location)
+        item_obj = self._usable_item(actor, TargetKind.CHARACTER)
+        met, _ = OnUseTargetPrerequisite().is_met(actor, target=near, context=self._ctx(item_obj))
+        assert met is True

@@ -71,6 +71,16 @@ class HoldsItemPrerequisite(Prerequisite):
         return True, ""
 
 
+def _is_visible_to(actor, target) -> bool:
+    """Whether ``actor`` can perceive ``target``.
+
+    MVP proxy: same-location presence (you perceive what is in your room).
+    TODO(#<perception-followup>): replace with a real perception/visibility
+    system (darkness, stealth, line-of-sight).
+    """
+    return target.location in (actor.location, actor)
+
+
 @dataclass
 class ItemUsablePrerequisite(Prerequisite):
     """The item's template must have an on-use pool (usable); consumables must
@@ -93,4 +103,55 @@ class ItemUsablePrerequisite(Prerequisite):
             return False, "That can't be used."
         if template.is_consumable and instance.charges <= 0:
             return False, "There are no uses left."
+        return True, ""
+
+
+@dataclass
+class OnUseTargetPrerequisite(Prerequisite):
+    """Enforce the item's on_use_target_kind contract on the effect-target.
+
+    Null kind => self-use only (a supplied target fails). A set kind => an
+    external target of that kind is required, reachable, and visible.
+    """
+
+    def is_met(  # noqa: C901,PLR0911
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from actions.constants import TargetKind  # noqa: PLC0415
+        from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
+        from flows.object_states.item_state import ItemState  # noqa: PLC0415
+
+        item_obj = (context or {}).get("kwargs", {}).get("item")
+        instance = resolve_item_instance(item_obj) if item_obj is not None else None
+        if instance is None:
+            return False, "That can't be used."
+        kind = instance.template.on_use_target_kind
+
+        if kind is None:
+            if target is not None:
+                return False, "That can't be used on others."
+            return True, ""
+
+        if target is None:
+            return False, "Use it on what?"
+
+        # Kind match: ITEM targets use ItemState.is_reachable_by.
+        if kind == TargetKind.ITEM:
+            target_instance = resolve_item_instance(target)
+            if target_instance is None:
+                return False, "You can't use that on that."
+            if not ItemState(target_instance, context=None).is_reachable_by(actor):
+                return False, "That isn't within reach."
+            if not _is_visible_to(actor, target):
+                return False, "You can't see that."
+            return True, ""
+
+        # CHARACTER / ROOM / PERSONA targets: same-location reachability + visibility.
+        if not _is_visible_to(actor, target):
+            return False, "You can't see that."
+        if actor.location not in (target.location, target):
+            return False, "They aren't here."
         return True, ""
