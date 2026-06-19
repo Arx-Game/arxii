@@ -882,75 +882,87 @@ Mutations are explicit and rare; reads are frequent and never query.
 
 ### 5.6 Covenant role × gear archetype compatibility
 
-Covenant role bonuses are **always granted in full**, regardless of the gear
-the character is wearing. The role-vs-gear interaction is per-slot, and it
-governs whether the slot's mundane gear stats *stack on top of* the role
-bonus or *only count if higher*.
+**Status: WIRED AND COMBAT-CONSUMING (#985, PR3).** `role_base_bonus_for_target` now
+reads `CovenantRoleBonus` authored config rows; `item_mundane_stat_for_target` reads
+`effective_weapon_damage` / `effective_armor_soak` from `ItemInstance`. Combat
+consumes the covenant-role bonus at two seams: `apply_equipped_armor_soak` adds the
+armor-soak bonus on top of the raw soak, and `_weapon_augmented_budget` adds the
+weapon-damage bonus to the technique budget. Default authoring is empty → no live
+numeric change until staff author `CovenantRoleBonus` rows.
 
-Per equipped item, the contribution to a `ModifierTarget` is:
+**Marginal semantics** (as shipped): the gear's mundane combat stat is counted
+directly by combat (`effective_weapon_damage` / `effective_armor_soak`). The
+covenant-role bonus is the *additional* amount that blending adds on top:
 
-- **Compatible gear:** `role_bonus + gear_stat` (additive)
-- **Incompatible gear:** `max(role_bonus, gear_stat)` (highest of the two only)
+- **Compatible slot:** `role_bonus` is added to the combat total — the role bonus
+  stacks on top of the gear stat combat already counts.
+- **Incompatible slot:** `max(0, role_bonus - gear_stat)` is added — only the
+  role's surplus over the gear stat counts; gear dominance produces zero addend.
 
-At low character levels `gear_stat > role_bonus`, so the slot's contribution
-is dominated by the gear regardless of compatibility — wearing "wrong" gear
-costs nothing. At higher levels `role_bonus > gear_stat`, so compatible gear
-adds a small mundane-stat increment on top of the role bonus while
-incompatible gear contributes only the role bonus (the gear's mundane stat
-is wasted). Either way, the character never loses their role bonus; they
-just don't get to stack mundane gear stats on top when wearing incompatible
-archetypes.
+This differs from the original spec which described `role_bonus + gear_stat`
+(compatible) vs `max(role_bonus, gear_stat)` (incompatible). The marginal form
+is equivalent in outcome — combat adds `gear_stat` once via its own read and
+`covenant_role_bonus` adds the marginal remainder — but avoids double-counting gear
+stats that combat already consumed.
+
+`role_base_bonus_for_target(role, target, character_level)` reads
+`CovenantRoleBonus` rows (FK `covenant_role`, FK `modifier_target`,
+`SmallIntegerField bonus_per_level`, unique per role×target) and returns
+`character_level × bonus_per_level`. No row → 0.
+
+`item_mundane_stat_for_target(item, target)` returns `item.effective_weapon_damage`
+for the seeded `weapon_damage` `ModifierTarget` and `item.effective_armor_soak` for
+`armor_soak`; 0 for all other targets. The derived stats on `ItemInstance` already
+apply the quality-tier multiplier — no separate `ItemCombatStat` model exists (#508).
 
 ```python
 def covenant_role_bonus(sheet: CharacterSheet, target: ModifierTarget) -> int:
-    """Per-equipped-item covenant role + gear contribution to this target.
+    """Per-equipped-item marginal covenant-role contribution to this target (#985).
 
-    Walks equipped items via cached handler and sums per-slot contributions
-    per the compatible/incompatible rule above.
+    Walks engaged roles via cached handler. For each role and each equipped item:
+      - compatible slot: adds role_bonus (stacks on top of gear combat already counts)
+      - incompatible slot: adds max(0, role_bonus - gear_stat) (role surplus only)
+
+    Returns 0 when no roles are engaged.
     """
-    role = sheet.character.covenant_roles.currently_held()
-    if role is None:
+    engaged_roles = sheet.character.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
         return 0
 
-    char_level = sheet.current_level
-    role_bonus = role_base_bonus_for_target(role, target, char_level)
-
     total = 0
-    for equipped in sheet.character.equipped_items:
-        item = equipped.item_instance
-        gear_stat = item_mundane_stat_for_target(item, target)
-        archetype = item.template.gear_archetype
-        if is_gear_compatible(role, archetype):
-            total += role_bonus + gear_stat  # additive
-        else:
-            total += max(role_bonus, gear_stat)  # take the higher
+    for role in engaged_roles:
+        role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+        for equipped in sheet.character.equipped_items:
+            item = equipped.item_instance
+            gear_stat = item_mundane_stat_for_target(item, target)
+            archetype = item.template.gear_archetype
+            if is_gear_compatible(role, archetype):
+                total += role_bonus  # compatible: role bonus stacks on gear combat counts
+            else:
+                total += max(0, role_bonus - gear_stat)  # incompatible: role surplus only
 
     return total
 ```
 
-The math is explicit per equipped item because each slot independently
-chooses additive vs max — a character wearing 3 compatible items + 2
-incompatible items gets `3 × (role + gear) + 2 × max(role, gear)`.
+The walker loops engaged roles (list from `currently_engaged_roles()`) and then
+equipped items — a character in two covenants stacks both roles' contributions
+additively. A character with no engaged roles returns 0 immediately (the
+engaged-roles early-out keeps the query budget flat for non-covenant characters).
 
-`role_base_bonus_for_target(role, target, character_level)` reads role-
-specific scaling from authored data (TBD location — likely a new
-`CovenantRoleBonus` model keyed by role + ModifierTarget + per-level
-coefficient). PR1 ships a placeholder that returns 0 for all targets; PR3
-wires actual values once combat balance is addressed.
+**Combat seams that consume the bonus (as of #985):**
 
-`item_mundane_stat_for_target(item, target)` reads mundane gear stats
-(weapon damage, armor protection, etc.) from the combat stats authored
-directly on `ItemTemplate` (`base_weapon_damage`, `base_armor_soak`, etc.)
-and derived per-instance on `ItemInstance` (`effective_weapon_damage` /
-`effective_armor_soak`) — resolved by issue #508; there is no separate
-`ItemCombatStat` model. Quality tier scales mundane stat magnitude (higher
-quality = larger flat contribution).
+- `apply_equipped_armor_soak(character, damage)` — adds
+  `_covenant_armor_soak_bonus(character)` (calls `get_modifier_total` for the
+  `armor_soak` `ModifierTarget`) on top of `effective_soak_from_armor`. The covenant
+  bonus is intangible; durability wear applies only to physical armor pieces.
+- `_weapon_augmented_budget(profile, budget, weapon, sheet)` — for
+  `uses_equipped_weapon` profiles, adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)`
+  on top of the weapon's `effective_weapon_damage`. No sheet supplied → bonus skipped.
 
-**Why this composes cleanly even when both lookups return 0 in PR1:** with
-both returning 0, `max(0, 0) == 0 + 0`, so the structural pipeline is
-identical to a fully-authored future state. PR1 tests inject non-zero
-values to validate the additive vs max branching without depending on PR3's
-authoring choices.
+Both seams route through `get_modifier_total(sheet, target)`, which calls
+`covenant_role_bonus` via the equipment walk (target category in
+`EQUIPMENT_RELEVANT_CATEGORIES`). Non-covenant characters and base combat
+damage/soak are unaffected.
 
 ## 6. Anchor Cap Formulas
 
@@ -1311,20 +1323,31 @@ stats need combat balance; transfer service functions are independent.
 - API endpoints for mantle catalog + clearance status.
 - Mission gate stays nullable until missions ship.
 
-### PR3 — Combat Stats + ItemCapabilityGrant
+### PR3 — Combat Stats + ItemCapabilityGrant (PARTIALLY DONE — #985)
 
 - Combat stats for weapon damage, armor protection, and durability live
   directly on `ItemTemplate` (`weapon_damage_type`, `base_weapon_damage`,
   `base_armor_soak`, `max_durability`) and `ItemInstance` (derived
   `effective_*` + `durability`) — resolved ahead of this PR by issue #508;
-  no separate `ItemCombatStat` model.
+  no separate `ItemCombatStat` model. **[BUILT & WIRED]**
+- `role_base_bonus_for_target` now wired to `CovenantRoleBonus` authored config
+  rows (`covenant_role` FK, `modifier_target` FK, `bonus_per_level` SmallInt,
+  unique per role×target); returns `character_level × bonus_per_level`. No row
+  → 0. Admin-registered. **[BUILT & WIRED — #985]**
+- `item_mundane_stat_for_target` now reads `effective_weapon_damage` /
+  `effective_armor_soak` from `ItemInstance` for the seeded `weapon_damage` /
+  `armor_soak` `ModifierTarget` names; 0 for other targets. Stale
+  `ItemCombatStat` docstring removed. **[BUILT & WIRED — #985]**
+- Combat seams consuming the covenant-role bonus: `apply_equipped_armor_soak`
+  adds `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top
+  of raw soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
+  WEAPON_DAMAGE_TARGET_NAME)` to the technique budget. **[BUILT & WIRED — #985]**
+- Default authoring is empty → no live numeric change until staff author rows
+  in `CovenantRoleBonus`. **[BUILT & WIRED — pending staff content]**
 - `ItemCapabilityGrant` model — items as capability sources, parallel to
-  `TechniqueCapabilityGrant`.
+  `TechniqueCapabilityGrant`. **[ABSENT — still post-PR3]**
 - `_get_equipment_sources` extension to `get_capability_sources_for_character`.
-- Wire `role_base_bonus_for_target` to actual values once combat balance is
-  set. Mundane stat formulas land here.
-- Combat pipeline integration test exercising the full equipped → role bonus
-  → mundane stat → modifier total chain.
+  **[ABSENT — still post-PR3]**
 
 ### PR4 — Transfer Service Functions + Crafting Recipe Foundation
 

@@ -206,7 +206,14 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     enforces engagement invariants.
   - `GearArchetypeCompatibility` — existence-only join (CovenantRole ×
     `world.items.constants.GearArchetype`). Row present = additive
-    compatibility; absent = `max(role_bonus, gear_stat)`.
+    compatibility; absent = marginal blend (see §5.6 for the marginal
+    semantics shipped in #985).
+  - `CovenantRoleBonus` (#985) — authored config: FK `covenant_role`, FK
+    `modifier_target` (`mechanics.ModifierTarget`), `bonus_per_level`
+    SmallInt, unique per (role, target). `role_base_bonus_for_target(role,
+    target, char_level)` returns `char_level × bonus_per_level`; no row → 0.
+    Admin-registered. Default authoring empty → no live numeric effect until
+    staff author rows.
 
 - **Constants** (`world.covenants.constants`): `CovenantType` (DURANCE,
   BATTLE), `RoleArchetype` (SWORD, SHIELD, CROWN).
@@ -285,10 +292,16 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     `test_modifier_total_no_query.py::CovenantRoleAnchorCapQueryBudgetTests`.
 
 - **Mechanics** (`world.mechanics.services`):
-  - `covenant_role_bonus(sheet, target)` (Slice A): iterates
-    `currently_engaged_roles()` and SUMs contributions across engaged roles.
-    Returns 0 when no roles engaged. Stacks additively across covenant
-    types (Durance + Battle).
+  - `covenant_role_bonus(sheet, target)` (Slice A, marginal semantics #985):
+    iterates `currently_engaged_roles()` × equipped items and SUMs marginal
+    contributions — compatible slot: adds `role_bonus`; incompatible slot: adds
+    `max(0, role_bonus - gear_stat)`. Returns 0 when no roles engaged. Stacks
+    additively across covenant types (Durance + Battle).
+  - `role_base_bonus_for_target(role, target, char_level)` (#985): reads
+    `CovenantRoleBonus`; returns `char_level × bonus_per_level`; 0 if no row.
+  - `item_mundane_stat_for_target(item, target)` (#985): returns
+    `item.effective_weapon_damage` / `item.effective_armor_soak` for the seeded
+    target names; 0 otherwise.
 
 - **Items** (`world.items`):
   - `GearArchetype` enum lives in `world.items.constants` and is the join
