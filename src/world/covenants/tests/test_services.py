@@ -220,6 +220,18 @@ class AddMemberTests(TestCase):
         membership = add_member(covenant=cov, character_sheet=sheet, role=role)
         self.assertEqual(membership.rank, base)
 
+    def test_add_member_provisions_base_rank_when_covenant_has_none(self) -> None:
+        """A covenant created outside formation has no ladder; add_member must still
+        succeed by provisioning a default base rank (rank is NOT NULL)."""
+        cov = CovenantFactory()
+        self.assertEqual(cov.ranks.count(), 0)
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        membership = add_member(covenant=cov, character_sheet=sheet, role=role)
+        self.assertIsNotNone(membership.rank)
+        self.assertEqual(cov.ranks.count(), 1)
+        self.assertEqual(membership.rank, cov.ranks.get())
+
     def test_duplicate_active_raises_integrity_error(self) -> None:
         cov = CovenantFactory()
         CovenantRankFactory(covenant=cov, tier=1)

@@ -203,6 +203,31 @@ def _base_rank(covenant: Covenant) -> CovenantRank:
     return covenant.ranks.order_by("-tier").first()
 
 
+def _ensure_base_rank(covenant: Covenant) -> CovenantRank:
+    """Return the covenant's base rank, provisioning a default one if it has none.
+
+    Covenants formed via ``create_covenant`` always have a rank ladder. A covenant
+    created outside formation (e.g. test/seed factories that instantiate ``Covenant``
+    directly) may have no ranks yet, and memberships require a NOT NULL ``rank``. In
+    that case, fall back to a single flat "Member" rank (tier 1, no capabilities) —
+    matching ``create_covenant``'s flat default — so adding the first member always
+    has a valid base rank to assign.
+    """
+    from world.covenants.constants import DEFAULT_MEMBER_RANK_NAME  # noqa: PLC0415
+
+    base = _base_rank(covenant)
+    if base is not None:
+        return base
+    return CovenantRank.objects.create(
+        covenant=covenant,
+        name=DEFAULT_MEMBER_RANK_NAME,
+        tier=1,
+        can_invite=False,
+        can_kick=False,
+        can_manage_ranks=False,
+    )
+
+
 @transaction.atomic
 def add_member(
     *,
@@ -217,7 +242,7 @@ def add_member(
     enforces "at most one active role per (character, covenant)"; the
     IntegrityError on conflict is the contract.
     """
-    rank = _base_rank(covenant)
+    rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
@@ -295,7 +320,7 @@ def assign_covenant_role(
     If ``rank`` is not provided, the covenant's base rank (highest tier = lowest
     authority) is used.
     """
-    effective_rank = rank if rank is not None else _base_rank(covenant)
+    effective_rank = rank if rank is not None else _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
