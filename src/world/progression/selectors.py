@@ -32,4 +32,7 @@ def next_path_options(character: ObjectDB) -> list[Path]:  # noqa: OBJECTDB_PARA
     current = current_path_for_character(character)
     if current is None:
         return []
+    # Deliberately unfiltered by stage (unlike eligible_paths_for_threshold, which
+    # pins the crossing's target_stage): this is the generic "what can I pursue next"
+    # picker. The path tree's children are the immediate next stage by construction.
     return list(current.child_paths.filter(is_active=True))
