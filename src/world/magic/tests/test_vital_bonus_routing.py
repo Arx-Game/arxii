@@ -360,7 +360,7 @@ class AnchorInScopeVacuousTests(TestCase):
 
     Spec §5.8 lines 1650-1652 requires passive contributions only from threads
     "whose anchor is currently in scope." All Thread typed FKs (target_trait,
-    target_technique, target_object, target_relationship_track, target_capstone)
+    target_technique, target_relationship_track, target_capstone)
     use on_delete=PROTECT, so deleting any anchor object raises ProtectedError
     rather than silently removing or nulling the FK. An existing Thread row
     therefore always has its anchor present.

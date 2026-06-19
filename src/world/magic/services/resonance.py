@@ -332,7 +332,7 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
 )
 
 
-def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: PLR0911
+def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     """Return True iff ``thread``'s anchor is involved in the action (Spec A §5.2).
 
     Relationship anchors are always considered in-action (player asserts
@@ -348,8 +348,6 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: 
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
-    if thread.target_kind == TargetKind.ROOM:
-        return thread.target_object_id in ctx.involved_objects
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         sheet = thread.owner
         engaged_roles = sheet.character.covenant_roles.currently_engaged_roles()

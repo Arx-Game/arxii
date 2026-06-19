@@ -41,7 +41,6 @@ class CharacterThreadHandler:
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_object",
                 "target_relationship_track",
                 "target_capstone",
                 "target_facet",

@@ -7,7 +7,6 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import SanctumSlotKind, TargetKind
-from world.magic.exceptions import AnchorCapNotImplemented
 from world.magic.factories import ResonanceFactory, ThreadFactory
 from world.magic.models import SanctumDetails, SanctumOwnerMode
 from world.magic.services import compute_anchor_cap, compute_effective_cap, compute_path_cap
@@ -50,11 +49,6 @@ class AnchorCapTests(TestCase):
     def test_relationship_capstone_cap_scales_with_capstone_size(self) -> None:
         thread = ThreadFactory(as_capstone_thread=True, _capstone_points=500)
         self.assertEqual(compute_anchor_cap(thread), 500)
-
-    def test_room_raises_not_implemented(self) -> None:
-        thread = ThreadFactory(as_room_thread=True)
-        with self.assertRaises(AnchorCapNotImplemented):
-            compute_anchor_cap(thread)
 
     def test_sanctum_anchor_cap_is_level_times_ten(self) -> None:
         """SANCTUM thread cap = sanctum feature_instance.level × 10 (Plan 4 §F)."""

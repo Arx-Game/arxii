@@ -9,7 +9,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
-- **Threads**: Per-character attachments anchored to a trait/technique/facet/room/
+- **Threads**: Per-character attachments anchored to a trait/technique/facet/
   relationship-track/relationship-capstone/covenant-role. Each Thread channels a
   single Resonance (currency) and accrues `developed_points` → `level` via the
   Imbuing ritual. The legacy 5-axis Thread family was removed and replaced in
@@ -156,7 +156,7 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   enforce payload/effect_kind shape.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
-  `unlock_gift`, `unlock_room_property`,
+  `unlock_gift`,
   `unlock_track`. `xp_cost` + M2M to `Path` (in-band) + `out_of_path_multiplier`.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
@@ -169,7 +169,7 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
 
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
-  `target_trait`, `target_technique`, `target_facet`, `target_object` (ROOM),
+  `target_trait`, `target_technique`, `target_facet`,
   `target_relationship_track`, `target_capstone`, `target_covenant_role`.
   Fields: `owner` (FK CharacterSheet), `resonance` (FK Resonance), `name`,
   `description`, `developed_points`, `level`, timestamps, `retired_at`

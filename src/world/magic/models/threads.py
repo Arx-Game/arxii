@@ -1,6 +1,6 @@
 """Threads and thread-pull infrastructure.
 
-Per-character Thread rows anchored to a trait/technique/room/relationship/facet/covenant-role.
+Per-character Thread rows anchored to a trait/technique/relationship/facet/covenant-role.
 ThreadLevelUnlock is the per-thread XP-locked-boundary receipt.
 ThreadPullCost is the per-tier pull-cost tuning table.
 ThreadXPLockedLevel is the XP-locked boundary price list.
@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
@@ -344,14 +343,6 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=TECHNIQUE; null otherwise.",
     )
-    target_object = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="anchored_threads",
-        help_text="Set when target_kind in (ITEM, ROOM); null otherwise.",
-    )
     target_relationship_track = models.ForeignKey(
         "relationships.RelationshipTrackProgress",
         on_delete=models.PROTECT,
@@ -426,11 +417,6 @@ class Thread(SharedMemoryModel):
                 name="uniq_thread_technique",
             ),
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_object"],
-                condition=models.Q(target_kind=TargetKind.ROOM),
-                name="uniq_thread_room",
-            ),
-            models.UniqueConstraint(
                 fields=["owner", "resonance", "target_relationship_track"],
                 condition=models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK),
                 name="uniq_thread_rel_track",
@@ -448,7 +434,6 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=False)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -465,24 +450,6 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=False)
-                        & models.Q(target_object__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
-                        & models.Q(target_capstone__isnull=True)
-                        & models.Q(target_facet__isnull=True)
-                        & models.Q(target_covenant_role__isnull=True)
-                        & models.Q(target_mantle__isnull=True)
-                        & models.Q(target_sanctum_details__isnull=True)
-                    )
-                ),
-            ),
-            models.CheckConstraint(
-                name="thread_room_payload",
-                check=(
-                    ~models.Q(target_kind=TargetKind.ROOM)
-                    | (
-                        models.Q(target_trait__isnull=True)
-                        & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=False)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -499,7 +466,6 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=False)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -516,7 +482,6 @@ class Thread(SharedMemoryModel):
                     | (
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
@@ -545,7 +510,6 @@ class Thread(SharedMemoryModel):
                         models.Q(target_facet__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
@@ -571,7 +535,6 @@ class Thread(SharedMemoryModel):
                         models.Q(target_covenant_role__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -597,7 +560,6 @@ class Thread(SharedMemoryModel):
                         models.Q(target_mantle__isnull=False)
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -648,7 +610,6 @@ class Thread(SharedMemoryModel):
                         & ~models.Q(slot_kind="")
                         & models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -672,7 +633,6 @@ class Thread(SharedMemoryModel):
         _kind_to_attr: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
-            TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
@@ -695,7 +655,6 @@ class Thread(SharedMemoryModel):
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
             TargetKind.FACET: "target_facet",
-            TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
@@ -706,7 +665,6 @@ class Thread(SharedMemoryModel):
             "target_trait",
             "target_technique",
             "target_facet",
-            "target_object",
             "target_relationship_track",
             "target_capstone",
             "target_covenant_role",

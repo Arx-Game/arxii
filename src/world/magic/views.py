@@ -708,7 +708,6 @@ class ThreadViewSet(viewsets.ModelViewSet):
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
-                "target_object",
                 "target_relationship_track",
                 "target_capstone",
             )
@@ -983,7 +982,6 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
         "unlock",
         "unlock__unlock_trait",
         "unlock__unlock_gift",
-        "unlock__unlock_room_property",
         "unlock__unlock_track",
     ).order_by("-pk")
     serializer_class = ThreadWeavingTeachingOfferSerializer
@@ -1703,8 +1701,6 @@ class ThreadHubSummaryView(APIView):
                     for technique in character.techniques.all()
                     if technique.gift_id == gift.pk
                 )
-            elif kind == TargetKind.ROOM and unlock.unlock_room_property_id:
-                room_property_ids.append(unlock.unlock_room_property_id)
             elif kind == TargetKind.RELATIONSHIP_TRACK and unlock.unlock_track_id:
                 weavable_relationship_track_ids.append(unlock.unlock_track_id)
 
@@ -2021,7 +2017,6 @@ class ApplicablePullsView(APIView):
         context = PullActionContext(
             technique=technique,
             effect_type_id=data.get("effect_type_id"),
-            target_object_id=data.get("target_object_id"),
             target_persona_id=data.get("target_persona_id"),
             scene_id=data.get("scene_id"),
         )

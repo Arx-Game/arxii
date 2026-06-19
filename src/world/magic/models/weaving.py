@@ -49,14 +49,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
         related_name="thread_weaving_unlocks",
         help_text="Set when target_kind=TECHNIQUE; covers all techniques under Gift.",
     )
-    unlock_room_property = models.ForeignKey(
-        "mechanics.Property",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="thread_weaving_unlocks",
-        help_text="Set when target_kind=ROOM; rooms with this Property.",
-    )
     unlock_track = models.ForeignKey(
         "relationships.RelationshipTrack",
         on_delete=models.PROTECT,
@@ -96,11 +88,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                 name="unique_threadweaving_unlock_gift",
             ),
             models.UniqueConstraint(
-                fields=["unlock_room_property"],
-                condition=models.Q(target_kind="ROOM"),
-                name="unique_threadweaving_unlock_room",
-            ),
-            models.UniqueConstraint(
                 fields=["unlock_track"],
                 condition=models.Q(target_kind="RELATIONSHIP_TRACK"),
                 name="unique_threadweaving_unlock_track",
@@ -113,7 +100,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                     | (
                         models.Q(unlock_trait__isnull=False)
                         & models.Q(unlock_gift__isnull=True)
-                        & models.Q(unlock_room_property__isnull=True)
                         & models.Q(unlock_track__isnull=True)
                     )
                 ),
@@ -125,19 +111,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                     | (
                         models.Q(unlock_trait__isnull=True)
                         & models.Q(unlock_gift__isnull=False)
-                        & models.Q(unlock_room_property__isnull=True)
-                        & models.Q(unlock_track__isnull=True)
-                    )
-                ),
-            ),
-            models.CheckConstraint(
-                name="threadweaving_room_payload",
-                check=(
-                    ~models.Q(target_kind="ROOM")
-                    | (
-                        models.Q(unlock_trait__isnull=True)
-                        & models.Q(unlock_gift__isnull=True)
-                        & models.Q(unlock_room_property__isnull=False)
                         & models.Q(unlock_track__isnull=True)
                     )
                 ),
@@ -149,7 +122,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                     | (
                         models.Q(unlock_trait__isnull=True)
                         & models.Q(unlock_gift__isnull=True)
-                        & models.Q(unlock_room_property__isnull=True)
                         & models.Q(unlock_track__isnull=False)
                     )
                 ),
@@ -171,7 +143,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
     # update here.
     _F_TRAIT = "unlock_trait"
     _F_GIFT = "unlock_gift"
-    _F_ROOM = "unlock_room_property"
     _F_TRACK = "unlock_track"
 
     # Discriminator -> required field name. CAPSTONE is intentionally absent
@@ -179,13 +150,11 @@ class ThreadWeavingUnlock(SharedMemoryModel):
     _KIND_TO_FIELD: dict[str, str] = {
         TargetKind.TRAIT: _F_TRAIT,
         TargetKind.TECHNIQUE: _F_GIFT,
-        TargetKind.ROOM: _F_ROOM,
         TargetKind.RELATIONSHIP_TRACK: _F_TRACK,
     }
     _ALL_TARGET_FIELDS: tuple[str, ...] = (
         _F_TRAIT,
         _F_GIFT,
-        _F_ROOM,
         _F_TRACK,
     )
 
@@ -199,8 +168,6 @@ class ThreadWeavingUnlock(SharedMemoryModel):
             return f"ThreadWeaving: {self.unlock_trait.name}"
         if self.target_kind == TargetKind.TECHNIQUE:
             return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
-        if self.target_kind == TargetKind.ROOM:
-            return f"ThreadWeaving: {self.unlock_room_property.name} spaces"
         if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
             return f"ThreadWeaving: {self.unlock_track.name} bonds"
         return "ThreadWeaving: <unknown>"  # defensive; unreachable while choices apply

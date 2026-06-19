@@ -16,10 +16,6 @@ class AnchorCapExceeded(MagicError):
     user_message = "This thread cannot grow beyond its anchor's strength."
 
 
-class AnchorCapNotImplemented(MagicError):
-    user_message = "This anchor's growth ceiling is not yet implemented."
-
-
 class PathCapExceeded(MagicError):
     user_message = "Your Path stage limits this thread's growth."
 

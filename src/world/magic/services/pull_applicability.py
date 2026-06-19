@@ -17,7 +17,6 @@ class PullActionContext:
 
     technique: Technique | None
     effect_type_id: int | None
-    target_object_id: int | None
     target_persona_id: int | None
     scene_id: int | None
 
