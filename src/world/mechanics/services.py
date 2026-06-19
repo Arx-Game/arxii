@@ -82,13 +82,22 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     Returns:
         ModifierBreakdown with sources, calculations, and total
     """
-    # Get all modifiers for this character and target
-    modifiers = CharacterModifier.objects.filter(
-        character=character,
-        target=modifier_target,
-    ).select_related("source__distinction_effect__distinction")
+    # Get all modifiers for this character and target. Materialize once: the rows are
+    # iterated twice below, so a bare ``.exists()`` pre-check would add a needless query.
+    modifiers = list(
+        CharacterModifier.objects.filter(
+            character=character,
+            target=modifier_target,
+        ).select_related("source__distinction_effect__distinction")
+    )
 
-    if not modifiers.exists():
+    # Skip orphaned rows whose source has lost its distinction_effect (it is nullable:
+    # SET_NULL when the effect template is deleted, or a future non-distinction source
+    # type). Such a row has no amplifier/immunity/label semantics left, so it contributes
+    # nothing rather than crashing on a None dereference (issue #909).
+    modifiers = [mod for mod in modifiers if mod.source.distinction_effect is not None]
+
+    if not modifiers:
         return ModifierBreakdown(
             modifier_target_name=modifier_target.name,
             sources=[],

@@ -94,6 +94,10 @@ breakdown = get_modifier_breakdown(character, modifier_target)
 # get_modifier_breakdown applies these rules:
 # 1. Amplifying sources: add their amplifies_sources_by bonus to all OTHER sources
 # 2. Immunity: if any source grants_immunity_to_negative, all negative final values are blocked
+# 3. Orphaned rows (source.distinction_effect is null — SET_NULL after the effect template
+#    is deleted, or a future non-distinction source type) are skipped: they contribute
+#    nothing and are not listed in sources, since their amplifier/immunity/label semantics
+#    are gone.
 
 breakdown = get_modifier_breakdown(character, modifier_target)
 breakdown.total            # Final stacked value after amplification/immunity
