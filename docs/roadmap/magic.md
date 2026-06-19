@@ -701,7 +701,19 @@ in-scope passive threads (via `_anchor_in_action`) plus an optional `CastPullDec
 `use_technique` threads them into `_derive_power` and charges a declared pull (after the
 soulfray/pre-cast gates, before anima deduction). The two non-combat scene callers
 (`scenes/cast_services.py`, `scenes/action_services.py`) opt in; combat is unchanged.
-Per-level softcaps/hardcaps on the resonance-standing axis remain a deferred follow-up.
+Per-level softcaps/hardcaps on the resonance-standing axis delivered in #853 (see below).
+
+**#853 — per-level resonance-standing cap bands (DONE):**
+
+`StandingCapBand` replaces the flat `AuraPowerConfig.resonance_standing_cap` field
+(removed in #768). Each band carries `min_level` (character level floor), `cap`
+(effective ceiling on `lifetime_earned` fed into the aura term), `mode`
+(`StandingCapMode.HARD` = hard clamp, `StandingCapMode.SOFT` = diminishing-returns
+scaling above the cap via `diminish_pct`), and an optional `diminish_pct`
+(SOFT only; HARD bands must leave it null, enforced by `clean()`). At cast time
+`_apply_standing_cap` selects the band with the greatest `min_level ≤ current_level`
+(greatest-floor wins; no band = uncapped). Staff author bands via Django admin;
+a factory (`StandingCapBandFactory`) covers tests.
 
 **#854 — player-facing cast pull declaration (DONE):** the public cast API threads a
 `cast_pull` end-to-end: `TechniqueCastCreateSerializer` takes a nested
