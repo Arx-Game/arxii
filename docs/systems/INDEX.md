@@ -921,6 +921,21 @@ Extensions to Evennia models for additional data storage.
 - **Integrates with:** accounts, characters, Evennia core
 - **Source:** `src/evennia_extensions/`
 - **Details:** [evennia_extensions.md](evennia_extensions.md)
+
+### Dev Seed Orchestrator
+Production-callable seed layer for populating sane defaults on a fresh dev install.
+
+- **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name (`"magic"`, `"items"`, `"combat"`, `"checks"`). Add a new cluster by appending an entry here.
+- **Surfaces:**
+  - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
+  - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message.
+- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220).
+- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (`seed_check_resolution_tables()` — the natively-owned checks cluster), `types.py` (`SeedReport` dataclass).
+- **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression.
+- **Source:** `src/world/seeds/`
+- **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
+
 ---
 
 ## Frontend

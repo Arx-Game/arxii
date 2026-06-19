@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Load sane defaults</h2>
+        <p>
+            Creates any missing sane-default rows across all seed clusters.
+            Never overwrites or deletes existing data. Safe to re-run at any time.
+        </p>
+        <p>
+            This operation is idempotent: rows that already exist are left untouched.
+            Only genuinely missing defaults will be created.
+        </p>
+    </div>
+
+    <div class="module" style="padding: 15px;">
+        <form method="post" action="{% url 'admin_seed_run' %}">
+            {% csrf_token %}
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Load sane defaults" class="default"
+                       style="padding: 10px 20px;">
+                <a href="{% url 'admin:index' %}"
+                   style="padding: 10px 20px; margin-left: 10px;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
