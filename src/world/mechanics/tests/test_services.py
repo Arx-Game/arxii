@@ -8,7 +8,11 @@ from world.distinctions.factories import (
     DistinctionEffectFactory,
     DistinctionFactory,
 )
-from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    ModifierSourceFactory,
+    ModifierTargetFactory,
+)
 from world.mechanics.models import CharacterModifier
 from world.mechanics.services import (
     covenant_role_bonus,
@@ -60,6 +64,61 @@ class TestGetModifierBreakdown(TestCase):
         assert len(breakdown.sources) == 1
         assert breakdown.sources[0].source_name == "Attractive"
         assert breakdown.sources[0].base_value == 10
+
+    def test_null_effect_source_is_ignored(self):
+        """A modifier whose source has a null distinction_effect is skipped, not crashed on.
+
+        ModifierSource.distinction_effect is nullable (SET_NULL when the effect template
+        is deleted, or a future non-distinction source type). Such an orphaned modifier
+        has lost its amplifier/immunity/label semantics, so the breakdown must ignore it
+        rather than dereference None (issue #909).
+        """
+        # A valid distinction modifier worth +5.
+        distinction = DistinctionFactory(name="Attractive")
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.allure,
+            value_per_rank=5,
+        )
+        char_distinction = CharacterDistinctionFactory(
+            character=self.character.character,
+            distinction=distinction,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # An orphaned modifier on the same target whose source has no distinction_effect.
+        CharacterModifierFactory(
+            character=self.character,
+            target=self.allure,
+            value=7,
+            source=ModifierSourceFactory(),
+        )
+
+        breakdown = get_modifier_breakdown(self.character, self.allure)
+
+        # Orphan contributes nothing and is not listed; only the valid +5 remains.
+        assert breakdown.total == 5
+        assert len(breakdown.sources) == 1
+        assert breakdown.sources[0].source_name == "Attractive"
+        assert breakdown.has_immunity is False
+        assert breakdown.negatives_blocked == 0
+
+    def test_only_null_effect_source_returns_empty(self):
+        """When every modifier row is orphaned, the breakdown is empty (no crash)."""
+        CharacterModifierFactory(
+            character=self.character,
+            target=self.allure,
+            value=9,
+            source=ModifierSourceFactory(),
+        )
+
+        breakdown = get_modifier_breakdown(self.character, self.allure)
+
+        assert breakdown.total == 0
+        assert breakdown.sources == []
+        assert breakdown.has_immunity is False
+        assert breakdown.negatives_blocked == 0
 
     def test_multiple_modifiers_sum(self):
         """Multiple modifiers are summed together."""
