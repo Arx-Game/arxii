@@ -47,7 +47,13 @@ const INTENT_EMBERS: PathIntentResponse = {
   intent: {
     id: 9,
     declared_at: '2026-06-01T00:00:00Z',
-    intended_path: { id: 3, name: 'Path of Embers', stage: 2, stage_display: 'Potential' },
+    intended_path: {
+      id: 3,
+      name: 'Path of Embers',
+      stage: 2,
+      stage_display: 'Potential',
+      description: '',
+    },
   },
 };
 
