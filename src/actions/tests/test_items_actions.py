@@ -12,6 +12,7 @@ from actions.definitions.items import (
     TakeOutAction,
     UnequipAction,
 )
+from actions.prerequisites import HoldsItemPrerequisite, ItemUsablePrerequisite
 from evennia_extensions.factories import (
     AccountFactory,
     CharacterFactory,
@@ -284,3 +285,55 @@ class TakeOutActionTests(TestCase):
         result = action.run(actor, target=bare_object)
         assert result.success is False
         assert result.message == "That can't be taken out."
+
+
+class UseItemPrereqTests(TestCase):
+    def _ctx(self, item_obj):
+        return {"kwargs": {"item": item_obj}}
+
+    def test_holds_item_fails_when_not_carried(self) -> None:
+        room = ObjectDBFactory(db_key="PReqRoom", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="PReqAlice", location=room)
+        item_obj = ObjectDBFactory(db_key="PReqLooseItem", location=room)  # on floor
+        ItemInstanceFactory(template=ItemTemplateFactory(name="Loose"), game_object=item_obj)
+        met, reason = HoldsItemPrerequisite().is_met(actor, context=self._ctx(item_obj))
+        assert met is False
+        assert reason
+
+    def test_holds_item_passes_when_carried(self) -> None:
+        actor = CharacterFactory(db_key="PReqBob")
+        item_obj = ObjectDBFactory(db_key="PReqHeldItem", location=actor)
+        ItemInstanceFactory(template=ItemTemplateFactory(name="Held"), game_object=item_obj)
+        met, _ = HoldsItemPrerequisite().is_met(actor, context=self._ctx(item_obj))
+        assert met is True
+
+    def test_item_usable_requires_on_use_pool(self) -> None:
+        actor = CharacterFactory(db_key="PReqCarl")
+        item_obj = ObjectDBFactory(db_key="PReqNoPool", location=actor)
+        ItemInstanceFactory(template=ItemTemplateFactory(name="NoPool"), game_object=item_obj)
+        met, reason = ItemUsablePrerequisite().is_met(actor, context=self._ctx(item_obj))
+        assert met is False
+        assert reason
+
+    def test_item_usable_passes_with_on_use_pool(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+
+        actor = CharacterFactory(db_key="PReqDan")
+        item_obj = ObjectDBFactory(db_key="PReqWithPool", location=actor)
+        pool = ConsequencePoolFactory()
+        template = ItemTemplateFactory(name="WithPool", on_use_pool=pool)
+        ItemInstanceFactory(template=template, game_object=item_obj)
+        met, _ = ItemUsablePrerequisite().is_met(actor, context=self._ctx(item_obj))
+        assert met is True
+
+    def test_item_usable_fails_consumable_with_no_charges(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+
+        actor = CharacterFactory(db_key="PReqEve")
+        item_obj = ObjectDBFactory(db_key="PReqDepletedConsumable", location=actor)
+        pool = ConsequencePoolFactory()
+        template = ItemTemplateFactory(name="DepletedPotion", on_use_pool=pool, is_consumable=True)
+        ItemInstanceFactory(template=template, game_object=item_obj, charges=0)
+        met, reason = ItemUsablePrerequisite().is_met(actor, context=self._ctx(item_obj))
+        assert met is False
+        assert reason
