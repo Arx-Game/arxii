@@ -21388,6 +21388,9 @@ components:
         position_id:
           type: integer
           nullable: true
+        blueprint_id:
+          type: integer
+          nullable: true
       required:
       - backend
     ActionTemplateMinimal:
@@ -36431,6 +36434,21 @@ components:
       - name
       - roster_entry
       - thumbnail_media_url
+    PersonaPosition:
+      type: object
+      description: A scene persona and the Position it currently occupies (or null).
+      properties:
+        persona_id:
+          type: integer
+          readOnly: true
+        position:
+          allOf:
+          - $ref: '#/components/schemas/PositionSummary'
+          readOnly: true
+          nullable: true
+      required:
+      - persona_id
+      - position
     PersonaTypeEnum:
       enum:
       - primary
@@ -39063,13 +39081,31 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionSummary'
+          readOnly: true
+        position_adjacency:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionAdjacencyItem'
+          readOnly: true
+        persona_positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaPosition'
+          readOnly: true
       required:
       - date_started
       - id
       - is_owner
       - location
       - participants
+      - persona_positions
       - personas
+      - position_adjacency
+      - positions
     SceneDetailRequest:
       type: object
       description: Full scene representation with personas

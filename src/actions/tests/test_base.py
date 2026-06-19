@@ -163,6 +163,7 @@ class ActionRegistryTests(TestCase):
             "home",
             "activate_permit",
             "move_to_position",
+            "set_the_stage",
             "start_round",
             "join_round",
             "leave_round",

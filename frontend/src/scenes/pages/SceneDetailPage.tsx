@@ -7,6 +7,7 @@ import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
+import { RoomPositionsPanel } from '../components/RoomPositionsPanel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
@@ -115,6 +116,7 @@ export function SceneDetailPage() {
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
         <PlaceBar sceneId={id} />
+        <RoomPositionsPanel sceneId={id} />
       </div>
 
       {/* Main interaction area with threading */}

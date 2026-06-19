@@ -12655,6 +12655,7 @@ export interface components {
       clash_action_slot?: string | null;
       action_slot?: string | null;
       position_id?: number | null;
+      blueprint_id?: number | null;
     };
     /** @description Minimal read-only representation of an ActionTemplate model instance. */
     ActionTemplateMinimal: {
@@ -20342,6 +20343,11 @@ export interface components {
         [key: string]: number | string;
       } | null;
     };
+    /** @description A scene persona and the Position it currently occupies (or null). */
+    PersonaPosition: {
+      readonly persona_id: number;
+      readonly position: components['schemas']['PositionSummary'] | null;
+    };
     /**
      * @description * `primary` - Primary
      *     * `established` - Established
@@ -21593,6 +21599,9 @@ export interface components {
       readonly personas: {
         [key: string]: unknown;
       }[];
+      readonly positions: components['schemas']['PositionSummary'][];
+      readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
+      readonly persona_positions: components['schemas']['PersonaPosition'][];
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {

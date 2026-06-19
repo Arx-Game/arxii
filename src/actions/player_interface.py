@@ -163,10 +163,12 @@ def _dispatch_registry(
     if action_obj is None:
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
     # Merge non-ObjectDB target ids from the ref into kwargs so REGISTRY actions
-    # that operate on non-ObjectDB models (e.g. move_to_position) receive them.
+    # that operate on non-ObjectDB models (e.g. move_to_position, set_the_stage) receive them.
     merged_kwargs = dict(kwargs)
     if ref.position_id is not None:
         merged_kwargs["position_id"] = ref.position_id
+    if ref.blueprint_id is not None:
+        merged_kwargs["blueprint_id"] = ref.blueprint_id
     result = action_obj.run(actor=character, **merged_kwargs)
     _drive_scene_round_for_turn_cost(action_obj, ctx)
     return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
@@ -300,6 +302,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_clash_contribution_actions(character, ctx=ctx))
     actions.extend(_scene_actions(character))
     actions.extend(_positioning_actions(character))
+    actions.extend(_set_the_stage_actions(character))
     # Registry backend: all current actions excluded (no ActionTemplate / check_type)
     # — see module docstring.  When registry actions gain ActionTemplate backing,
     # uncomment and implement _registry_actions(character).
@@ -762,6 +765,57 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
             )
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Staff-only terrain adapter (set_the_stage quick action)
+# ---------------------------------------------------------------------------
+
+
+def _set_the_stage_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface a ``set_the_stage`` ``PlayerAction`` for staff when the room has a default blueprint.
+
+    Only emits an action when ALL of the following are true:
+    - The actor passes ``is_staff_observer`` (avoids the model query for non-staff).
+    - The actor has a current location.
+    - The location has a ``RoomProfile`` with ``default_blueprint`` set.
+
+    A single ``PlayerAction`` is offered using the room's ``default_blueprint``.
+    Staff who want to apply a different blueprint can pass an arbitrary
+    ``blueprint_id`` in the kwargs via the API; this surface only provides the
+    one-click default-blueprint quick action.
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    if not is_staff_observer(character):
+        return []
+
+    location = character.location
+    if location is None:
+        return []
+
+    profile = getattr(location, "room_profile", None)  # noqa: GETATTR_LITERAL
+    if profile is None:
+        return []
+
+    blueprint = profile.default_blueprint
+    if blueprint is None:
+        return []
+
+    ref = ActionRef(
+        backend=ActionBackend.REGISTRY,
+        registry_key="set_the_stage",
+        blueprint_id=blueprint.pk,
+    )
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name=f"Set the stage: {blueprint.name}",
+            ref=ref,
+            description=blueprint.description if blueprint.description else "",
+            action_category=ActionCategory.PHYSICAL,
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------

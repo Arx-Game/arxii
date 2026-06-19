@@ -56,6 +56,11 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **APIs:** SceneViewSet, PersonaViewSet, SceneSummaryRevisionViewSet, PlaceViewSet, SceneActionRequestViewSet
 - **Frontend:** Scene list/detail pages, interaction feed, action panel
 
+### Positioning in Scenes — DONE (#1017)
+- **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.
+- **Frontend:** `RoomPositionsPanel` component (`frontend/src/scenes/components/`) renders positions, persona placement, move action, and a staff "Set the stage" control. `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
+- **Blueprint authoring + staging:** see `docs/roadmap/combat.md` (Positioning — Blueprints + Non-Combat Scene UI section) and `docs/systems/areas.md`.
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 

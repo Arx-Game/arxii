@@ -1,1 +1,1 @@
-0002_roomprofile_tenant_persona
+0003_roomprofile_default_blueprint

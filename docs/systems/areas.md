@@ -108,3 +108,144 @@ refresh_area_closure()
 ## Admin
 
 - `AreaAdmin` - List with name, level, parent, realm; filterable by level and realm; autocomplete for parent and realm
+
+---
+
+## Positioning Submodule (`src/world/areas/positioning/`)
+
+Room-anchored spatial graph: named position nodes, traversable edges, per-object occupancy, capability-gated movement, and GM terrain blueprints for non-combat scene staging.
+
+### Enums
+
+```python
+from world.areas.positioning.constants import PositionKind
+# PRIMARY, FEATURE (authored regions: balcony, altar, pit),
+# ELEVATED (catwalk), AERIAL (reserved; auto-created by flight — #532),
+# BARRIER_SIDE (reserved; dynamic carving)
+```
+
+### Models [BUILT & WIRED]
+
+**Abstract bases** (`models.py`):
+
+| Base | Purpose |
+|------|---------|
+| `PositionNodeBase` | `name`, `kind` (`PositionKind`), `description` — shared by `Position` and `BlueprintPosition` |
+| `PositionEdgeBase` | `is_passable`; `_validate_canonical()` helper (self-loop + pk-ascending canonical-order) — shared by `PositionEdge` and `BlueprintEdge` |
+
+**Live room graph** (room-anchored):
+
+| Model | Purpose | Key Fields / Constraints |
+|-------|---------|--------------------------|
+| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name |
+| `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
+| `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
+
+**Blueprint template graph** (room-independent):
+
+| Model | Purpose | Key Fields / Constraints |
+|-------|---------|--------------------------|
+| `PositionBlueprint` | GM-authored reusable terrain layout | `name` (unique), `description` |
+| `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint |
+| `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable` |
+
+**Room profile link** (in `evennia_extensions.RoomProfile`):
+
+- `default_blueprint` — nullable FK → `areas.PositionBlueprint`; used by the "Set the Stage" quick action.
+
+### Services [BUILT & WIRED]
+
+**`src/world/areas/positioning/services.py`**
+
+*Live room graph authoring:*
+
+| Function | Summary |
+|----------|---------|
+| `create_position(room, name, *, kind, description)` | Create a `Position` in a room |
+| `remove_position(position)` | Delete (cascades edges + occupancy) |
+| `connect_positions(a, b, *, is_passable, gating_challenge)` | Create a canonical `PositionEdge` (auto-reorders pk) |
+| `disconnect_positions(a, b)` | Remove the edge between two positions |
+
+*Blueprint authoring:*
+
+| Function | Summary |
+|----------|---------|
+| `create_blueprint(name, *, description)` | Create a `PositionBlueprint` |
+| `add_blueprint_position(blueprint, name, *, kind, description)` | Create a `BlueprintPosition` |
+| `connect_blueprint_positions(a, b, *, is_passable)` | Create a `BlueprintEdge` (raises `PositionError` for cross-blueprint) |
+| `remove_blueprint(blueprint)` | Delete blueprint and its positions/edges (cascade) |
+
+*Staging:*
+
+| Function | Summary |
+|----------|---------|
+| `instantiate_blueprint(blueprint, room, *, replace=False)` | Clone a blueprint's position graph into a room (returns new `Position` list). Raises `PositionError` if already staged and `replace=False`; raises `PositionError` if occupied when `replace=True`. Runs atomically. |
+
+*Query:*
+
+| Function | Summary |
+|----------|---------|
+| `position_reachable(origin, target, reach)` | Reach-semantics check (SAME / ADJACENT / ANY) |
+| `edge_between(a, b)` | Single edge lookup, order-independent |
+| `position_of(objectdb)` | Current `Position` for an object or `None` |
+| `room_position_adjacency(room)` | Full ADJACENT-reach adjacency map for a room (uses prefetched attrs when available) |
+| `adjacent_open_positions(position)` | Edges to passable, non-actively-gated neighbors |
+| `reachable_positions(objectdb)` | Multi-hop BFS over passable, non-gated edges |
+
+*Placement + movement:*
+
+| Function | Summary |
+|----------|---------|
+| `place_in_position(objectdb, position)` | Idempotent unconditional placement (staff / setup) |
+| `move_to_position(objectdb, target)` | Voluntary move — validates same room, current placement, adjacency, passability, gating challenge, MOVEMENT capability |
+| `force_move_to_position(objectdb, target)` | Bypass capability + edge checks (staff/consequence) |
+
+### Actions [BUILT & WIRED]
+
+**`src/actions/definitions/positioning.py`**
+
+| Action | Registry Key | Prerequisite | Notes |
+|--------|-------------|--------------|-------|
+| `MoveToPositionAction` | `move_to_position` | none | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `SetTheStageAction` | `set_the_stage` | `StaffOnlyPrerequisite` | Dispatched with `ActionRef(registry_key="set_the_stage", blueprint_id=<pk>, replace=False)`; surfaced via `get_player_actions` when the room's `RoomProfile.default_blueprint` is set. `ActionRef` carries a `blueprint_id` field for this. |
+
+The `_set_the_stage_actions(character)` helper in `src/actions/player_interface.py` surfaces one quick-action using the room's `default_blueprint` for staff.
+
+### Shared Serializers [BUILT & WIRED]
+
+**`src/world/areas/positioning/serializers.py`** — imported by both combat and scenes layers:
+
+| Serializer | Output |
+|------------|--------|
+| `PositionSummarySerializer` | `{id, name}` |
+| `PersonaPositionSerializer` | `{persona_id, position: {id, name} | null}` |
+| `PositionAdjacencyItemSerializer` | `{position_id, adjacent_position_ids: [int]}` |
+
+### Scene API Extension [BUILT & WIRED]
+
+`SceneDetailSerializer` (`src/world/scenes/serializers.py`) exposes three additional fields on the scene detail endpoint:
+
+| Field | Type | Content |
+|-------|------|---------|
+| `positions` | `[{id, name}]` | All positions in the scene's room |
+| `position_adjacency` | `[{position_id, adjacent_position_ids}]` | ADJACENT-reach adjacency map |
+| `persona_positions` | `[{persona_id, position}]` | Per-participant position (null if unplaced) |
+
+### Frontend [BUILT & WIRED]
+
+- `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons.
+- `RoomPositionsPanel` — scene detail component (`frontend/src/scenes/components/`); renders positions, persona placement, the move action, and a staff "Set the stage" control using the scene's positions payload.
+
+### Exceptions
+
+```python
+from world.areas.positioning.exceptions import PositionError, PositionTransitionError
+```
+
+`PositionTransitionError` (subclass of `PositionError`) carries `user_message` for move failures; actions surface it directly.
+
+### Deferred (follow-up required)
+
+- **Gated blueprint edges:** `BlueprintEdge` has no `gating_challenge` analogue; when a blueprint is instantiated the `instantiate_blueprint` service skips gating. Full gated-edge instantiation requires the absent `instantiate_situation()` service (which mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
+- Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
+- Implicit aerial positions, occupancy-screening reachability, dynamic-reshaping consequence effects

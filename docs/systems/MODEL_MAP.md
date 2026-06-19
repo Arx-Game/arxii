@@ -328,6 +328,7 @@
   - objectdb -> objects.ObjectDB [OneToOne]
   - area -> areas.Area [FK] (nullable)
   - tenant_persona -> scenes.Persona [FK] (nullable)
+  - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
   - resonance_grants <- magic.ResonanceGrant
@@ -439,6 +440,25 @@
   - position_a -> areas.Position [FK]
   - position_b -> areas.Position [FK]
   - gating_challenge -> mechanics.ChallengeInstance [FK] (nullable)
+
+### PositionBlueprint
+**Pointed to by:**
+  - positions <- areas.BlueprintPosition
+  - edges <- areas.BlueprintEdge
+  - rooms_defaulting <- evennia_extensions.RoomProfile
+
+### BlueprintPosition
+**Foreign Keys:**
+  - blueprint -> areas.PositionBlueprint [FK]
+**Pointed to by:**
+  - edges_as_a <- areas.BlueprintEdge
+  - edges_as_b <- areas.BlueprintEdge
+
+### BlueprintEdge
+**Foreign Keys:**
+  - blueprint -> areas.PositionBlueprint [FK]
+  - position_a -> areas.BlueprintPosition [FK]
+  - position_b -> areas.BlueprintPosition [FK]
 
 ### ObjectPosition
 **Foreign Keys:**
@@ -1231,7 +1251,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>, default_factory=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1993,6 +2013,10 @@
   - resonance -> magic.Resonance [FK]
   - check_outcome -> traits.CheckOutcome [FK]
 
+### SoulTetherConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
 ### SoulfrayConfig
 **Foreign Keys:**
   - resilience_check_type -> checks.CheckType [FK]
@@ -2020,7 +2044,6 @@
   - resonance -> magic.Resonance [FK]
   - target_trait -> traits.Trait [FK] (nullable)
   - target_technique -> magic.Technique [FK] (nullable)
-  - target_object -> objects.ObjectDB [FK] (nullable)
   - target_relationship_track -> relationships.RelationshipTrackProgress [FK] (nullable)
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - target_facet -> magic.Facet [FK] (nullable)
@@ -2043,7 +2066,6 @@
 **Foreign Keys:**
   - unlock_trait -> traits.Trait [FK] (nullable)
   - unlock_gift -> magic.Gift [FK] (nullable)
-  - unlock_room_property -> mechanics.Property [FK] (nullable)
   - unlock_track -> relationships.RelationshipTrack [FK] (nullable)
 **Pointed to by:**
   - character_purchases <- magic.CharacterThreadWeavingUnlock
@@ -2156,7 +2178,6 @@
   - resonances <- magic.Resonance
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
-  - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - personas <- scenes.Persona
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
@@ -2561,7 +2582,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>, default_factory=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x766f3cbcd550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3333,13 +3354,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x766f38dcffd0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x739e951640e0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x766f38dcffd0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x739e951640e0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

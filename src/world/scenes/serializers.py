@@ -1,6 +1,12 @@
+from drf_spectacular.utils import extend_schema_field
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from world.areas.positioning.serializers import (
+    PersonaPositionSerializer,
+    PositionAdjacencyItemSerializer,
+    PositionSummarySerializer,
+)
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.models import (
     Persona,
@@ -137,6 +143,9 @@ class SceneDetailSerializer(SceneListSerializer):
     """Full scene representation with personas"""
 
     personas = serializers.SerializerMethodField()
+    positions = serializers.SerializerMethodField()
+    position_adjacency = serializers.SerializerMethodField()
+    persona_positions = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -146,6 +155,9 @@ class SceneDetailSerializer(SceneListSerializer):
             "is_active",
             "privacy_mode",
             "personas",
+            "positions",
+            "position_adjacency",
+            "persona_positions",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -155,6 +167,57 @@ class SceneDetailSerializer(SceneListSerializer):
 
     def get_participants(self, obj):
         return super().get_participants(obj)
+
+    @extend_schema_field(PositionSummarySerializer(many=True))
+    def get_positions(self, obj: Scene) -> list[dict]:
+        """Return all positions in the scene's room as [{id, name}].
+
+        Returns an empty list when the scene has no location.
+        """
+        if obj.location is None:
+            return []
+        from world.areas.positioning.models import Position  # noqa: PLC0415
+
+        positions = Position.objects.filter(room=obj.location)
+        return PositionSummarySerializer(positions, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
+    def get_position_adjacency(self, obj: Scene) -> list[dict]:
+        """Return ADJACENT-reach position adjacency for the scene's room.
+
+        Each entry is ``{position_id: int, adjacent_position_ids: [int]}``.
+        Returns an empty list when the scene has no location.
+        """
+        if obj.location is None:
+            return []
+        from world.areas.positioning.services import room_position_adjacency  # noqa: PLC0415
+
+        entries = room_position_adjacency(obj.location)
+        return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
+
+    @extend_schema_field(PersonaPositionSerializer(many=True))
+    def get_persona_positions(self, obj: Scene) -> list[dict]:
+        """Return [{persona_id, position: {id, name} | null}] for each persona in the scene.
+
+        Resolves position via persona.character_sheet.character → position_of(character).
+        Returns an empty list when the scene has no location.
+        """
+        if obj.location is None:
+            return []
+        from world.areas.positioning.services import position_of  # noqa: PLC0415
+
+        personas = self._collect_personas(obj, only_real_names=False)
+        result = []
+        for persona in personas:
+            position = None
+            if persona.character_sheet is not None:
+                character = persona.character_sheet.character
+                if character is not None:
+                    pos = position_of(character)
+                    if pos is not None:
+                        position = PositionSummarySerializer(pos).data
+            result.append({"persona_id": persona.pk, "position": position})
+        return result
 
 
 class ScenesSpotlightSerializer(serializers.Serializer):

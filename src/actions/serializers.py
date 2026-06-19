@@ -66,6 +66,7 @@ class ActionRefSerializer(serializers.Serializer):
     clash_action_slot = serializers.CharField(allow_null=True, required=False)
     action_slot = serializers.CharField(allow_null=True, required=False)
     position_id = serializers.IntegerField(allow_null=True, required=False)
+    blueprint_id = serializers.IntegerField(allow_null=True, required=False)
 
 
 class SoulfrayWarningSerializer(serializers.Serializer):
@@ -176,6 +177,7 @@ class _DispatchRefSerializer(serializers.Serializer):
     clash_action_slot = serializers.CharField(allow_null=True, required=False, default=None)
     action_slot = serializers.CharField(allow_null=True, required=False, default=None)
     position_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    blueprint_id = serializers.IntegerField(allow_null=True, required=False, default=None)
 
 
 class DispatchActionSerializer(serializers.Serializer):
@@ -221,6 +223,7 @@ class DispatchActionSerializer(serializers.Serializer):
                 clash_action_slot=ref_data.get("clash_action_slot"),
                 action_slot=ref_data.get("action_slot"),
                 position_id=ref_data.get("position_id"),
+                blueprint_id=ref_data.get("blueprint_id"),
             )
         except ValueError:
             raise serializers.ValidationError(

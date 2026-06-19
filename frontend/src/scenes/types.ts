@@ -41,11 +41,35 @@ export interface ScenePersona {
   persona_type?: string;
 }
 
+/** Compact public representation of a room position (id + name). */
+export interface PositionSummary {
+  id: number;
+  name: string;
+}
+
+/** Adjacency graph entry for one position. */
+export interface PositionAdjacencyItem {
+  position_id: number;
+  adjacent_position_ids: number[];
+}
+
+/** A persona present in the scene and the position it currently occupies (or null). */
+export interface PersonaPosition {
+  persona_id: number;
+  position: PositionSummary | null;
+}
+
 export interface SceneDetail extends SceneListItem {
   is_active: boolean;
   is_owner: boolean;
   /** Personas reachable via the scene's interactions; the delivery-receiver pool. */
   personas?: ScenePersona[];
+  /** Room positions defined for this scene's location (#1017). */
+  positions: PositionSummary[];
+  /** Adjacency graph — which positions are reachable from each position (#1017). */
+  position_adjacency: PositionAdjacencyItem[];
+  /** Current position for each persona in the scene (#1017). */
+  persona_positions: PersonaPosition[];
 }
 
 export interface InteractionPersona {

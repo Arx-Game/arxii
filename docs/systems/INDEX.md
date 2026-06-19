@@ -231,22 +231,39 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
-### Positioning (Phase 1 — #530)
+### Positioning (#530 + #1017)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
-occupancy, and capability-gated movement. Works in combat, social scenes, and events.
+occupancy, capability-gated movement, GM terrain blueprints, and non-combat scene
+positioning UI.
 
-- **Models:** `Position` (named room region, `PositionKind` discriminator),
-  `PositionEdge` (adjacency; optional `gating_challenge` FK + `is_passable`),
-  `ObjectPosition` (OneToOne occupancy)
+- **Models:** `Position` (`PositionKind` discriminator), `PositionEdge` (optional
+  `gating_challenge` FK + `is_passable`), `ObjectPosition` (OneToOne occupancy);
+  **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live and blueprint
+  layers; **blueprint models** `PositionBlueprint` (reusable GM-authored layout),
+  `BlueprintPosition`, `BlueprintEdge`; `RoomProfile.default_blueprint` FK
+  (`evennia_extensions`) links a room to its preferred layout.
 - **Key Services:** `create_position` / `remove_position` / `connect_positions` /
   `disconnect_positions` / `edge_between` / `place_in_position` /
   `move_to_position` (adjacency + passability + MOVEMENT capability + active-gating) /
   `force_move_to_position` / `position_of` / `reachable_positions` /
-  `adjacent_open_positions`
+  `adjacent_open_positions`; **blueprint authoring** `create_blueprint` /
+  `add_blueprint_position` / `connect_blueprint_positions` / `remove_blueprint`;
+  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`
+- **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
+  `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
+  and scenes layers)
+- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`) + staff-only
+  `SetTheStageAction` (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
+  `persona_positions`
+- **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
+  `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
-  mechanics (Challenge/gating), actions (`MoveToPositionAction` via unified dispatch)
+  mechanics (Challenge/gating), actions (`MoveToPositionAction` / `SetTheStageAction`)
 - **Source:** `src/world/areas/positioning/`
+- **Details:** [areas.md](areas.md)
 ### Instances
 Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
 

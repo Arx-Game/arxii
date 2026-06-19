@@ -14,7 +14,14 @@ from django.db.models import Q
 
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
-from world.areas.positioning.models import ObjectPosition, Position, PositionEdge
+from world.areas.positioning.models import (
+    BlueprintEdge,
+    BlueprintPosition,
+    ObjectPosition,
+    Position,
+    PositionBlueprint,
+    PositionEdge,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -87,6 +94,135 @@ def disconnect_positions(a: Position, b: Position) -> None:
     """Remove the edge between two positions (order-independent)."""
     lo, hi = (a, b) if a.pk < b.pk else (b, a)
     PositionEdge.objects.filter(position_a=lo, position_b=hi).delete()
+
+
+# ---------------------------------------------------------------------------
+# Blueprint authoring
+# ---------------------------------------------------------------------------
+
+_ERR_BLUEPRINT_CROSS = "Both positions of a blueprint edge must belong to the same blueprint."
+
+
+def create_blueprint(name: str, *, description: str = "") -> PositionBlueprint:
+    """Create and return a new PositionBlueprint."""
+    return PositionBlueprint.objects.create(name=name, description=description)
+
+
+def add_blueprint_position(
+    blueprint: PositionBlueprint,
+    name: str,
+    *,
+    kind: str = PositionKind.FEATURE,
+    description: str = "",
+) -> BlueprintPosition:
+    """Create and return a new BlueprintPosition owned by blueprint."""
+    return BlueprintPosition.objects.create(
+        blueprint=blueprint, name=name, kind=kind, description=description
+    )
+
+
+def connect_blueprint_positions(
+    a: BlueprintPosition,
+    b: BlueprintPosition,
+    *,
+    is_passable: bool = True,
+) -> BlueprintEdge:
+    """Create a traversable edge between two blueprint positions, ordered canonically.
+
+    The smaller-pk position becomes position_a (canonical ordering), mirroring
+    ``connect_positions``. Raises PositionError if a and b belong to different
+    blueprints. Calls full_clean() before save so self-loop / canonical-order
+    constraints fire.
+    """
+    if a.blueprint_id != b.blueprint_id:
+        raise PositionError(_ERR_BLUEPRINT_CROSS)
+    if a.pk > b.pk:
+        a, b = b, a
+    edge = BlueprintEdge(
+        blueprint=a.blueprint,
+        position_a=a,
+        position_b=b,
+        is_passable=is_passable,
+    )
+    edge.full_clean()
+    edge.save()
+    return edge
+
+
+def remove_blueprint(blueprint: PositionBlueprint) -> None:
+    """Delete a blueprint (cascades positions and edges)."""
+    blueprint.delete()
+
+
+def instantiate_blueprint(
+    blueprint: PositionBlueprint,
+    room: ObjectDB,
+    *,
+    replace: bool = False,
+) -> list[Position]:
+    """Clone a blueprint's position graph into a room, returning the created Positions.
+
+    Wraps the entire operation in a transaction so a mid-way failure rolls back cleanly.
+
+    Args:
+        blueprint: The PositionBlueprint to clone.
+        room: The target room (ObjectDB) to stage.
+        replace: If True, delete any existing positions in the room before staging.
+                 Raises PositionError if any existing position has occupants.
+
+    Returns:
+        The list of newly-created Position instances.
+
+    Raises:
+        PositionError: If the room is already staged and replace=False, or if the
+                       room has occupants when replace=True.
+    """
+    from django.db import transaction
+
+    with transaction.atomic():
+        already_staged = Position.objects.filter(room=room).exists()
+
+        if already_staged and not replace:
+            msg = "This room is already staged."
+            raise PositionError(msg)
+
+        if already_staged and replace:
+            if ObjectPosition.objects.filter(position__room=room).exists():
+                msg = "Cannot restage an occupied room."
+                raise PositionError(msg)
+            # Cascade deletes PositionEdges and ObjectPositions via FK on_delete=CASCADE.
+            Position.objects.filter(room=room).delete()
+
+        # Build Position instances from the blueprint without hitting the DB per-item.
+        blueprint_positions = list(blueprint.positions.all())
+        new_positions = [
+            Position(
+                room=room,
+                name=bp_pos.name,
+                kind=bp_pos.kind,
+                description=bp_pos.description,
+            )
+            for bp_pos in blueprint_positions
+        ]
+        Position.objects.bulk_create(new_positions)
+
+        # bulk_create may not populate PKs reliably on SQLite (pre-Django 3.0 behaviour).
+        # Re-fetch the freshly created positions for this room and key by name.
+        # This is safe because blueprint position names are unique per blueprint, so
+        # within this room's newly-created set the name is unambiguous.
+        live_map: dict[str, Position] = {
+            pos.name: pos for pos in Position.objects.filter(room=room)
+        }
+
+        # Reproduce the blueprint's edges in the live graph.
+        for edge in blueprint.edges.all():
+            connect_positions(
+                live_map[edge.position_a.name],
+                live_map[edge.position_b.name],
+                is_passable=edge.is_passable,
+            )
+
+        return list(live_map.values())
 
 
 # ---------------------------------------------------------------------------

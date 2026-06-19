@@ -10,6 +10,10 @@ from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
+from world.areas.positioning.serializers import (
+    PositionAdjacencyItemSerializer,
+    PositionSummarySerializer,
+)
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
     ActionCategory,
@@ -89,13 +93,6 @@ def _serialize_active_conditions(
 # ---------------------------------------------------------------------------
 # Nested read serializers
 # ---------------------------------------------------------------------------
-
-
-class PositionSummarySerializer(serializers.Serializer):
-    """Compact public representation of a Position (id + name)."""
-
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(read_only=True)
 
 
 class OpponentSerializer(serializers.ModelSerializer):
@@ -493,22 +490,6 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "is_ready",
             "maneuver",
         ]
-
-
-# ---------------------------------------------------------------------------
-# Position adjacency serializer (for EncounterDetailSerializer.position_adjacency)
-# ---------------------------------------------------------------------------
-
-
-class PositionAdjacencyItemSerializer(serializers.Serializer):
-    """Read-only serializer for a single PositionAdjacency entry.
-
-    Exposes the ADJACENT-reach neighbor graph for one position so the
-    frontend can pre-filter selectable targets by position before declaring.
-    """
-
-    position_id = serializers.IntegerField(read_only=True)
-    adjacent_position_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
 
 
 # ---------------------------------------------------------------------------
