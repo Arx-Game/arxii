@@ -104,22 +104,10 @@ class ReadOnlyOrSceneParticipant(permissions.BasePermission):
     def has_object_permission(self, request: Request, view: APIView, obj: Scene) -> bool:
         # Read permissions for safe methods
         if request.method in permissions.SAFE_METHODS:
-            # For public scenes, anyone can read
-            if hasattr(obj, "is_public") and obj.is_public:
-                return True
-            # For private scenes, only participants and staff can read
-            if request.user.is_staff:
-                return True
-            return SceneParticipation.objects.filter(
-                scene=obj,
-                account=request.user,
-            ).exists()
+            return obj.is_viewable_by(request.user)  # type: ignore[invalid-argument-type]
 
         # Write permissions require scene participation or staff
         return (
             request.user.is_staff
-            or SceneParticipation.objects.filter(
-                scene=obj,
-                account=request.user,
-            ).exists()
+            or SceneParticipation.objects.filter(scene=obj, account=request.user).exists()
         )
