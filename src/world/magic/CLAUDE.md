@@ -425,8 +425,8 @@ Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapE
   pagination; authenticated). Supplies the tag-picker dropdown in the GM control panel.
 - `POST /api/magic/dramatic-moment-tags/` — create a tag; gated by
   `IsSceneGMOrOwnerOrStaff` (scene GMs, scene owners, and staff may tag — not
-  restricted to staff-only). Body fields: `character_sheet_id`, `moment_type_id`,
-  optional `scene_id`, optional `interaction_id`. Service errors map to HTTP 400
+  restricted to staff-only). Body fields: `character_sheet`, `moment_type`,
+  optional `scene`, optional `interaction`. Service errors map to HTTP 400
   with `user_message`. No `DELETE` endpoint — tags are immutable provenance records.
 - `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`
   and `scene`; paginated.

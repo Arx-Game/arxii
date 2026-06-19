@@ -614,7 +614,7 @@ and `JournalEntry.related_threads` M2M for all thread kinds.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/dramatic-moment-types/` | GET | Read-only catalog of authored `DramaticMomentType` rows; unpaginated; authenticated |
-| `/dramatic-moment-tags/` | POST | Tag a character's dramatic moment (gated by `IsSceneGMOrOwnerOrStaff`); body: `character_sheet_id`, `moment_type_id`, optional `scene_id`, optional `interaction_id`; service errors → 400 with `user_message` |
+| `/dramatic-moment-tags/` | POST | Tag a character's dramatic moment (gated by `IsSceneGMOrOwnerOrStaff`); body: `character_sheet`, `moment_type`, optional `scene`, optional `interaction`; service errors → 400 with `user_message` |
 | `/dramatic-moment-tags/` | GET | List tags; filterable by `character_sheet` and `scene`; paginated |
 
 No `DELETE` — tags are immutable provenance records.
