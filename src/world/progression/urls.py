@@ -9,6 +9,7 @@ from world.progression.views import (
     AccountProgressionView,
     ClaimKudosView,
     PathIntentViewSet,
+    PathOptionsView,
     RandomSceneViewSet,
     VoteViewSet,
 )
@@ -28,6 +29,7 @@ _path_intent_view = PathIntentViewSet.as_view(
 urlpatterns = [
     path("account/", AccountProgressionView.as_view(), name="account-progression"),
     path("claim-kudos/", ClaimKudosView.as_view(), name="claim-kudos"),
+    path("path-options/", PathOptionsView.as_view(), name="path-options"),
     path("path-intent/", _path_intent_view, name="path-intent"),
     path("", include(router.urls)),
 ]

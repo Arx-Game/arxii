@@ -16896,6 +16896,25 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/progression/path-options/:
+    get:
+      operationId: progression_path_options_retrieve
+      description: |-
+        GET /path-options/ — the calling character's current path + selectable next paths.
+
+        Transition-generic (not Audere-specific): the same options drive the level-3
+        pick and future path switches. Character resolved via the X-Character-ID header.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PathOptions'
+          description: ''
   /api/progression/random-scenes/:
     get:
       operationId: progression_random_scenes_list
@@ -36008,6 +36027,22 @@ components:
       - name
       - stage
       - stage_display
+    PathOptions:
+      type: object
+      description: 'Read serializer for GET /path-options/: current path + selectable
+        children.'
+      properties:
+        current_path:
+          allOf:
+          - $ref: '#/components/schemas/PathList'
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/PathList'
+      required:
+      - current_path
+      - options
     PathRequest:
       type: object
       description: Serializer for Path in CG context.

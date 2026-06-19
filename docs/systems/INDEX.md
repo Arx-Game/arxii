@@ -348,7 +348,7 @@ OOC visibility groups for player-controlled content sharing.
 ### Progression
 XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
-- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`
+- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -362,8 +362,15 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
   - `ExperiencePointsData.can_spend(amount) -> bool`
   - `CharacterXP.can_spend(amount) -> bool`
+  - `current_path_for_character(character) -> Path | None` (`selectors.py`) — returns the character's most-recent `CharacterPathHistory` path
+  - `next_path_options(character) -> list[Path]` (`selectors.py`) — returns active child paths of the current path (or all top-level paths if no current path); used by `PathOptionsView`
+- **API Endpoints (progression):**
+  - `GET /api/progression/path-options/` — current path + selectable next paths (character via `X-Character-ID` header) → `PathOptions` schema; transition-generic, reused beyond any single transition type
+  - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
+  - `PUT /api/progression/path-intent/` — declare a path intent; body `{ path_id }` (character via `X-Character-ID` header)
+  - `DELETE /api/progression/path-intent/` — clear declared intent (character via `X-Character-ID` header)
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
-- **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards)
+- **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`)
 - **Source:** `src/world/progression/`
 - **Details:** [progression.md](progression.md)
 

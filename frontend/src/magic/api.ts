@@ -39,6 +39,7 @@ import type {
   PaginatedTeachingOfferList,
   PaginatedThreadList,
   PathIntentResponse,
+  PathOptions,
   PatchThreadRequest,
   PendingStageAdvanceOffer,
   PullCommitRequest,
@@ -104,6 +105,7 @@ const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
 const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
 const PATH_INTENT_URL = '/api/progression/path-intent/';
+const PATH_OPTIONS_URL = '/api/progression/path-options/';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -864,6 +866,18 @@ export async function deletePathIntent(characterId: number): Promise<void> {
   if (!res.ok) {
     await parseErrorDetail(res, 'Failed to clear path intent');
   }
+}
+
+/**
+ * GET /api/progression/path-options/
+ * Current path + selectable next-stage paths for the character (X-Character-ID).
+ */
+export async function getNextPathOptions(characterId: number): Promise<PathOptions> {
+  const res = await apiFetch(PATH_OPTIONS_URL, {
+    headers: { 'X-Character-ID': String(characterId) },
+  });
+  if (!res.ok) throw new Error('Failed to load path options');
+  return res.json() as Promise<PathOptions>;
 }
 
 // ---------------------------------------------------------------------------

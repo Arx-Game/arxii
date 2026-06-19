@@ -323,6 +323,9 @@ export type PaginatedPendingAudereMajoraOfferList =
 export type AudereMajoraRespondRequest = components['schemas']['AudereMajoraRespondRequest'];
 export type AudereMajoraCrossingResult = components['schemas']['AudereMajoraCrossingResult'];
 
+export type PathOptions = components['schemas']['PathOptions'];
+export type PathListItem = components['schemas']['PathList'];
+
 /** A declared path intent as returned by GET /api/progression/path-intent/. */
 export interface PathIntentDetail {
   id: number;

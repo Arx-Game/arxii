@@ -10041,6 +10041,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/path-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /path-options/ — the calling character's current path + selectable next paths.
+     *
+     *     Transition-generic (not Audere-specific): the same options drive the level-3
+     *     pick and future path switches. Character resolved via the X-Character-ID header.
+     */
+    get: operations['progression_path_options_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/random-scenes/': {
     parameters: {
       query?: never;
@@ -20142,6 +20164,11 @@ export interface components {
       icon_name?: string;
       /** @description Display order within stage (lower = first) */
       sort_order?: number;
+    };
+    /** @description Read serializer for GET /path-options/: current path + selectable children. */
+    PathOptions: {
+      current_path: components['schemas']['PathList'] | null;
+      options: components['schemas']['PathList'][];
     };
     /** @description Serializer for Path in CG context. */
     PathRequest: {
@@ -37889,6 +37916,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  progression_path_options_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PathOptions'];
+        };
       };
     };
   };
