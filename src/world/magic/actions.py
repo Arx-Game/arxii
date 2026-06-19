@@ -10,10 +10,12 @@ import importlib
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
+from world.items.exceptions import InsufficientMaterials
 from world.items.models import ItemInstance
+from world.items.services.materials import consume_pks, gather_consumable_pks
 from world.magic.constants import RitualExecutionKind
 from world.magic.exceptions import RitualComponentError
-from world.magic.models import Ritual, RitualComponentRequirement
+from world.magic.models import Ritual
 
 
 class PerformRitualAction:
@@ -76,7 +78,7 @@ class PerformRitualAction:
                 all of the ritual's requirements.
         """
         matched_pks = self._validate_components()
-        self._consume_components(matched_pks)
+        consume_pks(matched_pks)
 
         # Step 3: site_property bonus — deferred to Spec D.
 
@@ -99,13 +101,13 @@ class PerformRitualAction:
     def _validate_components(self) -> list[int]:
         """Check that components_provided satisfy all requirements.
 
-        For each RitualComponentRequirement, tallies matching ItemInstances
-        from components_provided (same template; quality_tier >= min if set;
-        total quantity >= required).
+        Delegates to ``gather_consumable_pks`` from
+        ``world.items.services.materials``, translating ``InsufficientMaterials``
+        into the ritual-surface ``RitualComponentError`` that views.py catches.
 
         Returns:
-            List of ItemInstance PKs that will be consumed (one per
-            required-item slot, pruned to the minimum needed quantity).
+            List of ItemInstance PKs that will be consumed (pruned to the
+            minimum needed quantity, greedy order).
 
         Raises:
             RitualComponentError: On the first unsatisfied requirement.
@@ -113,50 +115,18 @@ class PerformRitualAction:
         requirements = self.ritual.requirements.all().select_related(
             "item_template", "min_quality_tier"
         )
-        consumed_pks: list[int] = []
-
-        for req in requirements:
-            # Find instances matching this requirement (template + quality).
-            candidates = [
-                inst
-                for inst in self.components_provided
-                if inst.template_id == req.item_template_id
-                and self._meets_quality(inst, req)
-                and inst.pk not in consumed_pks
-            ]
-            # Sum quantity across matching instances (ItemInstance.quantity
-            # represents stack size for stackable items).
-            total_qty = sum(inst.quantity for inst in candidates)
-            if total_qty < req.quantity:
-                msg = (
-                    f"Ritual '{self.ritual.name}' requires {req.quantity}x "
-                    f"'{req.item_template}' but only {total_qty} provided."
-                )
-                raise RitualComponentError(msg)
-
-            # Record PKs to consume (greedy: take from candidates in order).
-            remaining = req.quantity
-            for inst in candidates:
-                if remaining <= 0:
-                    break
-                consumed_pks.append(inst.pk)
-                remaining -= inst.quantity
-
-        return consumed_pks
-
-    @staticmethod
-    def _meets_quality(inst: ItemInstance, req: RitualComponentRequirement) -> bool:
-        """Return True if inst satisfies req.min_quality_tier (if any)."""
-        if req.min_quality_tier_id is None:
-            return True
-        if inst.quality_tier_id is None:
-            return False
-        return inst.quality_tier.sort_order >= req.min_quality_tier.sort_order
-
-    def _consume_components(self, pks: list[int]) -> None:
-        """Delete the consumed ItemInstance rows (bulk)."""
-        if pks:
-            ItemInstance.objects.filter(pk__in=pks).delete()
+        try:
+            return gather_consumable_pks(
+                available=self.components_provided,
+                requirements=requirements,
+            )
+        except InsufficientMaterials as exc:
+            req = exc.requirement
+            msg = (
+                f"Ritual '{self.ritual.name}' requires {req.quantity}x "
+                f"'{req.item_template}' but only {exc.provided_qty} provided."
+            )
+            raise RitualComponentError(msg) from exc
 
     def _dispatch_service(self) -> object:
         """Import and call the ritual's service function.

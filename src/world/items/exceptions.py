@@ -218,3 +218,30 @@ class OutfitIncomplete(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"Some pieces of that outfit are missing."},
     )
+
+
+# ---------------------------------------------------------------------------
+# Material consumption errors (services/materials.py)
+# ---------------------------------------------------------------------------
+
+
+class InsufficientMaterials(ItemError):
+    """Raised when a material-consumption check finds an unsatisfied requirement.
+
+    Carries structured data so callers can compose context-appropriate messages.
+
+    Attributes:
+        requirement: The duck-typed requirement object that failed
+            (e.g. RitualComponentRequirement, CraftingMaterialRequirement).
+        provided_qty: Total quantity of matching instances found (may be 0).
+    """
+
+    user_message = "You do not have the required materials."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You do not have the required materials."},
+    )
+
+    def __init__(self, *, requirement: object, provided_qty: int) -> None:
+        self.requirement = requirement
+        self.provided_qty = provided_qty
+        super().__init__(self.user_message)
