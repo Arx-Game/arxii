@@ -320,4 +320,23 @@ describe('EndorsementControl — kind="entry"', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('hides and fires no mutation when endorsee_sheet_id is null (safe null guard)', async () => {
+    // endorsee_sheet_id is typed number | null; the component must not cast it
+    // unsafely when null — it should return null instead of firing a bad mutation.
+    const user = userEvent.setup();
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ endorsee_sheet_id: null })}
+        sceneId="1"
+        kind="entry"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+    // No mutation should have been attempted.
+    expect(mockCreateSceneEntryEndorsement).not.toHaveBeenCalled();
+    // Suppress unused variable warning — user is needed for async setup but no interaction fires.
+    void user;
+  });
 });

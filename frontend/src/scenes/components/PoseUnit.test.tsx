@@ -26,10 +26,21 @@ vi.mock('./PoseUnitDetailPanel', () => ({
 }));
 
 // Stub EndorsementControl so PoseUnit mount tests can assert presence/absence
-// without pulling in endorsement hook machinery.
+// without pulling in endorsement hook machinery. The stub renders data-* attributes
+// carrying the forwarded mode and visibility so tests can verify prop forwarding.
 vi.mock('./EndorsementControl', () => ({
-  EndorsementControl: ({ kind }: { kind: string }) => (
-    <div data-testid={`endorsement-control-${kind}`} />
+  EndorsementControl: ({
+    kind,
+    interaction,
+  }: {
+    kind: string;
+    interaction: { mode: string; visibility: string };
+  }) => (
+    <div
+      data-testid={`endorsement-control-${kind}`}
+      data-mode={interaction.mode}
+      data-visibility={interaction.visibility}
+    />
   ),
 }));
 
@@ -468,24 +479,38 @@ describe('PoseUnit endorsement control mounting', () => {
     expect(screen.getByTestId('endorsement-control-pose')).toBeInTheDocument();
   });
 
-  it('WHISPER pose renders NO endorsement controls (guarded by EndorsementControl itself)', () => {
-    // The EndorsementControl stub renders regardless of visibility — the real
-    // component guards; PoseUnit just passes props through. We test here that
-    // PoseUnit still renders the control element (guard lives in EndorsementControl).
-    // This test verifies props are passed so the real component can guard.
-    const interaction = makeInteraction({
-      mode: 'WHISPER',
-      pose_kind: 'STANDARD',
-    });
+  // WHISPER and VERY_PRIVATE suppression is tested at the correct layer:
+  // EndorsementControl.test.tsx covers "hides for WHISPER mode" and "hides for
+  // VERY_PRIVATE visibility". PoseUnit's only responsibility is to mount
+  // EndorsementControl and forward the interaction prop — the control self-hides.
+  // The tests below verify that PoseUnit does pass the interaction's mode/visibility
+  // through to EndorsementControl, so the real component receives the data it needs
+  // to apply its own guard.
 
+  it('WHISPER pose: PoseUnit forwards interaction with mode=WHISPER to EndorsementControl', () => {
+    const interaction = makeInteraction({ mode: 'WHISPER', pose_kind: 'STANDARD' });
     render(
       <Wrapper>
         <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
 
-    // WHISPER is treated as a pose-mode interaction by PoseUnit branch logic;
-    // the control is rendered (guard lives inside EndorsementControl).
-    expect(screen.getByTestId('endorsement-control-pose')).toBeInTheDocument();
+    // The stub renders data-mode from the forwarded interaction prop.
+    // If PoseUnit passes the right interaction, the real EndorsementControl will
+    // see mode='WHISPER' and return null — suppression tested in EndorsementControl.test.tsx.
+    const control = screen.getByTestId('endorsement-control-pose');
+    expect(control).toHaveAttribute('data-mode', 'WHISPER');
+  });
+
+  it('VERY_PRIVATE pose: PoseUnit forwards interaction with visibility=VERY_PRIVATE to EndorsementControl', () => {
+    const interaction = makeInteraction({ visibility: 'VERY_PRIVATE', pose_kind: 'STANDARD' });
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="1" />
+      </Wrapper>
+    );
+
+    const control = screen.getByTestId('endorsement-control-pose');
+    expect(control).toHaveAttribute('data-visibility', 'VERY_PRIVATE');
   });
 });

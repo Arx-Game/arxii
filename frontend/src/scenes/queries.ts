@@ -158,7 +158,7 @@ export async function createPoseEndorsement(body: { interaction: number; resonan
 
 export async function deletePoseEndorsement(id: number) {
   const res = await apiFetch(`/api/magic/pose-endorsements/${id}/`, { method: 'DELETE' });
-  if (!res.ok && res.status !== 204) throw new Error('Failed to retract endorsement');
+  if (!res.ok) throw new Error('Failed to retract endorsement');
 }
 
 export async function createSceneEntryEndorsement(body: {
@@ -177,7 +177,7 @@ export async function createSceneEntryEndorsement(body: {
 export function useCreatePoseEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { interaction: number; resonance: number }) => createPoseEndorsement(body),
+    mutationFn: createPoseEndorsement,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
 }
@@ -185,7 +185,7 @@ export function useCreatePoseEndorsement(sceneId: string) {
 export function useDeletePoseEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => deletePoseEndorsement(id),
+    mutationFn: deletePoseEndorsement,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
 }
@@ -193,8 +193,7 @@ export function useDeletePoseEndorsement(sceneId: string) {
 export function useCreateSceneEntryEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { endorsee_sheet: number; scene: number; resonance: number }) =>
-      createSceneEntryEndorsement(body),
+    mutationFn: createSceneEntryEndorsement,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
   });
 }

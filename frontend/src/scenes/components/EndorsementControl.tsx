@@ -13,6 +13,7 @@
  *   - endorsable_resonances is empty (nothing to endorse with)
  *   - the pose belongs to the viewer (self-endorsement guard)
  *   - mode === 'WHISPER' or visibility === 'VERY_PRIVATE'
+ *   - kind='entry' and endorsee_sheet_id is null (impossible in practice but typed)
  */
 
 import { useMemo } from 'react';
@@ -74,10 +75,16 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
     [myRosterEntries, activeCharacterName]
   );
 
-  // Mutation hooks
+  // Mutation hooks — must be called unconditionally before any early return.
   const createPose = useCreatePoseEndorsement(sceneId);
   const deletePose = useDeletePoseEndorsement(sceneId);
   const createEntry = useCreateSceneEntryEndorsement(sceneId);
+
+  // Map resonance id → name for badge tooltips — memoized, unconditional.
+  const resonanceMap = useMemo(
+    () => new Map(interaction.endorsable_resonances.map((r) => [r.id, r.name])),
+    [interaction.endorsable_resonances]
+  );
 
   // ----- Guard conditions — render nothing --------------------------------
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
@@ -91,22 +98,26 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
     return null;
   }
 
+  // endorsee_sheet_id is typed number | null; for kind='entry' it must be present.
+  // If it's somehow null (impossible in practice but typed), hide rather than coerce.
+  if (kind === 'entry' && interaction.endorsee_sheet_id == null) {
+    return null;
+  }
+
   // ----- Data for this kind -----------------------------------------------
   const isPose = kind === 'pose';
   const endorsers: EndorserBadge[] = isPose
     ? interaction.pose_endorsers
     : interaction.entry_endorsers;
 
-  // Map resonance id → name for badge tooltips
-  const resonanceMap = new Map(interaction.endorsable_resonances.map((r) => [r.id, r.name]));
-
   // ----- Handlers ---------------------------------------------------------
   function handlePickResonance(resonanceId: number) {
     if (isPose) {
       createPose.mutate({ interaction: interaction.id, resonance: resonanceId });
     } else {
+      // endorsee_sheet_id is guaranteed non-null here by the guard above.
       createEntry.mutate({
-        endorsee_sheet: interaction.endorsee_sheet_id as number,
+        endorsee_sheet: interaction.endorsee_sheet_id!,
         scene: Number(sceneId),
         resonance: resonanceId,
       });
@@ -162,7 +173,7 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
       {/* Endorser badges */}
       {endorsers.map((badge) => (
         <BadgeChip
-          key={badge.persona_id}
+          key={`${badge.persona_id}-${badge.resonance_id}`}
           badge={badge}
           resonanceName={resonanceMap.get(badge.resonance_id) ?? String(badge.resonance_id)}
         />
