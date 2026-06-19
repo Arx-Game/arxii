@@ -17,6 +17,7 @@ from world.combat.constants import (
     ActionCategory,
     ClashActionSlot,
     ClashStatus,
+    EncounterOutcome,
     OpponentTier,
     ParticipantStatus,
 )
@@ -718,6 +719,11 @@ class EncounterListSerializer(serializers.ModelSerializer):
 
     participant_count = serializers.SerializerMethodField()
     opponent_count = serializers.SerializerMethodField()
+    # Declared explicitly so the generated OpenAPI type admits the pre-completion
+    # blank value the API serves until the encounter completes (#959).
+    outcome = serializers.ChoiceField(
+        choices=EncounterOutcome.choices, allow_blank=True, read_only=True
+    )
 
     class Meta:
         model = CombatEncounter
@@ -736,7 +742,6 @@ class EncounterListSerializer(serializers.ModelSerializer):
             "opponent_count",
         ]
         extra_kwargs = {
-            "outcome": {"read_only": True},
             "completed_at": {"read_only": True},
         }
 
@@ -790,6 +795,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         source="escalation_curve.tick_narration", read_only=True, default=None, allow_null=True
     )
     forced_escape = serializers.BooleanField(read_only=True)
+    # Declared explicitly so the generated OpenAPI type admits the pre-completion
+    # blank value the API serves until the encounter completes (#959).
+    outcome = serializers.ChoiceField(
+        choices=EncounterOutcome.choices, allow_blank=True, read_only=True
+    )
     # Duel fields — derived / FK; no additional queries when the viewset queryset
     # uses select_related("duel_winner__character").
     is_lethal = serializers.BooleanField(read_only=True)
@@ -829,7 +839,6 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "duel_winner",
         ]
         extra_kwargs = {
-            "outcome": {"read_only": True},
             "completed_at": {"read_only": True},
         }
 

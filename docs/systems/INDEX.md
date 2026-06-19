@@ -32,6 +32,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
+  - **Audere Majora + legend-deed minting (#953):**
+    `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
+    `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
+    `risk` / `reach` / `archetypes`; provides `as_renown_award_kwargs()`),
+    `AudereMajoraThreshold` (inherits `RenownAwardConfig`; adds `deed_title`
+    public field),
+    `AudereMajoraCrossing.legend_entry` (OneToOneField → `societies.LegendEntry`,
+    related_name `audere_majora_crossing`; null when `risk == NONE` or no primary
+    persona). Deed minting fires via `_mint_crossing_deed` in `cross_threshold`.
   - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
     tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
     `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
@@ -253,7 +262,10 @@ Social structures, organizations, reputation, and legend tracking.
 - **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationMembership`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
 - **Enums:** `ReputationTier`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
-- **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity)
+- **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse
+  OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints
+  a deed via `fire_renown_award` + `_mint_crossing_deed`.
+- **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 ### Goals

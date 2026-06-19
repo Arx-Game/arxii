@@ -5,10 +5,10 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
+from world.magic.models.renown_config import RenownAwardConfig
 
 
-class DramaticMomentType(SharedMemoryModel):
+class DramaticMomentType(RenownAwardConfig):
     """Staff-authored lookup describing a type of dramatic moment.
 
     Staff tags a character in a scene with a DramaticMomentType to fire both
@@ -31,25 +31,6 @@ class DramaticMomentType(SharedMemoryModel):
         default=15,
         help_text="Flat resonance units granted to the tagged character.",
     )
-    magnitude = models.CharField(
-        max_length=20,
-        choices=RenownMagnitude.choices,
-        default=RenownMagnitude.SMALL,
-        help_text="Renown magnitude passed to fire_renown_award.",
-    )
-    risk = models.CharField(
-        max_length=20,
-        choices=RenownRisk.choices,
-        default=RenownRisk.NONE,
-        help_text="Risk level for legend award; NONE means no legend granted.",
-    )
-    reach = models.CharField(
-        max_length=20,
-        choices=RenownReach.choices,
-        null=True,
-        blank=True,
-        help_text="Override reach; if null, derived from magnitude default.",
-    )
     per_scene_cap = models.PositiveIntegerField(
         default=1,
         help_text=(
@@ -57,12 +38,7 @@ class DramaticMomentType(SharedMemoryModel):
             "character within a single scene."
         ),
     )
-    archetypes = models.ManyToManyField(
-        "societies.PhilosophicalArchetype",
-        blank=True,
-        related_name="dramatic_moment_types",
-        help_text="Philosophical archetypes forwarded to fire_renown_award for reputation shaping.",
-    )
+    # magnitude / risk / reach / archetypes now inherited from RenownAwardConfig.
 
     class Meta:
         ordering = ["label"]

@@ -133,9 +133,9 @@ export function CombatTurnPanel({
   // ---------------------------------------------------------------------------
 
   if (encounter.status === 'completed') {
-    // Pre-#876 rows completed without a recorded outcome (the API sends "" —
-    // the generated enum omits the blank); fall back to "abandoned" so the
-    // banner always names a result.
+    // Pre-#876 rows completed without a recorded outcome (the API sends the
+    // blank string for them); fall back to "abandoned" so the banner always
+    // names a result.
     const outcome: string = encounter.outcome || 'abandoned';
     return (
       <div
