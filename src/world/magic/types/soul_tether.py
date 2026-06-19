@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 import uuid
 
 from world.character_sheets.models import CharacterSheet
@@ -33,6 +34,7 @@ class SineatingOffer:
     current_hollow: int
     hollow_max: int
     sineater_current_strain_stage: int
+    scene: Any = None  # The active Scene; populated by request_sineating (Phase 7)
 
 
 @dataclass(frozen=True, slots=True)

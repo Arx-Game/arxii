@@ -556,12 +556,13 @@ def _make_tethered_pair(
     return sinner, sineater, resonance, relationship
 
 
-def _make_sineating_offer(
+def _make_sineating_offer(  # noqa: PLR0913
     sinner: object,
     sineater: object,
     resonance: object,
     relationship: object,
     max_units: int = 5,
+    scene: object = None,
 ) -> SineatingOffer:
     """Build a SineatingOffer directly, bypassing scene validation.
 
@@ -581,6 +582,7 @@ def _make_sineating_offer(
         current_hollow=0,
         hollow_max=0,
         sineater_current_strain_stage=0,
+        scene=scene,
     )
 
 
@@ -671,6 +673,36 @@ class RequestSineatingValidationTests(TestCase):
                 scene=object(),  # non-None sentinel
             )
         self.assertIn("not one the Sinner accrues", ctx.exception.user_message)
+
+    def test_offer_carries_scene(self) -> None:
+        """Phase 7: the returned SineatingOffer.scene must equal the scene passed in."""
+        from world.scenes.factories import SceneFactory
+
+        # Form tether so the tether check passes.
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        # Seed a CharacterResonance so the resonance gate passes.
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+        scene = SceneFactory()
+        with patch(
+            "world.magic.services.soul_tether._both_in_scene",
+            return_value=True,
+        ):
+            offer = request_sineating(
+                sinner_sheet=self.sinner,
+                sineater_sheet=self.sineater,
+                resonance=self.resonance,
+                max_units=5,
+                scene=scene,
+            )
+        self.assertEqual(offer.scene, scene)
 
 
 # ---------------------------------------------------------------------------
@@ -780,6 +812,22 @@ class ResolveSineatingHappyPathTests(TestCase):
         offer = self._build_offer(max_units=5)
         result = resolve_sineating(offer, units_accepted=999)
         self.assertEqual(result.units_accepted, 5)
+
+    def test_audit_row_scene_matches_offer_scene(self) -> None:
+        """Phase 7: Sineating audit row.scene is taken from offer.scene."""
+        from world.scenes.factories import SceneFactory
+
+        scene = SceneFactory()
+        offer = _make_sineating_offer(
+            self.sinner,
+            self.sineater,
+            self.resonance,
+            self.relationship,
+            scene=scene,
+        )
+        resolve_sineating(offer, units_accepted=2)
+        row = Sineating.objects.get(sineater_sheet=self.sineater)
+        self.assertEqual(row.scene, scene)
 
 
 # ---------------------------------------------------------------------------

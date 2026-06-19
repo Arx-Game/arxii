@@ -679,6 +679,7 @@ def request_sineating(
         current_hollow=current_hollow,
         hollow_max=hollow_max,
         sineater_current_strain_stage=sineater_sheet.get_tether_strain_stage(),
+        scene=scene,
     )
 
 
@@ -885,7 +886,7 @@ def resolve_sineating(
             sinner_sheet=offer.sinner_sheet,
             sineater_sheet=offer.sineater_sheet,
             relationship=offer.relationship,
-            scene=None,  # TODO: Phase 7 — pass scene through offer payload
+            scene=offer.scene,
             resonance=offer.resonance,
             units_offered=offer.max_units_offered,
             units_accepted=units,
@@ -989,6 +990,7 @@ def resolve_sineating_from_db(
         current_hollow=current_hollow,
         hollow_max=hollow_max,
         sineater_current_strain_stage=pending.sineater_sheet.get_tether_strain_stage(),
+        scene=pending.scene,
     )
 
     # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
