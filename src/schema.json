@@ -29193,7 +29193,7 @@ components:
           type: boolean
           description: |-
             True iff use_item would proceed: the template has an on-use pool.
-            Mirrors the precondition in services.usage.use_item.
+            Delegates to the canonical ``ItemTemplate.is_usable`` predicate.
           readOnly: true
         contained_in:
           type: integer

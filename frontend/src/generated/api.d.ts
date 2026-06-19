@@ -16266,7 +16266,7 @@ export interface components {
       readonly display_image_url: string | null;
       /**
        * @description True iff use_item would proceed: the template has an on-use pool.
-       *     Mirrors the precondition in services.usage.use_item.
+       *     Delegates to the canonical ``ItemTemplate.is_usable`` predicate.
        */
       readonly is_usable: boolean;
       readonly contained_in: number;
