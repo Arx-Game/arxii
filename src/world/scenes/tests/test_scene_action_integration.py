@@ -142,14 +142,20 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         assert request.resolved_difficulty == 60  # HARD = 60
 
     def test_request_without_template_raises(self) -> None:
-        """Requests with no action_template raise ValueError."""
+        """A request whose action_key resolves no ActionTemplate still raises ValueError.
+
+        ``create_action_request`` now auto-resolves ``action_template`` from a
+        registry social action's ``template_name`` (#1172), so a registered key
+        like ``intimidate`` is no longer template-less. An unregistered key has no
+        template, so the consent resolution guard must still reject it.
+        """
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
-            action_key="intimidate",
+            action_key="unregistered_action",
         )
-        # action_template is None by default
+        self.assertIsNone(request.action_template_id)
 
         with self.assertRaises(ValueError):
             respond_to_action_request(
