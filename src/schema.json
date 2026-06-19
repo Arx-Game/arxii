@@ -8985,11 +8985,21 @@ paths:
         the result.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudereMajoraRespondRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudereMajoraCrossingResult'
+          description: ''
   /api/magic/audere/pending/:
     get:
       operationId: magic_audere_pending_list
@@ -9058,11 +9068,21 @@ paths:
         result.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudereRespondRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudereOfferResult'
+          description: ''
   /api/magic/character-anima/:
     get:
       operationId: magic_character_anima_list
@@ -10983,28 +11003,48 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoulTetherDetail'
+          description: ''
   /api/magic/soul-tether/accept/:
     post:
       operationId: magic_soul_tether_accept_create
       description: Validate and dispatch accept_soul_tether; return capstone PK.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptSoulTetherRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
-        '200':
-          description: No response body
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoulTetherAcceptResponse'
+          description: ''
   /api/magic/soul-tether/dissolve/:
     post:
       operationId: magic_soul_tether_dissolve_create
       description: Validate and dispatch dissolve_soul_tether; return 204 on success.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DissolveRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '204':
           description: No response body
   /api/magic/soul-tether/rescue/:
     post:
@@ -11013,11 +11053,21 @@ paths:
         payload.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoulTetherRescueRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RescueOutcome'
+          description: ''
   /api/magic/soul-tether/sineating/pending/:
     get:
       operationId: magic_soul_tether_sineating_pending_list
@@ -11087,22 +11137,42 @@ paths:
       description: Validate and dispatch request_sineating; return offer payload.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SineatingRequestRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SineatingOffer'
+          description: ''
   /api/magic/soul-tether/sineating/respond/:
     post:
       operationId: magic_soul_tether_sineating_respond_create
       description: Re-validate offer + dispatch resolve_sineating; return result payload.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SineatingRespondRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SineatingResult'
+          description: ''
   /api/magic/soul-tether/stage-advance/pending/:
     get:
       operationId: magic_soul_tether_stage_advance_pending_list
@@ -11176,11 +11246,21 @@ paths:
       description: Validate offer + dispatch resolve; return result payload.
       tags:
       - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StageAdvanceRespondRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageAdvanceBonusResult'
+          description: ''
   /api/magic/style-presentation-endorsements/:
     post:
       operationId: magic_style_presentation_endorsements_create
@@ -21158,6 +21238,35 @@ paths:
           description: ''
 components:
   schemas:
+    AcceptSoulTetherRequest:
+      type: object
+      description: |-
+        Write serializer for forming a Soul Tether (Spec B §12).
+
+        ``actor_sheet_id`` identifies the character sheet of the requesting account.
+        ``partner_sheet_id`` identifies the partner's character sheet.
+        ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
+        ``resonance_id`` selects the resonance for the Sinner's Thread.
+        ``writeup`` is the narrative description of the bond (20+ chars).
+      properties:
+        actor_sheet_id:
+          type: integer
+        partner_sheet_id:
+          type: integer
+        sinner_role:
+          $ref: '#/components/schemas/SinnerRoleEnum'
+        resonance_id:
+          type: integer
+        writeup:
+          type: string
+          minLength: 20
+          maxLength: 4000
+      required:
+      - actor_sheet_id
+      - partner_sheet_id
+      - resonance_id
+      - sinner_role
+      - writeup
     AcceptTeachingOfferRequest:
       type: object
       description: |-
@@ -21670,6 +21779,77 @@ components:
         * `rejected` - Rejected
         * `cancelled` - Cancelled
         * `completed` - Completed
+    AudereMajoraCrossingResult:
+      type: object
+      description: Read serializer for AudereMajoraCrossingResult dataclass.
+      properties:
+        accepted:
+          type: boolean
+        level_before:
+          type: integer
+        level_after:
+          type: integer
+        chosen_path_name:
+          type: string
+        advisory_text:
+          type: string
+        declaration_interaction_id:
+          type: integer
+          nullable: true
+      required:
+      - accepted
+      - advisory_text
+      - chosen_path_name
+      - declaration_interaction_id
+      - level_after
+      - level_before
+    AudereMajoraRespondRequest:
+      type: object
+      description: Write serializer for the player's Crossing decision. accept=false
+        declines.
+      properties:
+        offer_id:
+          type: integer
+        accept:
+          type: boolean
+        path_id:
+          type: integer
+          nullable: true
+        declaration_text:
+          type: string
+          maxLength: 4000
+      required:
+      - accept
+      - offer_id
+    AudereOfferResult:
+      type: object
+      description: Read serializer for AudereOfferResult (audere.py dataclass).
+      properties:
+        accepted:
+          type: boolean
+        intensity_bonus_applied:
+          type: integer
+        anima_pool_expanded_by:
+          type: integer
+        advisory_text:
+          type: string
+      required:
+      - accepted
+      - advisory_text
+      - anima_pool_expanded_by
+      - intensity_bonus_applied
+    AudereRespondRequest:
+      type: object
+      description: Write serializer for the player's Audere decision. accept=false
+        declines.
+      properties:
+        offer_id:
+          type: integer
+        accept:
+          type: boolean
+      required:
+      - accept
+      - offer_id
     AvailableEnhancement:
       type: object
       description: Read-only serializer for AvailableEnhancement (technique enhancement
@@ -25203,6 +25383,21 @@ components:
       description: |-
         * `obvious` - Obvious (visible if capability met)
         * `discoverable` - Discoverable (must be learned)
+    DissolveRequest:
+      type: object
+      description: |-
+        Write serializer for dissolving a Soul Tether (Spec B §13).
+
+        Either party may dissolve; ``actor_sheet_id`` is validated for ownership.
+        ``relationship_id`` is the PK of *either* directional CharacterRelationship row.
+      properties:
+        actor_sheet_id:
+          type: integer
+        relationship_id:
+          type: integer
+      required:
+      - actor_sheet_id
+      - relationship_id
     DistinctionCategory:
       type: object
       description: Serializer for DistinctionCategory lookup records.
@@ -25824,6 +26019,26 @@ components:
         * `medium` - Medium Effort
         * `high` - High Effort
         * `extreme` - Extreme Effort
+    EligiblePath:
+      type: object
+      description: Read serializer for a single eligible crossing path.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        stage:
+          type: integer
+        stage_display:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
+      - stage
+      - stage_display
     EncounterDetail:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -36115,8 +36330,8 @@ components:
           readOnly: true
         eligible_paths:
           type: array
-          items: {}
-          description: Eligible child paths serialized through EligiblePathSerializer.
+          items:
+            $ref: '#/components/schemas/EligiblePath'
           readOnly: true
         intended_path_id:
           type: integer
@@ -37811,6 +38026,31 @@ components:
         * `failure` - Failure
         * `expired` - Expired
         * `pending_gm_review` - Pending GM review
+    RescueOutcome:
+      type: object
+      description: Read serializer for RescueOutcome payloads.
+      properties:
+        severity_reduced:
+          type: integer
+        sinner_stage_at_start:
+          type: integer
+        sinner_stage_at_end:
+          type: integer
+        sineater_strain_taken:
+          type: integer
+        protagonism_lock_lifted:
+          type: boolean
+        audit_row_id:
+          type: integer
+          description: Return the SoulTetherRescue audit row PK.
+          readOnly: true
+      required:
+      - audit_row_id
+      - protagonism_lock_lifted
+      - severity_reduced
+      - sineater_strain_taken
+      - sinner_stage_at_end
+      - sinner_stage_at_start
     ResolutionTypeEnum:
       enum:
       - destroy
@@ -39299,6 +39539,45 @@ components:
       description: |-
         * `positive` - Positive
         * `negative` - Negative
+    SineatingOffer:
+      type: object
+      description: Read serializer for SineatingOffer payloads returned by the request
+        endpoint.
+      properties:
+        sinner_sheet_id:
+          type: integer
+          description: Return sinner_sheet PK.
+          readOnly: true
+        sineater_sheet_id:
+          type: integer
+          description: Return sineater_sheet PK.
+          readOnly: true
+        resonance_id:
+          type: integer
+          description: Return resonance PK.
+          readOnly: true
+        max_units_offered:
+          type: integer
+        anima_cost_per_unit:
+          type: integer
+        fatigue_cost_per_unit:
+          type: integer
+        current_hollow:
+          type: integer
+        hollow_max:
+          type: integer
+        sineater_current_strain_stage:
+          type: integer
+      required:
+      - anima_cost_per_unit
+      - current_hollow
+      - fatigue_cost_per_unit
+      - hollow_max
+      - max_units_offered
+      - resonance_id
+      - sineater_current_strain_stage
+      - sineater_sheet_id
+      - sinner_sheet_id
     SineatingPendingOffer:
       type: object
       description: |-
@@ -39349,6 +39628,73 @@ components:
       - sinner_persona_name
       - sinner_sheet_id
       - units_offered
+    SineatingRequestRequest:
+      type: object
+      description: |-
+        Write serializer for Sinner-initiated Sineating request (Spec B §7).
+
+        Returns a ``SineatingOffer`` that the Sineater can accept or decline via
+        the respond endpoint.
+      properties:
+        actor_sheet_id:
+          type: integer
+        sineater_sheet_id:
+          type: integer
+        resonance_id:
+          type: integer
+        max_units:
+          type: integer
+          minimum: 1
+        scene_id:
+          type: integer
+      required:
+      - actor_sheet_id
+      - max_units
+      - resonance_id
+      - scene_id
+      - sineater_sheet_id
+    SineatingRespondRequest:
+      type: object
+      description: |-
+        Write serializer for the Sineater's response to a Sineating request (Spec B §7).
+
+        The pending offer row is the canonical source of truth for scene, resonance,
+        and units cap — the caller only needs to identify the pair and supply their choice.
+        ``units_accepted=0`` means decline.
+      properties:
+        sinner_sheet_id:
+          type: integer
+        sineater_sheet_id:
+          type: integer
+        units_accepted:
+          type: integer
+          minimum: 0
+      required:
+      - sineater_sheet_id
+      - sinner_sheet_id
+      - units_accepted
+    SineatingResult:
+      type: object
+      description: Read serializer for SineatingResult payloads.
+      properties:
+        units_accepted:
+          type: integer
+        declined:
+          type: boolean
+        new_hollow_current:
+          type: integer
+        new_lifetime_helped:
+          type: integer
+        audit_row_id:
+          type: integer
+          description: Return the audit Sineating row PK.
+          readOnly: true
+      required:
+      - audit_row_id
+      - declined
+      - new_hollow_current
+      - new_lifetime_helped
+      - units_accepted
     SinkEnum:
       enum:
       - money
@@ -39365,6 +39711,14 @@ components:
         * `rumor` - Rumor
         * `crime_watch` - Crime Watch
         * `beat` - Beat
+    SinnerRoleEnum:
+      enum:
+      - SINNER
+      - SINEATER
+      type: string
+      description: |-
+        * `SINNER` - SINNER
+        * `SINEATER` - SINEATER
     SituationChallengeLink:
       type: object
       description: Nested serializer for situation challenge links.
@@ -39600,6 +39954,94 @@ components:
       required:
       - id
       - name
+    SoulTetherAcceptResponse:
+      type: object
+      properties:
+        capstone_id:
+          type: integer
+      required:
+      - capstone_id
+    SoulTetherDetail:
+      type: object
+      description: |-
+        Read serializer for GET /api/magic/soul-tether/{relationship_id}/.
+
+        Returns tether state: Hollow current/max, Thread levels, Sineater stats,
+        and role information. Accepts a CharacterRelationship (either direction).
+      properties:
+        relationship_id:
+          type: integer
+          readOnly: true
+        is_soul_tether:
+          type: boolean
+          readOnly: true
+        soul_tether_role:
+          type: string
+          readOnly: true
+        sinner_sheet_id:
+          type: integer
+          nullable: true
+          description: Return the Sinner's CharacterSheet PK.
+          readOnly: true
+        sineater_sheet_id:
+          type: integer
+          nullable: true
+          description: Return the Sineater's CharacterSheet PK.
+          readOnly: true
+        hollow_current:
+          type: integer
+          description: Return the Sinner's current Hollow capacity (from the capstone
+            Thread).
+          readOnly: true
+        hollow_max:
+          type: integer
+          description: Return the Sinner's Hollow maximum (thread.level * 10).
+          readOnly: true
+        sineater_lifetime_helped:
+          type: integer
+          description: Return the Sineater's total lifetime_helped across all resonances
+            for this bond.
+          readOnly: true
+        sinner_corruption_stage:
+          type: integer
+          description: Return the Sinner's highest corruption stage across all resonances.
+          readOnly: true
+        sineater_strain_stage:
+          type: integer
+          description: Return the Sineater's current Tether Strain severity (or 0
+            if none).
+          readOnly: true
+      required:
+      - hollow_current
+      - hollow_max
+      - is_soul_tether
+      - relationship_id
+      - sineater_lifetime_helped
+      - sineater_sheet_id
+      - sineater_strain_stage
+      - sinner_corruption_stage
+      - sinner_sheet_id
+      - soul_tether_role
+    SoulTetherRescueRequest:
+      type: object
+      description: |-
+        Write serializer for the rescue ritual (Spec B §9).
+
+        The Sineater performs the ritual on the Sinner. Both must be in the same scene.
+      properties:
+        actor_sheet_id:
+          type: integer
+        sinner_sheet_id:
+          type: integer
+        resonance_id:
+          type: integer
+        scene_id:
+          type: integer
+      required:
+      - actor_sheet_id
+      - resonance_id
+      - scene_id
+      - sinner_sheet_id
     SoulTetherRoleEnum:
       enum:
       - SINEATER
@@ -39820,6 +40262,46 @@ components:
       - created_at
       - id
       - title
+    StageAdvanceBonusResult:
+      type: object
+      description: Read serializer for StageAdvanceBonusResult payloads (Task 1.7).
+      properties:
+        offer_id:
+          type: string
+        units_committed:
+          type: integer
+        hollow_drained:
+          type: integer
+        strain_severity_added:
+          type: integer
+        declined:
+          type: boolean
+      required:
+      - declined
+      - hollow_drained
+      - offer_id
+      - strain_severity_added
+      - units_committed
+    StageAdvanceRespondRequest:
+      type: object
+      description: |-
+        Write serializer for the Sineater's response to a stage-advance prompt (Spec B §8.1).
+
+        The pending offer row is the canonical source of truth for resonance, max units,
+        and expiry — the caller only needs to identify the pair and supply their choice.
+        ``units_committed=0`` means decline.
+      properties:
+        sinner_sheet_id:
+          type: integer
+        sineater_sheet_id:
+          type: integer
+        units_committed:
+          type: integer
+          minimum: 0
+      required:
+      - sineater_sheet_id
+      - sinner_sheet_id
+      - units_committed
     StageEnum:
       enum:
       - 1
