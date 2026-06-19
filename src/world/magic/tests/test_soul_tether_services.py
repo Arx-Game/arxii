@@ -1836,6 +1836,100 @@ class DissolveSoulTetherMultiTetherTests(TestCase):
 
 
 # =============================================================================
+# Phase 15: dissolve_soul_tether emits SOUL_TETHER_DISSOLVED
+# =============================================================================
+
+
+class DissolveSoulTetherEmitTests(TestCase):
+    """Phase 15 — dissolve_soul_tether emits SOUL_TETHER_DISSOLVED with correct payload."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.track = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+        self.sinner, self.sineater = _make_eligible_pair(track=self.track)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
+        CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
+
+        CharacterAnimaFactory(character=self.sineater.character, current=20, maximum=20)
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+        accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.SINNER,
+            resonance=self.resonance,
+            writeup="A bond is formed.",
+            ritual_components=[],
+        )
+        self.relationship = CharacterRelationship.objects.get(
+            source=self.sinner, target=self.sineater
+        )
+
+    def test_emit_called_with_soul_tether_dissolved_event(self) -> None:
+        """dissolve_soul_tether emits SOUL_TETHER_DISSOLVED with sinner+sineater sheets."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from flows.constants import EventName
+        from world.magic.services.soul_tether import dissolve_soul_tether
+        from world.magic.types.soul_tether import SoulTetherDissolvedPayload
+
+        room = RoomProfileFactory().objectdb
+        self.sinner.character.db_location = room
+        self.sinner.character.save(update_fields=["db_location"])
+
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_called_once()
+        event_name, payload = mock_emit.call_args.args
+        self.assertEqual(event_name, EventName.SOUL_TETHER_DISSOLVED)
+        self.assertIsInstance(payload, SoulTetherDissolvedPayload)
+        self.assertEqual(payload.sinner_sheet, self.sinner)
+        self.assertEqual(payload.sineater_sheet, self.sineater)
+        self.assertEqual(payload.relationship, self.relationship)
+        self.assertEqual(mock_emit.call_args.kwargs["location"], room)
+
+    def test_emit_skipped_when_sinner_has_no_location(self) -> None:
+        """dissolve_soul_tether does not emit when the Sinner has no current location."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        # Default test characters have db_location=None.
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_not_called()
+
+    def test_emit_not_called_when_already_dissolved(self) -> None:
+        """dissolve_soul_tether is idempotent — no emit on a second call."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        room = RoomProfileFactory().objectdb
+        self.sinner.character.db_location = room
+        self.sinner.character.save(update_fields=["db_location"])
+
+        dissolve_soul_tether(
+            relationship_id=self.relationship.pk,
+            initiator_sheet=self.sinner,
+        )
+
+        with patch("world.magic.services.soul_tether.emit_event") as mock_emit:
+            dissolve_soul_tether(
+                relationship_id=self.relationship.pk,
+                initiator_sheet=self.sinner,
+            )
+
+        mock_emit.assert_not_called()
+
+
+# =============================================================================
 # Phase 10.2: Passive decay tuning on Corruption ConditionTemplates
 # =============================================================================
 

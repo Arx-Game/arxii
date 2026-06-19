@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 from django.utils import timezone
 
+from flows.constants import EventName
+from flows.emit import emit_event
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.magic.constants import SoulTetherRole, TargetKind
@@ -44,6 +46,7 @@ from world.magic.types.soul_tether import (
     RescueOutcome,
     SineatingOffer,
     SineatingResult,
+    SoulTetherDissolvedPayload,
     SoulTetherRole as SoulTetherRoleEnum,
     StageAdvanceBonusOffer,
     StageAdvanceBonusResult,
@@ -404,6 +407,10 @@ def dissolve_soul_tether(
             target=raw.source,
         )
 
+    dissolved_sinner_sheet: CharacterSheet | None = None
+    dissolved_sineater_sheet: CharacterSheet | None = None
+    dissolved_relationship: CharacterRelationship | None = None
+
     with transaction.atomic():
         # Re-fetch with locks to prevent races.
         outgoing = CharacterRelationship.objects.select_for_update().get(pk=outgoing.pk)
@@ -413,8 +420,14 @@ def dissolve_soul_tether(
         if not outgoing.is_soul_tether:
             return
 
-        # The Sinner is the source of the outgoing (SINNER) row.
+        # The Sinner is the source of the outgoing (SINNER) row; Sineater is the target.
         sinner_sheet: CharacterSheet = outgoing.source
+        sineater_sheet: CharacterSheet = outgoing.target
+
+        # Capture for post-atomic emit.
+        dissolved_sinner_sheet = sinner_sheet
+        dissolved_sineater_sheet = sineater_sheet
+        dissolved_relationship = outgoing
 
         # 1. Flip flags on both directional rows.
         for rel in (outgoing, incoming):
@@ -453,8 +466,19 @@ def dissolve_soul_tether(
     # NOTE: TetherStrain ConditionInstance on the Sineater persists (decays naturally).
     # NOTE: Sineating and SoulTetherRescue audit rows persist (immutable history).
     # NOTE: Trigger rows are cascade-deleted with ConditionInstance; no manual cleanup needed.
-    # TODO: Phase 15 — emit SOUL_TETHER_DISSOLVED reactive event when event infrastructure
-    #   supports cross-character location resolution.
+
+    # Emit the dissolution event after the atomic block so the DB state is visible
+    # to any reactive subscribers.  Resolve location from the Sinner's current position.
+    if dissolved_sinner_sheet is not None:
+        sinner_character = dissolved_sinner_sheet.character
+        location = getattr(sinner_character, "location", None)  # noqa: GETATTR_LITERAL
+        if location is not None:
+            dissolved_payload = SoulTetherDissolvedPayload(
+                sinner_sheet=dissolved_sinner_sheet,
+                sineater_sheet=dissolved_sineater_sheet,  # type: ignore[arg-type]
+                relationship=dissolved_relationship,  # type: ignore[arg-type]
+            )
+            emit_event(EventName.SOUL_TETHER_DISSOLVED, dissolved_payload, location=location)
 
 
 # =============================================================================

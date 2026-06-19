@@ -91,3 +91,12 @@ class StageAdvanceBonusResult:
     hollow_drained: int
     strain_severity_added: int
     declined: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SoulTetherDissolvedPayload:
+    """Reactive event payload emitted when a Soul Tether bond dissolves (Spec B §13, Phase 15)."""
+
+    sinner_sheet: CharacterSheet
+    sineater_sheet: CharacterSheet
+    relationship: CharacterRelationship
