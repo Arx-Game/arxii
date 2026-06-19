@@ -259,9 +259,9 @@ class PersonaViewPermissionsTestCase(APITestCase):
         )
         cls.persona = _create_owned_persona(cls.participant_account)
 
-    def test_persona_create_participant_permission(self):
-        """Test character owner can create personas"""
-        # Create identity owned by participant
+    def test_persona_create_is_locked_down_for_owner(self):
+        """Even a character owner — who passes the create permission — cannot POST a
+        persona; the create endpoint is gone (#1127). Method-not-allowed."""
         identity = CharacterSheetFactory()
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant_account,
@@ -282,7 +282,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
             content_type="application/json",
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     @suppress_permission_errors
     def test_persona_create_non_participant_denied(self):
@@ -310,8 +310,9 @@ class PersonaViewPermissionsTestCase(APITestCase):
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_persona_create_staff_permission(self):
-        """Test staff can create personas for any character"""
+    def test_persona_create_is_locked_down_for_staff(self):
+        """Even staff cannot POST a persona — the create endpoint is gone (#1127).
+        Method-not-allowed."""
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("persona-list")
         identity = CharacterSheetFactory()
@@ -326,4 +327,4 @@ class PersonaViewPermissionsTestCase(APITestCase):
             content_type="application/json",
         )
 
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED

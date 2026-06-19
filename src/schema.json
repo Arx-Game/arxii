@@ -15395,7 +15395,16 @@ paths:
   /api/personas/:
     get:
       operationId: personas_list
-      description: ViewSet for managing personas within scenes
+      description: |-
+        Read + actions over a character's personas (#1127 hardening).
+
+        Deliberately **not** a ``ModelViewSet``: the raw create/update/destroy were an
+        undesigned, identity-security-critical surface (a player could POST any
+        ``persona_type`` / ``is_fake_name`` and mint arbitrary alt identities). Personas are
+        created by the system (PRIMARY at character creation) and, in future, by designed IC
+        flows (mask command / disguise kit / formal alternate-identity process) that call the
+        creation at the service layer with their own gating and consequences. This viewset only
+        exposes reads + the player-facing actions (``set-active``, renown, spread, …).
       parameters:
       - in: query
         name: character
@@ -15442,30 +15451,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPersonaList'
           description: ''
-    post:
-      operationId: personas_create
-      description: ViewSet for managing personas within scenes
-      tags:
-      - personas
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PersonaRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Persona'
-          description: ''
   /api/personas/{id}/:
     get:
       operationId: personas_retrieve
-      description: ViewSet for managing personas within scenes
+      description: |-
+        Read + actions over a character's personas (#1127 hardening).
+
+        Deliberately **not** a ``ModelViewSet``: the raw create/update/destroy were an
+        undesigned, identity-security-critical surface (a player could POST any
+        ``persona_type`` / ``is_fake_name`` and mint arbitrary alt identities). Personas are
+        created by the system (PRIMARY at character creation) and, in future, by designed IC
+        flows (mask command / disguise kit / formal alternate-identity process) that call the
+        creation at the service layer with their own gating and consequences. This viewset only
+        exposes reads + the player-facing actions (``set-active``, renown, spread, …).
       parameters:
       - in: path
         name: id
@@ -15484,76 +15482,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Persona'
           description: ''
-    put:
-      operationId: personas_update
-      description: ViewSet for managing personas within scenes
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this persona.
-        required: true
-      tags:
-      - personas
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PersonaRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Persona'
-          description: ''
-    patch:
-      operationId: personas_partial_update
-      description: ViewSet for managing personas within scenes
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this persona.
-        required: true
-      tags:
-      - personas
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedPersonaRequest'
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Persona'
-          description: ''
-    delete:
-      operationId: personas_destroy
-      description: ViewSet for managing personas within scenes
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this persona.
-        required: true
-      tags:
-      - personas
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/personas/{id}/deed-stories/:
     get:
       operationId: personas_deed_stories_list
@@ -35590,36 +35518,6 @@ components:
         offer:
           type: integer
           description: The NPCServiceOffer row this details model decorates.
-    PatchedPersonaRequest:
-      type: object
-      properties:
-        character_sheet:
-          type: integer
-          description: The character sheet this persona belongs to.
-        name:
-          type: string
-          minLength: 1
-          description: Display name for this persona
-          maxLength: 255
-        is_fake_name:
-          type: boolean
-          description: True when this persona obscures the character's identity
-        persona_type:
-          allOf:
-          - $ref: '#/components/schemas/PersonaTypeEnum'
-          description: |-
-            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
-
-            * `primary` - Primary
-            * `established` - Established
-            * `temporary` - Temporary
-        description:
-          type: string
-          description: Physical description text
-        thumbnail_url:
-          type: string
-          format: uri
-          maxLength: 500
     PatchedPlayerFeedbackDetailRequest:
       type: object
       description: Read serializer for staff review.
@@ -36542,39 +36440,6 @@ components:
       - name
       - roster_entry
       - thumbnail_media_url
-    PersonaRequest:
-      type: object
-      properties:
-        character_sheet:
-          type: integer
-          description: The character sheet this persona belongs to.
-        name:
-          type: string
-          minLength: 1
-          description: Display name for this persona
-          maxLength: 255
-        is_fake_name:
-          type: boolean
-          description: True when this persona obscures the character's identity
-        persona_type:
-          allOf:
-          - $ref: '#/components/schemas/PersonaTypeEnum'
-          description: |-
-            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
-
-            * `primary` - Primary
-            * `established` - Established
-            * `temporary` - Temporary
-        description:
-          type: string
-          description: Physical description text
-        thumbnail_url:
-          type: string
-          format: uri
-          maxLength: 500
-      required:
-      - character_sheet
-      - name
     PersonaTypeEnum:
       enum:
       - primary
