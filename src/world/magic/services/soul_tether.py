@@ -541,11 +541,12 @@ def _increment_stat_safe(
     stat_key: str,
     amount: int = 1,
 ) -> None:
-    """Increment an achievement stat by key, no-op if StatDefinition not seeded yet.
+    """Increment an achievement stat by key, no-op if StatDefinition is absent.
 
-    Phase 12 seeds StatDefinition rows for sineating.* stats.
-    Until then this wrapper swallows DoesNotExist so the rest of the
-    Sineating loop can proceed without the seed data.
+    StatDefinition rows for sineating.* stats are seeded via
+    ``wire_soul_tether_stat_definitions`` in factories.  The DoesNotExist guard
+    below is a defensive wrapper for environments where that seed data has not
+    been loaded (e.g. minimal test setups); it does not indicate pending work.
 
     Args:
         character_sheet: The character whose stat to increment.
@@ -558,7 +559,7 @@ def _increment_stat_safe(
     try:
         stat_def = StatDefinition.objects.get(key=stat_key)
     except StatDefinition.DoesNotExist:
-        return  # Phase 12 will seed the row; skip until then
+        return  # Defensive guard: seed data not loaded in this environment; skip.
     increment_stat(character_sheet, stat_def, amount)
 
 
@@ -833,8 +834,9 @@ def resolve_sineating(
                 anima_row.save(update_fields=["current"])
                 anima_deducted = anima_cost
             except CharacterAnima.DoesNotExist:
-                # Sineater has no anima row yet — skip deduction, log TODO.
-                # TODO: Phase 12 — ensure CharacterAnima row is seeded at CG completion.
+                # Defensive guard: CharacterAnima is seeded at CG completion via
+                # finalize_magic_data; this branch is unreachable for post-CG characters
+                # but protects against environments where CG seeding was not run.
                 pass
 
             # 2. Deduct social fatigue from Sineater.
@@ -852,8 +854,9 @@ def resolve_sineating(
                 pool.save(update_fields=["social_current"])
                 fatigue_deducted = fatigue_cost
             except FatiguePool.DoesNotExist:
-                # Sineater has no fatigue pool yet — skip deduction, log TODO.
-                # TODO: Phase 12 — ensure FatiguePool row is seeded at CG completion.
+                # Defensive guard: FatiguePool is seeded at CG completion via
+                # get_or_create_fatigue_pool; this branch is unreachable for post-CG
+                # characters but protects against environments where CG seeding was not run.
                 pass
 
             # 3. Increment Sinner's Thread.hollow_current (clamp to hollow_max).
