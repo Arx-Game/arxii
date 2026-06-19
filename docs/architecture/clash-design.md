@@ -158,8 +158,10 @@ round. This mirrors the `CombatPull` / `CombatPullResolvedEffect` audit pattern.
      (see `outcome_to_delta` and `ClashConfig`). Power sets the magnitude; the check
      outcome is the quality gate.
    - Sum PC deltas; compute the NPC delta from the threat pattern (NPC-side
-     contributions remain on the `npc_delta` model — power-driving the NPC side is a
-     known follow-up); apply the affinity tilt (§8).
+     contributions remain on the `npc_delta` model — the NPC side stays authored-flat
+     **by design**: clash is PvE-asymmetric per the design pillars, so the NPC pushes an authored
+     magnitude rather than a power-scaled one; power-driving it was considered and
+     declined in #976); apply the affinity tilt (§8).
    - Write `ClashRound` + `ClashContribution` rows; update `clash.progress`.
    - Fire `per_round_consequence_pool` if set (visible incremental feedback).
    - Threshold check → if crossed, resolve (fire `resolution_consequence_pool`, set
