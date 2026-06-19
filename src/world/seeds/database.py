@@ -8,7 +8,7 @@ here. Tracked in the #1220 epic.
 
 from __future__ import annotations
 
-from world.seeds.clusters import CLUSTER_SEEDERS
+from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
 from world.seeds.types import SeedReport
 
 
@@ -27,6 +27,4 @@ def seed_dev_database(*, verbose: bool = False) -> SeedReport:
 
 def _row_count() -> int:
     """Coarse global row count across seeded content models (created-delta proxy)."""
-    from world.seeds.clusters import seeded_models  # noqa: PLC0415
-
     return sum(model.objects.count() for model in seeded_models())
