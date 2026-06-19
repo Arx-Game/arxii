@@ -1540,8 +1540,16 @@ def _get_eligible_entries(
 def _select_targets(
     entry: ThreatPoolEntry,
     active_participants: list[CombatParticipant],
+    rotation: int = 0,
 ) -> list[CombatParticipant]:
-    """Select targets for a threat pool entry from active participants."""
+    """Select targets for a threat pool entry from active participants.
+
+    ``rotation`` offsets the deterministic (non-random, non-health-sorted)
+    selection so a swarm's successive attacks fan across distinct PCs rather
+    than dogpiling the first one (#983). It is a no-op for the ALL, RANDOM, and
+    LOWEST_HEALTH modes, which already spread across or intentionally focus the
+    party on their own terms.
+    """
     if not active_participants:
         return []
 
@@ -1577,8 +1585,12 @@ def _select_targets(
 
     # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
     # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
-    # Placeholder: pick first active participants by DB order
-    return list(active_participants[:count])
+    # Placeholder: pick active participants by DB order, rotated so a swarm's
+    # successive attacks fan across distinct PCs instead of all landing on the
+    # first one (#983).
+    offset = rotation % len(active_participants)
+    rotated = active_participants[offset:] + active_participants[:offset]
+    return list(rotated[:count])
 
 
 def _batch_fetch_cooldown_data(
@@ -1701,10 +1713,10 @@ def select_npc_actions(
         else:
             n_attacks = 1
 
-        for _ in range(n_attacks):
+        for attack_index in range(n_attacks):
             weights = [e.weight for e in eligible]
             chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            targets = _select_targets(chosen, active_participants)
+            targets = _select_targets(chosen, active_participants, rotation=attack_index)
             action = CombatOpponentAction.objects.create(
                 opponent=opponent,
                 round_number=encounter.round_number,

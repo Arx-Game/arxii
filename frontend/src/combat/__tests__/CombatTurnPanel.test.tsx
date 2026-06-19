@@ -499,6 +499,32 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
   });
 });
 
+describe('CombatTurnPanel — forced escape banner wiring (#983)', () => {
+  it('renders the ForcedEscapeBanner in live panel state when forced_escape is true', () => {
+    mockEncounter({ is_participant: true, forced_escape: true });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    const banner = screen.getByRole('alert');
+    expect(banner).toHaveTextContent(/you must run/i);
+    // Wired into the live panel alongside the normal sections, not in place of them.
+    expect(screen.getByTestId('round-flow-section')).toBeInTheDocument();
+  });
+
+  it('does not render the ForcedEscapeBanner when forced_escape is false', () => {
+    mockEncounter({ is_participant: true, forced_escape: false });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/you must run/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('CombatTurnPanel — Open Encounter join/leave', () => {
   it('shows Join button for non-participant in open encounter between rounds', () => {
     mockEncounter({

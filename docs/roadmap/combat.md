@@ -279,7 +279,11 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   scales attritionally — `select_npc_actions` emits
   `clamp(ceil(swarm_count / bodies_per_attack), 1, acting_PCs)` attacks/round
   (the one-action-per-opponent unique constraint was dropped; `resolve_round`
-  resolves every swarm action). **Hero Killer** is unbeatable: damage never sets
+  resolves every swarm action). Those attacks **fan across distinct PCs**
+  (#983): single-target selection rotates round-robin per attack, so a swarm
+  spreads over the party rather than dogpiling the first PC — realizing the
+  intent behind capping the count at acting-PC count. **Hero Killer** is
+  unbeatable: damage never sets
   DEFEATED, `_classify_encounter_outcome` forbids VICTORY while one is present, so
   the only resolution is fleeing (FLED via the existing flee pipeline). A derived
   `CombatEncounter.forced_escape` property drives a "you must run" banner in the

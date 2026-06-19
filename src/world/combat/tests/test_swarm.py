@@ -88,6 +88,34 @@ class SwarmOffenseTests(TestCase):
         swarm_actions = [a for a in actions if a.opponent_id == swarm.pk]
         self.assertEqual(len(swarm_actions), 2)
 
+    def test_swarm_fans_attacks_across_distinct_pcs(self):
+        """A swarm's multiple actions spread over distinct PCs, not one (#983).
+
+        The default threat entry targets SINGLE/SPECIFIC_ROLE, which resolves
+        deterministically; before fanning, every swarm action piled onto the
+        same first PC. With ≥2 acting PCs and ≥2 attacks, each action should
+        land on a distinct PC.
+        """
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool)
+        # 30 bodies / 6 per attack = 5 raw, capped at 3 acting PCs → 3 actions.
+        swarm = SwarmOpponentFactory(
+            encounter=encounter,
+            swarm_count=30,
+            bodies_per_attack=6,
+            threat_pool=pool,
+        )
+        participants = [CombatParticipantFactory(encounter=encounter) for _ in range(3)]
+
+        actions = select_npc_actions(encounter)
+
+        swarm_actions = [a for a in actions if a.opponent_id == swarm.pk]
+        self.assertEqual(len(swarm_actions), 3)
+        # Each action is single-target; collect the one PC each hit.
+        targeted_ids = {a.targets.get().pk for a in swarm_actions}
+        self.assertEqual(targeted_ids, {p.pk for p in participants})
+
 
 class SwarmResolutionTests(TestCase):
     """End-to-end: a multi-action swarm resolves multiple attacks per round (#875).
