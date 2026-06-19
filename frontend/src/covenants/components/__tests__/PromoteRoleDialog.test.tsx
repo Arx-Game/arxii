@@ -57,7 +57,10 @@ const makeMembership = (): CharacterCovenantRole =>
       archetype_display: 'Sword',
       speed_rank: 1,
       description: 'The tip of the spear.',
+      parent_role: null,
     },
+    rank: { id: 1, name: 'Vanguard', tier: 1 },
+    viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
     engaged: true,
     joined_at: '2026-01-01T00:00:00Z',
     left_at: null,
@@ -76,7 +79,6 @@ const makeSubrole = (overrides: Partial<CovenantRoleWithParent> = {}): CovenantR
   archetype_display: 'Sword',
   speed_rank: 1,
   description: 'Carries the host into the breach.',
-  is_leadership: false,
   parent_role: 7,
   ...overrides,
 });

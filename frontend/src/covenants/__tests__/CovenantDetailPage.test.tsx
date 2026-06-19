@@ -1,16 +1,16 @@
 /**
- * CovenantDetailPage tests (C9)
+ * CovenantDetailPage tests
  *
- * Covers the page-level wiring done in C9:
- *   1. Existing behavior intact — covenant header (name) + member roster render.
- *   2. The new panels are mounted: BattleStateBanner, RitesPanel, RolePowersPanel
- *      (asserted via lightweight stubs).
- *   3. The viewer's OWN active membership row shows a "Promote" button; a
- *      non-own row does not.
+ * Covers:
+ *   1. Existing behavior intact — covenant header + member roster render.
+ *   2. Panels mounted: BattleStateBanner, RitesPanel, RolePowersPanel, RankManagementPanel.
+ *   3. The viewer's OWN membership row shows Promote; other rows do not.
+ *   4. Kick button gating: shown when viewer has can_kick AND target tier > viewer tier.
+ *   5. Kick button NOT shown when target has equal-or-lower tier number (higher authority).
+ *   6. Rank badge rendered in each member row.
  *
- * Renders the exported `CovenantDetailInner` directly to avoid router param
- * plumbing. Heavy children are stubbed so we assert mounting + props rather
- * than their internals.
+ * Renders CovenantDetailInner directly (avoids router param plumbing).
+ * Heavy children are stubbed to assert mounting + props.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -34,6 +34,9 @@ vi.mock('@/covenants/queries', () => ({
   useDisengageMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useLeaveMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useKickMember: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useCovenantRanks: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+  })),
 }));
 
 vi.mock('@/rituals/queries', () => ({
@@ -44,7 +47,7 @@ vi.mock('@/rituals/queries', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Stub heavy children — assert mounting + key props
+// Stub heavy children
 // ---------------------------------------------------------------------------
 
 vi.mock('@/covenants/components/BattleStateBanner', () => ({
@@ -77,6 +80,12 @@ vi.mock('@/covenants/components/PromoteRoleDialog', () => ({
 vi.mock('@/rituals/components/RitualSessionDraftDialog', () => ({
   RitualSessionDraftDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="induction-dialog" /> : null,
+}));
+
+vi.mock('@/covenants/components/RankManagementPanel', () => ({
+  RankManagementPanel: (props: { covenantId: number }) => (
+    <div data-testid="rank-management-panel">ranks:{props.covenantId}</div>
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -149,6 +158,10 @@ const makeCovenant = (overrides: Partial<CovenantWithBattleState> = {}): Covenan
     ...overrides,
   }) as CovenantWithBattleState;
 
+/**
+ * Build a membership fixture. `viewer_capabilities` defaults to all-false
+ * (non-leader viewer); override to test capability gating.
+ */
 const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): CharacterCovenantRole =>
   ({
     id: 100,
@@ -164,8 +177,10 @@ const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): Charact
       archetype_display: 'Sword',
       speed_rank: 1,
       description: 'The tip of the spear.',
-      is_leadership: false,
+      parent_role: null,
     },
+    rank: { id: 1, name: 'Founder', tier: 1 },
+    viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
     engaged: false,
     joined_at: '2026-01-01T00:00:00Z',
     left_at: null,
@@ -215,7 +230,7 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.getByText('Character #42')).toBeInTheDocument();
   });
 
-  it('mounts BattleStateBanner, RitesPanel, and RolePowersPanel', () => {
+  it('mounts BattleStateBanner, RitesPanel, RolePowersPanel, and RankManagementPanel', () => {
     mockDetail(makeCovenant());
     mockMembers([makeMembership()]);
 
@@ -224,7 +239,8 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.getByTestId('battle-state-banner')).toBeInTheDocument();
     expect(screen.getByTestId('rites-panel')).toHaveTextContent(`rites:${COVENANT_ID}`);
     expect(screen.getByTestId('role-powers-panel')).toHaveTextContent(`powers:${COVENANT_ID}`);
-    // The viewer is an active member, so the membership-aware panels know it.
+    expect(screen.getByTestId('rank-management-panel')).toHaveTextContent(`ranks:${COVENANT_ID}`);
+    // The viewer is an active member, so membership-aware panels know it.
     expect(screen.getByTestId('battle-state-banner')).toHaveAttribute('data-active', 'true');
     expect(screen.getByTestId('rites-panel')).toHaveAttribute('data-active', 'true');
   });
@@ -255,33 +271,21 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.getByTestId('leave-button')).toBeInTheDocument();
   });
 
-  // A nested covenant_role override fully replaces the fixture's role object, so
-  // helpers build the full role with the desired is_leadership flag.
-  const leaderRole = (is_leadership: boolean) => ({
-    id: 7,
-    name: 'Vanguard',
-    slug: 'vanguard',
-    covenant_type: 'battle',
-    covenant_type_display: 'Covenant of Battle',
-    archetype: 'sword',
-    archetype_display: 'Sword',
-    speed_rank: 1,
-    description: 'The tip of the spear.',
-    is_leadership,
-  });
-
-  it('renders a kick-button on a non-leader other row when the viewer is a leader', () => {
+  it('shows kick button when viewer has can_kick and target has strictly higher tier', () => {
+    // Viewer is at tier 1; target is at tier 2 (lower authority → can be kicked).
     mockDetail(makeCovenant());
     mockMembers([
       makeMembership({
         id: 100,
         character_sheet: OWN_SHEET_ID,
-        covenant_role: leaderRole(true) as never,
+        rank: { id: 1, name: 'Founder', tier: 1 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
-        covenant_role: leaderRole(false) as never,
+        rank: { id: 2, name: 'Member', tier: 2 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
       }),
     ]);
 
@@ -291,18 +295,20 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(kickButtons).toHaveLength(1);
   });
 
-  it('renders NO kick-button on a fellow-leader other row', () => {
+  it('renders NO kick button when target has the same tier (equal authority)', () => {
     mockDetail(makeCovenant());
     mockMembers([
       makeMembership({
         id: 100,
         character_sheet: OWN_SHEET_ID,
-        covenant_role: leaderRole(true) as never,
+        rank: { id: 1, name: 'Elder', tier: 2 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
       }),
       makeMembership({
         id: 101,
         character_sheet: 999,
-        covenant_role: leaderRole(true) as never,
+        rank: { id: 2, name: 'Elder', tier: 2 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
       }),
     ]);
 
@@ -311,15 +317,69 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.queryByTestId('kick-button')).not.toBeInTheDocument();
   });
 
-  it('renders no kick-button on any row when the viewer is not a leader', () => {
+  it('renders NO kick button when target has lower tier number (higher authority)', () => {
+    // Viewer tier 3, target tier 1 — viewer cannot kick a superior.
     mockDetail(makeCovenant());
     mockMembers([
-      makeMembership({ id: 100, character_sheet: OWN_SHEET_ID }),
-      makeMembership({ id: 101, character_sheet: 999 }),
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        rank: { id: 3, name: 'Recruit', tier: 3 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        rank: { id: 1, name: 'Founder', tier: 1 },
+        viewer_capabilities: { can_invite: false, can_kick: true, can_manage_ranks: false },
+      }),
     ]);
 
     render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
 
     expect(screen.queryByTestId('kick-button')).not.toBeInTheDocument();
+  });
+
+  it('renders no kick button on any row when viewer lacks can_kick', () => {
+    mockDetail(makeCovenant());
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        rank: { id: 1, name: 'Founder', tier: 1 },
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        rank: { id: 2, name: 'Member', tier: 2 },
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('kick-button')).not.toBeInTheDocument();
+  });
+
+  it('renders a rank badge in each member row', () => {
+    mockDetail(makeCovenant());
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        rank: { id: 1, name: 'Founder', tier: 1 },
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        rank: { id: 2, name: 'Recruit', tier: 3 },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText('Founder')).toBeInTheDocument();
+    expect(screen.getByText('Recruit')).toBeInTheDocument();
   });
 });

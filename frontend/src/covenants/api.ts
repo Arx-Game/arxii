@@ -22,6 +22,16 @@ export type CovenantRole = components['schemas']['CovenantRole'];
 export type PaginatedCovenantList = components['schemas']['PaginatedCovenantList'];
 export type PaginatedCharacterCovenantRoleList =
   components['schemas']['PaginatedCharacterCovenantRoleList'];
+export type CovenantRank = components['schemas']['CovenantRank'];
+export type CovenantRankNested = components['schemas']['CovenantRankNested'];
+export type PaginatedCovenantRankList = components['schemas']['PaginatedCovenantRankList'];
+
+/** Typed cast of the generated `{[key: string]: unknown}` viewer_capabilities block. */
+export interface ViewerCapabilities {
+  can_invite: boolean;
+  can_kick: boolean;
+  can_manage_ranks: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Hand-written schema extensions (until OpenAPI regen at integration; see #518)
@@ -108,6 +118,7 @@ export interface StandDownResult {
 const COVENANTS_URL = '/api/covenants/covenants';
 const CHARACTER_ROLES_URL = '/api/covenants/character-roles';
 const ROLES_URL = '/api/covenants/roles';
+const RANKS_URL = '/api/covenants/ranks';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -301,4 +312,116 @@ export async function getCovenantRoles(params: {
   const res = await apiFetch(`${ROLES_URL}/${query ? `?${query}` : ''}`);
   if (!res.ok) throw new Error('Failed to load covenant roles');
   return res.json() as Promise<CovenantRoleWithParent[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Rank reads
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/covenants/ranks/?covenant={covenantId}
+ * Returns all ranks for the given covenant, ordered by tier.
+ */
+export async function getCovenantRanksForCovenant(
+  covenantId: number
+): Promise<PaginatedCovenantRankList> {
+  const res = await apiFetch(`${RANKS_URL}/?covenant=${covenantId}`);
+  if (!res.ok) throw new Error(`Failed to load ranks for covenant ${covenantId}`);
+  return res.json() as Promise<PaginatedCovenantRankList>;
+}
+
+// ---------------------------------------------------------------------------
+// Rank mutations
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/covenants/ranks/
+ * Create a new rank for the given covenant.
+ */
+export async function createCovenantRank(data: {
+  covenant: number;
+  name: string;
+  tier: number;
+  description?: string;
+  can_invite?: boolean;
+  can_kick?: boolean;
+  can_manage_ranks?: boolean;
+}): Promise<CovenantRank> {
+  const res = await apiFetch(`${RANKS_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to create rank');
+  return res.json() as Promise<CovenantRank>;
+}
+
+/**
+ * PATCH /api/covenants/ranks/{id}/
+ * Partial-update a rank (rename, toggle capability flags).
+ */
+export async function updateCovenantRank(
+  id: number,
+  data: Partial<{
+    name: string;
+    description: string;
+    can_invite: boolean;
+    can_kick: boolean;
+    can_manage_ranks: boolean;
+  }>
+): Promise<CovenantRank> {
+  const res = await apiFetch(`${RANKS_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to update rank');
+  return res.json() as Promise<CovenantRank>;
+}
+
+/**
+ * DELETE /api/covenants/ranks/{id}/
+ * Delete a rank, reassigning its members to `reassignTo`.
+ */
+export async function deleteCovenantRank(id: number, reassignTo: number): Promise<void> {
+  const res = await apiFetch(`${RANKS_URL}/${id}/`, {
+    method: 'DELETE',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ reassign_to: reassignTo }),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to delete rank');
+}
+
+/**
+ * POST /api/covenants/ranks/{rankId}/assign-member/
+ * Assign a member to this rank.
+ */
+export async function assignMemberToRank(
+  rankId: number,
+  membershipId: number
+): Promise<CharacterCovenantRole> {
+  const res = await apiFetch(`${RANKS_URL}/${rankId}/assign-member/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ membership: membershipId }),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to assign member to rank');
+  return res.json() as Promise<CharacterCovenantRole>;
+}
+
+/**
+ * POST /api/covenants/ranks/reorder/
+ * Reorder all ranks for a covenant.
+ */
+export async function reorderRanks(
+  covenantId: number,
+  orderedRankIds: number[]
+): Promise<PaginatedCovenantRankList> {
+  const res = await apiFetch(`${RANKS_URL}/reorder/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ covenant: covenantId, ordered_rank_ids: orderedRankIds }),
+  });
+  if (!res.ok) await parseErrorDetail(res, 'Failed to reorder ranks');
+  return res.json() as Promise<PaginatedCovenantRankList>;
 }

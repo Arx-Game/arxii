@@ -19,6 +19,7 @@ export const covenantKeys = {
   members: (covenantId: number) => [...covenantKeys.all, 'members', covenantId] as const,
   powers: (covenantId: number) => [...covenantKeys.all, 'powers', covenantId] as const,
   subroles: (parentRoleId: number) => [...covenantKeys.all, 'subroles', parentRoleId] as const,
+  ranks: (covenantId: number) => [...covenantKeys.all, 'ranks', covenantId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,92 @@ export function useStandDownCovenant(covenantId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: covenantKeys.powers(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Rank hooks
+// ---------------------------------------------------------------------------
+
+export function useCovenantRanks(covenantId: number) {
+  return useQuery({
+    queryKey: covenantKeys.ranks(covenantId),
+    queryFn: () => api.getCovenantRanksForCovenant(covenantId),
+    enabled: covenantId > 0,
+    throwOnError: true,
+  });
+}
+
+export function useCreateRank(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      covenant: number;
+      name: string;
+      tier: number;
+      description?: string;
+      can_invite?: boolean;
+      can_kick?: boolean;
+      can_manage_ranks?: boolean;
+    }) => api.createCovenantRank(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useUpdateRank(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: number;
+      data: Partial<{
+        name: string;
+        description: string;
+        can_invite: boolean;
+        can_kick: boolean;
+        can_manage_ranks: boolean;
+      }>;
+    }) => api.updateCovenantRank(vars.id, vars.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useDeleteRank(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { rankId: number; reassignTo: number }) =>
+      api.deleteCovenantRank(vars.rankId, vars.reassignTo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useAssignMemberToRank(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { rankId: number; membershipId: number }) =>
+      api.assignMemberToRank(vars.rankId, vars.membershipId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.members(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+export function useReorderRanks(covenantId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { orderedRankIds: number[] }) =>
+      api.reorderRanks(covenantId, vars.orderedRankIds),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.ranks(covenantId) }).catch(() => {});
     },
   });
 }

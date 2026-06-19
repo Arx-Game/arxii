@@ -46,7 +46,8 @@ import { BattleStateBanner } from '@/covenants/components/BattleStateBanner';
 import { RitesPanel } from '@/covenants/components/RitesPanel';
 import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
 import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
-import type { CharacterCovenantRole } from '@/covenants/api';
+import { RankManagementPanel } from '@/covenants/components/RankManagementPanel';
+import type { CharacterCovenantRole, ViewerCapabilities } from '@/covenants/api';
 import type { RitualWithSchema, RitualInputSchema } from '@/rituals/types';
 
 // ---------------------------------------------------------------------------
@@ -77,11 +78,18 @@ function DetailSkeleton() {
 interface MemberRowProps {
   membership: CharacterCovenantRole;
   isOwnMembership: boolean;
-  viewerIsLeader: boolean;
+  viewerCapabilities: ViewerCapabilities;
+  viewerRankTier: number;
   covenantId: number;
 }
 
-function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: MemberRowProps) {
+function MemberRow({
+  membership,
+  isOwnMembership,
+  viewerCapabilities,
+  viewerRankTier,
+  covenantId,
+}: MemberRowProps) {
   const engage = useEngageMembership(covenantId);
   const disengage = useDisengageMembership(covenantId);
   const leave = useLeaveMembership(covenantId);
@@ -91,7 +99,13 @@ function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: 
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
-  const canKick = viewerIsLeader && !role.is_leadership && !isOwnMembership && membership.is_active;
+  // can_kick is true when: viewer has the capability, target is not own row, target is active,
+  // and target has a strictly higher tier number (lower authority) than the viewer.
+  const canKick =
+    viewerCapabilities.can_kick &&
+    !isOwnMembership &&
+    membership.is_active &&
+    membership.rank.tier > viewerRankTier;
 
   function handleEngage() {
     engage.mutate(membership.id);
@@ -115,8 +129,11 @@ function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: 
       data-testid="member-row"
     >
       <div className="min-w-0 flex-1 space-y-0.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">Character #{characterSheetId}</span>
+          <Badge variant="secondary" className="text-xs">
+            {membership.rank.name}
+          </Badge>
           <Badge variant="outline" className="text-xs">
             {role.name}
           </Badge>
@@ -276,7 +293,15 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
     : null;
 
   const isActiveMember = ownMembership !== null;
-  const viewerIsLeader = ownMembership?.covenant_role.is_leadership ?? false;
+
+  // viewer_capabilities is the same value on every row in one covenant (server memoizes it);
+  // read it from the first result. Cast from the generated {[key: string]: unknown} shape.
+  const viewerCapabilities: ViewerCapabilities = (membersPage?.results?.[0]?.viewer_capabilities as
+    | ViewerCapabilities
+    | undefined) ?? { can_invite: false, can_kick: false, can_manage_ranks: false };
+
+  // Viewer's own rank tier (or Infinity = lowest authority if not a member).
+  const viewerRankTier: number = ownMembership?.rank?.tier ?? Infinity;
 
   // Find induction ritual
   const allRituals = !ritualsLoading ? ((ritualsData?.results ?? []) as RitualWithSchema[]) : [];
@@ -346,7 +371,8 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
                 key={membership.id}
                 membership={membership}
                 isOwnMembership={membership.character_sheet === characterSheetId}
-                viewerIsLeader={viewerIsLeader}
+                viewerCapabilities={viewerCapabilities}
+                viewerRankTier={viewerRankTier}
                 covenantId={covenantId}
               />
             ))}
@@ -366,6 +392,11 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
       {/* Per-member passive role powers */}
       <section>
         <RolePowersPanel covenantId={covenantId} />
+      </section>
+
+      {/* Rank ladder management (visible to members with can_manage_ranks) */}
+      <section>
+        <RankManagementPanel covenantId={covenantId} viewerCapabilities={viewerCapabilities} />
       </section>
 
       {/* Induction dialog */}
