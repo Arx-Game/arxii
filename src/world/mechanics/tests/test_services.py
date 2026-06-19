@@ -945,3 +945,41 @@ class EquipmentWalkRawObjectDBSafetyTests(TestCase):
         from world.mechanics.services import get_modifier_total
 
         self.assertEqual(get_modifier_total(self.sheet, self.target), 0)
+
+
+class ItemMundaneStatForTargetTests(TestCase):
+    """Tests for item_mundane_stat_for_target — reads effective_* from ItemInstance (#985)."""
+
+    def test_weapon_damage_target_returns_effective_weapon_damage(self) -> None:
+        from world.combat.factories import wire_weapon_damage_modifier_target
+        from world.items.constants import GearArchetype
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+        from world.mechanics.services import item_mundane_stat_for_target
+
+        target = wire_weapon_damage_modifier_target()
+        template = ItemTemplateFactory(
+            gear_archetype=GearArchetype.MELEE_ONE_HAND, base_weapon_damage=7
+        )
+        item = ItemInstanceFactory(template=template)
+        self.assertEqual(item_mundane_stat_for_target(item, target), item.effective_weapon_damage)
+        self.assertGreater(item_mundane_stat_for_target(item, target), 0)
+
+    def test_armor_soak_target_returns_effective_armor_soak(self) -> None:
+        from world.combat.factories import wire_armor_soak_modifier_target
+        from world.items.constants import GearArchetype
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+        from world.mechanics.services import item_mundane_stat_for_target
+
+        target = wire_armor_soak_modifier_target()
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.LIGHT_ARMOR, base_armor_soak=5)
+        item = ItemInstanceFactory(template=template)
+        self.assertEqual(item_mundane_stat_for_target(item, target), item.effective_armor_soak)
+        self.assertGreater(item_mundane_stat_for_target(item, target), 0)
+
+    def test_unrelated_target_returns_zero(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.mechanics.services import item_mundane_stat_for_target
+
+        target = ModifierTargetFactory(name="SomethingElse")
+        item = ItemInstanceFactory()
+        self.assertEqual(item_mundane_stat_for_target(item, target), 0)

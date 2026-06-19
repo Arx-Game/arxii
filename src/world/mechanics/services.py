@@ -632,11 +632,23 @@ def role_base_bonus_for_target(
     return character_level * config.bonus_per_level
 
 
-def item_mundane_stat_for_target(
-    item: ItemInstance,  # noqa: ARG001
-    target: ModifierTarget,  # noqa: ARG001
-) -> int:
-    """PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat."""
+def item_mundane_stat_for_target(item: ItemInstance, target: ModifierTarget) -> int:
+    """Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).
+
+    Reads the per-instance derived combat stats shipped by #508 — quality-scaled
+    and already 0 for the wrong archetype. weapon_damage / armor_soak targets only;
+    every other target → 0. (No ItemCombatStat model exists — #508 put these
+    directly on ItemTemplate/ItemInstance.)
+    """
+    from world.items.constants import (  # noqa: PLC0415
+        ARMOR_SOAK_TARGET_NAME,
+        WEAPON_DAMAGE_TARGET_NAME,
+    )
+
+    if target.name == WEAPON_DAMAGE_TARGET_NAME:
+        return item.effective_weapon_damage
+    if target.name == ARMOR_SOAK_TARGET_NAME:
+        return item.effective_armor_soak
     return 0
 
 
