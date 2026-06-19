@@ -100,7 +100,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
 )
-from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig
+from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig, StandingCapBand
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
@@ -272,6 +272,8 @@ __all__ = [
     "SineatingPendingOffer",
     "SoulTetherRescue",
     "SoulfrayConfig",
+    # power config — per-level standing cap bands (#853)
+    "StandingCapBand",
     # endorsement (Spec C style presentation — #1152)
     "StylePresentationEndorsement",
     "Technique",

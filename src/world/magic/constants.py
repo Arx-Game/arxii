@@ -9,6 +9,13 @@ class CantripArchetype(models.TextChoices):
     UTILITY = "utility", "Utility"
 
 
+class StandingCapMode(models.TextChoices):
+    """Mode for a StandingCapBand: hard clamp vs. soft diminish (#853)."""
+
+    HARD = "HARD", "Hard (clamp to cap)"
+    SOFT = "SOFT", "Soft (diminish excess above cap)"
+
+
 class AlterationKind(models.TextChoices):
     """Discriminator on MagicalAlterationTemplate (MAGE_SCAR vs CORRUPTION_TWIST)."""
 

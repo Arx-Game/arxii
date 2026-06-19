@@ -851,3 +851,29 @@ class CastPullDeclarationTests(TestCase):
         self.assertEqual(decl.threads, (thread,))
         with self.assertRaises(dataclasses.FrozenInstanceError):
             decl.tier = 3  # frozen
+
+
+class StandingCapBandModelTests(TestCase):
+    def test_factory_creates_band(self):
+        from world.magic.factories import StandingCapBandFactory
+
+        band = StandingCapBandFactory(min_level=1, cap=50)
+        self.assertEqual(band.min_level, 1)
+        self.assertEqual(band.cap, 50)
+
+    def test_hard_band_rejects_nonzero_diminish(self):
+        from django.core.exceptions import ValidationError
+
+        from world.magic.constants import StandingCapMode
+        from world.magic.models import StandingCapBand
+
+        band = StandingCapBand(min_level=1, cap=50, mode=StandingCapMode.HARD, diminish_pct=25)
+        with self.assertRaises(ValidationError):
+            band.full_clean()
+
+    def test_soft_band_allows_diminish(self):
+        from world.magic.constants import StandingCapMode
+        from world.magic.models import StandingCapBand
+
+        band = StandingCapBand(min_level=6, cap=100, mode=StandingCapMode.SOFT, diminish_pct=50)
+        band.full_clean()  # no raise
