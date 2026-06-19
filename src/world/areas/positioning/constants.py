@@ -8,3 +8,6 @@ class PositionKind(models.TextChoices):
     ELEVATED = "elevated", "Elevated"  # catwalk, balcony rim
     BARRIER_SIDE = "barrier_side", "Barrier Side"  # reserved; dynamic carving
     CHASM = "chasm", "Chasm"  # below-ground level; entering it emits FELL (#1018)
+
+
+AERIAL_PROPERTY_NAME = "aerial"
