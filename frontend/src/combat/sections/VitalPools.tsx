@@ -18,6 +18,7 @@
  * Phase 8, Task 8.2 — unified-combat-ui plan.
  */
 
+import { StatBar } from '@/components/character/StatBar';
 import { cn } from '@/lib/utils';
 import { useCharacterAnima } from '@/magic/queries';
 import type { EncounterDetail, Participant } from '../types';
@@ -55,41 +56,6 @@ export function findOwnParticipant(
   characterSheetId: number
 ): Participant | undefined {
   return participants.find((p) => p.character_sheet_id === characterSheetId);
-}
-
-// ---------------------------------------------------------------------------
-// BarRow — labelled horizontal bar
-// ---------------------------------------------------------------------------
-
-interface BarRowProps {
-  label: string;
-  current: number;
-  maximum: number;
-  /** Tailwind fill class, e.g. 'bg-primary' or 'bg-amber-500'. */
-  fillClass?: string;
-  testId?: string;
-}
-
-function BarRow({ label, current, maximum, fillClass = 'bg-primary', testId }: BarRowProps) {
-  const pct = maximum > 0 ? Math.min(100, (current / maximum) * 100) : 0;
-  return (
-    <div className="space-y-1" data-testid={testId}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-foreground">{label}</span>
-        <span className="font-mono text-xs text-foreground">
-          {current}
-          <span className="text-muted-foreground"> / {maximum}</span>
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn('h-full rounded-full transition-all', fillClass)}
-          style={{ width: `${pct}%` }}
-          data-testid={testId !== undefined ? `${testId}-fill` : undefined}
-        />
-      </div>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -154,42 +120,32 @@ export function VitalPools({
       {!collapsed && (
         <div className="space-y-3 border-t border-border px-3 py-2">
           {/* Health */}
-          {health !== null && maxHealth !== null ? (
-            <BarRow
-              label="Health"
-              current={health}
-              maximum={maxHealth}
-              fillClass={isWounded ? 'bg-amber-500' : 'bg-emerald-500'}
-              testId="vital-health-bar"
-            />
-          ) : (
-            <div className="space-y-1" data-testid="vital-health-bar">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground">Health</span>
-                <span className="text-xs text-muted-foreground">—</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted" />
-            </div>
-          )}
+          <StatBar
+            label="Health"
+            valueText={health !== null && maxHealth !== null ? `${health} / ${maxHealth}` : '—'}
+            percent={healthPct !== null ? healthPct * 100 : 0}
+            fillClass={isWounded ? 'bg-amber-500' : 'bg-emerald-500'}
+            testId="vital-health-bar"
+          />
 
           {/* Anima */}
-          {!animaLoading && animaCurrent !== null && animaMaximum !== null ? (
-            <BarRow
-              label="Anima"
-              current={animaCurrent}
-              maximum={animaMaximum}
-              fillClass="bg-violet-500"
-              testId="vital-anima-bar"
-            />
-          ) : (
-            <div className="space-y-1" data-testid="vital-anima-bar">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-foreground">Anima</span>
-                <span className="text-xs text-muted-foreground">{animaLoading ? '…' : '—'}</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted" />
-            </div>
-          )}
+          <StatBar
+            label="Anima"
+            valueText={
+              !animaLoading && animaCurrent !== null && animaMaximum !== null
+                ? `${animaCurrent} / ${animaMaximum}`
+                : animaLoading
+                  ? '…'
+                  : '—'
+            }
+            percent={
+              animaCurrent !== null && animaMaximum !== null && animaMaximum > 0
+                ? (animaCurrent / animaMaximum) * 100
+                : 0
+            }
+            fillClass="bg-violet-500"
+            testId="vital-anima-bar"
+          />
 
           {/* Fatigue (Physical / Social / Mental) — real values from the
            * viewer's participant row. Hidden entirely when fatigue is null
@@ -199,25 +155,16 @@ export function VitalPools({
               const pool = fatigue[key];
               const current = pool?.current ?? 0;
               const capacity = pool?.capacity ?? 0;
-              const pct = capacity > 0 ? Math.min(100, Math.max(0, (current / capacity) * 100)) : 0;
-              const testId = `vital-fatigue-${key}-bar`;
+              const pct = capacity > 0 ? (current / capacity) * 100 : 0;
               return (
-                <div key={key} className="space-y-1" data-testid={testId}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-foreground">{label} Fatigue</span>
-                    <span className="font-mono text-xs text-foreground">
-                      {current}
-                      <span className="text-muted-foreground"> / {capacity}</span>
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-orange-500 transition-all"
-                      style={{ width: `${pct}%` }}
-                      data-testid={`${testId}-fill`}
-                    />
-                  </div>
-                </div>
+                <StatBar
+                  key={key}
+                  label={`${label} Fatigue`}
+                  valueText={`${current} / ${capacity}`}
+                  percent={pct}
+                  fillClass="bg-orange-500"
+                  testId={`vital-fatigue-${key}-bar`}
+                />
               );
             })}
         </div>

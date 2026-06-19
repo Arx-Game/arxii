@@ -1,15 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
-import type { FatigueStatus } from '@/fatigue/fatigueQueries';
 
 export type CharacterStatus = components['schemas']['CharacterVitalsStatusEnum'];
 
-export type CharacterVitalsData = Omit<components['schemas']['CharacterVitals'], 'fatigue'> & {
-  // Generated VitalsFatigue types zone as plain string; FatigueStatus keeps the
-  // FatigueZone union that FatigueBars' Record lookups depend on.
-  fatigue: FatigueStatus;
-};
+// `fatigue.*.zone` is now a generated enum (FatiguePoolStatusSerializer's
+// ChoiceField), so the generated CharacterVitals already carries the union that
+// FatigueBars' Record lookups depend on — no hand-written override needed.
+export type CharacterVitalsData = components['schemas']['CharacterVitals'];
 
 /**
  * Fetch the vitals panel payload for a character (CharacterSheet pk).

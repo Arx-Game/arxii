@@ -90,6 +90,18 @@ class Covenant(SharedMemoryModel):
             "cannot be engaged. Never True for DURANCE or CAMPAIGN covenants."
         ),
     )
+    campaign_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ended_campaigns",
+        help_text=(
+            "CAMPAIGN battle covenants only: the defining story whose completion "
+            "dissolves this campaign. SET_NULL so deleting the story does not "
+            "cascade-delete the covenant. Empty for STANDING/DURANCE covenants."
+        ),
+    )
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.organization_id is None:
@@ -141,6 +153,10 @@ class Covenant(SharedMemoryModel):
                 raise ValidationError({"is_dormant": "Only Battle covenants may be dormant."})
         if self.is_dormant and self.battle_binding != BattleBinding.STANDING:
             raise ValidationError({"is_dormant": "Only STANDING battle covenants may be dormant."})
+        if self.campaign_story_id and self.battle_binding != BattleBinding.CAMPAIGN:
+            raise ValidationError(
+                {"campaign_story": "Only CAMPAIGN battle covenants may set campaign_story."}
+            )
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.magic.constants import StandingCapMode
 
 
 class LevelPowerConfig(SharedMemoryModel):
@@ -55,10 +59,6 @@ class AuraPowerConfig(SharedMemoryModel):
             "scene reactions). Uses lifetime_earned, not spendable balance."
         ),
     )
-    resonance_standing_cap = models.PositiveIntegerField(
-        default=0,
-        help_text="Soft cap on the resonance-standing axis (0 = uncapped).",
-    )
 
     class Meta:
         verbose_name = "Aura Power Config"
@@ -67,6 +67,50 @@ class AuraPowerConfig(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"AuraPowerConfig(align={self.affinity_alignment_bonus},"
-            f" standing={self.resonance_standing_bonus},"
-            f" cap={self.resonance_standing_cap})"
+            f" standing={self.resonance_standing_bonus})"
         )
+
+
+class StandingCapBand(SharedMemoryModel):
+    """Per-character-level cap band for the resonance-standing power term (#853).
+
+    Staff author one row per level threshold. The band with the greatest
+    ``min_level`` <= the caster's ``current_level`` sets the cap. HARD clamps to
+    ``cap``; SOFT keeps ``diminish_pct`` percent of the excess above ``cap``. No
+    bands authored = uncapped (the term stays opt-in).
+    """
+
+    min_level = models.PositiveIntegerField(
+        unique=True,
+        help_text="Lowest character current_level at which this band applies.",
+    )
+    cap = models.PositiveIntegerField(
+        help_text="Cap on the resonance-standing power contribution at this band.",
+    )
+    mode = models.CharField(
+        max_length=4,
+        choices=StandingCapMode.choices,
+        default=StandingCapMode.HARD,
+        help_text="HARD clamps to cap; SOFT diminishes the excess above cap.",
+    )
+    diminish_pct = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "SOFT only: percent (0-100) of each point above cap that still "
+            "counts. Ignored for HARD."
+        ),
+    )
+
+    class Meta:
+        ordering = ["min_level"]
+        verbose_name = "Standing Cap Band"
+        verbose_name_plural = "Standing Cap Bands"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.mode == StandingCapMode.HARD and self.diminish_pct:
+            raise ValidationError({"diminish_pct": "diminish_pct must be 0 for HARD bands."})
+
+    def __str__(self) -> str:
+        return f"StandingCapBand(L{self.min_level}+, cap={self.cap}, {self.mode})"

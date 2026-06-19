@@ -39,6 +39,7 @@ from world.magic.models import (
     SceneEntryEndorsement,
     SoulfrayConfig,
     SoulTetherConfig,
+    StandingCapBand,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
@@ -407,6 +408,14 @@ class LevelPowerConfigAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(StandingCapBand)
+class StandingCapBandAdmin(admin.ModelAdmin):
+    """Staff authoring surface for per-level resonance-standing cap bands (#853)."""
+
+    list_display = ("min_level", "cap", "mode", "diminish_pct")
+    ordering = ("min_level",)
 
 
 @admin.register(ResonanceGainConfig)

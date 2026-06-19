@@ -6,13 +6,18 @@ from world.stories.constants import ProgressStatus, StoryMaturity
 from world.stories.models import Episode
 from world.stories.types import AnyStoryProgress
 
+# Terminal pointer states: the run is over and no longer live. COMPLETED means
+# it genuinely reached an ending; FORECLOSED means its story was concluded while
+# the run was still in flight (honest "unresolved", not a false completion).
+TERMINAL_PROGRESS_STATUSES = (ProgressStatus.COMPLETED, ProgressStatus.FORECLOSED)
+
 
 def set_progress_status(progress: AnyStoryProgress, status: ProgressStatus) -> None:
-    """Set status on any progress type. COMPLETED also clears is_active;
-    every other status keeps is_active True (the story is still live, just
-    paused)."""
+    """Set status on any progress type. A terminal status (COMPLETED or
+    FORECLOSED) clears is_active; every other status keeps is_active True (the
+    story is still live, just paused)."""
     progress.status = status
-    progress.is_active = status != ProgressStatus.COMPLETED
+    progress.is_active = status not in TERMINAL_PROGRESS_STATUSES
     # last_advanced_at is auto_now; omitting it from update_fields preserves
     # its prior value. A status-only flip is NOT a forward advance, so the
     # staleness clock (days_waiting / stale_stories) must not be reset here.

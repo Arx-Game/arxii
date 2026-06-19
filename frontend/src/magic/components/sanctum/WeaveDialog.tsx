@@ -30,16 +30,12 @@ import {
 
 import { useWeaveSanctumThread } from '../../sanctumQueries';
 import type { SanctumDetails, SanctumSlotKind } from '../../sanctumTypes';
+import { extractErrorMessage } from '@/lib/errors';
 
 export interface WeaveDialogProps {
   sanctum: SanctumDetails;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to weave Sanctum thread';
 }
 
 const SLOT_LABELS: Record<SanctumSlotKind, string> = {
@@ -89,7 +85,9 @@ export function WeaveDialog({ sanctum, open, onOpenChange }: Readonly<WeaveDialo
             </Select>
           </div>
           {mutation.isError ? (
-            <p className="text-sm text-destructive">{extractErrorMessage(mutation.error)}</p>
+            <p className="text-sm text-destructive">
+              {extractErrorMessage(mutation.error, 'Failed to weave Sanctum thread')}
+            </p>
           ) : null}
         </div>
 

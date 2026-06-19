@@ -37,12 +37,18 @@ class BeatKind(models.TextChoices):
 
 class ProgressStatus(models.TextChoices):
     """Finer-grained pointer state. is_active stays True for ACTIVE /
-    WAITING_FOR_GM / RESTING; only COMPLETED sets is_active False."""
+    WAITING_FOR_GM / RESTING; COMPLETED and FORECLOSED set is_active False.
+
+    FORECLOSED is the honest terminal state for a run still in flight when its
+    story is concluded: distinct from COMPLETED (the run genuinely reached an
+    ending) so an unfinished thread is never falsely reported done, nor left
+    orphaned in a live state."""
 
     ACTIVE = "active", "Active"
     WAITING_FOR_GM = "waiting_for_gm", "Waiting for GM"
     RESTING = "resting", "Resting"
     COMPLETED = "completed", "Completed"
+    FORECLOSED = "foreclosed", "Foreclosed (story ended; thread unresolved)"
 
 
 class BeatPredicateType(models.TextChoices):

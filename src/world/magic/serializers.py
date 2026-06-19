@@ -9,6 +9,7 @@ Affinities and Resonances are proper domain models in the magic app.
 
 from typing import TYPE_CHECKING
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
@@ -2320,6 +2321,7 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
             )
         return cache[pk]
 
+    @extend_schema_field(EligiblePathSerializer(many=True))
     def get_eligible_paths(self, obj: object) -> list:
         """Eligible child paths serialized through EligiblePathSerializer."""
         paths = self._eligible_paths_for_obj(obj)
@@ -2352,12 +2354,14 @@ class AudereMajoraRespondSerializer(serializers.Serializer):
     offer_id = serializers.IntegerField()
     accept = serializers.BooleanField()
     path_id = serializers.IntegerField(required=False, allow_null=True)
+    # No `default=""`: the validate()/create() `.get(..., "")` fallbacks already
+    # cover omission, and a default would make drf-spectacular mark the field
+    # required in the generated request schema (decline call-sites omit it).
     declaration_text = serializers.CharField(
         required=False,
         allow_blank=True,
         max_length=4000,
         trim_whitespace=True,
-        default="",
     )
 
     def validate_offer_id(self, value: int):

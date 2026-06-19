@@ -1,22 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
 
-export type FatigueZone = 'fresh' | 'strained' | 'tired' | 'overexerted' | 'exhausted';
-
-export interface FatiguePoolStatus {
-  current: number;
-  capacity: number;
-  percentage: number;
-  zone: FatigueZone;
-}
-
-export interface FatigueStatus {
-  physical: FatiguePoolStatus;
-  social: FatiguePoolStatus;
-  mental: FatiguePoolStatus;
-  well_rested: boolean;
-  rested_today: boolean;
-}
+// Sourced from the generated OpenAPI schema. `zone` is a ChoiceField on the wire
+// (FatiguePoolStatusSerializer), so the union is generated, not hand-written.
+export type FatigueZone = components['schemas']['ZoneEnum'];
+export type FatiguePoolStatus = components['schemas']['FatiguePoolStatus'];
+export type FatigueStatus = components['schemas']['VitalsFatigue'];
 
 export async function restCommand(): Promise<{ detail: string }> {
   const res = await apiFetch('/api/fatigue/rest/', { method: 'POST' });

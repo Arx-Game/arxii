@@ -941,6 +941,7 @@
   - research_projects <- clues.ResearchProjectDetails
   - room_placements <- clues.RoomClue
   - trigger_placements <- clues.ClueTrigger
+  - item_trigger_placements <- clues.ItemClueTrigger
 
 ### CharacterClue
 **Foreign Keys:**
@@ -962,11 +963,17 @@
   - room_profile -> evennia_extensions.RoomProfile [FK]
   - clue -> clues.Clue [FK]
 
+### ItemClueTrigger
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [FK]
+  - clue -> clues.Clue [FK]
+
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' — Record that a character has found a clue (idempotent).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' — Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' — AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' — Grant clues triggered passively by entering ``room`` (#1160).`
+- `maybe_grant_item_acquisition_clues(character: 'ObjectDB', item: 'ItemInstance') -> 'list[Clue]' — Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).`
 - `plant_rescue_clue(captivity: 'Captivity', room_profile: 'RoomProfile', *, name: 'str', description: 'str', detect_difficulty: 'int' = 0) -> 'RoomClue' — Plant a discoverable rescue clue at a location for a held captive (#931 Phase 4).`
 - `search_room(character: 'ObjectDB', room_profile: 'RoomProfile', search_check_type: 'CheckType') -> 'list[Clue]' — Search a room: roll ``search_check_type`` against each hidden clue's difficulty.`
 - `target_already_known(clue: 'Clue', roster_entry: 'RosterEntry') -> 'bool' — Whether the character already has what this clue points at.`
@@ -1224,7 +1231,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x73b727209550>, default_factory=<dataclasses._MISSING_TYPE object at 0x73b727209550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x73b727209550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>, default_factory=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1262,6 +1269,7 @@
 **Foreign Keys:**
   - legend_summary -> societies.CovenantLegendSummary [OneToOne] (nullable)
   - organization -> societies.Organization [OneToOne]
+  - campaign_story -> stories.Story [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
@@ -1334,7 +1342,7 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
-- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '') -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
+- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
@@ -1845,6 +1853,8 @@
 ### LevelPowerConfig
 
 ### AuraPowerConfig
+
+### StandingCapBand
 
 ### MagicProgressionMilestone
 **Foreign Keys:**
@@ -2544,7 +2554,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x73b727209550>, default_factory=<dataclasses._MISSING_TYPE object at 0x73b727209550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x73b727209550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>, default_factory=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x77d19e0cd550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3316,13 +3326,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x73b7233ffdc0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x77d19a1f3ea0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x73b7233ffdc0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x77d19a1f3ea0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -3536,6 +3546,7 @@
   - bulletin_posts <- stories.TableBulletinPost
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
+  - ended_campaigns <- covenants.Covenant
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute

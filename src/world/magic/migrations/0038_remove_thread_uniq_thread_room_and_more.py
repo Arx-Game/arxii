@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("classes", "0004_alter_characterclasslevel_level"),
         ("covenants", "0010_covenantrole_is_leadership"),
         ("items", "0019_fashionstyle_in_vogue_styles"),
-        ("magic", "0035_furyconfig_furytier"),
+        ("magic", "0037_remove_aurapowerconfig_resonance_standing_cap"),
         ("relationships", "0003_relationshiptrack_fuels_escalation_spikes"),
         ("traits", "0001_initial"),
     ]

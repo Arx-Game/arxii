@@ -20,5 +20,5 @@ class BackboneConstantsTests(SimpleTestCase):
     def test_progress_status_members(self):
         self.assertEqual(
             set(ProgressStatus.values),
-            {"active", "waiting_for_gm", "resting", "completed"},
+            {"active", "waiting_for_gm", "resting", "completed", "foreclosed"},
         )

@@ -147,12 +147,16 @@ export function usePendingStageAdvanceOffers() {
 
 /**
  * Fetch the caller's threads (account-scoped, excluding retired).
+ *
+ * Pass ``{ enabled: false }`` to defer the fetch (e.g. until a cast dialog is
+ * open). Defaults to ``true`` so all existing callers are unaffected.
  */
-export function useThreads() {
+export function useThreads(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: magicKeys.threadList(),
     queryFn: () => api.getThreads(),
     throwOnError: true,
+    enabled: options?.enabled ?? true,
   });
 }
 

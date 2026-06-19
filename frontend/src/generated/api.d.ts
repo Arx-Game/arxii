@@ -11503,6 +11503,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/complete/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/complete/ — conclude a story.
+     *
+     *     Lead GM on the story (or staff) marks the story COMPLETED; in-flight
+     *     progress is foreclosed (see complete_story). Idempotent. No request
+     *     body; permission gating is the only access control.
+     */
+    post: operations['stories_complete_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/detach-from-table/': {
     parameters: {
       query?: never;
@@ -12495,6 +12518,22 @@ export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
     /**
+     * @description Write serializer for forming a Soul Tether (Spec B §12).
+     *
+     *     ``actor_sheet_id`` identifies the character sheet of the requesting account.
+     *     ``partner_sheet_id`` identifies the partner's character sheet.
+     *     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
+     *     ``resonance_id`` selects the resonance for the Sinner's Thread.
+     *     ``writeup`` is the narrative description of the bond (20+ chars).
+     */
+    AcceptSoulTetherRequest: {
+      actor_sheet_id: number;
+      partner_sheet_id: number;
+      sinner_role: components['schemas']['SinnerRoleEnum'];
+      resonance_id: number;
+      writeup: string;
+    };
+    /**
      * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
      *
      *     Optional ``learner_sheet_id`` disambiguates the learner when the requesting
@@ -12732,6 +12771,34 @@ export interface components {
      * @enum {string}
      */
     AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
+    /** @description Read serializer for AudereMajoraCrossingResult dataclass. */
+    AudereMajoraCrossingResult: {
+      accepted: boolean;
+      level_before: number;
+      level_after: number;
+      chosen_path_name: string;
+      advisory_text: string;
+      declaration_interaction_id: number | null;
+    };
+    /** @description Write serializer for the player's Crossing decision. accept=false declines. */
+    AudereMajoraRespondRequest: {
+      offer_id: number;
+      accept: boolean;
+      path_id?: number | null;
+      declaration_text?: string;
+    };
+    /** @description Read serializer for AudereOfferResult (audere.py dataclass). */
+    AudereOfferResult: {
+      accepted: boolean;
+      intensity_bonus_applied: number;
+      anima_pool_expanded_by: number;
+      advisory_text: string;
+    };
+    /** @description Write serializer for the player's Audere decision. accept=false declines. */
+    AudereRespondRequest: {
+      offer_id: number;
+      accept: boolean;
+    };
     /** @description Read-only serializer for AvailableEnhancement (technique enhancement option). */
     AvailableEnhancement: {
       readonly technique_id: number;
@@ -14360,6 +14427,16 @@ export interface components {
      * @enum {string}
      */
     DiscoveryTypeEnum: 'obvious' | 'discoverable';
+    /**
+     * @description Write serializer for dissolving a Soul Tether (Spec B §13).
+     *
+     *     Either party may dissolve; ``actor_sheet_id`` is validated for ownership.
+     *     ``relationship_id`` is the PK of *either* directional CharacterRelationship row.
+     */
+    DissolveRequest: {
+      actor_sheet_id: number;
+      relationship_id: number;
+    };
     /** @description Serializer for DistinctionCategory lookup records. */
     DistinctionCategory: {
       readonly id: number;
@@ -14618,6 +14695,14 @@ export interface components {
      * @enum {string}
      */
     EffortLevelEnum: 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
+    /** @description Read serializer for a single eligible crossing path. */
+    EligiblePath: {
+      id: number;
+      name: string;
+      stage: number;
+      stage_display: string;
+      description: string;
+    };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetail: {
       readonly id: number;
@@ -15379,7 +15464,7 @@ export interface components {
       capacity: number;
       /** Format: double */
       percentage: number;
-      zone: string;
+      zone: components['schemas']['ZoneEnum'];
     };
     FormTrait: {
       readonly id: number;
@@ -20171,8 +20256,7 @@ export interface components {
       readonly advisory_text: string;
       /** @description Fixed risk copy (approved verbatim). */
       readonly risk_text: string;
-      /** @description Eligible child paths serialized through EligiblePathSerializer. */
-      readonly eligible_paths: unknown[];
+      readonly eligible_paths: components['schemas']['EligiblePath'][];
       /** @description Return the PathIntent's intended_path_id if it is among eligible paths, else None. */
       readonly intended_path_id: number | null;
       /** Format: date-time */
@@ -20975,6 +21059,16 @@ export interface components {
      * @enum {string}
      */
     RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    /** @description Read serializer for RescueOutcome payloads. */
+    RescueOutcome: {
+      severity_reduced: number;
+      sinner_stage_at_start: number;
+      sinner_stage_at_end: number;
+      sineater_strain_taken: number;
+      protagonism_lock_lifted: boolean;
+      /** @description Return the SoulTetherRescue audit row PK. */
+      readonly audit_row_id: number;
+    };
     /**
      * @description * `destroy` - Destroy (removed for everyone)
      *     * `personal` - Personal (resolved for this character only)
@@ -21697,6 +21791,21 @@ export interface components {
      * @enum {string}
      */
     SignEnum: 'positive' | 'negative';
+    /** @description Read serializer for SineatingOffer payloads returned by the request endpoint. */
+    SineatingOffer: {
+      /** @description Return sinner_sheet PK. */
+      readonly sinner_sheet_id: number;
+      /** @description Return sineater_sheet PK. */
+      readonly sineater_sheet_id: number;
+      /** @description Return resonance PK. */
+      readonly resonance_id: number;
+      max_units_offered: number;
+      anima_cost_per_unit: number;
+      fatigue_cost_per_unit: number;
+      current_hollow: number;
+      hollow_max: number;
+      sineater_current_strain_stage: number;
+    };
     /**
      * @description Sineater-facing view of a pending Sineating offer (inbox UI).
      *
@@ -21717,6 +21826,40 @@ export interface components {
       readonly created_at: string;
     };
     /**
+     * @description Write serializer for Sinner-initiated Sineating request (Spec B §7).
+     *
+     *     Returns a ``SineatingOffer`` that the Sineater can accept or decline via
+     *     the respond endpoint.
+     */
+    SineatingRequestRequest: {
+      actor_sheet_id: number;
+      sineater_sheet_id: number;
+      resonance_id: number;
+      max_units: number;
+      scene_id: number;
+    };
+    /**
+     * @description Write serializer for the Sineater's response to a Sineating request (Spec B §7).
+     *
+     *     The pending offer row is the canonical source of truth for scene, resonance,
+     *     and units cap — the caller only needs to identify the pair and supply their choice.
+     *     ``units_accepted=0`` means decline.
+     */
+    SineatingRespondRequest: {
+      sinner_sheet_id: number;
+      sineater_sheet_id: number;
+      units_accepted: number;
+    };
+    /** @description Read serializer for SineatingResult payloads. */
+    SineatingResult: {
+      units_accepted: number;
+      declined: boolean;
+      new_hollow_current: number;
+      new_lifetime_helped: number;
+      /** @description Return the audit Sineating row PK. */
+      readonly audit_row_id: number;
+    };
+    /**
      * @description * `money` - Money
      *     * `legend_points` - Legend Points
      *     * `resonance` - Resonance
@@ -21726,6 +21869,12 @@ export interface components {
      * @enum {string}
      */
     SinkEnum: 'money' | 'legend_points' | 'resonance' | 'rumor' | 'crime_watch' | 'beat';
+    /**
+     * @description * `SINNER` - SINNER
+     *     * `SINEATER` - SINEATER
+     * @enum {string}
+     */
+    SinnerRoleEnum: 'SINNER' | 'SINEATER';
     /** @description Nested serializer for situation challenge links. */
     SituationChallengeLink: {
       challenge_template: number;
@@ -21816,6 +21965,45 @@ export interface components {
     SocietySearch: {
       id: number;
       name: string;
+    };
+    SoulTetherAcceptResponse: {
+      capstone_id: number;
+    };
+    /**
+     * @description Read serializer for GET /api/magic/soul-tether/{relationship_id}/.
+     *
+     *     Returns tether state: Hollow current/max, Thread levels, Sineater stats,
+     *     and role information. Accepts a CharacterRelationship (either direction).
+     */
+    SoulTetherDetail: {
+      readonly relationship_id: number;
+      readonly is_soul_tether: boolean;
+      readonly soul_tether_role: string;
+      /** @description Return the Sinner's CharacterSheet PK. */
+      readonly sinner_sheet_id: number | null;
+      /** @description Return the Sineater's CharacterSheet PK. */
+      readonly sineater_sheet_id: number | null;
+      /** @description Return the Sinner's current Hollow capacity (from the capstone Thread). */
+      readonly hollow_current: number;
+      /** @description Return the Sinner's Hollow maximum (thread.level * 10). */
+      readonly hollow_max: number;
+      /** @description Return the Sineater's total lifetime_helped across all resonances for this bond. */
+      readonly sineater_lifetime_helped: number;
+      /** @description Return the Sinner's highest corruption stage across all resonances. */
+      readonly sinner_corruption_stage: number;
+      /** @description Return the Sineater's current Tether Strain severity (or 0 if none). */
+      readonly sineater_strain_stage: number;
+    };
+    /**
+     * @description Write serializer for the rescue ritual (Spec B §9).
+     *
+     *     The Sineater performs the ritual on the Sinner. Both must be in the same scene.
+     */
+    SoulTetherRescueRequest: {
+      actor_sheet_id: number;
+      sinner_sheet_id: number;
+      resonance_id: number;
+      scene_id: number;
     };
     /**
      * @description * `SINEATER` - Sineater
@@ -21927,6 +22115,26 @@ export interface components {
       readonly base_value: number;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description Read serializer for StageAdvanceBonusResult payloads (Task 1.7). */
+    StageAdvanceBonusResult: {
+      offer_id: string;
+      units_committed: number;
+      hollow_drained: number;
+      strain_severity_added: number;
+      declined: boolean;
+    };
+    /**
+     * @description Write serializer for the Sineater's response to a stage-advance prompt (Spec B §8.1).
+     *
+     *     The pending offer row is the canonical source of truth for resonance, max units,
+     *     and expiry — the caller only needs to identify the pair and supply their choice.
+     *     ``units_committed=0`` means decline.
+     */
+    StageAdvanceRespondRequest: {
+      sinner_sheet_id: number;
+      sineater_sheet_id: number;
+      units_committed: number;
     };
     /**
      * @description * `1` - Prospect
@@ -23188,6 +23396,15 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /**
+     * @description * `fresh` - Fresh
+     *     * `strained` - Strained
+     *     * `tired` - Tired
+     *     * `overexerted` - Overexerted
+     *     * `exhausted` - Exhausted
+     * @enum {string}
+     */
+    ZoneEnum: 'fresh' | 'strained' | 'tired' | 'overexerted' | 'exhausted';
     /** @description One polish category's value + derived tier label for a building. */
     _CategoryPolish: {
       category_id: number;
@@ -31095,14 +31312,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AudereMajoraRespondRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['AudereMajoraCrossingResult'];
+        };
       };
     };
   };
@@ -31158,14 +31380,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AudereRespondRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['AudereOfferResult'];
+        };
       };
     };
   };
@@ -32725,12 +32952,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['SoulTetherDetail'];
+        };
       };
     };
   };
@@ -32741,14 +32969,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AcceptSoulTetherRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['SoulTetherAcceptResponse'];
+        };
       };
     };
   };
@@ -32759,10 +32992,14 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DissolveRequest'];
+      };
+    };
     responses: {
       /** @description No response body */
-      200: {
+      204: {
         headers: {
           [name: string]: unknown;
         };
@@ -32777,14 +33014,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SoulTetherRescueRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['RescueOutcome'];
+        };
       };
     };
   };
@@ -32840,14 +33082,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SineatingRequestRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['SineatingOffer'];
+        };
       };
     };
   };
@@ -32858,14 +33105,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SineatingRespondRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['SineatingResult'];
+        };
       };
     };
   };
@@ -32921,14 +33173,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StageAdvanceRespondRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['StageAdvanceBonusResult'];
+        };
       };
     };
   };
@@ -39850,6 +40107,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_complete_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

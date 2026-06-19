@@ -6,6 +6,12 @@ Techniques are the primary magical abilities, powered by intensity and control s
 
 **Source:** `src/world/magic/`
 **API Base:** `/api/magic/`
+**How it works (start here):**
+- `docs/architecture/technique-use-pipeline.md` — **How Magic Works**: the end-to-end
+  cast lifecycle (entry paths → cost → resolution → consequences → narration), with diagram.
+- `docs/architecture/power-derivation.md` — the power ledger (assembly phases) and the
+  penetration-vs-resistance contest, with diagrams.
+
 **Design Docs:**
 - `docs/plans/2026-01-20-magic-system-design.md` (original system design)
 - `docs/plans/2026-03-02-cantrip-technique-alignment.md` (cantrip/technique alignment)

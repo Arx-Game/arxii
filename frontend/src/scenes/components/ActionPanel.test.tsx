@@ -61,12 +61,14 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
-// Mock the magic queries module — ActionPanel uses useThreads to map thread → resonance.
+// Mock the magic queries module — useCastPullSelection (called by ActionPanel) uses
+// useThreads to map thread → resonance, and useCharacterResonances for balance tooltips.
 vi.mock('@/magic/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/magic/queries')>();
   return {
     ...actual,
     useThreads: vi.fn(),
+    useCharacterResonances: vi.fn(() => ({ data: undefined })),
   };
 });
 
@@ -953,5 +955,29 @@ describe('ActionPanel', () => {
     });
     const params = vi.mocked(castTechnique).mock.calls[0][1];
     expect(params).not.toHaveProperty('pull');
+  });
+
+  // -------------------------------------------------------------------------
+  // Cast error surface (#895 item 3)
+  // -------------------------------------------------------------------------
+
+  it('renders the backend detail message via role="alert" when castTechnique rejects', async () => {
+    vi.mocked(castTechnique).mockRejectedValue(
+      new Error('Insufficient anima to cast Ember Touch.')
+    );
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /cast ember touch/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Insufficient anima to cast Ember Touch.');
   });
 });

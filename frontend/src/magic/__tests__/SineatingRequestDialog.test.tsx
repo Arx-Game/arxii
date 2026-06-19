@@ -391,7 +391,7 @@ describe('SineatingRequestDialog', () => {
     expect(screen.queryByTestId('sineating-error-banner')).not.toBeInTheDocument();
   });
 
-  it('shows generic error message when error has no message', () => {
+  it('shows per-site fallback error message when error has no message', () => {
     const emptyError = new Error('');
     setupMocks({ isError: true, error: emptyError });
 

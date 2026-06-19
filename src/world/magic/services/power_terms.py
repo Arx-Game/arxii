@@ -80,6 +80,26 @@ def level_power_term(ctx: PowerTermContext) -> int:
     return char_contribution + tech_contribution
 
 
+def _apply_standing_cap(standing: int, current_level: int) -> int:
+    """Apply the per-level StandingCapBand to a raw resonance-standing value (#853).
+
+    Selects the band with the greatest ``min_level`` <= ``current_level``. No
+    matching band returns ``standing`` unchanged (uncapped). HARD clamps to the
+    band cap; SOFT keeps ``diminish_pct`` percent of the excess above the cap.
+    """
+    from world.magic.constants import StandingCapMode  # noqa: PLC0415
+    from world.magic.models import StandingCapBand  # noqa: PLC0415
+
+    band = (
+        StandingCapBand.objects.filter(min_level__lte=current_level).order_by("-min_level").first()
+    )
+    if band is None or standing <= band.cap:
+        return standing
+    if band.mode == StandingCapMode.HARD:
+        return band.cap
+    return band.cap + (standing - band.cap) * band.diminish_pct // 100
+
+
 def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
     """Affinity-alignment contribution: caster's CharacterAura % per distinct affinity."""
     from world.magic.models.aura import CharacterAura  # noqa: PLC0415
@@ -99,7 +119,7 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
 
 
 def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
-    """Resonance-standing contribution: summed lifetime_earned x bonus, soft-capped."""
+    """Resonance-standing contribution: summed lifetime_earned x bonus, per-level cap-banded."""
     from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
 
     if not config.resonance_standing_bonus:
@@ -112,9 +132,7 @@ def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: l
         )
     )
     standing = total_earned * config.resonance_standing_bonus
-    if config.resonance_standing_cap:
-        standing = min(standing, config.resonance_standing_cap)
-    return standing
+    return _apply_standing_cap(standing, ctx.sheet.current_level)
 
 
 def aura_power_term(ctx: PowerTermContext) -> int:
@@ -123,7 +141,8 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     Affinity axis: caster's CharacterAura % in each distinct affinity of the
     technique's resonances, proportional to ``affinity_alignment_bonus``.
     Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
-    in those resonances x ``resonance_standing_bonus``, soft-capped.
+    in those resonances x ``resonance_standing_bonus``, then capped per character
+    level by the applicable ``StandingCapBand`` (HARD clamp / SOFT diminish; #853).
     Returns 0 when unconfigured or when the cast has no technique.
     """
     config = get_aura_power_config()

@@ -110,3 +110,72 @@ class BattleCovenantModelTests(TestCase):
                 founders=founders,
                 battle_binding=BattleBinding.STANDING,
             )
+
+    def test_campaign_may_set_campaign_story(self):
+        from world.stories.factories import StoryFactory
+
+        cov = CovenantFactory.build(
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.CAMPAIGN,
+            sworn_objective="x",
+            campaign_story=StoryFactory(),
+        )
+        cov.clean()  # must not raise
+
+    def test_non_campaign_rejects_campaign_story(self):
+        from world.stories.factories import StoryFactory
+
+        cov = CovenantFactory.build(
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            sworn_objective="x",
+            campaign_story=StoryFactory(),
+        )
+        with self.assertRaises(ValidationError):
+            cov.clean()
+
+    def test_create_covenant_persists_campaign_story(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+        from world.stories.factories import StoryFactory
+
+        story = StoryFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        founders = [
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+        ]
+        cov = create_covenant(
+            name="The Khati Crusade",
+            covenant_type=CovenantType.BATTLE,
+            sworn_objective="Free the Khati.",
+            founders=founders,
+            battle_binding=BattleBinding.CAMPAIGN,
+            campaign_story=story,
+        )
+        self.assertEqual(cov.campaign_story_id, story.pk)
+
+    def test_create_covenant_rejects_campaign_story_on_non_campaign(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.exceptions import CampaignStoryNotAllowedError
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant
+        from world.covenants.types import CovenantFounder
+        from world.stories.factories import StoryFactory
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        founders = [
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+            CovenantFounder(character_sheet=CharacterSheetFactory(), role=role),
+        ]
+        with self.assertRaises(CampaignStoryNotAllowedError):
+            create_covenant(
+                name="Standing With Story",
+                covenant_type=CovenantType.BATTLE,
+                sworn_objective="x",
+                founders=founders,
+                battle_binding=BattleBinding.STANDING,
+                campaign_story=StoryFactory(),
+            )

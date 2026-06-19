@@ -1,1 +1,1 @@
-0001_initial
+0002_alter_globalstoryprogress_status_and_more
