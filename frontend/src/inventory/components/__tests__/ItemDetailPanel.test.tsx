@@ -350,6 +350,43 @@ describe('ItemDetailPanel', () => {
     expect(mutate).toHaveBeenCalledWith(item.id, expect.any(Object));
   });
 
+  it('use-result block resets when the panel switches to a different item', () => {
+    const mutate = vi.fn((_id, opts) =>
+      opts.onSuccess({
+        charges_remaining: 2,
+        destroyed: false,
+        soft_deleted: false,
+        applied_effect_count: 1,
+      })
+    );
+    vi.mocked(useUseItem).mockReturnValue({ mutate, isPending: false } as unknown as ReturnType<
+      typeof useUseItem
+    >);
+
+    const itemA = makeItem({
+      id: 7,
+      is_usable: true,
+      charges: 3,
+      template: { ...makeItem().template, is_consumable: true },
+    });
+    const itemB = makeItem({
+      id: 99,
+      display_name: 'Iron Dagger',
+      is_usable: true,
+      charges: 3,
+      template: { ...makeItem().template, is_consumable: true },
+    });
+
+    const { rerender } = render(
+      <ItemDetailPanel item={itemA} characterId={1} open onOpenChange={vi.fn()} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }));
+    expect(screen.getByTestId('use-result')).toBeInTheDocument();
+
+    rerender(<ItemDetailPanel item={itemB} characterId={1} open onOpenChange={vi.fn()} />);
+    expect(screen.queryByTestId('use-result')).toBeNull();
+  });
+
   it('calls removeMutation.mutate when remove button is clicked', () => {
     const mutate = vi.fn();
     vi.mocked(itemFacetsHooks.useRemoveItemFacet).mockReturnValue({

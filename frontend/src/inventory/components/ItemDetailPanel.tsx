@@ -89,6 +89,7 @@ export function ItemDetailPanel({
         {item ? (
           <>
             <ItemContent
+              key={item.id}
               item={item}
               itemFacetsQuery={itemFacetsQuery}
               facetsQuery={facetsQuery}
