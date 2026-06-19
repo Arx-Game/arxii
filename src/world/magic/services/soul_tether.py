@@ -1204,16 +1204,6 @@ _RESCUE_MIN_STAGE: int = 3
 #: Terminal corruption stage at which protagonism is locked (mirrors corruption.py).
 _RESCUE_TERMINAL_STAGE: int = 5
 
-#: Strain severity cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
-#: Stage 3 = moderate, Stage 4 = heavy, Stage 5 = severe.
-_RESCUE_STRAIN_COST: dict[int, int] = {3: 5, 4: 10, 5: 18}
-
-#: Resonance balance cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
-_RESCUE_RESONANCE_COST: dict[int, int] = {3: 10, 4: 20, 5: 35}
-
-#: Corruption severity budget base per stage (tunable — TODO Phase 14).
-_RESCUE_BUDGET_BASE: dict[int, int] = {3: 60, 4: 120, 5: 250}
-
 #: Success level constants mirroring anima.py pattern.
 _RESCUE_CRIT_SUCCESS_LEVEL = 2
 _RESCUE_SUCCESS_LEVEL = 1
@@ -1223,8 +1213,8 @@ _RESCUE_PARTIAL_LEVEL = 0
 def _compute_strain_cost(sinner_stage: int) -> int:
     """Return Strain severity the Sineater takes for a rescue at *sinner_stage*.
 
-    Tuning placeholder values (TODO Phase 14):
-        stage 3 = 5, stage 4 = 10, stage 5 = 18
+    Values are read from the ``SoulTetherConfig`` singleton (pk=1), defaulting to
+    stage 3 = 5, stage 4 = 10, stage 5 = 18.
 
     Args:
         sinner_stage: Corruption stage (3-5) the Sinner is at.
@@ -1232,14 +1222,19 @@ def _compute_strain_cost(sinner_stage: int) -> int:
     Returns:
         Strain severity amount to apply to the Sineater.
     """
-    return _RESCUE_STRAIN_COST.get(sinner_stage, _RESCUE_STRAIN_COST[5])
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_strain_stage3
+    if sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_strain_stage4
+    return cfg.rescue_strain_stage5
 
 
 def _compute_resonance_cost(sinner_stage: int) -> int:
     """Return Resonance balance cost the Sineater pays for a rescue at *sinner_stage*.
 
-    Tuning placeholder values (TODO Phase 14):
-        stage 3 = 10, stage 4 = 20, stage 5 = 35
+    Values are read from the ``SoulTetherConfig`` singleton (pk=1), defaulting to
+    stage 3 = 10, stage 4 = 20, stage 5 = 35.
 
     Args:
         sinner_stage: Corruption stage (3-5) the Sinner is at.
@@ -1247,7 +1242,12 @@ def _compute_resonance_cost(sinner_stage: int) -> int:
     Returns:
         Resonance balance amount to deduct from the Sineater.
     """
-    return _RESCUE_RESONANCE_COST.get(sinner_stage, _RESCUE_RESONANCE_COST[5])
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_resonance_stage3
+    if sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        return cfg.rescue_resonance_stage4
+    return cfg.rescue_resonance_stage5
 
 
 def _compute_rescue_budget(
@@ -1257,8 +1257,9 @@ def _compute_rescue_budget(
 ) -> int:
     """Compute severity-reduction budget for the rescue ritual outcome.
 
-    Tuning placeholder formula (TODO Phase 14 — surface via SoulTetherConfig):
-        base = _RESCUE_BUDGET_BASE[stage]  (60 / 120 / 250)
+    All tuning knobs are read from the ``SoulTetherConfig`` singleton (pk=1).
+    Default formula (reproduces original behaviour):
+        base = {3: 60, 4: 120, 5: 250}[stage]
         multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
         budget = max(1, int(base * multiplier))
 
@@ -1276,8 +1277,18 @@ def _compute_rescue_budget(
     Returns:
         Integer severity budget to pass to reduce_corruption.
     """
-    base = _RESCUE_BUDGET_BASE.get(sinner_stage, _RESCUE_BUDGET_BASE[5])
-    multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+    cfg = get_soul_tether_config()
+    if sinner_stage == 3:  # noqa: PLR2004 — corruption stage literal
+        base = cfg.rescue_budget_base_stage3
+    elif sinner_stage == 4:  # noqa: PLR2004 — corruption stage literal
+        base = cfg.rescue_budget_base_stage4
+    else:
+        base = cfg.rescue_budget_base_stage5
+    multiplier = (
+        cfg.rescue_budget_base_mult_tenths / 10
+        + success_level * cfg.rescue_budget_success_mult_tenths / 10
+        + thread_level * cfg.rescue_budget_thread_mult_hundredths / 100
+    )
     return max(1, int(base * multiplier))
 
 

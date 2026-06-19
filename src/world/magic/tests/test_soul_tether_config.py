@@ -3,6 +3,48 @@
 from django.test import TestCase
 
 
+class SoulTetherConfigKnobsTest(TestCase):
+    """Verify the rescue helpers read from SoulTetherConfig, not module constants."""
+
+    def test_strain_cost_reads_from_config(self):
+        from world.magic.services.soul_tether import _compute_strain_cost, get_soul_tether_config
+
+        cfg = get_soul_tether_config()
+        cfg.rescue_strain_stage4 = 99
+        cfg.save()
+        self.assertEqual(_compute_strain_cost(4), 99)
+
+    def test_resonance_cost_reads_from_config(self):
+        from world.magic.services.soul_tether import (
+            _compute_resonance_cost,
+            get_soul_tether_config,
+        )
+
+        cfg = get_soul_tether_config()
+        cfg.rescue_resonance_stage3 = 77
+        cfg.save()
+        self.assertEqual(_compute_resonance_cost(3), 77)
+
+    def test_rescue_budget_reads_base_from_config(self):
+        from world.magic.services.soul_tether import _compute_rescue_budget, get_soul_tether_config
+
+        cfg = get_soul_tether_config()
+        cfg.rescue_budget_base_stage5 = 500
+        # multiplier: 10/10 + 0*(5/10) + 0*(5/100) = 1.0  → budget = max(1, int(500*1.0))
+        cfg.save()
+        self.assertEqual(_compute_rescue_budget(0, 5, 0), 500)
+
+    def test_rescue_budget_reads_multipliers_from_config(self):
+        from world.magic.services.soul_tether import _compute_rescue_budget, get_soul_tether_config
+
+        cfg = get_soul_tether_config()
+        # base=60, success_mult = 10 tenths = 1.0 per level, thread=0
+        cfg.rescue_budget_success_mult_tenths = 10
+        cfg.save()
+        # budget = max(1, int(60 * (1.0 + 1*1.0 + 0*0.05))) = int(60*2.0) = 120
+        self.assertEqual(_compute_rescue_budget(1, 3, 0), 120)
+
+
 class SoulTetherConfigGetterTest(TestCase):
     def test_get_soul_tether_config_lazy_creates_with_defaults(self):
         from world.magic.services.soul_tether import get_soul_tether_config
