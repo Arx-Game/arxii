@@ -163,6 +163,11 @@ class DramaticMomentCountOnParticipantTest(APITestCase):
             self.assertGreaterEqual(p["dramatic_moment_count"], 0)
 
     def test_participant_with_tags_has_correct_count(self):
+        # Add a second untagged participant so the test can verify targeted identity.
+        other_sheet = CharacterSheetFactory()
+        other_persona = other_sheet.primary_persona
+        InteractionFactory(scene=self.scene, persona=other_persona)
+
         persona = self.sheet.primary_persona
         InteractionFactory(scene=self.scene, persona=persona)
         moment_type = DramaticMomentTypeFactory()
@@ -173,8 +178,37 @@ class DramaticMomentCountOnParticipantTest(APITestCase):
         )
         data = self._scene_detail()
         participants = data.get("participants", [])
-        # Find the participant whose roster_entry maps to our sheet's character.
-        # The dramatic_moment_count is on the participant; at least one must be >0
-        # (the sheet with the tag).
-        counts = [p["dramatic_moment_count"] for p in participants]
-        self.assertIn(1, counts, f"Expected count=1 among {counts}")
+
+        # SceneParticipantSerializer exposes "id" as the Persona pk.
+        # Match the tagged participant by persona.pk so no roster_entry is required
+        # (CharacterSheetFactory does not create a RosterEntry by default).
+        tagged_persona_id = persona.pk
+        tagged_participant = next(
+            (p for p in participants if p["id"] == tagged_persona_id),
+            None,
+        )
+        self.assertIsNotNone(
+            tagged_participant,
+            f"No participant matched persona id={tagged_persona_id}; got {participants}",
+        )
+        self.assertEqual(
+            tagged_participant["dramatic_moment_count"],
+            1,
+            f"Tagged participant should have count=1; got {tagged_participant}",
+        )
+
+        # The untagged participant should have count 0.
+        untagged_persona_id = other_persona.pk
+        untagged_participant = next(
+            (p for p in participants if p["id"] == untagged_persona_id),
+            None,
+        )
+        self.assertIsNotNone(
+            untagged_participant,
+            f"No participant matched untagged persona id={untagged_persona_id}",
+        )
+        self.assertEqual(
+            untagged_participant["dramatic_moment_count"],
+            0,
+            f"Untagged participant should have count=0; got {untagged_participant}",
+        )
