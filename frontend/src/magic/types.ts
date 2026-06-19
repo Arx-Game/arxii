@@ -3,9 +3,10 @@
  *
  * Re-exports generated schemas for Thread, CharacterResonance, SineatingPendingOffer,
  * PendingStageAdvanceOffer, Ritual, ThreadWeavingTeachingOffer, and related list types.
- * Local types cover request bodies and response shapes that the generated schema left
- * as `content?: never` (e.g. soul-tether detail, sineating offer response, rescue
- * outcome, thread hub summary, pull preview/commit).
+ * The soul-tether / Audere / Audere Majora respond + detail endpoints are now annotated
+ * with `@extend_schema` (#920), so their request/response shapes are re-exported from the
+ * generated schema too. The few remaining local types cover shapes with no 1:1 serializer
+ * (e.g. TetherBond, ImbueRequest/Response, the alteration-resolve union, technique design).
  */
 
 import type { components } from '@/generated/api';
@@ -32,128 +33,31 @@ export type PaginatedPendingStageAdvanceOfferList =
   components['schemas']['PaginatedPendingStageAdvanceOfferList'];
 
 // ---------------------------------------------------------------------------
-// Soul Tether detail response
+// Soul Tether respond/detail endpoints — generated via @extend_schema (#920)
 //
-// The generated schema for GET /api/magic/soul-tether/{relationship_id}/
-// has `content?: never` — drf-spectacular does not know the response shape
-// because SoulTetherDetailSerializer derives from serializers.Serializer, not
-// a model. We declare the shape manually from SoulTetherDetailSerializer.
+// These endpoints use plain `serializers.Serializer` classes. With
+// `@extend_schema` on each view, drf-spectacular now emits proper request and
+// response components, so we re-export the generated shapes instead of
+// hand-rolling them (which could drift from the backend serializers).
 // ---------------------------------------------------------------------------
 
-export interface SoulTetherDetail {
-  relationship_id: number;
-  is_soul_tether: boolean;
-  soul_tether_role: string; // 'ABYSSAL' | 'CELESTIAL' from SoulTetherRole choices
-  sinner_sheet_id: number | null;
-  sineater_sheet_id: number | null;
-  hollow_current: number;
-  hollow_max: number;
-  sineater_lifetime_helped: number;
-  sinner_corruption_stage: number;
-  sineater_strain_stage: number;
-}
+export type SoulTetherDetail = components['schemas']['SoulTetherDetail'];
+export type DissolveRequest = components['schemas']['DissolveRequest'];
 
-// ---------------------------------------------------------------------------
-// Dissolve request body
-// ---------------------------------------------------------------------------
+// SineatingRequestSerializer is a request body, so the generated component
+// carries drf-spectacular's "Request" suffix (→ SineatingRequestRequest).
+export type SineatingRequest = components['schemas']['SineatingRequestRequest'];
+export type SineatingOffer = components['schemas']['SineatingOffer'];
 
-export interface DissolveRequest {
-  actor_sheet_id: number;
-  relationship_id: number;
-}
+export type SineatingRespondRequest = components['schemas']['SineatingRespondRequest'];
+export type SineatingResult = components['schemas']['SineatingResult'];
 
-// ---------------------------------------------------------------------------
-// Sineating request body + offer response
-//
-// POST /api/magic/soul-tether/sineating/request/ accepts SineatingRequestSerializer.
-// It returns a SineatingOffer which drf-spectacular marks as no body (the view uses
-// a plain Serializer). We type the response from SineatingOfferSerializer.
-// ---------------------------------------------------------------------------
+// RescueRequest maps to the generated SoulTetherRescueRequest component.
+export type RescueRequest = components['schemas']['SoulTetherRescueRequest'];
+export type RescueOutcome = components['schemas']['RescueOutcome'];
 
-export interface SineatingRequest {
-  actor_sheet_id: number;
-  sineater_sheet_id: number;
-  resonance_id: number;
-  max_units: number;
-  scene_id: number;
-}
-
-export interface SineatingOffer {
-  sinner_sheet_id: number;
-  sineater_sheet_id: number;
-  resonance_id: number;
-  max_units_offered: number;
-  anima_cost_per_unit: number;
-  fatigue_cost_per_unit: number;
-  current_hollow: number;
-  hollow_max: number;
-  sineater_current_strain_stage: number;
-}
-
-// ---------------------------------------------------------------------------
-// Sineating respond body + result response
-//
-// POST /api/magic/soul-tether/sineating/respond/ accepts SineatingRespondSerializer.
-// Response shape from SineatingResultSerializer.
-// ---------------------------------------------------------------------------
-
-export interface SineatingRespondRequest {
-  sinner_sheet_id: number;
-  sineater_sheet_id: number;
-  units_accepted: number; // 0 = decline
-}
-
-export interface SineatingResult {
-  units_accepted: number;
-  declined: boolean;
-  new_hollow_current: number;
-  new_lifetime_helped: number;
-  audit_row_id: number;
-}
-
-// ---------------------------------------------------------------------------
-// Rescue request + outcome
-//
-// POST /api/magic/soul-tether/rescue/ accepts SoulTetherRescueSerializer.
-// Response shape from RescueOutcomeSerializer.
-// ---------------------------------------------------------------------------
-
-export interface RescueRequest {
-  actor_sheet_id: number;
-  sinner_sheet_id: number;
-  resonance_id: number;
-  scene_id: number;
-}
-
-export interface RescueOutcome {
-  severity_reduced: number;
-  sinner_stage_at_start: number;
-  sinner_stage_at_end: number;
-  sineater_strain_taken: number;
-  protagonism_lock_lifted: boolean;
-  audit_row_id: number;
-}
-
-// ---------------------------------------------------------------------------
-// Stage-advance respond request + result
-//
-// POST /api/magic/soul-tether/stage-advance/respond/ accepts StageAdvanceRespondSerializer.
-// Response shape from StageAdvanceBonusResultSerializer.
-// ---------------------------------------------------------------------------
-
-export interface StageAdvanceRespondRequest {
-  sinner_sheet_id: number;
-  sineater_sheet_id: number;
-  units_committed: number; // 0 = decline
-}
-
-export interface StageAdvanceBonusResult {
-  offer_id: string;
-  units_committed: number;
-  hollow_drained: number;
-  strain_severity_added: number;
-  declined: boolean;
-}
+export type StageAdvanceRespondRequest = components['schemas']['StageAdvanceRespondRequest'];
+export type StageAdvanceBonusResult = components['schemas']['StageAdvanceBonusResult'];
 
 // ---------------------------------------------------------------------------
 // Tether bond — returned by getMyTetherBonds / useMyTetherBonds
@@ -398,85 +302,27 @@ export type PendingAudereOffer = components['schemas']['PendingAudereOffer'];
 export type PaginatedPendingAudereOfferList =
   components['schemas']['PaginatedPendingAudereOfferList'];
 
-/** Body for POST /api/magic/audere/respond/. accept=false declines. */
-export interface AudereRespondRequest {
-  offer_id: number;
-  accept: boolean;
-}
-
-/**
- * Response from audere/respond/ (AudereOfferResultSerializer — plain
- * Serializer, not in generated schema).
- */
-export interface AudereOfferResult {
-  accepted: boolean;
-  intensity_bonus_applied: number;
-  anima_pool_expanded_by: number;
-  advisory_text: string;
-}
+// Body for POST /api/magic/audere/respond/ (accept=false declines) + result.
+// Generated via @extend_schema on AudereRespondView (#920).
+export type AudereRespondRequest = components['schemas']['AudereRespondRequest'];
+export type AudereOfferResult = components['schemas']['AudereOfferResult'];
 
 // ---------------------------------------------------------------------------
-// Audere Majora (Crossing offer), #543
+// Audere Majora (Crossing offer), #543 — generated shapes (#920)
+//
+// The PendingAudereMajoraOfferViewSet is auto-detected by drf-spectacular;
+// `eligible_paths` is now typed via @extend_schema_field on the serializer's
+// get_eligible_paths, so the whole offer (and its paginated list) re-export
+// cleanly. The respond endpoint is annotated via @extend_schema.
 // ---------------------------------------------------------------------------
 
-/** One eligible crossing path returned by GET /api/magic/audere-majora/pending/. */
-export interface EligiblePath {
-  id: number;
-  name: string;
-  stage: number;
-  stage_display: string;
-  description: string;
-}
+export type EligiblePath = components['schemas']['EligiblePath'];
+export type PendingAudereMajoraOffer = components['schemas']['PendingAudereMajoraOffer'];
+export type PaginatedPendingAudereMajoraOfferList =
+  components['schemas']['PaginatedPendingAudereMajoraOfferList'];
 
-/**
- * A pending Audere Majora crossing offer.
- * Returned (paginated) by GET /api/magic/audere-majora/pending/.
- */
-export interface PendingAudereMajoraOffer {
-  id: number;
-  character_sheet_id: number;
-  character_name: string;
-  fired_intensity: number;
-  soulfray_stage_order: number;
-  boundary_level: number;
-  target_stage_display: string;
-  vision_text: string;
-  advisory_text: string;
-  risk_text: string;
-  eligible_paths: EligiblePath[];
-  intended_path_id: number | null;
-  created_at: string;
-}
-
-/** Paginated wrapper for PendingAudereMajoraOffer list. */
-export interface PaginatedPendingAudereMajoraOfferList {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: PendingAudereMajoraOffer[];
-}
-
-/** Body for POST /api/magic/audere-majora/respond/. accept=false declines. */
-export interface AudereMajoraRespondRequest {
-  offer_id: number;
-  accept: boolean;
-  path_id?: number | null;
-  declaration_text?: string;
-}
-
-/**
- * Response from audere-majora/respond/ (AudereMajoraCrossingResultSerializer —
- * plain Serializer, not in generated schema).
- */
-export interface AudereMajoraCrossingResult {
-  accepted: boolean;
-  level_before: number;
-  level_after: number;
-  chosen_path_name: string;
-  advisory_text: string;
-  /** null on decline and on no-scene crossings. */
-  declaration_interaction_id: number | null;
-}
+export type AudereMajoraRespondRequest = components['schemas']['AudereMajoraRespondRequest'];
+export type AudereMajoraCrossingResult = components['schemas']['AudereMajoraCrossingResult'];
 
 /** A declared path intent as returned by GET /api/progression/path-intent/. */
 export interface PathIntentDetail {

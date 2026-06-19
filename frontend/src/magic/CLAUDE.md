@@ -58,21 +58,28 @@ TypeScript types for the magic module.
 
 - `getTierCaps(pending)` — returns the typed `AlterationTierCaps` for a `PendingAlteration`. `tier_caps` is a `SerializerMethodField` → generated as an untyped dict; always use this helper instead of casting the raw field.
 
-**Local types** (the generated schema leaves these as `content?: never`):
+**Soul Tether / Audere respond + detail re-exports** (generated via `@extend_schema`, #920 —
+these endpoints use plain `serializers.Serializer` classes, now annotated so drf-spectacular
+emits real components; re-exported instead of hand-rolled so they can't drift):
 
-- `SoulTetherDetail` — response shape for `GET /api/magic/soul-tether/{relationship_id}/`
-  (from `SoulTetherDetailSerializer`; fields: relationship_id, is_soul_tether, soul_tether_role,
-  sinner/sineater sheet ids, hollow_current/max, sineater_lifetime_helped, corruption/strain stages)
-- `DissolveRequest` — `{ actor_sheet_id, relationship_id }`
-- `SineatingRequest` — body for POST sineating/request/ (`actor_sheet_id`, `sineater_sheet_id`,
-  `resonance_id`, `max_units`, `scene_id`)
-- `SineatingOffer` — response from sineating/request/ (SineatingOfferSerializer shape)
-- `SineatingRespondRequest` — `{ sinner_sheet_id, sineater_sheet_id, units_accepted }` (0=decline)
-- `SineatingResult` — response from sineating/respond/ (SineatingResultSerializer shape)
-- `RescueRequest` — body for POST rescue/ (`actor_sheet_id`, `sinner_sheet_id`, `resonance_id`, `scene_id`)
-- `RescueOutcome` — response from rescue/ (RescueOutcomeSerializer shape)
-- `StageAdvanceRespondRequest` — `{ sinner_sheet_id, sineater_sheet_id, units_committed }` (0=decline)
-- `StageAdvanceBonusResult` — response from stage-advance/respond/ (StageAdvanceBonusResultSerializer shape)
+- `SoulTetherDetail` — `components['schemas']['SoulTetherDetail']` — response for
+  `GET /api/magic/soul-tether/{relationship_id}/`
+- `DissolveRequest` — `components['schemas']['DissolveRequest']`
+- `SineatingRequest` — `components['schemas']['SineatingRequestRequest']` (request body → "Request" suffix)
+- `SineatingOffer` — `components['schemas']['SineatingOffer']`
+- `SineatingRespondRequest` — `components['schemas']['SineatingRespondRequest']` (units_accepted=0 declines)
+- `SineatingResult` — `components['schemas']['SineatingResult']`
+- `RescueRequest` — `components['schemas']['SoulTetherRescueRequest']`
+- `RescueOutcome` — `components['schemas']['RescueOutcome']`
+- `StageAdvanceRespondRequest` — `components['schemas']['StageAdvanceRespondRequest']` (units_committed=0 declines)
+- `StageAdvanceBonusResult` — `components['schemas']['StageAdvanceBonusResult']`
+- `AudereRespondRequest` / `AudereOfferResult` — `audere/respond/` request + result
+- `AudereMajoraRespondRequest` / `AudereMajoraCrossingResult` — `audere-majora/respond/` request + result
+- `EligiblePath` / `PendingAudereMajoraOffer` / `PaginatedPendingAudereMajoraOfferList` —
+  the Crossing offer list (`eligible_paths` typed via `@extend_schema_field` on the serializer)
+
+**Local types** (no 1:1 serializer to re-export):
+
 - `WeaveThreadRequest` — body for POST /threads/ (weave new thread)
 - `PatchThreadRequest` — `{ name?, description? }` for PATCH /threads/{id}/
 - `ImbueRequest` — `{ ritual_id, character_sheet_id, kwargs: { thread_id, amount } }`
@@ -333,14 +340,14 @@ for removal once the hub/detail pages are confirmed stable.
 - **NOT here:** Soul Tether _formation_ (acceptance) goes through
   `POST /api/magic/rituals/perform/` via `usePerformRitual` in the rituals module.
 - **Backend:** `world.magic` — services/soul_tether.py, views.py, urls.py
-- **Serializer mapping:**
-  - `SoulTetherDetailSerializer` → `SoulTetherDetail` (local type, not in generated schema)
-  - `SineatingOfferSerializer` → `SineatingOffer` (local type)
-  - `SineatingResultSerializer` → `SineatingResult` (local type)
-  - `RescueOutcomeSerializer` → `RescueOutcome` (local type)
-  - `StageAdvanceBonusResultSerializer` → `StageAdvanceBonusResult` (local type)
-  - `SineatingPendingOfferSerializer` → `SineatingPendingOffer` (generated schema)
-  - `PendingStageAdvanceOfferSerializer` → `PendingStageAdvanceOffer` (generated schema)
+- **Serializer mapping** (all generated via `@extend_schema`, #920):
+  - `SoulTetherDetailSerializer` → `SoulTetherDetail`
+  - `SineatingOfferSerializer` → `SineatingOffer`
+  - `SineatingResultSerializer` → `SineatingResult`
+  - `RescueOutcomeSerializer` → `RescueOutcome`
+  - `StageAdvanceBonusResultSerializer` → `StageAdvanceBonusResult`
+  - `SineatingPendingOfferSerializer` → `SineatingPendingOffer`
+  - `PendingStageAdvanceOfferSerializer` → `PendingStageAdvanceOffer`
 - **Consumers (Phase 3 Tasks 3.2–3.7):** SoulTetherPanel, SineatingInbox,
   SineatingRespondDialog, StageAdvanceInbox, RescueDialog, DissolveDialog
 
@@ -370,11 +377,11 @@ action. `useAlterationLibrary(id).data` is `AlterationLibraryEntry[]`, not a pag
 wrapper. The `@extend_schema` decorator on the backend makes the generated schema reflect
 this accurately.
 
-**`SoulTetherDetail` is a local type, NOT in the generated schema.**
-The generated `magic_soul_tether_retrieve` operation has `content?: never` because
-`SoulTetherDetailSerializer` derives from `serializers.Serializer`, not a ModelSerializer,
-and drf-spectacular cannot infer the response shape. The fields are taken directly from
-`SoulTetherDetailSerializer` field declarations.
+**`SoulTetherDetail` is now generated (#920), re-exported — do not hand-roll it.**
+`SoulTetherDetailView.get` carries `@extend_schema(responses={200: SoulTetherDetailSerializer})`,
+so `components['schemas']['SoulTetherDetail']` exists. Same pattern for every soul-tether /
+Audere respond + detail endpoint: annotate the view (or `@extend_schema_field` a method field),
+run `just gen-api-types`, and re-export — never re-introduce a hand-rolled mirror that can drift.
 
 **`soul_tether_role` is a string, not a union.**
 The `SoulTetherRole` TextChoices (`ABYSSAL` / `CELESTIAL`) are not exposed in the generated

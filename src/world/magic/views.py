@@ -18,10 +18,10 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -79,11 +79,16 @@ from world.magic.models import (
 )
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
+    AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     ApplicablePullsRequestSerializer,
+    AudereMajoraCrossingResultSerializer,
+    AudereMajoraRespondSerializer,
+    AudereOfferResultSerializer,
+    AudereRespondSerializer,
     CantripSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
@@ -91,6 +96,7 @@ from world.magic.serializers import (
     CharacterResonanceSerializer,
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
+    DissolveSerializer,
     EffectTypeSerializer,
     FacetSerializer,
     FacetTreeSerializer,
@@ -101,6 +107,7 @@ from world.magic.serializers import (
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
     ProgressionStageSerializer,
+    RescueOutcomeSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPatchSerializer,
@@ -110,6 +117,14 @@ from world.magic.serializers import (
     RitualSessionDraftSerializer,
     RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
+    SineatingOfferSerializer,
+    SineatingRequestSerializer,
+    SineatingRespondSerializer,
+    SineatingResultSerializer,
+    SoulTetherDetailSerializer,
+    SoulTetherRescueSerializer,
+    StageAdvanceBonusResultSerializer,
+    StageAdvanceRespondSerializer,
     StylePresentationEndorsementSerializer,
     TechniqueDesignSerializer,
     TechniqueSerializer,
@@ -1200,10 +1215,17 @@ class SoulTetherAcceptView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=AcceptSoulTetherSerializer,
+        responses={
+            201: inline_serializer(
+                name="SoulTetherAcceptResponse",
+                fields={"capstone_id": serializers.IntegerField()},
+            )
+        },
+    )
     def post(self, request: Request) -> Response:
         """Validate and dispatch accept_soul_tether; return capstone PK."""
-        from world.magic.serializers import AcceptSoulTetherSerializer  # noqa: PLC0415
-
         serializer = AcceptSoulTetherSerializer(
             data=request.data,
             context={"request": request},
@@ -1224,9 +1246,9 @@ class SoulTetherDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: SoulTetherDetailSerializer})
     def get(self, request: Request, relationship_id: int) -> Response:
         """Fetch and serialise the tether state for the given relationship."""
-        from world.magic.serializers import SoulTetherDetailSerializer  # noqa: PLC0415
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         rel = get_object_or_404(CharacterRelationship, pk=relationship_id, is_soul_tether=True)
@@ -1246,13 +1268,12 @@ class SineatingRequestView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=SineatingRequestSerializer,
+        responses={200: SineatingOfferSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Validate and dispatch request_sineating; return offer payload."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            SineatingOfferSerializer,
-            SineatingRequestSerializer,
-        )
-
         serializer = SineatingRequestSerializer(
             data=request.data,
             context={"request": request},
@@ -1277,13 +1298,12 @@ class SineatingRespondView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=SineatingRespondSerializer,
+        responses={200: SineatingResultSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Re-validate offer + dispatch resolve_sineating; return result payload."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            SineatingRespondSerializer,
-            SineatingResultSerializer,
-        )
-
         serializer = SineatingRespondSerializer(
             data=request.data,
             context={"request": request},
@@ -1307,13 +1327,12 @@ class SoulTetherRescueView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=SoulTetherRescueSerializer,
+        responses={200: RescueOutcomeSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Validate and dispatch perform_soul_tether_rescue; return outcome payload."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            RescueOutcomeSerializer,
-            SoulTetherRescueSerializer,
-        )
-
         serializer = SoulTetherRescueSerializer(
             data=request.data,
             context={"request": request},
@@ -1337,10 +1356,9 @@ class SoulTetherDissolveView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=DissolveSerializer, responses={204: None})
     def post(self, request: Request) -> Response:
         """Validate and dispatch dissolve_soul_tether; return 204 on success."""
-        from world.magic.serializers import DissolveSerializer  # noqa: PLC0415
-
         serializer = DissolveSerializer(
             data=request.data,
             context={"request": request},
@@ -1435,13 +1453,12 @@ class StageAdvanceRespondView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=StageAdvanceRespondSerializer,
+        responses={200: StageAdvanceBonusResultSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Validate offer + dispatch resolve; return result payload."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            StageAdvanceBonusResultSerializer,
-            StageAdvanceRespondSerializer,
-        )
-
         serializer = StageAdvanceRespondSerializer(
             data=request.data,
             context={"request": request},
@@ -1522,13 +1539,12 @@ class AudereRespondView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=AudereRespondSerializer,
+        responses={200: AudereOfferResultSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Validate ownership + dispatch resolve_audere_offer; return the result."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            AudereOfferResultSerializer,
-            AudereRespondSerializer,
-        )
-
         return _dispatch_respond(request, AudereRespondSerializer, AudereOfferResultSerializer)
 
 
@@ -1570,13 +1586,12 @@ class AudereMajoraRespondView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=AudereMajoraRespondSerializer,
+        responses={200: AudereMajoraCrossingResultSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Validate ownership + dispatch resolve_audere_majora_offer; return the result."""
-        from world.magic.serializers import (  # noqa: PLC0415
-            AudereMajoraCrossingResultSerializer,
-            AudereMajoraRespondSerializer,
-        )
-
         return _dispatch_respond(
             request, AudereMajoraRespondSerializer, AudereMajoraCrossingResultSerializer
         )
