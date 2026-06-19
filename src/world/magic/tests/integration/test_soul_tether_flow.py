@@ -233,6 +233,8 @@ def _build_sineating_offer(
     max_units: int = 5,
 ) -> SineatingOffer:
     """Construct a SineatingOffer directly, bypassing scene/roster validation."""
+    from world.scenes.factories import SceneFactory
+
     return SineatingOffer(
         sinner_sheet=sinner,  # type: ignore[arg-type]
         sineater_sheet=sineater,  # type: ignore[arg-type]
@@ -244,6 +246,7 @@ def _build_sineating_offer(
         current_hollow=0,
         hollow_max=100,
         sineater_current_strain_stage=0,
+        scene=SceneFactory(),
     )
 
 

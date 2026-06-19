@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING
 import uuid
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import Sineating, SoulTetherRescue
 from world.relationships.models import CharacterRelationship
+
+if TYPE_CHECKING:
+    from world.scenes.models import Scene
 
 
 class SoulTetherRole(str, Enum):
@@ -34,7 +37,7 @@ class SineatingOffer:
     current_hollow: int
     hollow_max: int
     sineater_current_strain_stage: int
-    scene: Any = None  # The active Scene; populated by request_sineating (Phase 7)
+    scene: Scene
 
 
 @dataclass(frozen=True, slots=True)

@@ -562,7 +562,8 @@ def _make_sineating_offer(  # noqa: PLR0913
     resonance: object,
     relationship: object,
     max_units: int = 5,
-    scene: object = None,
+    *,
+    scene: object,
 ) -> SineatingOffer:
     """Build a SineatingOffer directly, bypassing scene validation.
 
@@ -570,6 +571,7 @@ def _make_sineating_offer(  # noqa: PLR0913
     request_sineating validation.  The SineatingOffer is the frozen
     dataclass accepted by resolve_sineating — constructing it manually
     allows us to skip the roster/scene-participation lookup chain.
+    ``scene`` is required; pass a real ``SceneFactory()`` instance.
     """
     return SineatingOffer(
         sinner_sheet=sinner,  # type: ignore[arg-type]
@@ -730,12 +732,15 @@ class ResolveSineatingHappyPathTests(TestCase):
         CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
 
     def _build_offer(self, max_units: int = 5) -> SineatingOffer:
+        from world.scenes.factories import SceneFactory
+
         return _make_sineating_offer(
             self.sinner,
             self.sineater,
             self.resonance,
             self.relationship,
             max_units=max_units,
+            scene=SceneFactory(),
         )
 
     def test_returns_sineating_result_with_correct_units(self) -> None:
@@ -852,11 +857,14 @@ class ResolveSineatingDeclineTests(TestCase):
         CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
 
     def _build_offer(self) -> SineatingOffer:
+        from world.scenes.factories import SceneFactory
+
         return _make_sineating_offer(
             self.sinner,
             self.sineater,
             self.resonance,
             self.relationship,
+            scene=SceneFactory(),
         )
 
     def test_decline_returns_declined_true(self) -> None:
@@ -1525,7 +1533,11 @@ def _form_tether_and_resolve(
     units: int = 3,
 ) -> None:
     """Accept a tether and resolve a Sineating to make hollow_current > 0."""
-    offer = _make_sineating_offer(sinner, sineater, resonance, relationship, max_units=units)
+    from world.scenes.factories import SceneFactory
+
+    offer = _make_sineating_offer(
+        sinner, sineater, resonance, relationship, max_units=units, scene=SceneFactory()
+    )
     resolve_sineating(offer, units_accepted=units)
 
 
@@ -1568,8 +1580,15 @@ class DissolveSoulTetherSingleTests(TestCase):
 
         # Seed some sineating so hollow_current > 0 (optional — dissolution retires
         # threads regardless, but this validates hollow doesn't interfere).
+        from world.scenes.factories import SceneFactory
+
         offer = _make_sineating_offer(
-            self.sinner, self.sineater, self.resonance, self.relationship, max_units=3
+            self.sinner,
+            self.sineater,
+            self.resonance,
+            self.relationship,
+            max_units=3,
+            scene=SceneFactory(),
         )
         resolve_sineating(offer, units_accepted=3)
 
