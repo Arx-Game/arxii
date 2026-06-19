@@ -99,6 +99,17 @@ class InteractionReceiver(SharedMemoryModel):
         related_name="interactions_received",
         help_text="The persona who received this interaction",
     )
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The account that received this, pinned at creation (#1219). Party identity for "
+            "private-content log visibility — stable across persona hand-offs."
+        ),
+    )
 
     class Meta:
         constraints = [

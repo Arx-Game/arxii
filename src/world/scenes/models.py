@@ -462,6 +462,18 @@ class Interaction(SharedMemoryModel):
         help_text="How the writer appeared at this moment. Always set — every "
         "interaction has a persona, even if it's just the character's primary persona.",
     )
+    writer_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The account that wrote this, pinned at creation (#1219). Party identity for "
+            "private-content log visibility — stable across persona hand-offs, so an "
+            "inheriting player is never treated as a party to the prior player's whispers."
+        ),
+    )
     scene = models.ForeignKey(
         Scene,
         on_delete=models.SET_NULL,
