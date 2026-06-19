@@ -17,9 +17,10 @@ from world.magic.audere import (
     _check_soulfray_gate,
     soulfray_stage_order_snapshot,
 )
+from world.magic.models.renown_config import RenownAwardConfig
 
 
-class AudereMajoraThreshold(SharedMemoryModel):
+class AudereMajoraThreshold(RenownAwardConfig):
     """Configuration for a tier-crossing boundary level.
 
     One row per boundary level (5, 10, 15, 20). Authored by staff in the DB.
@@ -53,6 +54,16 @@ class AudereMajoraThreshold(SharedMemoryModel):
     )
     manifestation_text = models.TextField(
         help_text="Broadcast to the room when the offer fires. Authored in DB.",
+    )
+    deed_title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "PUBLIC deed name used as the renown/echo title when a crossing mints a "
+            "deed. Non-spoiler — distinct from vision_text/manifestation_text. Blank "
+            "falls back to a generic composed title."
+        ),
     )
 
     class Meta:
@@ -141,6 +152,14 @@ class AudereMajoraCrossing(SharedMemoryModel):
     )
     level_after = models.PositiveSmallIntegerField(
         help_text="Character level granted by the crossing.",
+    )
+    legend_entry = models.OneToOneField(
+        "societies.LegendEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audere_majora_crossing",
+        help_text="The legend deed minted for this crossing. Receipt stays source of truth.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -339,6 +358,79 @@ def maybe_create_audere_majora_offer(
 
 
 # =============================================================================
+# Deed helpers
+# =============================================================================
+
+
+def _crossing_deed_title(threshold: AudereMajoraThreshold, persona, chosen_path) -> str:
+    """Public, non-spoiler deed name: authored override, else generic composed copy."""
+    if threshold.deed_title:
+        return threshold.deed_title
+    return f"{persona.name}'s Crossing — {chosen_path.name}"
+
+
+def _crossing_deed_description(persona, chosen_path) -> str:
+    """Generic non-spoiler deed description from public facts only."""
+    return f"{persona.name} crossed the threshold onto {chosen_path.name}."
+
+
+def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
+    """Mint the renown deed for a completed crossing; record present witnesses.
+
+    No-ops when the crosser has no primary persona. When the threshold's risk
+    yields no legend (misconfigured), fire_renown_award creates no LegendEntry
+    and there is nothing to link or witness.
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.societies.constants import DeedKnowledgeSource  # noqa: PLC0415
+    from world.societies.knowledge_services import (  # noqa: PLC0415
+        grant_deed_knowledge,
+        scene_witness_personas,
+    )
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+    from world.societies.renown import fire_renown_award  # noqa: PLC0415
+
+    sheet = crossing.character_sheet
+    try:
+        persona = sheet.primary_persona
+    except Persona.DoesNotExist:
+        return
+
+    scene = crossing.scene
+    origin_area = (
+        scene.location.area
+        if scene and hasattr(scene, "location") and scene.location is not None
+        else None
+    )
+    threshold = crossing.threshold
+    title = _crossing_deed_title(threshold, persona, crossing.chosen_path)
+
+    result = fire_renown_award(
+        persona=persona,
+        origin_area=origin_area,
+        title=title,
+        **threshold.as_renown_award_kwargs(),
+    )
+    if result.legend_entry_id is None:
+        return
+
+    entry = LegendEntry.objects.get(pk=result.legend_entry_id)
+    if not entry.description:
+        entry.description = _crossing_deed_description(persona, crossing.chosen_path)
+        entry.save(update_fields=["description"])
+
+    crossing.legend_entry = entry
+    crossing.save(update_fields=["legend_entry"])
+
+    if scene is not None:
+        grant_deed_knowledge(
+            deed=entry,
+            personas=scene_witness_personas(scene),
+            source=DeedKnowledgeSource.WITNESSED,
+        )
+
+
+# =============================================================================
 # Crossing services (Task 4)
 # =============================================================================
 
@@ -433,7 +525,7 @@ def cross_threshold(
 
     CharacterPathHistory.objects.create(character=character, path=chosen_path)
 
-    AudereMajoraCrossing.objects.create(
+    crossing = AudereMajoraCrossing.objects.create(
         character_sheet=sheet,
         threshold=threshold,
         chosen_path=chosen_path,
@@ -442,6 +534,7 @@ def cross_threshold(
         level_before=level_before,
         level_after=level_after,
     )
+    _mint_crossing_deed(crossing)
 
     majora_template = ConditionTemplate.get_by_name(AUDERE_MAJORA_CONDITION_NAME)
     # Result deliberately unchecked, mirroring offer_audere: no authored trigger
