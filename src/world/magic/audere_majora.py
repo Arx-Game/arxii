@@ -17,9 +17,10 @@ from world.magic.audere import (
     _check_soulfray_gate,
     soulfray_stage_order_snapshot,
 )
+from world.magic.models.renown_config import RenownAwardConfig
 
 
-class AudereMajoraThreshold(SharedMemoryModel):
+class AudereMajoraThreshold(RenownAwardConfig):
     """Configuration for a tier-crossing boundary level.
 
     One row per boundary level (5, 10, 15, 20). Authored by staff in the DB.
@@ -53,6 +54,16 @@ class AudereMajoraThreshold(SharedMemoryModel):
     )
     manifestation_text = models.TextField(
         help_text="Broadcast to the room when the offer fires. Authored in DB.",
+    )
+    deed_title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "PUBLIC deed name used as the renown/echo title when a crossing mints a "
+            "deed. Non-spoiler — distinct from vision_text/manifestation_text. Blank "
+            "falls back to a generic composed title."
+        ),
     )
 
     class Meta:
@@ -141,6 +152,14 @@ class AudereMajoraCrossing(SharedMemoryModel):
     )
     level_after = models.PositiveSmallIntegerField(
         help_text="Character level granted by the crossing.",
+    )
+    legend_entry = models.OneToOneField(
+        "societies.LegendEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audere_majora_crossing",
+        help_text="The legend deed minted for this crossing. Receipt stays source of truth.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
