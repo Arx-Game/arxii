@@ -21,6 +21,7 @@ import type {
   OutfitSlot,
   PaginatedResponse,
   UpdateOutfitPayload,
+  UseItemResult,
 } from './types';
 
 type ItemFacetRead = components['schemas']['ItemFacetRead'];
@@ -130,6 +131,14 @@ export async function listInventory(characterId: number): Promise<ItemInstance[]
   }
   const data = (await res.json()) as PaginatedResponse<ItemInstance>;
   return data.results;
+}
+
+export async function postUseItem(itemId: number): Promise<UseItemResult> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/use/`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to use item'));
+  }
+  return (await res.json()) as UseItemResult;
 }
 
 export async function listEquipped(characterId: number): Promise<EquippedItem[]> {

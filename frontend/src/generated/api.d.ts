@@ -5409,7 +5409,7 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Use a consumable item: apply its on-use effects (to self) and spend a charge.
+     * @description Use an item with an on-use pool: apply its effects (to self); consumables spend a charge.
      *
      *     Owner-or-staff gated. Business logic lives entirely in ``use_item``;
      *     this view resolves the actor, enforces ownership, and maps
@@ -16264,6 +16264,11 @@ export interface components {
       readonly display_description: string;
       /** @description Return the cloudinary URL for the item's display image, if any. */
       readonly display_image_url: string | null;
+      /**
+       * @description True iff use_item would proceed: the template has an on-use pool.
+       *     Mirrors the precondition in services.usage.use_item.
+       */
+      readonly is_usable: boolean;
       readonly contained_in: number;
       /** @description Stack quantity for stackable items. */
       readonly quantity: number;

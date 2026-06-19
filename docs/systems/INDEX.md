@@ -715,6 +715,10 @@ services, and equipment-modifier integration.
   - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
     — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
   - `remove_facet_from_item(*, item_facet) -> None`
+  - `use_item(item_instance, user, target=None) -> UseItemResult` — applies on-use pool effects;
+    consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
+    usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
+    (no `on_use_pool`) or `NoChargesRemaining` (consumable at 0 charges)
   - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
     deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
@@ -726,8 +730,14 @@ services, and equipment-modifier integration.
     at 0 charges
   - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
     OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
+- **Usable vs consumable:** an item is *usable* iff `template.on_use_pool_id is not None`.
+  *Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge
+  per use and are destroyed at 0 charges. Non-consumable usable items are reusable.
+- **Serializer field `is_usable`:** `ItemInstanceReadSerializer` exposes `is_usable` (bool,
+  `SerializerMethodField`) — `True` iff `template.on_use_pool_id is not None`. Clients gate the
+  Use button on this field.
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
-  `SlotIncompatible` — all in `world.items.exceptions`
+  `SlotIncompatible`, `ItemNotUsable`, `NoChargesRemaining` — all in `world.items.exceptions`
 - **API Endpoints:**
   - `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/`
     (read-only catalog)
@@ -737,9 +747,18 @@ services, and equipment-modifier integration.
     unequip route through the action layer via the WebSocket `execute_action`
     inputfunc (`{action: "equip" | "unequip", kwargs: {target_id: N, ...}}`)
     or the telnet `wear` / `remove` / `get` / `drop` commands
+  - `GET /api/items/inventory/` — read-only inventory list (`.in_play()` filtered)
+  - `POST /api/items/inventory/<pk>/use/` — use item; owner-or-staff gated; returns
+    `UseItemResult` (`charges_remaining`, `consumed`, `result_text`); `ItemError` → HTTP 400
 - **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
   region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
   per item; worn facets feed the mechanics modifier walk (see Mechanics §EQUIPMENT_RELEVANT).
+  Usability (`is_usable`) is derived entirely from the template's `on_use_pool` FK — no
+  separate flag or type split.
+- **Frontend:** `WardrobePage` (outfits, equipped items, inventory grid, item detail drawer);
+  `ItemDetailPanel` shows a **Use** button when `item.is_usable` is true (disabled for
+  depleted consumables), calls `POST /api/items/inventory/<pk>/use/`, and renders an inline
+  result block (charges remaining / consumed / text); errors toast the backend `user_message`.
 - **Integrates with:** mechanics (equipment modifier walk via `passive_facet_bonuses` +
   `covenant_role_bonus`), magic (outfit trickle, `outfit_item_facet` ResonanceGrant FK),
   covenants (gear archetype compatibility), crafting (future: crafting recipes)

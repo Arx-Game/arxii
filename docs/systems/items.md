@@ -57,13 +57,15 @@ from world.items.constants import (
 
 ---
 
-## API Endpoints (Read-Only)
+## API Endpoints
 
 | Endpoint | ViewSet | Notes |
 |----------|---------|-------|
 | `/api/items/quality-tiers/` | `QualityTierViewSet` | List quality tiers |
 | `/api/items/interaction-types/` | `InteractionTypeViewSet` | List interaction types |
 | `/api/items/templates/` | `ItemTemplateViewSet` | List/detail with nested slots and interaction bindings |
+| `GET /api/items/inventory/` | `ItemInstanceViewSet` | Read-only inventory list; filtered to `.in_play()` |
+| `POST /api/items/inventory/<pk>/use/` | `ItemInstanceViewSet` | Use item; owner-or-staff gated; returns `UseItemResult` |
 
 ---
 
@@ -163,6 +165,31 @@ Override via `.env`:
 ITEM_SOFT_DELETE_GRACE_DAYS=14
 ```
 
+### Usable vs Consumable Items
+An item is **usable** iff its template has an `on_use_pool` FK set (`template.on_use_pool_id is not None`).
+This is the single gate checked by `use_item` and exposed as the `is_usable` field on `ItemInstanceRead`.
+
+**Consumable** items are the *subset* of usable items where `template.is_consumable` is True:
+- Each use spends one charge (atomic `select_for_update`).
+- At 0 charges, instances with personalised data (custom name/description, non-default quality tier,
+  facets, `lore_value`, or provenance) are **soft-deleted** (`destroyed_at` marker); bare
+  template-identical throwaways are **hard-deleted** (the `CONSUMED` `OwnershipEvent` row survives
+  via `SET_NULL` on the FK).
+- `NoChargesRemaining` is raised before effects fire when `charges <= 0`.
+
+**Reusable** usable items (not consumable) apply effects on every use without spending a charge
+or ever being destroyed. An `ACTIVATED` `OwnershipEvent` is logged on each use.
+
+The `use_item` service (`world/items/services/usage.py`) dispatches both branches. Effects are
+authored as `checks.Consequence` → `ConsequenceEffect` grouped into an `actions.ConsequencePool`
+on `ItemTemplate.on_use_pool`; `on_use_check_type` and `on_use_difficulty` gate the optional
+skill check. Both consumable and reusable items return a `UseItemResult` dataclass.
+
+### is_usable Serializer Field
+`ItemInstanceReadSerializer` exposes `is_usable` (a `SerializerMethodField`) equal to
+`template.on_use_pool_id is not None`. Clients gate the **Use** button on this field; they do not
+need to inspect the template directly.
+
 ---
 
 ## Integration with Capability/Challenge System
@@ -207,12 +234,10 @@ See `docs/systems/magic.md` for the full thread and ritual model lineup.
 
 ## What's Not Yet Built
 
-- **Service functions** for equip/unequip, give, pick up, drop, consume
-- **Combat stat blocks** for weapons and armor
-- **Fashion facet integration** with the magic/resonance system
-- **Visible equipment rendering** for character appearance
-- **Frontend inventory UI**
-- **Modifier source integration** with the mechanics system (equipment as modifier sources)
 - **ItemCapabilityGrant model** — links items to capabilities (parallel to TechniqueCapabilityGrant)
 - **Equipment source collector** — `_get_equipment_sources()` for `get_capability_sources_for_character()`
 - **Unified action aggregation** — frontend layer merging challenge actions, item interactions, and basic actions
+- **use-item Action class** — action-layer `UseItemAction` in `actions/definitions/` converging on
+  `action.run()` alongside equip/unequip; the REST endpoint (`POST /api/items/inventory/<pk>/use/`)
+  currently handles frontend use-item requests directly
+- **Time-based cleanup** — cron purge of soft-deleted, non-lore-critical item instances

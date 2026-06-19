@@ -332,3 +332,40 @@ class UseItemActionTests(TestCase):
         item = self._make_held_item(charges=0)
         response = self.client.post(f"/api/items/inventory/{item.pk}/use/", {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class IsUsableSerializerTests(TestCase):
+    """Tests for the is_usable field on ItemInstanceReadSerializer."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(
+            db_key="IsUsableRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _instance(self, *, template) -> ItemInstance:
+        """Build an ItemInstance with a game object at room location."""
+        obj = ObjectDBFactory(
+            db_key=f"IsUsableObj{template.pk}",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        obj.location = self.room
+        obj.save()
+        return ItemInstanceFactory(template=template, game_object=obj, quality_tier=None)
+
+    def test_is_usable_true_when_template_has_on_use_pool(self) -> None:
+        """is_usable mirrors use_item's precondition: template has an on-use pool,
+        independent of is_consumable."""
+        from actions.factories import ConsequencePoolFactory
+        from world.items.serializers import ItemInstanceReadSerializer
+
+        usable = ItemTemplateFactory(
+            is_consumable=False, max_charges=0, on_use_pool=ConsequencePoolFactory()
+        )
+        not_usable = ItemTemplateFactory(is_consumable=True, max_charges=1, on_use_pool=None)
+        self.assertTrue(
+            ItemInstanceReadSerializer(self._instance(template=usable)).data["is_usable"]
+        )
+        self.assertFalse(
+            ItemInstanceReadSerializer(self._instance(template=not_usable)).data["is_usable"]
+        )

@@ -175,10 +175,16 @@ soak; thread defensive-magnitude tuning.
 
 **Branch:** `feature-509-item-interaction-service-functions-use-c`
 
-Service layer (+ a REST entry point) for using consumable items — potions, scrolls,
-charged-use items. Reuses the wired effect stack end-to-end rather than introducing new
-effect or pool primitives: effects are authored as `checks.Consequence` → `ConsequenceEffect`
-and grouped into an `actions.ConsequencePool` (the same abstraction combat clashes use).
+Service layer (+ a REST entry point) for using items with an authored on-use effect pool —
+potions, scrolls, charged-use items, and reusable magical objects. Reuses the wired effect
+stack end-to-end rather than introducing new effect or pool primitives: effects are authored
+as `checks.Consequence` → `ConsequenceEffect` and grouped into an `actions.ConsequencePool`
+(the same abstraction combat clashes use).
+
+**Usable vs Consumable:** An item is *usable* iff `ItemTemplate.on_use_pool_id is not None`.
+*Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge
+per use and are destroyed at 0 charges. Non-consumable usable items are **reusable**: effects
+fire, an `ACTIVATED` ownership event is logged, no charge is spent, and the item is never destroyed.
 
 What landed:
 
@@ -194,14 +200,14 @@ What landed:
 - **Service `world/items/services/usage.py`:** `consume_item_charges` (atomic, `select_for_update`
   charge lock, `ACTIVATED`/`CONSUMED` ledger, soft/hard delete) and `use_item` (deterministic via
   `apply_pool_deterministically`, or check-gated via `select_consequence` + `apply_resolution`;
-  charge spent regardless of check outcome). Returns a `UseItemResult` dataclass.
+  consumables spend a charge regardless of check outcome; reusable items never spend charges).
+  Returns a `UseItemResult` dataclass.
 - **Typed exceptions:** `ItemNotUsable`, `NoChargesRemaining` (in `world.items.exceptions`).
 - **REST:** `POST /api/items/inventory/<pk>/use/` — a `use` action on `ItemInstanceViewSet`,
   owner-or-staff gated, `ItemError` → HTTP 400; list/retrieve filter `.in_play()`.
 
 Deferred follow-ups: use-item *Action* (`actions/definitions/`) converging on `action.run()`
-alongside equip/unequip; durability-on-use (#508) integration; quantity/stack consumption;
-frontend "use item" UI.
+alongside equip/unequip; durability-on-use (#508) integration; quantity/stack consumption.
 
 ## Time-Based Cleanup of Soft-Deleted Items (DONE, #1025)
 
@@ -216,7 +222,7 @@ What landed:
   `True` if the item must never be auto-purged: `lore_value != 0`, OR has attached facets
   (`ItemFacet` rows), OR has transfer provenance (a GIVEN, STOLEN, or TRANSFERRED
   `OwnershipEvent`). Cosmetic-only data (custom name, quality tier) is deliberately *not*
-  lore-critical so throway cosmetics are still eligible for purge.
+  lore-critical so throwaway cosmetics are still eligible for purge.
 - **`PROVENANCE_EVENT_TYPES`** frozenset in `world/items/constants.py` — `{GIVEN, STOLEN,
   TRANSFERRED}` — the transfer-event guard shared by the predicate and the cleanup query.
 - **`hard_delete_item_instance(item_instance)` shared helper** in
@@ -227,8 +233,9 @@ What landed:
   behavior is now retired for hard-delete paths.
 - **`purge_expired_soft_deleted_items(*, grace=None) -> int`** in
   `world/items/services/cleanup.py` — queries `destroyed_at < cutoff AND lore_value=0
-  AND facets=0 AND transfer_provenance=0`, calls `hard_delete_item_instance` for each,
-  returns the count purged. Wraps everything in `@transaction.atomic`.
+  AND facets=0 AND transfer_provenance=0`, then purges each via a per-item savepoint so one
+  PROTECT-referenced row can't wedge the batch (Mantle / ProjectContribution rows are also
+  excluded at the query level); returns the count purged.
 - **`ITEM_SOFT_DELETE_GRACE_DAYS`** in `settings.py` — defaults to 30, configurable via
   the `ITEM_SOFT_DELETE_GRACE_DAYS` env var. Passed as `timedelta(days=N)` to the
   cleanup service.
@@ -237,7 +244,30 @@ What landed:
   logs the purge count.
 - **Tests** — lore-critical items are retained forever; past-grace non-lore-critical items
   are purged; within-grace items are retained; no-op when nothing eligible; no orphaned
-  ledger rows after purge.
+  ledger rows after purge; PROTECT-referenced rows are skipped without aborting the batch.
+
+## Use-Item Frontend UI (DONE, #1026)
+
+**Branch:** `feature-1026-frontend-use-item-ui`
+
+React **Use** button and inline result display wired into `ItemDetailPanel`, completing the
+player-facing loop for usable items shipped in #509.
+
+What landed:
+
+- **`is_usable` serializer field** — `ItemInstanceReadSerializer` exposes `is_usable` as a
+  `SerializerMethodField` equal to `template.on_use_pool_id is not None`. Clients gate the Use
+  button on this field; they do not inspect the template directly.
+- **`useUseItem` hook** — React Query mutation calling `POST /api/items/inventory/<pk>/use/`;
+  returns `UseItemResult` (`charges_remaining`, `consumed`, `result_text`).
+- **Use button in `ItemDetailPanel`** — rendered only when `item.is_usable`; disabled when the
+  item is consumable and `charges <= 0`. On success, shows an inline result block beneath the
+  charges line (charges remaining / consumed indicator / result text). On error, toasts the
+  backend `user_message`.
+- **Non-consumable (reusable) path** — the button is always enabled; the result block shows
+  "Used" with any authored result text and no charge counter.
+- **Generated types** — `ItemInstanceRead.is_usable` (bool) and `UseItemResult` wired into
+  the frontend API schema.
 
 ## Inventory Service Functions (DONE)
 
@@ -534,7 +564,8 @@ Explicitly NOT in this slice (parked):
 - ~~Saved outfits (Phase A)~~ — **done** (Outfit / OutfitSlot models, apply_outfit / undress / save_outfit / delete_outfit / add_outfit_slot / remove_outfit_slot services, ApplyOutfit/Undress actions, `wear outfit <name>` + `undress` telnet commands, REST CRUD, wardrobe page)
 - ~~Item stats model~~ — **done** (#508: `ItemTemplate` base combat stats — `weapon_damage_type`, `base_weapon_damage`, `base_armor_soak`, `max_durability`, gated by `gear_archetype`; `ItemInstance` derives `effective_weapon_damage` / `effective_armor_soak` / `is_broken` from quality tier and `durability`; `decrement_item_durability` service; combat wiring — armor soak in `apply_damage_to_participant`, equipped-weapon damage via `TechniqueDamageProfile.uses_equipped_weapon`, durability decremented on landed/soaked hits)
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
-- Item interaction service functions — using items, consuming charges (DONE, #509)
+- ~~Item interaction service functions — using items, consuming charges~~ — **done** (#509: `use_item` service, `on_use_pool` schema, soft/hard delete, `POST /api/items/inventory/<pk>/use/`)
+- ~~Frontend "use item" UI~~ — **done** (#1026: `is_usable` serializer field, `useUseItem` hook, Use button in `ItemDetailPanel` with inline result block; reusable and consumable branches both handled)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
 - ~~Outfits Phase B (Fashion)~~ — **done** (`FashionStyle` + `FashionStyleBonus` models, `Society.current_fashion_style` FK, `fashion_outfit_bonus` service, wired into `get_modifier_total` via `perceiving_society`; scene-derived society + combat surfacing delivered in Spec D PR4 / #512 via `societies_for_scene` + `collect_check_modifiers`)
 - ~~Outfits Phase C (Modeling)~~ — **done** (#514: `FashionPresentation` + peer `PresentationEndorsement`, `Event.host_society`, `prestige_from_fashion` axis, `FacetVogueMomentum` + seasonal trendsetter ceremony rewriting `Society.current_fashion_style`, `RankingType.FASHION` leaderboard reusing #676, present/judge API + event-detail UI)

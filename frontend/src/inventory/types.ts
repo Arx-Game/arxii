@@ -25,6 +25,7 @@ export type OutfitSlotWriteRequest = components['schemas']['OutfitSlotWriteReque
 
 export type ItemInstance = components['schemas']['ItemInstanceRead'];
 export type EquippedItem = components['schemas']['EquippedItemRead'];
+export type UseItemResult = components['schemas']['UseItemResult'];
 
 export type BodyRegion = components['schemas']['BodyRegionEnum'];
 export type EquipmentLayer = components['schemas']['EquipmentLayerEnum'];
