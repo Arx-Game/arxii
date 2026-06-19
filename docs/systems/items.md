@@ -17,7 +17,8 @@ from world.items.constants import (
                          # LEFT_LEG, RIGHT_LEG, FEET, LEFT_FINGER, RIGHT_FINGER,
                          # LEFT_EAR, RIGHT_EAR
     EquipmentLayer,      # SKIN, UNDER, BASE, OVER, OUTER, ACCESSORY
-    OwnershipEventType,  # CREATED, GIVEN, STOLEN, TRANSFERRED
+    OwnershipEventType,  # CREATED, GIVEN, STOLEN, TRANSFERRED, ACTIVATED, CONSUMED
+    PROVENANCE_EVENT_TYPES,  # frozenset {GIVEN, STOLEN, TRANSFERRED} — transfer provenance
 )
 ```
 
@@ -51,7 +52,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OwnershipEvent` | Append-only ownership transition ledger | `item_instance` (FK), `event_type`, `from_account` (FK), `to_account` (FK), `notes`, `created_at` |
+| `OwnershipEvent` | Ownership transition ledger (append-only during play; purged alongside non-lore-critical items on cleanup) | `item_instance` (FK, SET_NULL), `event_type`, `from_character_sheet` (FK), `to_character_sheet` (FK), `notes`, `created_at` |
 | `CurrencyBalance` | Per-account gold balance | `account` (OneToOne to AccountDB), `gold` |
 
 ---
@@ -86,8 +87,81 @@ EquippedItem rows for torso, both arms, etc.). The unique constraint
 `(character, body_region, equipment_layer)` enforces one item per slot.
 
 ### Ownership Ledger
-`OwnershipEvent` is append-only — ownership transitions are recorded, never deleted.
-This supports investigation mechanics, theft tracking, and provenance queries.
+`OwnershipEvent` is append-only during normal play — ownership transitions are
+recorded, not overwritten. However, the soft-delete cleanup path (see "Destruction &
+soft-delete lifecycle" below) hard-deletes the entire footprint of non-lore-critical
+items, **including their ledger rows**. Ledger rows are therefore permanent only for
+lore-critical items (those with `lore_value`, facets, or transfer provenance — i.e.
+items that have changed hands). Bare throwaway consumables' CREATED/ACTIVATED/CONSUMED
+rows are removed alongside the item on purge. This supports investigation mechanics,
+theft tracking, and provenance queries for items that matter.
+
+---
+
+## Destruction & soft-delete lifecycle
+
+Items move through three states:
+
+| State | Meaning | How to query |
+|-------|---------|--------------|
+| **In play** | Active, in the game world | `ItemInstance.objects.in_play()` (`destroyed_at IS NULL`) |
+| **Soft-deleted (recoverable)** | Removed from play but row retained | `destroyed_at IS NOT NULL` |
+| **Purged** | Row hard-deleted; gone permanently | — (no row) |
+
+### Predicates on ItemInstance
+
+**`differs_from_template`** (property) — `True` if the instance carries any
+per-instance data worth preserving: a `custom_name`, `custom_description`, `lore_value`,
+non-default `quality_tier`, any attached facets, or any `OwnershipEvent` beyond
+`CREATED`. Used by `consume_item_charges` to decide soft-delete vs. hard-delete at
+0 charges.
+
+**`is_lore_critical`** (property) — a tighter subset; `True` only if the item must
+*never* be auto-purged. Conditions: `lore_value` is nonzero, OR the item has facets,
+OR it has transfer provenance (a `GIVEN`, `STOLEN`, or `TRANSFERRED` ownership event
+in `PROVENANCE_EVENT_TYPES`). Cosmetic-only data (custom name, quality tier) is not
+lore-critical: those items can be purged once the grace period expires.
+
+### Shared deletion helper
+
+`hard_delete_item_instance(item_instance)` in
+`world/items/services/usage.py` removes the instance's complete footprint in one
+call: it deletes all `OwnershipEvent` rows for the item first (so no ledger row is
+left with a null FK), then deletes the `game_object` (whose CASCADE removes the
+`ItemInstance` row) or the `ItemInstance` row directly if there is no game object.
+This helper is used by both the destruction-at-0-charges path and the time-based
+cleanup, so there is no second code path that could leave dangling rows.
+
+### Time-based cleanup of soft-deleted items
+
+**Service:** `purge_expired_soft_deleted_items(*, grace=None)` in
+`world/items/services/cleanup.py`
+
+Runs daily as the `items.soft_delete_cleanup` cron task (registered in
+`world/items/tasks.py`). On each run it:
+
+1. Computes a cutoff: `now() - grace` (default: `settings.ITEM_SOFT_DELETE_GRACE_DAYS`
+   days, configurable via the `ITEM_SOFT_DELETE_GRACE_DAYS` env var, default **30**).
+2. Queries all `ItemInstance` rows with `destroyed_at < cutoff` **and**
+   `lore_value=0` **and** zero attached facets **and** zero transfer-provenance events
+   (GIVEN/STOLEN/TRANSFERRED).
+3. Calls `hard_delete_item_instance` for each, returning the count purged.
+
+Lore-critical items (`is_lore_critical=True`) are never eligible and remain as
+soft-deleted rows indefinitely, available for staff recovery.
+
+**Configuration:**
+
+```python
+# src/server/conf/settings.py (default)
+ITEM_SOFT_DELETE_GRACE_DAYS = env.int("ITEM_SOFT_DELETE_GRACE_DAYS", default=30)
+```
+
+Override via `.env`:
+
+```
+ITEM_SOFT_DELETE_GRACE_DAYS=14
+```
 
 ---
 

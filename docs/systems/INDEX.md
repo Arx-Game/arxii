@@ -702,7 +702,9 @@ services, and equipment-modifier integration.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
-  accessory), `OwnershipEventType` (created/given/stolen/transferred), `GearArchetype`
+  accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
+  `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
+  provenance used by the lore-critical predicate)
 - **Handlers:**
   - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
     `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
@@ -713,6 +715,17 @@ services, and equipment-modifier integration.
   - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
     — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
   - `remove_facet_from_item(*, item_facet) -> None`
+  - `hard_delete_item_instance(item_instance) -> None` (`world/items/services/usage.py`) —
+    deletes the whole footprint: ledger rows then game_object/instance; no dangling FKs
+  - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
+    — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
+    by the `items.soft_delete_cleanup` daily cron task (#1025)
+- **Predicates on `ItemInstance`:**
+  - `differs_from_template` — True if instance has any per-instance data (custom name/desc,
+    lore_value, quality_tier, facets, or non-CREATED provenance); gates soft- vs. hard-delete
+    at 0 charges
+  - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
+    OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
   `SlotIncompatible` — all in `world.items.exceptions`
 - **API Endpoints:**
