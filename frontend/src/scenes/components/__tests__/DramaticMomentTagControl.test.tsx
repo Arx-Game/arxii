@@ -10,6 +10,7 @@
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -206,6 +207,42 @@ describe('PoseUnit — GM dramatic-moment tag control', () => {
 
     await waitFor(() => {
       expect(mockFetchDramaticMomentTypes).toHaveBeenCalled();
+    });
+  });
+
+  it('submitting the dialog calls postDramaticMomentTag with the correct body', async () => {
+    // Radix Select sets pointer-events: none on <body> while closed;
+    // disable the userEvent pointer-events guard so we can click the Select in jsdom.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const interaction = makeInteraction({ id: 42 });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="5" canGm={true} />
+      </Wrapper>
+    );
+
+    // Open the dialog
+    await user.click(screen.getByTestId('tag-moment-button'));
+
+    // Wait for the dialog to open and moment types to load
+    await waitFor(() => {
+      expect(screen.getByText('Tag Dramatic Moment')).toBeInTheDocument();
+    });
+
+    // Open the Select dropdown and pick "Grand Entrance" (id=1)
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Grand Entrance' }));
+
+    // Submit the form
+    await user.click(screen.getByTestId('tag-moment-submit'));
+
+    // Assert the mutation was called with the correct body shape
+    await waitFor(() => {
+      expect(mockPostDramaticMomentTag).toHaveBeenCalledWith({
+        moment_type: 1,
+        interaction: 42,
+      });
     });
   });
 });

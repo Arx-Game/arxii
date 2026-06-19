@@ -241,8 +241,12 @@ export function PoseUnit({
       {/* Dramatic-moment tag badges (#1139) */}
       {dramaticTags.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1" data-testid="dramatic-moment-badges">
-          {dramaticTags.map((tag, idx) => (
-            <Badge key={idx} variant="secondary" className="text-xs">
+          {dramaticTags.map((tag) => (
+            <Badge
+              key={`${tag.moment_type_label}-${tag.character_sheet_id ?? 'none'}`}
+              variant="secondary"
+              className="text-xs"
+            >
               ✶ {tag.moment_type_label}
             </Badge>
           ))}

@@ -155,13 +155,12 @@ export async function postDramaticMomentTag(body: {
   interaction?: number;
   character_sheet?: number;
   scene?: number;
-}): Promise<unknown> {
+}): Promise<void> {
   const res = await apiFetch('/api/magic/dramatic-moment-tags/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to tag dramatic moment');
-  return res.json();
 }
 
 export async function reactToWindow(
