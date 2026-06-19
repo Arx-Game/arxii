@@ -59,10 +59,6 @@ class AuraPowerConfig(SharedMemoryModel):
             "scene reactions). Uses lifetime_earned, not spendable balance."
         ),
     )
-    resonance_standing_cap = models.PositiveIntegerField(
-        default=0,
-        help_text="Soft cap on the resonance-standing axis (0 = uncapped).",
-    )
 
     class Meta:
         verbose_name = "Aura Power Config"
@@ -71,8 +67,7 @@ class AuraPowerConfig(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"AuraPowerConfig(align={self.affinity_alignment_bonus},"
-            f" standing={self.resonance_standing_bonus},"
-            f" cap={self.resonance_standing_cap})"
+            f" standing={self.resonance_standing_bonus})"
         )
 
 

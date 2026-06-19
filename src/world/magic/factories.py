@@ -2583,7 +2583,6 @@ class AuraPowerConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
     affinity_alignment_bonus = 0
     resonance_standing_bonus = 0
-    resonance_standing_cap = 0
 
 
 class StandingCapBandFactory(factory.django.DjangoModelFactory):

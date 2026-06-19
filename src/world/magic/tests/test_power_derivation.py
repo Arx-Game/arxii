@@ -623,7 +623,7 @@ class AuraPowerConfigAccessorTests(TestCase):
         from world.magic.services.power_terms import get_aura_power_config
 
         cfg = AuraPowerConfig.objects.create(
-            pk=1, affinity_alignment_bonus=10, resonance_standing_bonus=2, resonance_standing_cap=50
+            pk=1, affinity_alignment_bonus=10, resonance_standing_bonus=2
         )
         self.assertEqual(get_aura_power_config(), cfg)
 
@@ -749,16 +749,64 @@ class AuraPowerTermTests(TestCase):
         AuraPowerConfigFactory(affinity_alignment_bonus=20)  # 50% celestial * 20 = 10
         self.assertEqual(aura_power_term(self._ctx()), 10)
 
-    def test_resonance_standing_axis_and_cap(self):
+    def _set_level(self, level: int) -> None:
+        from world.classes.factories import CharacterClassLevelFactory
+
+        CharacterClassLevelFactory(character=self.character, level=level)
+        self.sheet.invalidate_class_level_cache()
+
+    def _standing_setup(self, lifetime_earned: int, bonus: int) -> None:
         from world.magic.factories import AuraPowerConfigFactory, CharacterResonanceFactory
-        from world.magic.services.power_terms import aura_power_term
 
         CharacterResonanceFactory(
-            character_sheet=self.sheet, resonance=self.resonance, lifetime_earned=30
+            character_sheet=self.sheet, resonance=self.resonance, lifetime_earned=lifetime_earned
         )
-        AuraPowerConfigFactory(resonance_standing_bonus=2, resonance_standing_cap=40)
-        # 30 * 2 = 60, capped to 40
-        self.assertEqual(aura_power_term(self._ctx()), 40)
+        AuraPowerConfigFactory(resonance_standing_bonus=bonus)
+
+    def test_standing_uncapped_when_no_bands(self):
+        from world.magic.services.power_terms import aura_power_term
+
+        self._standing_setup(lifetime_earned=30, bonus=2)  # 60, no bands
+        self._set_level(5)
+        self.assertEqual(aura_power_term(self._ctx()), 60)
+
+    def test_standing_uncapped_when_level_below_lowest_band(self):
+        from world.magic.factories import StandingCapBandFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        self._standing_setup(lifetime_earned=30, bonus=2)  # 60
+        StandingCapBandFactory(min_level=5, cap=40, mode="HARD")
+        self._set_level(3)  # below the only band
+        self.assertEqual(aura_power_term(self._ctx()), 60)
+
+    def test_hard_band_clamps(self):
+        from world.magic.factories import StandingCapBandFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        self._standing_setup(lifetime_earned=30, bonus=2)  # 60
+        StandingCapBandFactory(min_level=1, cap=40, mode="HARD")
+        self._set_level(5)
+        self.assertEqual(aura_power_term(self._ctx()), 40)  # reproduces the old flat-cap behavior
+
+    def test_soft_band_diminishes_excess(self):
+        from world.magic.factories import StandingCapBandFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        self._standing_setup(lifetime_earned=30, bonus=2)  # 60
+        StandingCapBandFactory(min_level=1, cap=40, mode="SOFT", diminish_pct=50)
+        self._set_level(5)
+        # 40 + (60 - 40) * 50 // 100 = 40 + 10 = 50
+        self.assertEqual(aura_power_term(self._ctx()), 50)
+
+    def test_highest_applicable_band_wins(self):
+        from world.magic.factories import StandingCapBandFactory
+        from world.magic.services.power_terms import aura_power_term
+
+        self._standing_setup(lifetime_earned=100, bonus=2)  # 200
+        StandingCapBandFactory(min_level=1, cap=40, mode="HARD")
+        StandingCapBandFactory(min_level=6, cap=150, mode="HARD")
+        self._set_level(8)  # picks the L6 band, not L1
+        self.assertEqual(aura_power_term(self._ctx()), 150)
 
     def test_no_technique_returns_zero(self):
         from world.magic.factories import AuraPowerConfigFactory
