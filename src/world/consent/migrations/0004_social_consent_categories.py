@@ -118,7 +118,6 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="whitelist_entries",
                 to="consent.socialconsentcategory",
-                default=None,
                 null=True,
             ),
             preserve_default=False,

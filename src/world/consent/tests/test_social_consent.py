@@ -38,6 +38,18 @@ class SocialConsentWhitelistModelTest(TestCase):
                 owner_tenure=owner, allowed_tenure=allowed, category=entry.category
             )
 
+    def test_whitelist_unique_per_owner_allowed_category(self):
+        from django.db import IntegrityError
+
+        from world.consent.factories import SocialConsentCategoryFactory
+        from world.roster.factories import RosterTenureFactory
+
+        owner, allowed = RosterTenureFactory(), RosterTenureFactory()
+        cat = SocialConsentCategoryFactory()
+        SocialConsentWhitelistFactory(owner_tenure=owner, allowed_tenure=allowed, category=cat)
+        with self.assertRaises(IntegrityError):
+            SocialConsentWhitelistFactory(owner_tenure=owner, allowed_tenure=allowed, category=cat)
+
 
 class SocialConsentCategoryRuleModelTest(TestCase):
     def test_category_rule_unique_per_category(self):
@@ -55,18 +67,3 @@ class SocialConsentCategoryRuleModelTest(TestCase):
         SocialConsentCategoryRuleFactory(preference=pref, category=cat, mode=ConsentMode.ALLOWLIST)
         with self.assertRaises(IntegrityError):
             SocialConsentCategoryRuleFactory(preference=pref, category=cat)
-
-    def test_whitelist_unique_per_owner_allowed_category(self):
-        from django.db import IntegrityError
-
-        from world.consent.factories import (
-            SocialConsentCategoryFactory,
-            SocialConsentWhitelistFactory,
-        )
-        from world.roster.factories import RosterTenureFactory
-
-        owner, allowed = RosterTenureFactory(), RosterTenureFactory()
-        cat = SocialConsentCategoryFactory()
-        SocialConsentWhitelistFactory(owner_tenure=owner, allowed_tenure=allowed, category=cat)
-        with self.assertRaises(IntegrityError):
-            SocialConsentWhitelistFactory(owner_tenure=owner, allowed_tenure=allowed, category=cat)

@@ -271,4 +271,7 @@ class SocialConsentWhitelist(SharedMemoryModel):
         verbose_name_plural = "Social Consent Whitelist Entries"
 
     def __str__(self) -> str:
-        return f"SocialConsentWhitelist({self.owner_tenure_id} ← {self.allowed_tenure_id})"
+        return (
+            f"SocialConsentWhitelist({self.owner_tenure_id} ← "
+            f"{self.allowed_tenure_id} [{self.category_id}])"
+        )
