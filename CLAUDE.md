@@ -109,6 +109,32 @@ file `src/.env`; Django commands run from `src/`.
 - **Evennia migration quirks** — `docs/evennia-quirks.md`. Use `arx manage
   makemigrations` (custom command that prevents phantom Evennia-library migrations).
 
+## Docs Are Directives — Keep Them in Tandem
+
+In the agentic era, docs are **directives that you and other agents act on**, not
+commentary. A stale doc actively misleads — it is worse than no doc, because it is
+trusted. So **a change is not complete until the docs that describe it change in the
+same PR.** When you change behavior, architecture, a pipeline/flow, models, APIs, or
+service-function signatures, update the docs that describe them as part of the work:
+
+- **System doc + index** — update `docs/systems/<system>.md` and
+  `docs/systems/INDEX.md` when you add/rename/remove models, services, enums,
+  exceptions, or endpoints.
+- **Model map** — regenerate `docs/systems/MODEL_MAP.md`
+  (`uv run python tools/introspect_models.py`) after model/FK or service-signature
+  changes.
+- **Architecture doc** — update the relevant `docs/architecture/*.md` (including its
+  diagrams) when you change a pipeline, contract, or flow it documents.
+- **Roadmap** — mark the relevant `docs/roadmap/*.md` and record *what was built*.
+- **Fix-on-sight** — if you touch code a doc describes and find the doc already wrong,
+  correct it at the source in the same PR (use the `verify-against-code` skill's
+  `[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` labeling).
+
+This does not contradict "code is the source of truth" (see Anti-Reinvention): code
+is what's *true*; this invariant keeps the docs *trustworthy enough to be directives*.
+A change may legitimately need no doc update — but decide that deliberately, per the
+list above; don't default to skipping.
+
 ## Anti-Reinvention — REQUIRED for feature design
 
 **Every feature-design workflow MUST include an explicit "no reinventing the wheel"
@@ -204,6 +230,9 @@ rule: see the `running-tests` skill.
 
 ## Completing a Unit of Work
 
+- **Update the docs in tandem** — per "Docs Are Directives," sync the
+  system/architecture/INDEX/MODEL_MAP docs (and their diagrams) your change affects
+  *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
 - **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).

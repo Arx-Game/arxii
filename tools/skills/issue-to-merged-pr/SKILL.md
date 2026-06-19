@@ -191,6 +191,13 @@ Follow the plan if one exists; otherwise implement directly. Commit
 frequently. The plan's spec-review-loop applies to brainstorming runs; for
 skipped-design tasks, just edit and commit.
 
+**Keep docs in tandem (CLAUDE.md "Docs Are Directives").** Before opening the PR,
+update the docs your change affects *in the same PR* — system doc +
+`docs/systems/INDEX.md`, `docs/systems/MODEL_MAP.md` (regen after model/signature
+changes), the relevant `docs/architecture/*.md` and its diagrams, and the roadmap.
+A code change that leaves its docs stale is incomplete; stale docs misdirect the
+next agent.
+
 ### 4. Sync with main
 
 Sync **once here** to surface conflicts and migration collisions early and to
