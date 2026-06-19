@@ -112,10 +112,68 @@ export function PoseUnitDetailPanel({ actionInteractionIds }: PoseUnitDetailPane
               )
             )
           )}
+          {typeof actionOutcome.progress_delta === 'number' && (
+            <ClashContributionStory
+              strainCommitted={actionOutcome.strain_committed}
+              power={actionOutcome.power}
+              progressDelta={actionOutcome.progress_delta}
+            />
+          )}
           {actionOutcome.power_ledger && <PowerLedgerPanel ledger={actionOutcome.power_ledger} />}
         </div>
       ))}
     </div>
+  );
+}
+
+// Clash contribution summary line: strain → power → progress. The power-ledger
+// card below it carries the intensity/multiplier breakdown; this is the one-line
+// story. `power` is gated to null for viewers who can't see the ledger, so it is
+// omitted (strain + progress remain). Negative progress is a botch-backfire and
+// renders as a loss. (#977)
+function ClashContributionStory({
+  strainCommitted,
+  power,
+  progressDelta,
+}: {
+  strainCommitted?: number | null;
+  power?: number | null;
+  progressDelta: number;
+}) {
+  const isLoss = progressDelta < 0;
+  return (
+    <div
+      data-testid="clash-contribution-story"
+      className="flex flex-wrap items-baseline gap-1 font-mono text-xs"
+    >
+      {strainCommitted != null && (
+        <>
+          <span>{strainCommitted} strain</span>
+          <Arrow />
+        </>
+      )}
+      {power != null && (
+        <>
+          <span>{power} power</span>
+          <Arrow />
+        </>
+      )}
+      <span
+        data-testid="clash-progress-delta"
+        className={cn('font-medium', isLoss ? 'text-rose-400' : 'text-emerald-400')}
+      >
+        {progressDelta >= 0 ? '+' : ''}
+        {progressDelta} progress
+      </span>
+    </div>
+  );
+}
+
+function Arrow() {
+  return (
+    <span aria-hidden className="text-muted-foreground">
+      →
+    </span>
   );
 }
 

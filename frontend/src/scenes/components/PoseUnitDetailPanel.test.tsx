@@ -238,6 +238,109 @@ describe('PoseUnitDetailPanel', () => {
     expect(screen.queryByTestId('power-ledger-panel')).toBeNull();
   });
 
+  it('renders the clash strain→power→progress story when power is visible', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [],
+          strain_committed: 4,
+          power: 37,
+          progress_delta: 18,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    const story = await screen.findByTestId('clash-contribution-story');
+    expect(story).toHaveTextContent('4 strain');
+    expect(story).toHaveTextContent('37 power');
+    const delta = within(story).getByTestId('clash-progress-delta');
+    expect(delta).toHaveTextContent('+18 progress');
+    // Positive progress reads as a gain, not a loss.
+    expect(delta).toHaveClass('text-emerald-400');
+  });
+
+  it('omits the power number when it is gated (null) but still tells strain→progress', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [],
+          strain_committed: 4,
+          power: null,
+          progress_delta: 18,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    const story = await screen.findByTestId('clash-contribution-story');
+    expect(story).toHaveTextContent('4 strain');
+    expect(story).toHaveTextContent('+18 progress');
+    expect(story).not.toHaveTextContent(/power/);
+  });
+
+  it('styles a botch-backfire (negative progress) as a loss', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [],
+          strain_committed: 4,
+          power: 12,
+          progress_delta: -6,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    const delta = await screen.findByTestId('clash-progress-delta');
+    expect(delta).toHaveTextContent('-6 progress');
+    expect(delta).toHaveClass('text-rose-400');
+  });
+
+  it('renders no clash story for a non-clash outcome (no progress_delta)', async () => {
+    mockUseOutcomeDetails.mockReturnValue({
+      data: [
+        {
+          action_interaction_id: 5,
+          effects: [{ kind: 'damage', label: 'Knight took 6 damage', deep_link: null }],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useOutcomeDetails>);
+
+    render(
+      <Wrapper>
+        <PoseUnitDetailPanel actionInteractionIds={[5]} />
+      </Wrapper>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Knight took 6 damage')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('clash-contribution-story')).toBeNull();
+  });
+
   it('renders a non-deep-linked effect as plain text, not a button', () => {
     mockUseOutcomeDetails.mockReturnValue({
       data: [
