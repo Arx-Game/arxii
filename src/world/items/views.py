@@ -28,6 +28,7 @@ from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
+    CraftingCostUnaffordable,
     CraftingNotConfigured,
     FacetAlreadyAttached,
     FacetCapacityExceeded,
@@ -56,6 +57,7 @@ from world.items.models import (
     TemplateSlot,
 )
 from world.items.serializers import (
+    CraftingQuoteSerializer,
     EquippedItemReadSerializer,
     FacetCraftResultSerializer,
     FashionJudgementSerializer,
@@ -356,10 +358,75 @@ class ItemFacetViewSet(viewsets.ViewSet):
                 item_instance=item_instance,
                 facet=facet,
             )
-        except (FacetAlreadyAttached, FacetCapacityExceeded, CraftingNotConfigured) as exc:
+        except (
+            FacetAlreadyAttached,
+            FacetCapacityExceeded,
+            CraftingNotConfigured,
+            CraftingCostUnaffordable,
+        ) as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         status_code = 201 if result.attached else 200
         return Response(FacetCraftResultSerializer(result).data, status=status_code)
+
+    @extend_schema(
+        responses=CraftingQuoteSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="item_instance",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="ItemInstance pk to quote the crafting cost for.",
+            ),
+            OpenApiParameter(
+                name="facet",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Facet pk that would be attached.",
+            ),
+        ],
+    )
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="quote")
+    def quote(self, request: Request) -> Response:
+        """Return a read-only cost+quality quote for attaching a facet (no mutation)."""
+        from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+        from world.items.crafting.services import build_crafting_quote  # noqa: PLC0415
+        from world.magic.models import Facet  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
+        facet_pk = _parse_int_param(request.query_params.get("facet"))  # noqa: USE_FILTERSET
+        if instance_pk is None:
+            raise serializers.ValidationError(
+                {"item_instance": "This query parameter is required."}
+            )
+        if facet_pk is None:
+            raise serializers.ValidationError({"facet": "This query parameter is required."})
+        try:
+            item_instance = ItemInstance.objects.select_related(
+                "holder_character_sheet__character"
+            ).get(pk=instance_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff and not _user_holds_item(user, item_instance):
+            raise NotFound
+        try:
+            facet = Facet.objects.get(pk=facet_pk)
+        except Facet.DoesNotExist as exc:
+            raise NotFound from exc
+        crafter_character = item_instance.holder_character_sheet.character
+        crafter_character_sheet = item_instance.holder_character_sheet
+        try:
+            quote = build_crafting_quote(
+                kind=CraftingRecipeKind.FACET_ATTACH,
+                crafter_character=crafter_character,
+                crafter_character_sheet=crafter_character_sheet,
+                target=facet,
+            )
+        except CraftingNotConfigured as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CraftingQuoteSerializer(quote).data)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
@@ -1245,7 +1312,7 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
     a failed roll.
     """
 
-    http_method_names = ["post", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
     permission_classes = [ItemStyleWritePermission]
     serializer_class = StyleCraftResultSerializer
 
@@ -1264,7 +1331,72 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
                 item_instance=item_instance,
                 style=style,
             )
-        except (StyleAlreadyAttached, StyleCapacityExceeded, CraftingNotConfigured) as exc:
+        except (
+            StyleAlreadyAttached,
+            StyleCapacityExceeded,
+            CraftingNotConfigured,
+            CraftingCostUnaffordable,
+        ) as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         status_code = 201 if result.attached else 200
         return Response(StyleCraftResultSerializer(result).data, status=status_code)
+
+    @extend_schema(
+        responses=CraftingQuoteSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="item_instance",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="ItemInstance pk to quote the crafting cost for.",
+            ),
+            OpenApiParameter(
+                name="style",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Style pk that would be attached.",
+            ),
+        ],
+    )
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="quote")
+    def quote(self, request: Request) -> Response:
+        """Return a read-only cost+quality quote for attaching a style (no mutation)."""
+        from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+        from world.items.crafting.services import build_crafting_quote  # noqa: PLC0415
+        from world.items.models import Style  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
+        style_pk = _parse_int_param(request.query_params.get("style"))  # noqa: USE_FILTERSET
+        if instance_pk is None:
+            raise serializers.ValidationError(
+                {"item_instance": "This query parameter is required."}
+            )
+        if style_pk is None:
+            raise serializers.ValidationError({"style": "This query parameter is required."})
+        try:
+            item_instance = ItemInstance.objects.select_related(
+                "holder_character_sheet__character"
+            ).get(pk=instance_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff and not _user_holds_item(user, item_instance):
+            raise NotFound
+        try:
+            style = Style.objects.get(pk=style_pk)
+        except Style.DoesNotExist as exc:
+            raise NotFound from exc
+        crafter_character = item_instance.holder_character_sheet.character
+        crafter_character_sheet = item_instance.holder_character_sheet
+        try:
+            quote = build_crafting_quote(
+                kind=CraftingRecipeKind.STYLE_ATTACH,
+                crafter_character=crafter_character,
+                crafter_character_sheet=crafter_character_sheet,
+                target=style,
+            )
+        except CraftingNotConfigured as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CraftingQuoteSerializer(quote).data)

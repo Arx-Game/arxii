@@ -29,9 +29,9 @@ class ItemError(Exception):
 
 
 class CraftingNotConfigured(Exception):
-    """Raised when facet crafting is attempted before a CheckType is configured."""
+    """Raised when crafting is attempted before a CheckType is configured."""
 
-    user_message = "Facet crafting is not available yet."
+    user_message = "Crafting is not available yet."
 
 
 # ---------------------------------------------------------------------------

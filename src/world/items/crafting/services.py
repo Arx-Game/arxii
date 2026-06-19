@@ -12,7 +12,7 @@ handler registry on ``CraftingRecipeKind``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -25,17 +25,20 @@ from world.checks.consequence_resolution import (
 from world.checks.services import perform_check
 from world.checks.types import ResolutionContext
 from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
-from world.items.crafting.models import CraftingRecipe
+from world.items.crafting.models import CraftingRecipe, CraftingSkillCap
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
 from world.items.exceptions import CraftingNotConfigured
+from world.items.models import ItemInstance
+from world.items.services.materials import meets_quality_tier
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.items.crafting.constants import CraftingRecipeKind
-    from world.items.models import ItemInstance, QualityTier
+    from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
 
 
@@ -53,6 +56,157 @@ class CraftRunResult:
     quality_tier: QualityTier | None
     consumed: dict
     consequence_label: str | None
+
+
+@dataclass(frozen=True)
+class CraftingQuoteCost:
+    """Resource cost entry for a single cost vector in a crafting quote."""
+
+    action_points: int
+    action_points_have: int
+    anima: int
+    anima_have: int
+    materials: list[dict]
+
+
+@dataclass(frozen=True)
+class CraftingQuoteRisk:
+    """A single failure-risk row in a crafting quote."""
+
+    outcome_name: str | None
+    cost_consumption: str
+    label: str | None
+
+
+@dataclass(frozen=True)
+class CraftingQuote:
+    """Read-only snapshot of what a crafting attempt would cost and what quality it could yield."""
+
+    costs: CraftingQuoteCost
+    affordable: bool
+    max_quality_tier: QualityTier | None
+    failure_risk: list[CraftingQuoteRisk] = field(default_factory=list)
+
+
+def build_crafting_quote(
+    *,
+    kind: CraftingRecipeKind,
+    crafter_character: ObjectDB,
+    crafter_character_sheet: CharacterSheet,
+    target: object,  # noqa: ARG001  # kept for API symmetry with run_crafting_recipe
+) -> CraftingQuote:
+    """Return a read-only cost+quality snapshot for a potential crafting attempt.
+
+    Does NOT mutate any state — no cost deduction, no roll, no attachment.
+    Resolves the recipe for ``kind``, inspects the crafter's current resources
+    and skill, and returns a ``CraftingQuote`` describing:
+
+    * ``costs``: AP, Anima, and material requirements with current holdings.
+    * ``affordable``: True iff all cost vectors are satisfied.
+    * ``max_quality_tier``: Skill-capped ceiling quality tier (None if uncapped).
+    * ``failure_risk``: Consequence pool rows mapped to risk summaries.
+
+    Args:
+        kind: Which recipe to quote for.
+        crafter_character: The ObjectDB whose AP pool, Anima, and traits are read.
+        crafter_character_sheet: The CharacterSheet whose inventory is checked.
+        target: Unused at quote time (kept for API symmetry with run_crafting_recipe).
+
+    Returns:
+        A ``CraftingQuote`` dataclass (frozen, read-only).
+
+    Raises:
+        CraftingNotConfigured: No recipe for ``kind``, or it has no ``check_type``.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+
+    # 1. Resolve recipe ---
+    try:
+        recipe = CraftingRecipe.objects.get(kind=kind)
+    except CraftingRecipe.DoesNotExist as exc:
+        raise CraftingNotConfigured from exc
+    if recipe.check_type is None:
+        raise CraftingNotConfigured
+
+    # 2. AP availability ---
+    ap_cost = recipe.action_point_cost
+    pool = ActionPointPool.get_or_create_for_character(crafter_character)
+    ap_have = pool.current
+
+    # 3. Anima availability ---
+    anima_cost = recipe.anima_cost
+    anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+    anima_have = anima_row.current if anima_row is not None else 0
+
+    # 4. Materials availability ---
+    requirements = list(
+        recipe.material_requirements.all().select_related("item_template", "min_quality_tier")
+    )
+    required_template_ids = [r.item_template_id for r in requirements]
+    available: list[ItemInstance] = list(
+        ItemInstance.objects.filter(
+            holder_character_sheet=crafter_character_sheet,
+            template_id__in=required_template_ids,
+        ).select_related("quality_tier")
+    )
+    # Tally held quantities per template that meet min quality.
+    material_rows = []
+    all_materials_satisfied = True
+    for req in requirements:
+        matching = [
+            inst
+            for inst in available
+            if inst.template_id == req.item_template_id and meets_quality_tier(inst, req)
+        ]
+        held_qty = sum(inst.quantity for inst in matching)
+        material_rows.append(
+            {
+                "item_template_id": req.item_template_id,
+                "name": req.item_template.name,
+                "quantity_required": req.quantity,
+                "have": held_qty,
+            }
+        )
+        if held_qty < req.quantity:
+            all_materials_satisfied = False
+
+    # 5. Affordability ---
+    affordable = ap_have >= ap_cost and anima_have >= anima_cost and all_materials_satisfied
+
+    # 6. Max quality tier from skill cap ---
+    max_quality_tier: QualityTier | None = None
+    if recipe.skill_trait is not None:
+        skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
+        max_quality_tier = CraftingSkillCap.for_skill(recipe, skill)
+
+    # 7. Failure risk from consequence pool ---
+    consequence_rows = list(
+        recipe.consequence_rows.all().select_related("consequence", "consequence__outcome_tier")
+    )
+    failure_risk = [
+        CraftingQuoteRisk(
+            outcome_name=(
+                row.consequence.outcome_tier.name if row.consequence.outcome_tier else None
+            ),
+            cost_consumption=row.cost_consumption,
+            label=row.consequence.label,
+        )
+        for row in consequence_rows
+    ]
+
+    return CraftingQuote(
+        costs=CraftingQuoteCost(
+            action_points=ap_cost,
+            action_points_have=ap_have,
+            anima=anima_cost,
+            anima_have=anima_have,
+            materials=material_rows,
+        ),
+        affordable=affordable,
+        max_quality_tier=max_quality_tier,
+        failure_risk=failure_risk,
+    )
 
 
 @transaction.atomic
