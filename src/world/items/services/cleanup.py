@@ -25,6 +25,12 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
 
     ``grace`` defaults to ``settings.ITEM_SOFT_DELETE_GRACE_DAYS`` days.
 
+    A soft-deleted item must never be in the game world. Any otherwise-eligible
+    instance whose ``game_object`` still has a location (e.g. a half-undelete
+    that moved the object back into play but left ``destroyed_at`` set) is NOT
+    purged — it is logged for staff to resolve (clear ``destroyed_at`` to truly
+    undelete it, or pull it back out of the world).
+
     PROTECT-referenced instances (those with a Mantle or ProjectContribution
     FK) are excluded from the eligibility queryset. Additionally, each deletion
     runs in its own savepoint so that any unexpected ProtectedError from a
@@ -36,6 +42,7 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
     eligible = list(
         ItemInstance.objects.filter(destroyed_at__lt=cutoff, lore_value=0)
         .filter(mantle__isnull=True, project_contributions__isnull=True)
+        .select_related("game_object")
         .annotate(
             facet_count=Count("item_facets", distinct=True),
             transfer_count=Count(
@@ -46,8 +53,28 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
         )
         .filter(facet_count=0, transfer_count=0)
     )
-    purged = 0
+
+    # Safety guard: a soft-deleted item must not be in the game world. If its
+    # game_object has a location, someone re-homed it without clearing
+    # destroyed_at (a half-undelete) — never purge it; surface it instead.
+    in_world = []
+    purgeable = []
     for instance in eligible:
+        if instance.game_object_id is not None and instance.game_object.db_location_id is not None:
+            in_world.append(instance)
+        else:
+            purgeable.append(instance)
+    if in_world:
+        logger.warning(
+            "purge_expired_soft_deleted_items: %d soft-deleted item(s) are in the game "
+            "world while flagged for deletion (pks=%s); NOT purging. Resolve by clearing "
+            "destroyed_at to undelete, or removing them from the world.",
+            len(in_world),
+            [instance.pk for instance in in_world],
+        )
+
+    purged = 0
+    for instance in purgeable:
         try:
             with transaction.atomic():
                 hard_delete_item_instance(instance)

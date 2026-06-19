@@ -235,7 +235,10 @@ What landed:
   `world/items/services/cleanup.py` — queries `destroyed_at < cutoff AND lore_value=0
   AND facets=0 AND transfer_provenance=0`, then purges each via a per-item savepoint so one
   PROTECT-referenced row can't wedge the batch (Mantle / ProjectContribution rows are also
-  excluded at the query level); returns the count purged.
+  excluded at the query level); returns the count purged. **In-world safety guard:** an
+  otherwise-eligible row whose `game_object` still has a location (a half-undelete) is never
+  purged — it is logged at WARNING for staff to resolve, so the cron can't delete a game
+  object out from under a live room.
 - **`ITEM_SOFT_DELETE_GRACE_DAYS`** in `settings.py` — defaults to 30, configurable via
   the `ITEM_SOFT_DELETE_GRACE_DAYS` env var. Passed as `timedelta(days=N)` to the
   cleanup service.

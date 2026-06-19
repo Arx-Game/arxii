@@ -47,6 +47,25 @@ class PurgeExpiredSoftDeletedItemsTests(TestCase):
         self.assertEqual(purged, 0)
         self.assertTrue(ItemInstance.objects.filter(pk=inst.pk).exists())
 
+    def test_in_world_item_not_purged_and_warns(self):
+        # Half-undelete: the game_object was moved back into the world but
+        # destroyed_at is still set. Never purge an in-world item — warn instead.
+        from world.items.models import ItemInstance
+        from world.items.services.cleanup import purge_expired_soft_deleted_items
+
+        in_world = self._soft_deleted(age_days=40, custom_name="Re-homed Phial")
+        in_world.game_object.db_location = self.ObjectDBFactory()
+        in_world.game_object.save()
+        plain = self._soft_deleted(age_days=40, custom_name="Plain Phial")
+
+        with self.assertLogs("world.items.services.cleanup", level="WARNING") as logs:
+            purged = purge_expired_soft_deleted_items(grace=timedelta(days=30))
+
+        self.assertEqual(purged, 1)  # only the plain, out-of-world item
+        self.assertTrue(ItemInstance.objects.filter(pk=in_world.pk).exists())
+        self.assertFalse(ItemInstance.objects.filter(pk=plain.pk).exists())
+        self.assertTrue(any(str(in_world.pk) in line for line in logs.output))
+
     def test_lore_value_survives_forever(self):
         from world.items.models import ItemInstance
         from world.items.services.cleanup import purge_expired_soft_deleted_items

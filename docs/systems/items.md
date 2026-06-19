@@ -146,8 +146,17 @@ Runs daily as the `items.soft_delete_cleanup` cron task (registered in
    days, configurable via the `ITEM_SOFT_DELETE_GRACE_DAYS` env var, default **30**).
 2. Queries all `ItemInstance` rows with `destroyed_at < cutoff` **and**
    `lore_value=0` **and** zero attached facets **and** zero transfer-provenance events
-   (GIVEN/STOLEN/TRANSFERRED).
-3. Calls `hard_delete_item_instance` for each, returning the count purged.
+   (GIVEN/STOLEN/TRANSFERRED), excluding PROTECT-referenced rows (Mantle /
+   ProjectContribution).
+3. Calls `hard_delete_item_instance` for each out-of-world row in its own savepoint,
+   returning the count purged.
+
+**In-world safety guard:** a soft-deleted item must never be in the game world. Any
+otherwise-eligible row whose `game_object` still has a location (e.g. a half-undelete
+that moved the object back into play but left `destroyed_at` set) is **not** purged —
+it is logged at WARNING for staff to resolve (clear `destroyed_at` to truly undelete,
+or pull it back out of the world). This prevents the cron from deleting a game object
+out from under a live room.
 
 Lore-critical items (`is_lore_critical=True`) are never eligible and remain as
 soft-deleted rows indefinitely, available for staff recovery.
