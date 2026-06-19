@@ -102,7 +102,10 @@ The core resolution loop is implemented end-to-end.
 
 - **`resolve_challenge()` service** — DONE. Validates challenge state, delegates to generic consequence pipeline for effect dispatch, handles challenge-specific bookkeeping (resolution_type, source_challenge provenance, CharacterChallengeRecord)
 - **Generic consequence pipeline** — DONE. `select_consequence()` + `apply_resolution()` in checks app. Decoupled from challenges — any system can map check results to weighted consequences. Two-step design supports future reroll/negation.
-- **Consequence application** — DONE. ConsequenceEffect model with effect handlers for APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed pending combat system)
+- **Consequence application** — DONE. ConsequenceEffect model with effect handlers for
+  APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW,
+  GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed pending combat system).
+  Dynamic-reshaping effect types added in #1018 (see "Positioning reshape effects" below).
 - **Character loss filtering** — DONE. Always applied regardless of consequence source (approach-level or template-level). Positive rollmod downgrades to worst non-loss alternative.
 - **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
 - **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator uses rank-based calculation from the check system.
@@ -433,6 +436,51 @@ Built capability and challenge content layer exercising the full pipeline end-to
 ### Societies & Organizations
 - **Organization Properties** — an organization's territory or holdings could have Properties (fortified, sacred, corrupted) that affect what Challenges appear there
 - **Reputation-gated approaches** — some ChallengeApproaches might require society reputation as a prerequisite
+
+### Positioning Reshape Effects — DONE (#1018)
+
+Six new `EffectType` values handle dynamic battlefield changes as structured consequence
+effects dispatched by `apply_resolution` / `world/mechanics/effect_handlers.py`.  They
+resolve entirely within the actor's current room at apply time; no FK to a per-room runtime
+`Position` is stored on the `ConsequenceEffect` row.
+
+**New EffectType values** (`world/checks/constants.py`):
+
+| EffectType | Handler | What it does |
+|------------|---------|--------------|
+| `CREATE_POSITION` | `_create_position` | Create a new `Position` (kind defaults to FEATURE); optionally connect it to the actor's current position (`position_connect_from_actor`) and move a target into it (`position_place_occupant`); emits `FELL` if the new position is a CHASM |
+| `MOVE_TO_POSITION` | `_move_to_position` | Force-move the resolved target to the destination position; destination is resolved via `PositionDestination` (see below); emits `FELL` if destination is a CHASM |
+| `SEVER_EDGE` | `_sever_edge` | Disconnect the edge between two named positions in the room; skips gracefully if either endpoint or the edge is absent |
+| `CONNECT_EDGE` | `_connect_edge` | Connect two named positions (idempotent — no-op when an edge already exists) |
+| `GRANT_FLIGHT` | `_grant_flight` | Call `enter_aerial(target)` — materializes the aerial layer and moves the target to the AERIAL twin above their current position |
+| `REMOVE_FLIGHT` | `_remove_flight` | Call `leave_aerial(target)` — returns the target to their anchor ground position and clears the `"aerial"` property |
+
+**`PositionDestination`** (`world/checks/constants.py`) — governs how `MOVE_TO_POSITION`
+resolves its target position:
+
+| Value | Meaning |
+|-------|---------|
+| `ACTOR_POSITION` | The actor's current position at apply time |
+| `GATING_FAR_SIDE` | The far-side endpoint of the gating edge whose `gating_challenge` matches `context.challenge_instance` — used for gated-crossing consequences |
+| `NAMED` | A position looked up by `effect.position_name` in the actor's room |
+
+**`ConsequenceEffect` positioning columns** (all in `world/checks/models.py`):
+
+| Field | Relevant for |
+|-------|-------------|
+| `position_name` | `CREATE_POSITION` (the new node's name); `SEVER_EDGE` / `CONNECT_EDGE` (first endpoint); `MOVE_TO_POSITION` + NAMED destination |
+| `position_name_b` | `SEVER_EDGE` / `CONNECT_EDGE` second endpoint |
+| `position_kind` | `CREATE_POSITION` — `PositionKind` for the new node (default: FEATURE) |
+| `position_description` | `CREATE_POSITION` — description text for the new node |
+| `position_destination` | `MOVE_TO_POSITION` — `PositionDestination` value |
+| `position_connect_from_actor` | `CREATE_POSITION` — when True, connect the new node to the actor's current position (default True) |
+| `position_place_occupant` | `CREATE_POSITION` — when True, force-move the resolved target into the new node |
+
+**`FELL` event seam:** `maybe_emit_fall(objectdb, position)` is called by `_create_position`
+and `_move_to_position` whenever the resulting position is a `CHASM`.  It emits
+`EventName.FELL` (`FallEvent(faller, position)`) via the reactive layer.  The reactive
+consumer — capability-based catch (fly/acrobatics interrupt) and AFK-safe multi-round
+plummet — is deferred to the round/turn framework follow-up (#520).
 
 ## Open Design Questions
 

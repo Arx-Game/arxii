@@ -231,12 +231,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
-### Positioning (#530 + #1017)
+### Positioning (#530 + #1017 + #1018)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
-occupancy, capability-gated movement, GM terrain blueprints, and non-combat scene
-positioning UI.
+occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
+positioning UI, and dynamic battlefield reshaping (aerial layer, chasms, consequence
+effects for graph mutation and flight).
 
-- **Models:** `Position` (`PositionKind` discriminator), `PositionEdge` (optional
+- **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
+  the ground node an AERIAL or CHASM node is anchored to), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable`), `ObjectPosition` (OneToOne occupancy);
   **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live and blueprint
   layers; **blueprint models** `PositionBlueprint` (reusable GM-authored layout),
@@ -248,7 +250,15 @@ positioning UI.
   `force_move_to_position` / `position_of` / `reachable_positions` /
   `adjacent_open_positions`; **blueprint authoring** `create_blueprint` /
   `add_blueprint_position` / `connect_blueprint_positions` / `remove_blueprint`;
-  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`
+  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`;
+  **aerial layer** `materialize_aerial_layer(room)` / `teardown_aerial_layer(room)` /
+  `enter_aerial(objectdb)` / `leave_aerial(objectdb)`;
+  **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
+- **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
+  `PositionDestination` in `world/checks/constants.py`
+  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED) — governs `MOVE_TO_POSITION` effect destination
+- **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
+  factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
@@ -258,10 +268,14 @@ positioning UI.
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
   `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
-- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
+- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
+  aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service);
+  reactive fall consumer (catch/plummet tied to #520)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
-  mechanics (Challenge/gating), actions (`MoveToPositionAction` / `SetTheStageAction`)
+  mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
+  flows (`EventName.FELL` reactive seam),
+  actions (`MoveToPositionAction` / `SetTheStageAction`)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
@@ -686,7 +700,14 @@ Unified modifier system — categories, types, sources, and per-character modifi
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Equipment
   bonuses flow through `passive_facet_bonuses` + `covenant_role_bonus` (called inline
   by `get_modifier_total`, not stored as `CharacterModifier` rows).
-- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
+- **EffectType values** (`world/checks/constants.py` — dispatched by `world/mechanics/effect_handlers.py`):
+  - Pre-#1018: `APPLY_CONDITION`, `REMOVE_CONDITION`, `ADD_PROPERTY`, `REMOVE_PROPERTY`,
+    `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,
+    `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
+  - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
+    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
+  action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 

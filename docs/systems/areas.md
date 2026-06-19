@@ -120,8 +120,12 @@ Room-anchored spatial graph: named position nodes, traversable edges, per-object
 ```python
 from world.areas.positioning.constants import PositionKind
 # PRIMARY, FEATURE (authored regions: balcony, altar, pit),
-# ELEVATED (catwalk), AERIAL (reserved; auto-created by flight — #532),
-# BARRIER_SIDE (reserved; dynamic carving)
+# ELEVATED (catwalk, balcony rim),
+# AERIAL (auto-created by flight services; exists only while airborne objects occupy the room),
+# BARRIER_SIDE (reserved; dynamic carving),
+# CHASM (below-ground level; entering one emits EventName.FELL)
+
+AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 ```
 
 ### Models [BUILT & WIRED]
@@ -137,7 +141,7 @@ from world.areas.positioning.constants import PositionKind
 
 | Model | Purpose | Key Fields / Constraints |
 |-------|---------|--------------------------|
-| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name |
+| `Position` | Named tactical region in a room | `room` FK → `objects.ObjectDB`; unique per room+name; `elevation_anchor` (self-FK, null=floor/top-level) — the ground `Position` this AERIAL or CHASM node is anchored to |
 | `PositionEdge` | Traversable adjacency between two `Position` nodes | `position_a` / `position_b` FK (canonical pk order); `is_passable`; `gating_challenge` FK → `mechanics.ChallengeInstance` (nullable) |
 | `ObjectPosition` | One-to-one occupancy record | `objectdb` OneToOne PK; `position` FK — mirrors `db_location` |
 
@@ -244,8 +248,68 @@ from world.areas.positioning.exceptions import PositionError, PositionTransition
 
 `PositionTransitionError` (subclass of `PositionError`) carries `user_message` for move failures; actions surface it directly.
 
+### Aerial and Chasm Vertical Layer [BUILT & WIRED]
+
+**`src/world/areas/positioning/services.py`**
+
+The vertical layer adds a two-tier depth model on top of the ground graph.
+
+**AERIAL layer (flight):**
+
+Each non-AERIAL position in a room has an AERIAL twin named `"Above <name>"` with
+`elevation_anchor` pointing to its ground counterpart.  Vertical edges connect each ground
+position to its twin.  Horizontal edges in the aerial layer mirror the ground adjacency graph
+but are all passable and ungated, so airborne objects fly over walls, locked gates, and chasm
+edges that would block ground movement.
+
+| Function | Summary |
+|----------|---------|
+| `materialize_aerial_layer(room)` | Build the full AERIAL twin graph over every ground position (idempotent; no-op when already present) |
+| `teardown_aerial_layer(room)` | Delete all AERIAL positions in the room (cascades edges + occupancy); called when the last airborne occupant lands |
+| `enter_aerial(objectdb)` | Move `objectdb` to the AERIAL twin above its current ground position; materializes the layer if needed; sets the `"aerial"` `ObjectProperty` on the object |
+| `leave_aerial(objectdb)` | Return `objectdb` to its `elevation_anchor` ground position; clears the `"aerial"` property; tears down the layer when no AERIAL node retains occupants |
+
+The `"aerial"` `Property` (value=1) is the runtime tag: while present, `objectdb` is
+airborne.  `AerialPropertyFactory` in `src/world/mechanics/factories.py` provides the
+seed/test factory for this property row (get-or-create by name).
+
+**CHASM (below-ground vertical drop):**
+
+A `CHASM` position is a below-ground region reached by falling.  Its `elevation_anchor`
+points to the ground position above it.  Entering a CHASM — via a consequence effect or a
+direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventName.FELL`
+(`FallEvent(faller, position)`) into the reactive layer.
+
+| Function | Summary |
+|----------|---------|
+| `maybe_emit_fall(objectdb, position)` | Emit `EventName.FELL` when `position.kind == CHASM`; returns `True` if the event was emitted, `False` otherwise |
+
+The reactive catch consumer (capability-based fly/acrobatics interrupt + AFK-safe
+multi-round plummet down the `elevation_anchor` chain with impact consequences) is deferred
+to a follow-up tied to the round/turn framework (#520).
+
+**Gated-edge crossing and `MOVE_TO_POSITION`:**
+
+A gated `PositionEdge` (`gating_challenge` IS NOT NULL and `is_active=True`) blocks
+`move_to_position` for normal traversal.  Players who approach via a `ChallengeApproach`
+using `PERSONAL` resolution mode cross the gate for themselves only (the
+`ChallengeInstance` remains active for other characters).  A `MOVE_TO_POSITION` /
+`GATING_FAR_SIDE` `ConsequenceEffect` on the approach's consequence pool executes
+`force_move_to_position` to the far side; `_gating_far_side()` in
+`world/mechanics/effect_handlers.py` resolves the far side from the edge whose
+`gating_challenge` matches the active `ChallengeInstance`.  Gated edges appear as locked
+entries in the player's move list until the gating challenge is resolved.
+
 ### Deferred (follow-up required)
 
-- **Gated blueprint edges:** `BlueprintEdge` has no `gating_challenge` analogue; when a blueprint is instantiated the `instantiate_blueprint` service skips gating. Full gated-edge instantiation requires the absent `instantiate_situation()` service (which mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
+- **Gated blueprint edges:** `BlueprintEdge` has no `gating_challenge` analogue; when a
+  blueprint is instantiated the `instantiate_blueprint` service skips gating. Full
+  gated-edge instantiation requires the absent `instantiate_situation()` service (which
+  mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
+- **Reactive fall catch + multi-round plummet:** `EventName.FELL` is emitted; the consumer
+  (fly/teleport/acrobatics interrupt, AFK-safe plummet down the `elevation_anchor` chain
+  with impact consequences) is deferred to the round/turn framework follow-up (#520).
+- **Anti-air "blocks-flight" gate flag:** a future `PositionEdge` flag (or Property tag)
+  that prevents `enter_aerial` from crossing above a blocked node.
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
-- Implicit aerial positions, occupancy-screening reachability, dynamic-reshaping consequence effects
+- Occupancy-screening reachability (crowded-position filtering)
