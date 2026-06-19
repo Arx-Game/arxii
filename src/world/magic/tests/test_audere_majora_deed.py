@@ -222,7 +222,7 @@ class MintCrossingDeedNoSceneTests(TestCase):
         self.assertEqual(witness_count, 0)
 
 
-class ResolveOfferAcceptMintsDeedException2ETests(TestCase):
+class ResolveOfferAcceptMintsDeedE2ETests(TestCase):
     """resolve_audere_majora_offer accept end-to-end: deed minted and attributed to crosser."""
 
     @classmethod
