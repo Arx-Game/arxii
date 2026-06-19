@@ -10,6 +10,13 @@ class PositionSummarySerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
 
 
+class PersonaPositionSerializer(serializers.Serializer):
+    """A scene persona and the Position it currently occupies (or null)."""
+
+    persona_id = serializers.IntegerField(read_only=True)
+    position = PositionSummarySerializer(read_only=True, allow_null=True)
+
+
 class PositionAdjacencyItemSerializer(serializers.Serializer):
     """Read-only serializer for a single PositionAdjacency entry.
 

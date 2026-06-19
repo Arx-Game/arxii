@@ -3,6 +3,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
 from world.areas.positioning.serializers import (
+    PersonaPositionSerializer,
     PositionAdjacencyItemSerializer,
     PositionSummarySerializer,
 )
@@ -194,11 +195,7 @@ class SceneDetailSerializer(SceneListSerializer):
         entries = room_position_adjacency(obj.location)
         return PositionAdjacencyItemSerializer(entries, many=True).data  # type: ignore[return-value]
 
-    @extend_schema_field(
-        serializers.ListField(
-            child=serializers.DictField(),
-        )
-    )
+    @extend_schema_field(PersonaPositionSerializer(many=True))
     def get_persona_positions(self, obj: Scene) -> list[dict]:
         """Return [{persona_id, position: {id, name} | null}] for each persona in the scene.
 
