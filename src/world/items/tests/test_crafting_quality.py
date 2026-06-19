@@ -131,6 +131,40 @@ class CapAboveScoreTests(_QualityResolutionBase):
         self.assertEqual(result, self.common)
 
 
+class NoSkillTraitTests(TestCase):
+    """When recipe.skill_trait is None, the skill cap is skipped entirely."""
+
+    def setUp(self) -> None:
+        self.common = QualityTierFactory(name="Common", numeric_min=0, numeric_max=49, sort_order=0)
+        self.fine = QualityTierFactory(name="Fine", numeric_min=50, numeric_max=79, sort_order=1)
+        self.masterwork = QualityTierFactory(
+            name="Masterwork", numeric_min=80, numeric_max=200, sort_order=2
+        )
+
+        # Recipe with no skill trait.
+        self.recipe = CraftingRecipeFactory(
+            success_level_step=10,
+            min_success_level=1,
+            skill_trait=None,
+        )
+        # Cap rows exist but should be ignored.
+        CraftingSkillCapFactory(recipe=self.recipe, min_skill_value=0, max_quality_tier=self.common)
+
+        self.character = CharacterFactory()
+        CharacterSheetFactory(character=self.character)
+
+    def test_no_skill_trait_returns_uncapped_tier(self) -> None:
+        """A recipe with skill_trait=None returns the raw score's tier without raising."""
+        result = resolve_capped_tier(
+            recipe=self.recipe,
+            crafter_character=self.character,
+            check_result=_check_result(total_points=90, success_level=1),
+        )
+
+        # score = 90 + (1-1)*10 = 90 → Masterwork (uncapped).
+        self.assertEqual(result, self.masterwork)
+
+
 class NoTiersSeededTests(TestCase):
     """When no QualityTier rows are seeded, CraftingNotConfigured is raised."""
 

@@ -49,7 +49,7 @@ def resolve_capped_tier(
         CraftingNotConfigured: No ``QualityTier`` rows are seeded (``for_score``
             returns ``None`` only in an unconfigured deployment).
     """
-    from world.items.models import QualityTier as _QualityTier  # noqa: PLC0415
+    from world.items.models import QualityTier  # noqa: PLC0415
 
     score = compute_quality_score(
         check_result,
@@ -57,12 +57,13 @@ def resolve_capped_tier(
         min_success_level=recipe.min_success_level,
     )
 
-    skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
-    cap = CraftingSkillCap.for_skill(recipe, skill)
-    if cap is not None:
-        score = min(score, cap.numeric_max)
+    if recipe.skill_trait is not None:
+        skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
+        cap_tier = CraftingSkillCap.for_skill(recipe, skill)
+        if cap_tier is not None:
+            score = min(score, cap_tier.numeric_max)
 
-    tier = _QualityTier.for_score(score)
+    tier = QualityTier.for_score(score)
     if tier is None:
         raise CraftingNotConfigured
     return tier
