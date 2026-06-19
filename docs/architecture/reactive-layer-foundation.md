@@ -31,10 +31,12 @@ system, not of magic.
   the subject's trigger handler) and `ROOM` scope (delivered to the room's
   trigger handler). Authors pick the scope that matches "where does this
   trigger live."
-- **Populate once, mutate in place.** Each `TriggerHandler` is a
+- **Populate once, invalidate on commit.** Each `TriggerHandler` is a
   `cached_property` on a typeclass. It reads its Trigger rows on first
-  access, then is kept in sync via explicit service-function hooks when
-  conditions apply/remove or stages change. No repeated queries.
+  access, then is dropped and lazily re-read when service-function hooks
+  fire as conditions apply/remove or stages change. Invalidation defers to
+  `transaction.on_commit`, so a rolled-back trigger install/removal never
+  corrupts the cache (#964).
 - **In-memory flow execution.** `FlowExecution` is not a model. Flow state
   lives in Python objects. Player prompts suspend via Twisted Deferreds
   held in a module-level dict; timeouts fire default branches.
@@ -129,10 +131,15 @@ Handler responsibilities:
   returns cancellation/propagation state.
 - **Sync hooks:** `on_trigger_added(trigger)`, `on_trigger_removed(pk)`,
   `on_stage_changed(condition, new_stage)`. Called by service functions
-  that apply conditions, remove them, or advance stages. Mutate the
-  handler's in-memory structures in place. Never re-query.
-- **Invalidation:** handlers do not invalidate. They stay in sync via the
-  explicit hooks above. This is the SharedMemoryModel-trusting pattern.
+  that apply conditions, remove them, or advance stages. The add/remove
+  hooks route through `invalidate()`; `on_stage_changed` is a no-op
+  (`_is_active` re-checks stage at dispatch time).
+- **Invalidation:** `invalidate()` registers a `transaction.on_commit`
+  callback that drops the populated index so the next `triggers_for()`
+  re-reads committed rows. Deferring to commit keeps the cache rollback-safe
+  (#964): unlike the synchronous `.invalidate()` on sibling read-caches
+  (`ConditionHandler` et al.), a phantom trigger would *double-fire*, so
+  trigger dispatch must never see uncommitted or rolled-back rows.
 
 Different typeclasses may have different handler subclasses (e.g., rooms
 might do additional filtering for line-of-sight triggers).
@@ -538,8 +545,9 @@ All tests use FactoryBoy — no fixture data required. Tests live in
 - All 29 integration tests pass without fixture data, using only factories.
 - `ConditionInstance` removal cascades all associated `Trigger` rows
   (tested via DB assertion).
-- Handler `cached_property` populates once; sync hooks mutate in-memory
-  state without re-query (tested via query-count assertion).
+- Handler `cached_property` populates once and serves reads without re-query
+  (tested via query-count assertion); sync hooks invalidate on commit and the
+  next read re-populates.
 - AE attacks produce N parallel FlowStacks (one per PERSONAL target) plus
   one ROOM FlowStack; depth cap applies per-stack.
 - Combat arithmetic is NOT duplicated in the reactive layer — all damage
