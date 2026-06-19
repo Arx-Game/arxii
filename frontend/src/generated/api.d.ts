@@ -5415,7 +5415,7 @@ export interface paths {
      *     this view resolves the actor, enforces ownership, and maps
      *     ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
      *     surface does NOT accept a target — on-use effects apply to the holder
-     *     only. Targeted use belongs in the future use-item Action layer, which
+     *     only by design. Targeted use is handled by ``UseItemAction``, which
      *     carries proximity/prerequisite checks.
      */
     post: operations['items_inventory_use_create'];
@@ -16266,7 +16266,7 @@ export interface components {
       readonly display_image_url: string | null;
       /**
        * @description True iff use_item would proceed: the template has an on-use pool.
-       *     Mirrors the precondition in services.usage.use_item.
+       *     Delegates to the canonical ``ItemTemplate.is_usable`` predicate.
        */
       readonly is_usable: boolean;
       readonly contained_in: number;

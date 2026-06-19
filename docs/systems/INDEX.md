@@ -722,6 +722,9 @@ services, and equipment-modifier integration.
     `attachment_quality_tier`; unique per (item_instance, facet)
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
+  — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
+  by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
@@ -751,12 +754,18 @@ services, and equipment-modifier integration.
     at 0 charges
   - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
     OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
-- **Usable vs consumable:** an item is *usable* iff `template.on_use_pool_id is not None`.
+- **Usable vs consumable:** `ItemTemplate.is_usable` (= `on_use_pool_id is not None`) is the
+  canonical predicate; `use_item`, `ItemUsablePrerequisite`, and the serializer all delegate to it.
   *Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge
   per use and are destroyed at 0 charges. Non-consumable usable items are reusable.
 - **Serializer field `is_usable`:** `ItemInstanceReadSerializer` exposes `is_usable` (bool,
   `SerializerMethodField`) — `True` iff `template.on_use_pool_id is not None`. Clients gate the
   Use button on this field.
+- **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
+  point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
+  instance), optional `target` (validated by `OnUseTargetPrerequisite` against
+  `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
+  Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
   `SlotIncompatible`, `ItemNotUsable`, `NoChargesRemaining` — all in `world.items.exceptions`
 - **API Endpoints:**
@@ -849,10 +858,11 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`
-- **Pattern:** `action.run(actor, **kwargs)` → checks prerequisites → executes → returns `ActionResult`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `ActionEnhancement` model, `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Source:** `src/actions/`
 
 ### Flows

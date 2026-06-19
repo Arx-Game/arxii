@@ -1,4 +1,4 @@
-"""Item-specific actions: equip, unequip, put_in, take_out."""
+"""Item-specific actions: equip, unequip, put_in, take_out, use_item."""
 
 from __future__ import annotations
 
@@ -10,12 +10,19 @@ from evennia.objects.models import ObjectDB
 from actions.base import Action
 from actions.constants import ActionCategory
 from actions.definitions.item_helpers import resolve_item_instance
+from actions.prerequisites import (
+    HoldsItemPrerequisite,
+    ItemUsablePrerequisite,
+    OnUseTargetPrerequisite,
+    Prerequisite,
+)
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from flows.service_functions.inventory import equip, put_in, take_out, unequip
-from world.items.exceptions import InventoryError
+from world.items.exceptions import InventoryError, ItemError
+from world.items.services.usage import use_item
 
 
 @dataclass
@@ -303,4 +310,63 @@ class ActivatePermitAction(Action):
         return ActionResult(
             success=True,
             message=(f"Permit activated — construction project #{project.pk} opened."),
+        )
+
+
+@dataclass
+class UseItemAction(Action):
+    """Use a held consumable item, applying its on-use pool's effects."""
+
+    key: str = "use_item"
+    name: str = "Use"
+    icon: str = "flask-conical"
+    category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    intent_event: str | None = "before_use"
+    result_event: str | None = "use"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"item", "target"})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [
+            HoldsItemPrerequisite(),
+            ItemUsablePrerequisite(),
+            OnUseTargetPrerequisite(),
+        ]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        item_obj = kwargs.get("item")
+        item_instance = resolve_item_instance(item_obj) if item_obj is not None else None
+        if item_instance is None:
+            return ActionResult(success=False, message="Use what?")
+
+        target = kwargs.get("target")  # validated by prerequisites; None = self-use
+
+        try:
+            result = use_item(item_instance=item_instance, user=actor, target=target)
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        item_state = ItemState(item_instance, context=sdm)
+        message_location(
+            actor_state,
+            "$You() $conj(use) {item}.",
+            mapping={"item": item_state},
+        )
+        return ActionResult(
+            success=True,
+            data={
+                "charges_remaining": result.charges_remaining,
+                "destroyed": result.destroyed,
+                "applied_effect_count": len(result.applied_effects),
+            },
         )

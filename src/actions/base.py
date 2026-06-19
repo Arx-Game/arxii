@@ -198,6 +198,20 @@ class Action:
 
         # TODO: emit intent event and check for trigger interruption
 
+        # Enforce prerequisites against the final (post-enhancement) kwargs.
+        # run() is the single telnet+web chokepoint; prerequisites read kwargs
+        # via the context dict (so they can see a second target).
+        availability = self.check_availability(
+            actor,
+            target=context.kwargs.get("target"),
+            context={"kwargs": context.kwargs, "scene_data": sdm},
+        )
+        if not availability.available:
+            return ActionResult(
+                success=False,
+                message="; ".join(availability.reasons) or "You can't do that right now.",
+            )
+
         # Charge the action's declarative AP + fatigue cost before executing (#1154).
         cost_failure = self._charge_costs(actor)
         if cost_failure is not None:

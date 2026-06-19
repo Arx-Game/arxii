@@ -36,6 +36,7 @@ from commands.evennia_overrides.items import (
     CmdPut,
     CmdRemove,
     CmdUndress,
+    CmdUse,
     CmdWear,
     CmdWithdraw,
 )
@@ -85,6 +86,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdUndress())
         self.add(CmdPut())
         self.add(CmdWithdraw())
+        self.add(CmdUse())
         self.add(CmdHome())
         self.add(CmdInventory())
         self.add(CmdSay())

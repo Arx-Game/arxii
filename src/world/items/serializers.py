@@ -285,8 +285,8 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
 
     def get_is_usable(self, obj: ItemInstance) -> bool:
         """True iff use_item would proceed: the template has an on-use pool.
-        Mirrors the precondition in services.usage.use_item."""
-        return obj.template.on_use_pool_id is not None
+        Delegates to the canonical ``ItemTemplate.is_usable`` predicate."""
+        return obj.template.is_usable
 
 
 class VisibleWornItemSerializer(serializers.Serializer):

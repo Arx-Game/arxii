@@ -16,6 +16,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from actions.constants import TargetKind
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.constants import (
     PROVENANCE_EVENT_TYPES,
@@ -220,6 +221,17 @@ class ItemTemplate(SharedMemoryModel):
             "Authored target difficulty for the on-use check. Required iff on_use_check_type set."
         ),
     )
+    on_use_target_kind = models.CharField(
+        max_length=20,
+        choices=TargetKind.choices,
+        null=True,
+        blank=True,
+        help_text=(
+            "Required kind of an external on-use target. Null = self-use only "
+            "(no external target accepted). CHARACTER/ITEM/ROOM = an external "
+            "target of that kind is required, validated by UseItemAction."
+        ),
+    )
     is_craftable = models.BooleanField(
         default=False,
         help_text="Whether this item can be crafted by players.",
@@ -369,6 +381,14 @@ class ItemTemplate(SharedMemoryModel):
             raise ValidationError(
                 {"on_use_difficulty": "Only valid when on_use_check_type is set."}
             )
+
+    @property
+    def is_usable(self) -> bool:
+        """Whether this template can be used (has an on-use effect pool).
+
+        Canonical 'usable' predicate; consumables are the charge-spending subset.
+        """
+        return self.on_use_pool_id is not None
 
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:

@@ -1,15 +1,16 @@
-"""Telnet commands for item-specific actions: equip, unequip, put_in, take_out."""
+"""Telnet commands for item-specific actions: equip, unequip, put_in, take_out, use."""
 
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from actions.definitions.items import (
     EquipAction,
     PutInAction,
     TakeOutAction,
     UnequipAction,
+    UseItemAction,
 )
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from commands.command import ArxCommand
@@ -117,3 +118,27 @@ class CmdWithdraw(ArxCommand):
             not_found_msg=f"Could not find '{item_name}' in '{container_name}'.",
         )
         return {"target": target, "container": container}
+
+
+class CmdUse(ArxCommand):
+    """Use an item from your inventory, optionally on a target.
+
+    Telnet grammars:
+        ``use <item>``              — use the item on yourself / its default effect
+        ``use <item> on <target>``  — direct the item at a specific target
+    """
+
+    key = "use"
+    aliases: ClassVar[list[str]] = ["apply"]
+    locks = "cmd:all()"
+    arg_regex = r"\s|$"
+    action = UseItemAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = self.require_args("Use what?")
+        item_text, _, target_text = args.partition(" on ")
+        item = self.search_or_raise(item_text.strip())
+        target = None
+        if target_text.strip():
+            target = self.search_or_raise(target_text.strip())
+        return {"item": item, "target": target}
