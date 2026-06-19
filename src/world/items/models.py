@@ -376,6 +376,14 @@ class ItemTemplate(SharedMemoryModel):
                 {"on_use_difficulty": "Only valid when on_use_check_type is set."}
             )
 
+    @property
+    def is_usable(self) -> bool:
+        """Whether this template can be used (has an on-use effect pool).
+
+        Canonical 'usable' predicate; consumables are the charge-spending subset.
+        """
+        return self.on_use_pool_id is not None
+
     @cached_property
     def cached_slots(self) -> list[TemplateSlot]:
         """

@@ -99,7 +99,7 @@ class ItemUsablePrerequisite(Prerequisite):
         if instance is None:
             return False, "That can't be used."
         template = instance.template
-        if template.on_use_pool_id is None:
+        if not template.is_usable:
             return False, "That can't be used."
         if template.is_consumable and instance.charges <= 0:
             return False, "There are no uses left."
