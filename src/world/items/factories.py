@@ -353,3 +353,52 @@ class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     min_success_level = 1
     action_point_cost = 0
     anima_cost = 0
+
+
+class CraftingMaterialRequirementFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftingMaterialRequirement.
+
+    Defaults to a single unit of a freshly generated item template with no minimum
+    quality requirement. Pass ``min_quality_tier`` explicitly when tier gating is needed.
+    """
+
+    class Meta:
+        model = "items.CraftingMaterialRequirement"
+
+    recipe = factory.SubFactory(CraftingRecipeFactory)
+    item_template = factory.SubFactory(ItemTemplateFactory)
+    quantity = 1
+    min_quality_tier = None
+
+
+class CraftingSkillCapFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftingSkillCap.
+
+    Requires ``recipe`` and ``max_quality_tier`` to be passed explicitly when
+    building multi-band fixtures; the defaults give sensible standalone rows.
+    The unique constraint on (recipe, min_skill_value) means callers must vary
+    min_skill_value when adding multiple caps to the same recipe.
+    """
+
+    class Meta:
+        model = "items.CraftingSkillCap"
+
+    recipe = factory.SubFactory(CraftingRecipeFactory)
+    min_skill_value = 0
+    max_quality_tier = factory.SubFactory(QualityTierFactory)
+
+
+class CraftingRecipeConsequenceFactory(factory.django.DjangoModelFactory):
+    """Factory for CraftingRecipeConsequence.
+
+    The unique constraint on (recipe, consequence) means callers must use distinct
+    combinations; by default both are freshly generated to avoid collisions.
+    """
+
+    class Meta:
+        model = "items.CraftingRecipeConsequence"
+
+    recipe = factory.SubFactory(CraftingRecipeFactory)
+    consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
+    weight_override = None
+    cost_consumption = "full"
