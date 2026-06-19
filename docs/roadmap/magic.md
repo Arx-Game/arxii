@@ -706,11 +706,12 @@ Per-level softcaps/hardcaps on the resonance-standing axis delivered in #853 (se
 **#853 — per-level resonance-standing cap bands (DONE):**
 
 `StandingCapBand` replaces the flat `AuraPowerConfig.resonance_standing_cap` field
-(removed in #768). Each band carries `min_level` (character level floor), `cap`
-(effective ceiling on `lifetime_earned` fed into the aura term), `mode`
+(added in #768, removed here). Each band carries `min_level` (character level floor),
+`cap` (ceiling on the resonance-standing contribution, i.e. summed
+`lifetime_earned × resonance_standing_bonus`), `mode`
 (`StandingCapMode.HARD` = hard clamp, `StandingCapMode.SOFT` = diminishing-returns
-scaling above the cap via `diminish_pct`), and an optional `diminish_pct`
-(SOFT only; HARD bands must leave it null, enforced by `clean()`). At cast time
+scaling above the cap via `diminish_pct`), and `diminish_pct`
+(SOFT only; HARD bands must leave it 0, the default, enforced by `clean()`). At cast time
 `_apply_standing_cap` selects the band with the greatest `min_level ≤ current_level`
 (greatest-floor wins; no band = uncapped). Staff author bands via Django admin;
 a factory (`StandingCapBandFactory`) covers tests.
