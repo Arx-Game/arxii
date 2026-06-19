@@ -26,8 +26,8 @@ surfaces**, each grown independently:
 3. **`world/scenes/action_availability.get_available_scene_actions`** — a third
    availability path, DB-driven via `ActionTemplate.objects.filter(category="social")`.
 4. **Combat** — entirely bespoke: `declare_action` service
-   (`src/world/combat/services.py:757`), `DeclareActionSerializer`
-   (`src/world/combat/serializers.py:355-386`), `resolve_round` view
+   (`src/world/combat/services.py:757`), ~~`DeclareActionSerializer`~~
+   (retired in #987 — see below), `resolve_round` view
    (`src/world/combat/views.py:140`).
 
 ### The two diagnostic bugs (both confirmed at the view layer; service layer is wired)
@@ -44,9 +44,12 @@ surfaces**, each grown independently:
   (`resolve_combat_technique`, `:431-483`) is fully wired and requires a
   non-optional `offense_check_type: CheckType`.
   Additionally `focused_ally_target` is hardcoded `None`
-  (`src/world/combat/views.py:290`) and **absent from
+  (`src/world/combat/views.py:290`) and **absent from the (now-retired)
   `DeclareActionSerializer`**, so no self-cast / buff / ally-target technique
-  can ever be declared — though `declare_action` accepts the parameter.
+  could ever be declared via that path — though `declare_action` accepts the
+  parameter. **Fixed in #987:** `focused_ally_target` is now accepted by the
+  unified `/dispatch/` path (`dispatch_player_action` →
+  `CombatRoundContext.record_declaration` → `_record_combat_declaration`).
 - **#2 — challenge player-resolution path missing.** `resolve_challenge`
   (`src/world/mechanics/challenge_resolution.py:46-51`) is a solid resolution
   primitive, but there is **no player-facing dispatch endpoint** that calls it.
@@ -101,7 +104,7 @@ it. Scope = "player does thing with their character."
    `offense_check_type` from `Technique.action_template.check_type`;
    `action_template` becomes **required** for combat-usable techniques (explicit
    config error, no silent no-op, no "legacy"). Add `focused_ally_target` to the
-   declare path. **This is the #1 fix.**
+   `/dispatch/` path. **This is the #1 fix.**
 4. **Combat-agnostic tempo seam** — `get_active_round_context(character)`;
    combat is the sole implementor; no general-scene provider, no plugin
    framework.
@@ -139,7 +142,7 @@ it. Scope = "player does thing with their character."
 model, and its own roadmap (`src/actions/CLAUDE.md:96-114`) names exactly these
 missing pieces ("CharacterCapabilities facade," "On-Demand Action
 Availability," generic dispatch). No new app. Challenge logic stays in
-`world/mechanics`; combat declare stays in `world/combat`. `src/actions/`
+`world/mechanics`; `declare_action` service stays in `world/combat`. `src/actions/`
 **aggregates and routes**; it does not absorb the backends.
 
 **Spine — resolved `CheckType`.** Every player action descriptor resolves to a
@@ -259,12 +262,18 @@ them costs a round is pre-existing combat-design, not this interface's concern.
 - The silent `if offense_check_type is not None` no-op guard is **deleted**. A
   combat-usable technique with no `action_template` is a configuration error
   that raises a typed exception, never a silent skip.
-- Validation that a declared technique has an `action_template` lives in
-  `DeclareActionSerializer` (validation in serializers, not services/views).
-- `focused_ally_target` is **added to `DeclareActionSerializer`**
-  (`src/world/combat/serializers.py:355-386`) and the
-  `src/world/combat/views.py:290` hardcoded `None` removed. `declare_action`
-  already accepts it.
+- Validation that a declared technique has an `action_template` is enforced by
+  `CombatRoundContext._record_combat_declaration` inside the dispatch path
+  (validation before calling `declare_action`). The former
+  `DeclareActionSerializer` and the `/api/combat/{id}/declare/` view were
+  **retired in #987**; `dispatch_player_action` →
+  `CombatRoundContext.record_declaration` → `_record_combat_declaration` is now
+  the single combat-declaration authority. [BUILT & WIRED]
+- `focused_ally_target` is now accepted through the unified
+  `/api/actions/characters/{id}/dispatch/` endpoint (the hardcoded `None` in
+  the old `src/world/combat/views.py:290` is gone with the retired view).
+  `declare_action` already accepted it; the fix was exposing it at the call
+  site. [BUILT & WIRED]
 
 ## 6. Surfaces
 
@@ -349,8 +358,9 @@ CI's fresh DB).
 | `declare_action` | `src/world/combat/services.py:757` |
 | `resolve_round` service / `_resolve_pc_action` gate | `src/world/combat/services.py:1977`, `:1720`, `:1764-1773` |
 | `resolve_combat_technique` | `src/world/combat/services.py:431-483` |
-| `resolve_round` view / hardcoded `focused_ally_target` | `src/world/combat/views.py:140-149`, `:290` |
-| `DeclareActionSerializer` (no `focused_ally_target`) | `src/world/combat/serializers.py:355-386` |
+| `resolve_round` view / hardcoded `focused_ally_target` | `src/world/combat/views.py:140-149`, `:290` (hardcoded `None` removed in #987) |
+| ~~`DeclareActionSerializer`~~ (retired in #987) | ~~`src/world/combat/serializers.py:355-386`~~ — deleted |
+| `dispatch_player_action` → `CombatRoundContext.record_declaration` → `_record_combat_declaration` (sole declaration authority) [BUILT & WIRED] | `src/actions/dispatch.py`, `src/world/combat/round_context.py` |
 | `CombatEncounter` / `CombatParticipant` / `CombatRoundAction` | `src/world/combat/models.py:27-88`, `:385-422`, `:425-518` |
 | `Technique.action_template` (nullable) | `src/world/magic/models/techniques.py:225-351` |
 | `execute_action` inputfunc | `src/server/conf/inputfuncs.py:55-121` |

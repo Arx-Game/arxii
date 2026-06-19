@@ -3275,33 +3275,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
-  /api/combat/{id}/declare/:
-    post:
-      operationId: combat_declare_create
-      description: Declare actions for the current round.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this combat encounter.
-        required: true
-      tags:
-      - combat
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EncounterDetail'
-          description: ''
   /api/combat/{id}/end/:
     post:
       operationId: combat_end_create

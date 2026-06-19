@@ -2284,23 +2284,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/combat/{id}/declare/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Declare actions for the current round. */
-    post: operations['combat_declare_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/combat/{id}/end/': {
     parameters: {
       query?: never;
@@ -26389,32 +26372,6 @@ export interface operations {
     };
   };
   combat_cover_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this combat encounter. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['EncounterDetail'];
-        };
-      };
-    };
-  };
-  combat_declare_create: {
     parameters: {
       query?: never;
       header?: never;

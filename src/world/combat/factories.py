@@ -1102,6 +1102,46 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     base_filter_condition = None  # all filtering happens in the service function
 
 
+def wire_weapon_damage_modifier_target():
+    """Seed the equipment-relevant 'weapon_damage' ModifierTarget (#985).
+
+    Lives in the 'stat' category (EQUIPMENT_RELEVANT_CATEGORIES) so the
+    covenant-role equipment walk fires for it. item_mundane_stat_for_target
+    returns the equipped item's effective_weapon_damage for this target.
+    Idempotent via django_get_or_create on (category, name).
+    """
+    from world.items.constants import WEAPON_DAMAGE_TARGET_NAME
+    from world.mechanics.constants import STAT_CATEGORY_NAME
+    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+    return ModifierTargetFactory(
+        name=WEAPON_DAMAGE_TARGET_NAME,
+        category=ModifierCategoryFactory(name=STAT_CATEGORY_NAME),
+        description="Equipped-weapon mundane damage + covenant-role weapon bonus.",
+        is_active=True,
+    )
+
+
+def wire_armor_soak_modifier_target():
+    """Seed the equipment-relevant 'armor_soak' ModifierTarget (#985).
+
+    Lives in the 'stat' category (EQUIPMENT_RELEVANT_CATEGORIES) so the
+    covenant-role equipment walk fires for it. item_mundane_stat_for_target
+    returns the equipped item's effective_armor_soak for this target.
+    Idempotent via django_get_or_create on (category, name).
+    """
+    from world.items.constants import ARMOR_SOAK_TARGET_NAME
+    from world.mechanics.constants import STAT_CATEGORY_NAME
+    from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+    return ModifierTargetFactory(
+        name=ARMOR_SOAK_TARGET_NAME,
+        category=ModifierCategoryFactory(name=STAT_CATEGORY_NAME),
+        description="Equipped-armor mundane soak + covenant-role soak bonus.",
+        is_active=True,
+    )
+
+
 def wire_escalation_content() -> None:
     """Seed the escalation spike trigger definitions (idempotent).
 

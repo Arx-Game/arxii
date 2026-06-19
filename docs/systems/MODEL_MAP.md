@@ -1251,7 +1251,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7720634b1550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7720634b1550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7720634b1550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1307,6 +1307,7 @@
   - sub_roles <- covenants.CovenantRole
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
+  - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
 
 ### GearArchetypeCompatibility
@@ -1323,6 +1324,11 @@
 
 ### CovenantLevelBonus
 **Foreign Keys:**
+  - modifier_target -> mechanics.ModifierTarget [FK]
+
+### CovenantRoleBonus
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### CovenantRite
@@ -2139,6 +2145,7 @@
   - gated_by_conditions <- relationships.RelationshipCondition
   - fashion_style_bonuses <- items.FashionStyleBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
+  - covenant_role_bonuses <- covenants.CovenantRoleBonus
 
 ### ModifierSource
 **Foreign Keys:**
@@ -2326,12 +2333,12 @@
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None) -> 'int' — Get total modifier value for a target.`
-- `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat.`
+- `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the coherence bonus from worn styles bound to the character's Motif (Spec D §5.3).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
-- `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 wires authored values.`
+- `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
@@ -2575,7 +2582,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7720634b1550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7720634b1550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7720634b1550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3347,13 +3354,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x77205e18c090>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x739e951640e0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x77205e18c090>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x739e951640e0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

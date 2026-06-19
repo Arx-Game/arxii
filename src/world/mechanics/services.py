@@ -525,12 +525,13 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     "engaged" with the covenant where they hold the role. Multiple engaged
     roles (e.g., one Durance + one Battle) stack additively.
 
-    Per slot:
-    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus + gear_stat (additive)
-    - Incompatible gear (no row): max(role_bonus, gear_stat) (highest wins)
+    Per slot (marginal blend — combat already counts the gear's base stat directly):
+    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus stacks on top.
+    - Incompatible gear (no row): max(0, role_bonus - gear_stat) — only the role's
+      surplus beyond what the gear already provides; never negative.
 
-    At low character levels gear_stat dominates; incompatible gear costs nothing.
-    At high levels role_bonus dominates; incompatible gear's mundane stat is wasted.
+    At low character levels an incompatible item may fully suppress the role bonus;
+    at high levels role_bonus dominates and the incompatibility cost shrinks.
 
     Args:
         sheet: CharacterSheet instance.
@@ -560,9 +561,13 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
             gear_stat = item_mundane_stat_for_target(item, target)
             archetype = item.template.gear_archetype
             if is_gear_compatible(role, archetype):
-                total += role_bonus + gear_stat
+                total += (
+                    role_bonus  # compatible: role bonus stacks on the gear combat already counts
+                )
             else:
-                total += max(role_bonus, gear_stat)
+                total += max(
+                    0, role_bonus - gear_stat
+                )  # incompatible: only the role's surplus over gear
     return total
 
 
@@ -613,19 +618,42 @@ def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
 
 
 def role_base_bonus_for_target(
-    role: CovenantRole,  # noqa: ARG001
-    target: ModifierTarget,  # noqa: ARG001
-    character_level: int,  # noqa: ARG001
+    role: CovenantRole,
+    target: ModifierTarget,
+    character_level: int,
 ) -> int:
-    """PLACEHOLDER — returns 0 in PR1. PR3 wires authored values."""
-    return 0
+    """Authored covenant-role bonus for ``target``, scaled by character level (#985).
+
+    Reads the ``CovenantRoleBonus`` row for ``(role, target)`` and returns
+    ``character_level * bonus_per_level``. No row → 0 (most targets). Mirrors
+    ``covenant_level_bonus``'s authored-config lookup; reached only after
+    ``covenant_role_bonus``'s engaged-roles early-out.
+    """
+    from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
+
+    config = CovenantRoleBonus.objects.filter(covenant_role=role, modifier_target=target).first()
+    if config is None:
+        return 0
+    return character_level * config.bonus_per_level
 
 
-def item_mundane_stat_for_target(
-    item: ItemInstance,  # noqa: ARG001
-    target: ModifierTarget,  # noqa: ARG001
-) -> int:
-    """PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat."""
+def item_mundane_stat_for_target(item: ItemInstance, target: ModifierTarget) -> int:
+    """Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).
+
+    Reads the per-instance derived combat stats shipped by #508 — quality-scaled
+    and already 0 for the wrong archetype. weapon_damage / armor_soak targets only;
+    every other target → 0. (No ItemCombatStat model exists — #508 put these
+    directly on ItemTemplate/ItemInstance.)
+    """
+    from world.items.constants import (  # noqa: PLC0415
+        ARMOR_SOAK_TARGET_NAME,
+        WEAPON_DAMAGE_TARGET_NAME,
+    )
+
+    if target.name == WEAPON_DAMAGE_TARGET_NAME:
+        return item.effective_weapon_damage
+    if target.name == ARMOR_SOAK_TARGET_NAME:
+        return item.effective_armor_soak
     return 0
 
 

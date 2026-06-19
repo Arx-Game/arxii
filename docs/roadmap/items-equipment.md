@@ -68,6 +68,36 @@ What shipped:
   `SlotIncompatible` in `world.items.exceptions`; `CovenantRoleNeverHeldError` in
   `world.covenants.exceptions`; `NoMatchingWornFacetItemsError` in `world.magic.exceptions`
 
+## Spec D PR3 — Covenant-Role × Gear Blend Wired End-to-End (DONE, #985)
+
+**Spec:** `docs/architecture/items-fashion-mantles.md` §5.6, §10 PR3
+
+What shipped:
+
+- **`CovenantRoleBonus` model** (`world.covenants`) — authored config: FK
+  `covenant_role`, FK `modifier_target`, `bonus_per_level` SmallInt, unique per
+  (role, target). Admin-registered. Default authoring empty → no live numeric effect
+  until staff author rows.
+- **`role_base_bonus_for_target` wired** — reads `CovenantRoleBonus`; returns
+  `character_level × bonus_per_level`; no row → 0. Mirrors `covenant_level_bonus`'s
+  authored-config lookup pattern.
+- **`item_mundane_stat_for_target` wired** — returns `item.effective_weapon_damage`
+  for the seeded `weapon_damage` `ModifierTarget` and `item.effective_armor_soak` for
+  `armor_soak`; 0 for other targets. No separate `ItemCombatStat` model (#508 put
+  stats on `ItemTemplate`/`ItemInstance` directly). Stale `ItemCombatStat` docstring
+  removed.
+- **Marginal §5.6 blend** — compatible slot: adds `role_bonus` (stacks on top of the
+  gear combat already reads); incompatible slot: adds `max(0, role_bonus - gear_stat)`
+  (role surplus only). Equivalent outcome to the original spec; avoids double-counting.
+- **Combat seams:** `apply_equipped_armor_soak` adds `_covenant_armor_soak_bonus`
+  (routes through `get_modifier_total` for the `armor_soak` target); `_weapon_augmented_budget`
+  adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget.
+  Non-covenant characters and base damage/soak are unchanged.
+- **Tests** — `test_covenant_combat_blend.py` (integration: weapon + soak seams +
+  non-covenant regression + unseeded-target guard); `test_covenant_role_bonus_gating.py`
+  (unit); `test_modifier_total_no_query.py::CovenantRoleAnchorCapQueryBudgetTests`
+  (no-query path still passes).
+
 ## Spec D PR4 — Mantle System + Fashion Combat Integration (DONE)
 
 **Spec:** `docs/architecture/items-fashion-mantles.md` §4.3, §5.4, §6.2 (issue #512)

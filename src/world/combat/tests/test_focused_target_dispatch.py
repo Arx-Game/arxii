@@ -29,8 +29,10 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import (
+    BinaryEffectTypeFactory,
     CharacterTechniqueFactory,
     EffectTypeFactory,
+    TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
 from world.vitals.models import CharacterVitals
@@ -191,3 +193,56 @@ class TestFocusedTargetEndToEnd(django.test.TestCase):
         ).first()
         assert row is not None
         self.assertEqual(row.focused_opponent_target_id, self.opponent.pk)
+
+
+class TestFocusedAllyTargetDispatch(django.test.TestCase):
+    """Drive the REAL ``dispatch_player_action`` entry point with an ally target id."""
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        self.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.sheet = self.participant.character_sheet
+        self.character = self.sheet.character
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet,
+            health=100,
+            max_health=100,
+        )
+
+    def test_focused_ally_target_id_persisted(self) -> None:
+        """A self/ally-cast technique dispatched with focused_ally_target_id persists the ally."""
+        ally = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        # Buff (no base_power → no forced opponent target); one ally-kind condition row
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_category=ActionCategory.PHYSICAL,
+            action_template=ActionTemplateFactory(),
+        )
+        TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+
+        ref = ActionRef(
+            backend=ActionBackend.COMBAT, technique_id=technique.pk, action_slot="focused"
+        )
+        dispatch_player_action(
+            self.character,
+            ref,
+            {"effort_level": EffortLevel.MEDIUM, "focused_ally_target_id": ally.pk},
+        )
+
+        row = CombatRoundAction.objects.filter(
+            participant=self.participant, round_number=self.encounter.round_number
+        ).first()
+        assert row is not None
+        self.assertEqual(row.focused_ally_target_id, ally.pk)

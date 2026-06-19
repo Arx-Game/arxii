@@ -7,13 +7,14 @@ from evennia.objects.models import ObjectDB
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
+from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, EncounterStatus, EncounterType, ParticipantStatus
+from world.combat.constants import EncounterStatus, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -25,8 +26,8 @@ from world.combat.models import CombatOpponentAction, CombatRoundAction
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
 from world.magic.factories import (
-    BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterTechniqueFactory,
     EffectTypeFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
@@ -260,24 +261,6 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         self.assertIsNone(response.data)
-
-    def test_declare_non_participant_denied(self) -> None:
-        """Account with no participant in encounter gets 403."""
-        other_account = AccountFactory(username="outsider")
-        other_char = CharacterFactory(db_key="outsiderchar")
-        CharacterSheetFactory(character=other_char)
-        RosterTenureFactory(
-            roster_entry__character_sheet__character=other_char,
-            player_data__account=other_account,
-        )
-        client = APIClient()
-        client.force_authenticate(user=other_account)
-        response = client.post(
-            f"/api/combat/{self.encounter.pk}/declare/",
-            {"effort_level": "medium"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
 
     def test_ready_toggle(self) -> None:
         """Participant can toggle ready on their action if one exists."""
@@ -530,68 +513,6 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["detail"], _ERR_DECLARE_FAILED)
 
-    def test_declare_ally_target_persisted_via_endpoint(self) -> None:
-        """Declaring a self/ally-cast technique via the DRF endpoint persists focused_ally_target.
-
-        This is the TDD red test: DeclareActionSerializer has no focused_ally_target
-        field, so the view hardcodes focused_ally_target=None, dropping the ally choice.
-        The test must fail because CombatRoundAction.focused_ally_target is None instead
-        of the ally participant.
-        """
-        # Buff effect type (no base_power → no damage → no forced opponent target)
-        buff_effect_type = BinaryEffectTypeFactory()
-        # Technique with action_template so serializer validation passes,
-        # and one ally-kind condition row so target-kind validation passes
-        technique = TechniqueFactory(
-            effect_type=buff_effect_type,
-            damage_profile=False,
-            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
-        )
-        TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
-
-        # Fresh DECLARING encounter linked to the scene so setUpTestData doesn't interfere
-        declare_encounter = CombatEncounterFactory(
-            scene=self.scene,
-            status=EncounterStatus.DECLARING,
-            round_number=1,
-        )
-        # Caster — use player_sheet so player_account's played_character_sheet_ids matches
-        caster_participant = CombatParticipantFactory(
-            encounter=declare_encounter,
-            character_sheet=self.player_sheet,
-            status=ParticipantStatus.ACTIVE,
-        )
-        CharacterVitals.objects.get_or_create(
-            character_sheet=self.player_sheet,
-            defaults={"health": 100, "max_health": 100},
-        )
-        # Ally — a second participant in the same encounter
-        ally_participant = CombatParticipantFactory(
-            encounter=declare_encounter,
-            status=ParticipantStatus.ACTIVE,
-        )
-
-        client = APIClient()
-        client.force_authenticate(user=self.player_account)
-        response = client.post(
-            f"/api/combat/{declare_encounter.pk}/declare/",
-            {
-                "focused_action": technique.pk,
-                "focused_category": "physical",
-                "effort_level": "medium",
-                "focused_ally_target": ally_participant.pk,
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
-
-        # Reload the persisted action and assert the ally target was stored
-        action = CombatRoundAction.objects.get(
-            participant=caster_participant,
-            round_number=declare_encounter.round_number,
-        )
-        self.assertEqual(action.focused_ally_target, ally_participant)
-
 
 class StaffAccessTest(TestCase):
     """Staff can access GM endpoints without being scene GM.
@@ -737,15 +658,24 @@ class DeclareAndResolveE2ETest(TestCase):
         expected_condition_template = applied_condition_row.condition
 
         # --- Step 1: Player declares the technique targeting the opponent ---
+        # CharacterTechniqueFactory links the technique to the player's sheet so the
+        # COMBAT backend ref resolves (dispatch validates against current availability).
+        CharacterTechniqueFactory(character=self.player_sheet, technique=technique)
+
         client = APIClient()
         client.force_authenticate(user=self.player_account)
         declare_response = client.post(
-            f"/api/combat/{encounter.pk}/declare/",
+            f"/api/actions/characters/{self.player_character.pk}/dispatch/",
             {
-                "focused_action": technique.pk,
-                "focused_category": ActionCategory.PHYSICAL,
-                "effort_level": "medium",
-                "focused_opponent_target": opponent.pk,
+                "ref": {
+                    "backend": ActionBackend.COMBAT,
+                    "technique_id": technique.pk,
+                    "action_slot": "focused",
+                },
+                "kwargs": {
+                    "effort_level": "medium",
+                    "focused_opponent_target_id": opponent.pk,
+                },
             },
             format="json",
         )

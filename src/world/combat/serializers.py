@@ -6,12 +6,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
-from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
-from actions.errors import ActionDispatchError
 from world.areas.positioning.serializers import (
     PositionAdjacencyItemSerializer,
     PositionSummarySerializer,
@@ -36,7 +34,6 @@ from world.combat.models import (
 )
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
-from world.fatigue.constants import EffortLevel
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
 from world.mechanics.constants import EngagementType
@@ -985,59 +982,6 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Write serializers
 # ---------------------------------------------------------------------------
-
-
-class DeclareActionSerializer(serializers.Serializer):
-    """Write serializer for action declaration."""
-
-    focused_action = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-    focused_category = serializers.ChoiceField(
-        choices=ActionCategory.choices,
-        required=False,
-        allow_null=True,
-    )
-    effort_level = serializers.ChoiceField(
-        choices=EffortLevel.choices,
-        default=EffortLevel.MEDIUM,
-    )
-    focused_opponent_target = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-    focused_ally_target = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-    physical_passive = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-    social_passive = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-    mental_passive = serializers.IntegerField(
-        required=False,
-        allow_null=True,
-    )
-
-    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        """Validate that a focused_action technique is combat-ready."""
-        focused_action_id = attrs.get("focused_action")
-        if focused_action_id is not None:
-            technique = get_object_or_404(Technique, pk=focused_action_id)
-            if technique.action_template is None:
-                raise serializers.ValidationError(
-                    {
-                        "focused_action": ActionDispatchError(
-                            ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY
-                        ).user_message,
-                    }
-                )
-        return attrs
 
 
 class RemoveParticipantSerializer(serializers.Serializer):

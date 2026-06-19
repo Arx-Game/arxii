@@ -2,12 +2,12 @@
 
 Pipeline: CharacterSheet + CovenantRole + GearArchetypeCompatibility (for compatible archetype
 only) → patch placeholder helpers (role_base_bonus_for_target, item_mundane_stat_for_target) →
-call get_modifier_total(sheet, target) → assert additive-vs-max branching.
+call get_modifier_total(sheet, target) → assert marginal blend branching.
 
-Math reference:
-  compatible gear:   role_bonus + gear_stat  (additive)
-  incompatible gear: max(role_bonus, gear_stat)
-  two items (one each): (role+gear) + max(role, gear)
+Math reference (§5.6 marginal blend — combat already counts the gear's base stat):
+  compatible gear:   role_bonus  (role stacks on top of gear combat already provides)
+  incompatible gear: max(0, role_bonus - gear_stat)  (role's surplus over gear; never negative)
+  two items (one each): role_bonus + max(0, role_bonus - gear_stat)
 
 The PR1 placeholders return 0. All five tests patch them to non-zero values so the
 branching logic fires at the integration level rather than collapsing to a trivial 0.
@@ -156,7 +156,7 @@ class GearCompatibilityPipelineTests(TestCase):
     # ------------------------------------------------------------------
 
     def test_compatible_gear_additive(self) -> None:
-        """Patches: role=10, gear=3. Single compatible item (HEAVY_ARMOR) → 10+3 = 13."""
+        """Patches: role=10, gear=3. Single compatible item (HEAVY_ARMOR) → role_bonus = 10."""
         from world.mechanics.services import get_modifier_total
 
         sheet = self._make_single_compat_sheet()
@@ -167,10 +167,10 @@ class GearCompatibilityPipelineTests(TestCase):
         ):
             result = get_modifier_total(sheet, self.target)
 
-        self.assertEqual(result, 13)  # 10 + 3 additive
+        self.assertEqual(result, 10)  # role_bonus only (combat already counts gear stat)
 
     def test_incompatible_gear_max(self) -> None:
-        """Patches: role=10, gear=3. Single incompatible item (RANGED) → max(10, 3) = 10."""
+        """Patches: role=10, gear=3. Single incompatible item (RANGED) → max(0, 10-3) = 7."""
         from world.mechanics.services import get_modifier_total
 
         sheet = self._make_single_incompat_sheet()
@@ -181,10 +181,10 @@ class GearCompatibilityPipelineTests(TestCase):
         ):
             result = get_modifier_total(sheet, self.target)
 
-        self.assertEqual(result, 10)  # max(10, 3)
+        self.assertEqual(result, 7)  # max(0, 10-3) marginal surplus
 
     def test_two_items_compatible_and_incompatible_aggregate(self) -> None:
-        """Patches: role=5, gear=2. One compatible + one incompatible → (5+2) + max(5,2) = 12."""
+        """Patches: role=5, gear=2. One compatible + one incompatible → 5 + max(0,5-2) = 8."""
         from world.mechanics.services import get_modifier_total
 
         with (
@@ -193,7 +193,7 @@ class GearCompatibilityPipelineTests(TestCase):
         ):
             result = get_modifier_total(self.sheet, self.target)
 
-        self.assertEqual(result, 12)  # (5+2) + max(5,2) = 7 + 5
+        self.assertEqual(result, 8)  # 5 + max(0, 5-2) = 5 + 3
 
     def test_no_role_returns_zero(self) -> None:
         """No CharacterCovenantRole row → covenant_role_bonus returns 0 → total is 0."""
@@ -225,7 +225,7 @@ class GearCompatibilityPipelineTests(TestCase):
         self.assertEqual(result, 0)
 
     def test_incompatible_gear_higher_max_wins(self) -> None:
-        """Patches: role=2, gear=15. Incompatible item → max(2, 15) = 15."""
+        """Patches: role=2, gear=15. Incompatible item → max(0, 2-15) = 0."""
         from world.mechanics.services import get_modifier_total
 
         sheet = self._make_single_incompat_sheet()
@@ -236,4 +236,4 @@ class GearCompatibilityPipelineTests(TestCase):
         ):
             result = get_modifier_total(sheet, self.target)
 
-        self.assertEqual(result, 15)  # max(2, 15)
+        self.assertEqual(result, 0)  # max(0, 2-15) = 0, gear fully suppresses role

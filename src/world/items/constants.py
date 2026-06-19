@@ -107,6 +107,11 @@ FASHION_MATCH_BASE = 1
 # rows fetched by name (no slug fields, no data migration); tests author them
 # via factories. The endorsement weight is deliberately large so peer judging
 # dominates the graded check floor.
+# Combat stat ModifierTarget names (#985). Used by item_mundane_stat_for_target
+# to identify which stat an equipped item contributes to.
+WEAPON_DAMAGE_TARGET_NAME = "weapon_damage"
+ARMOR_SOAK_TARGET_NAME = "armor_soak"
+
 FASHION_PRESENTATION_CHECK_TYPE_NAME = "Fashion Presentation"
 FASHION_PRESENTATION_MODIFIER_TARGET_NAME = "Fashion Presentation"
 FASHION_PRESENTATION_ENDORSEMENT_WEIGHT = 5  # peer endorsements dominate acclaim

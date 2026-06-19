@@ -42,7 +42,6 @@ from world.combat.serializers import (
     AddOpponentSerializer,
     AddParticipantSerializer,
     CoverSerializer,
-    DeclareActionSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
     JoinEncounterSerializer,
@@ -56,7 +55,6 @@ from world.combat.services import (
     add_opponent,
     add_participant,
     begin_declaration_phase,
-    declare_action,
     declare_cover,
     declare_flee,
     end_encounter,
@@ -70,7 +68,6 @@ from world.combat.services import (
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
-from world.magic.models import Technique
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.stories.pagination import StandardResultsSetPagination
@@ -98,7 +95,6 @@ class CombatEncounterViewSet(ModelViewSet):
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
         if self.action in (
-            "declare",
             "ready",
             "my_action",
             "available_combos",
@@ -435,75 +431,6 @@ class CombatEncounterViewSet(ModelViewSet):
         return self._serialize_encounter(request, encounter)
 
     # --- Player Actions ---
-
-    @action(detail=True, methods=[HTTPMethod.POST])
-    def declare(self, request: Request, pk: int | None = None) -> Response:
-        """Declare actions for the current round."""
-        encounter = self.get_object()
-        serializer = DeclareActionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        participant = self._get_participant(request, encounter)
-        if not participant:
-            return Response(
-                {"detail": _ERR_NOT_PARTICIPANT},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        data = serializer.validated_data
-
-        # Resolve focused action FK
-        focused_action = None
-        focused_action_id = data.get("focused_action")
-        if focused_action_id:
-            focused_action = get_object_or_404(Technique, pk=focused_action_id)
-
-        # Resolve focused opponent target FK
-        focused_opponent_target = None
-        target_id = data.get("focused_opponent_target")
-        if target_id:
-            focused_opponent_target = get_object_or_404(
-                CombatOpponent,
-                pk=target_id,
-                encounter=encounter,
-            )
-
-        # Resolve focused ally target FK
-        focused_ally_target = None
-        ally_target_id = data.get("focused_ally_target")
-        if ally_target_id:
-            focused_ally_target = get_object_or_404(
-                CombatParticipant,
-                pk=ally_target_id,
-                encounter=encounter,
-            )
-
-        # Resolve passive technique FKs
-        passive_kwargs: dict[str, Technique | None] = {}
-        for passive_field in ("physical_passive", "social_passive", "mental_passive"):
-            passive_id = data.get(passive_field)
-            if passive_id:
-                passive_kwargs[passive_field] = get_object_or_404(
-                    Technique,
-                    pk=passive_id,
-                )
-
-        try:
-            declare_action(
-                participant,
-                focused_action=focused_action,
-                focused_category=data.get("focused_category"),
-                effort_level=data["effort_level"],
-                focused_opponent_target=focused_opponent_target,
-                focused_ally_target=focused_ally_target,
-                physical_passive=passive_kwargs.get("physical_passive"),
-                social_passive=passive_kwargs.get("social_passive"),
-                mental_passive=passive_kwargs.get("mental_passive"),
-            )
-        except ValueError:
-            return Response(
-                {"detail": _ERR_DECLARE_FAILED},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def ready(self, request: Request, pk: int | None = None) -> Response:
