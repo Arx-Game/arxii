@@ -13,6 +13,7 @@ import {
   fetchPlaces,
   joinPlace,
   leavePlace,
+  castTechnique,
 } from './actionQueries';
 
 function mockOkResponse(data: unknown) {
@@ -244,6 +245,19 @@ describe('actionQueries', () => {
       vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
 
       await expect(leavePlace('42', 5)).rejects.toThrow('Failed to leave place');
+    });
+  });
+
+  describe('castTechnique', () => {
+    it('surfaces the backend detail on a 400', async () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({ detail: 'You cannot afford that pull.' }),
+      } as Response);
+
+      await expect(castTechnique('1', { initiator_persona: 1, technique_id: 2 })).rejects.toThrow(
+        'You cannot afford that pull.'
+      );
     });
   });
 });

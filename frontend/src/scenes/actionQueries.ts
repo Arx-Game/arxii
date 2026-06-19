@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 import type {
   PlayerActionsResponse,
   ActionRequest,
@@ -170,7 +171,7 @@ export async function castTechnique(
     method: 'POST',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to cast technique');
+  if (!res.ok) await readErrorDetail(res, 'Failed to cast technique');
   return res.json();
 }
 
