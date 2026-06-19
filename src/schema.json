@@ -26054,16 +26054,10 @@ components:
         status:
           $ref: '#/components/schemas/Status4e6Enum'
         outcome:
-          allOf:
-          - $ref: '#/components/schemas/Outcome88eEnum'
           readOnly: true
-          description: |-
-            Typed result recorded at completion (#876); empty until completed.
-
-            * `victory` - Victory
-            * `defeat` - Defeat
-            * `fled` - Fled
-            * `abandoned` - Abandoned
+          oneOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         completed_at:
           type: string
           format: date-time
@@ -26260,16 +26254,10 @@ components:
         status:
           $ref: '#/components/schemas/Status4e6Enum'
         outcome:
-          allOf:
-          - $ref: '#/components/schemas/Outcome88eEnum'
           readOnly: true
-          description: |-
-            Typed result recorded at completion (#876); empty until completed.
-
-            * `victory` - Victory
-            * `defeat` - Defeat
-            * `fled` - Fled
-            * `abandoned` - Abandoned
+          oneOf:
+          - $ref: '#/components/schemas/Outcome88eEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         completed_at:
           type: string
           format: date-time

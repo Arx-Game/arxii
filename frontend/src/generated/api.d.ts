@@ -14710,15 +14710,9 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
-      /**
-       * @description Typed result recorded at completion (#876); empty until completed.
-       *
-       *     * `victory` - Victory
-       *     * `defeat` - Defeat
-       *     * `fled` - Fled
-       *     * `abandoned` - Abandoned
-       */
-      readonly outcome: components['schemas']['Outcome88eEnum'];
+      readonly outcome:
+        | components['schemas']['Outcome88eEnum']
+        | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
@@ -14814,15 +14808,9 @@ export interface components {
       scene?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
-      /**
-       * @description Typed result recorded at completion (#876); empty until completed.
-       *
-       *     * `victory` - Victory
-       *     * `defeat` - Defeat
-       *     * `fled` - Fled
-       *     * `abandoned` - Abandoned
-       */
-      readonly outcome: components['schemas']['Outcome88eEnum'];
+      readonly outcome:
+        | components['schemas']['Outcome88eEnum']
+        | components['schemas']['BlankEnum'];
       /** Format: date-time */
       readonly completed_at: string | null;
       round_number?: number;
