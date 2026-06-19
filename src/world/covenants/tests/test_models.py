@@ -10,6 +10,7 @@ from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
 from world.covenants.models import (
     Covenant,
+    CovenantRank,
     CovenantRiteParticipant,
     CovenantRole,
     GearArchetypeCompatibility,
@@ -77,13 +78,10 @@ class CovenantRoleTests(TestCase):
         self.assertIsNotNone(role.pk)
         self.assertEqual(role.covenant_type, CovenantType.DURANCE)
 
-    def test_is_leadership_defaults_false_and_settable(self):
-        from world.covenants.factories import CovenantRoleFactory
-
-        role = CovenantRoleFactory()
-        self.assertFalse(role.is_leadership)
-        leader = CovenantRoleFactory(slug="leader-role", is_leadership=True)
-        self.assertTrue(leader.is_leadership)
+    def test_no_is_leadership_field(self) -> None:
+        """CovenantRole must NOT have an is_leadership field after #1027."""
+        role = CovenantRole()
+        self.assertFalse(hasattr(role, "is_leadership"))
 
 
 class GearArchetypeCompatibilityTests(TestCase):
@@ -118,6 +116,7 @@ class CharacterCovenantRoleTests(TestCase):
             covenant_type=CovenantType.DURANCE,
             sworn_objective="Test objective.",
         )
+        cls.rank = CovenantRank.objects.create(covenant=cls.covenant, name="Member", tier=1)
 
     def test_create_active(self) -> None:
         from world.covenants.models import CharacterCovenantRole
@@ -126,6 +125,7 @@ class CharacterCovenantRoleTests(TestCase):
             character_sheet=self.sheet,
             covenant_role=self.role,
             covenant=self.covenant,
+            rank=self.rank,
         )
         self.assertIsNone(row.left_at)
         self.assertIsNotNone(row.joined_at)
@@ -137,6 +137,7 @@ class CharacterCovenantRoleTests(TestCase):
             character_sheet=self.sheet,
             covenant_role=self.role,
             covenant=self.covenant,
+            rank=self.rank,
         )
         # Active row already exists for this (character, covenant); must fail
         with self.assertRaises(IntegrityError):
@@ -144,6 +145,7 @@ class CharacterCovenantRoleTests(TestCase):
                 character_sheet=self.sheet,
                 covenant_role=self.role,
                 covenant=self.covenant,
+                rank=self.rank,
             )
 
     def test_historical_assignments_allowed_after_left_at_set(self) -> None:
@@ -153,6 +155,7 @@ class CharacterCovenantRoleTests(TestCase):
             character_sheet=self.sheet,
             covenant_role=self.role,
             covenant=self.covenant,
+            rank=self.rank,
         )
         first.left_at = timezone.now()
         first.save(update_fields=["left_at"])
@@ -161,6 +164,7 @@ class CharacterCovenantRoleTests(TestCase):
             character_sheet=self.sheet,
             covenant_role=self.role,
             covenant=self.covenant,
+            rank=self.rank,
         )
         self.assertEqual(
             CharacterCovenantRole.objects.filter(
@@ -200,6 +204,11 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             archetype=RoleArchetype.SWORD,
         )
         cls.sheet = CharacterSheetFactory()
+        cls.rank_a = CovenantRank.objects.create(covenant=cls.cov_a, name="Member", tier=1)
+        cls.rank_b = CovenantRank.objects.create(covenant=cls.cov_b, name="Member", tier=1)
+        cls.rank_battle = CovenantRank.objects.create(
+            covenant=cls.cov_battle, name="Member", tier=1
+        )
 
     def test_one_active_role_per_covenant(self) -> None:
         """Two active rows in the same covenant for one character is rejected."""
@@ -209,6 +218,7 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             character_sheet=self.sheet,
             covenant=self.cov_a,
             covenant_role=self.role_vanguard,
+            rank=self.rank_a,
         )
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
@@ -216,6 +226,7 @@ class CharacterCovenantRoleConstraintTests(TestCase):
                     character_sheet=self.sheet,
                     covenant=self.cov_a,
                     covenant_role=self.role_vanguard,
+                    rank=self.rank_a,
                 )
 
     def test_same_role_in_different_covenants_allowed(self) -> None:
@@ -226,12 +237,14 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             character_sheet=self.sheet,
             covenant=self.cov_a,
             covenant_role=self.role_vanguard,
+            rank=self.rank_a,
         )
         # Should not raise.
         CharacterCovenantRole.objects.create(
             character_sheet=self.sheet,
             covenant=self.cov_b,
             covenant_role=self.role_vanguard,
+            rank=self.rank_b,
         )
 
     def test_clean_rejects_engaged_with_left_at(self) -> None:
@@ -241,6 +254,7 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             character_sheet=self.sheet,
             covenant=self.cov_a,
             covenant_role=self.role_vanguard,
+            rank=self.rank_a,
             engaged=True,
             left_at=timezone.now(),
         )
@@ -254,12 +268,14 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             character_sheet=self.sheet,
             covenant=self.cov_a,
             covenant_role=self.role_vanguard,
+            rank=self.rank_a,
             engaged=True,
         )
         ccr2 = CharacterCovenantRole(
             character_sheet=self.sheet,
             covenant=self.cov_b,
             covenant_role=self.role_vanguard,
+            rank=self.rank_b,
             engaged=True,
         )
         with self.assertRaises(ValidationError):
@@ -272,12 +288,14 @@ class CharacterCovenantRoleConstraintTests(TestCase):
             character_sheet=self.sheet,
             covenant=self.cov_a,
             covenant_role=self.role_vanguard,
+            rank=self.rank_a,
             engaged=True,
         )
         ccr2 = CharacterCovenantRole(
             character_sheet=self.sheet,
             covenant=self.cov_battle,
             covenant_role=self.role_sword_battle,
+            rank=self.rank_battle,
             engaged=True,
         )
         # Should not raise — different covenant types.
@@ -420,3 +438,130 @@ class CovenantRiteInstanceTests(TestCase):
         rite = self._make_rite()
         self.assertEqual(rite._meta.verbose_name, "Covenant Rite")
         self.assertEqual(rite._meta.verbose_name_plural, "Covenant Rites")
+
+
+class CovenantRankTests(TestCase):
+    """Tests for CovenantRank model — unique constraints and factory."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.covenants.factories import CovenantFactory
+
+        cls.covenant = CovenantFactory(name="Rank Test Covenant")
+
+    def test_create_rank(self) -> None:
+        rank = CovenantRank.objects.create(
+            covenant=self.covenant,
+            name="Magister",
+            tier=1,
+        )
+        self.assertEqual(rank.name, "Magister")
+        self.assertEqual(rank.tier, 1)
+        self.assertFalse(rank.can_invite)
+        self.assertFalse(rank.can_kick)
+        self.assertFalse(rank.can_manage_ranks)
+
+    def test_str(self) -> None:
+        rank = CovenantRank.objects.create(
+            covenant=self.covenant,
+            name="Warden",
+            tier=2,
+        )
+        self.assertIn("Warden", str(rank))
+        self.assertIn("tier 2", str(rank))
+        self.assertIn(self.covenant.name, str(rank))
+
+    def test_unique_tier_per_covenant(self) -> None:
+        CovenantRank.objects.create(covenant=self.covenant, name="Grand Master", tier=10)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CovenantRank.objects.create(covenant=self.covenant, name="Other", tier=10)
+
+    def test_unique_name_per_covenant(self) -> None:
+        CovenantRank.objects.create(covenant=self.covenant, name="Unique Name", tier=20)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CovenantRank.objects.create(covenant=self.covenant, name="Unique Name", tier=21)
+
+    def test_same_tier_different_covenant_allowed(self) -> None:
+        from world.covenants.factories import CovenantFactory
+
+        other = CovenantFactory(name="Other Covenant For Rank")
+        CovenantRank.objects.create(covenant=self.covenant, name="Alpha", tier=99)
+        # Should not raise — same tier, different covenant.
+        CovenantRank.objects.create(covenant=other, name="Alpha", tier=99)
+
+    def test_factory(self) -> None:
+        from world.covenants.factories import CovenantRankFactory
+
+        rank = CovenantRankFactory()
+        self.assertIsNotNone(rank.pk)
+        self.assertFalse(rank.can_invite)
+        self.assertFalse(rank.can_kick)
+        self.assertFalse(rank.can_manage_ranks)
+
+    def test_manager_variant_factory(self) -> None:
+        from world.covenants.factories import CovenantManagerRankFactory
+
+        rank = CovenantManagerRankFactory()
+        self.assertTrue(rank.can_invite)
+        self.assertTrue(rank.can_kick)
+        self.assertTrue(rank.can_manage_ranks)
+
+    def test_ordering(self) -> None:
+        from world.covenants.factories import CovenantFactory
+
+        cov = CovenantFactory(name="Ordered Covenant")
+        CovenantRank.objects.create(covenant=cov, name="Bottom", tier=5)
+        CovenantRank.objects.create(covenant=cov, name="Top", tier=1)
+        ranks = list(CovenantRank.objects.filter(covenant=cov))
+        self.assertEqual(ranks[0].tier, 1)
+        self.assertEqual(ranks[1].tier, 5)
+
+
+class CharacterCovenantRoleRankTests(TestCase):
+    """Tests for CharacterCovenantRole.rank FK and the rank/covenant-match clean() check."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.covenants.factories import CovenantFactory, CovenantRankFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.covenant = CovenantFactory(name="Rank Member Covenant")
+        cls.other_covenant = CovenantFactory(name="Wrong Covenant For Rank")
+        cls.role = CovenantRoleFactory()
+        cls.rank = CovenantRankFactory(covenant=cls.covenant, tier=1)
+        cls.wrong_rank = CovenantRankFactory(covenant=cls.other_covenant, tier=1)
+
+    def test_membership_factory_has_rank(self) -> None:
+        from world.covenants.factories import CharacterCovenantRoleFactory
+
+        ccr = CharacterCovenantRoleFactory()
+        self.assertIsNotNone(ccr.rank_id)
+        # The factory must wire rank.covenant == membership.covenant.
+        self.assertEqual(ccr.rank.covenant_id, ccr.covenant_id)
+
+    def test_clean_rejects_rank_from_wrong_covenant(self) -> None:
+        from world.covenants.models import CharacterCovenantRole
+
+        ccr = CharacterCovenantRole(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            rank=self.wrong_rank,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            ccr.full_clean()
+        self.assertIn("rank", ctx.exception.message_dict)
+
+    def test_clean_accepts_rank_from_correct_covenant(self) -> None:
+        from world.covenants.models import CharacterCovenantRole
+
+        ccr = CharacterCovenantRole(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            rank=self.rank,
+        )
+        # Should not raise ValidationError for the rank field.
+        ccr.full_clean()

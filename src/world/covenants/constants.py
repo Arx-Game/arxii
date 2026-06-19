@@ -37,3 +37,8 @@ class BattleBinding(models.TextChoices):
 
     STANDING = "standing", "Standing (unit or banner — can rise again)"
     CAMPAIGN = "campaign", "Campaign (one-time event — dissolves when done)"
+
+
+# Default rank names created during covenant formation.
+DEFAULT_FOUNDER_RANK_NAME = "Founder"
+DEFAULT_MEMBER_RANK_NAME = "Member"

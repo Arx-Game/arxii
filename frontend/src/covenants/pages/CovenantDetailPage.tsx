@@ -39,6 +39,8 @@ import {
   useDisengageMembership,
   useLeaveMembership,
   useKickMember,
+  useCovenantRanks,
+  useAssignMemberToRank,
 } from '@/covenants/queries';
 import { useRituals } from '@/rituals/queries';
 import { RitualSessionDraftDialog } from '@/rituals/components/RitualSessionDraftDialog';
@@ -46,7 +48,8 @@ import { BattleStateBanner } from '@/covenants/components/BattleStateBanner';
 import { RitesPanel } from '@/covenants/components/RitesPanel';
 import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
 import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
-import type { CharacterCovenantRole } from '@/covenants/api';
+import { RankManagementPanel } from '@/covenants/components/RankManagementPanel';
+import type { CharacterCovenantRole, CovenantRank, ViewerCapabilities } from '@/covenants/api';
 import type { RitualWithSchema, RitualInputSchema } from '@/rituals/types';
 
 // ---------------------------------------------------------------------------
@@ -77,21 +80,46 @@ function DetailSkeleton() {
 interface MemberRowProps {
   membership: CharacterCovenantRole;
   isOwnMembership: boolean;
-  viewerIsLeader: boolean;
+  viewerCapabilities: ViewerCapabilities;
+  viewerRankTier: number;
   covenantId: number;
+  ranks: CovenantRank[];
 }
 
-function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: MemberRowProps) {
+function MemberRow({
+  membership,
+  isOwnMembership,
+  viewerCapabilities,
+  viewerRankTier,
+  covenantId,
+  ranks,
+}: MemberRowProps) {
   const engage = useEngageMembership(covenantId);
   const disengage = useDisengageMembership(covenantId);
   const leave = useLeaveMembership(covenantId);
   const kick = useKickMember(covenantId);
+  const assignRank = useAssignMemberToRank(covenantId);
   const isBusy = engage.isPending || disengage.isPending;
   const [promoteOpen, setPromoteOpen] = useState(false);
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
-  const canKick = viewerIsLeader && !role.is_leadership && !isOwnMembership && membership.is_active;
+  // can_kick is true when: viewer has the capability, target is not own row, target is active,
+  // and target has a strictly higher tier number (lower authority) than the viewer.
+  const canKick =
+    viewerCapabilities.can_kick &&
+    !isOwnMembership &&
+    membership.is_active &&
+    membership.rank.tier > viewerRankTier;
+  // Rank assignment (promote/demote) is offered to managers on any active member.
+  const canAssignRank =
+    viewerCapabilities.can_manage_ranks && membership.is_active && ranks.length > 0;
+
+  function handleAssignRank(rankId: number) {
+    if (rankId !== membership.rank.id) {
+      assignRank.mutate({ rankId, membershipId: membership.id });
+    }
+  }
 
   function handleEngage() {
     engage.mutate(membership.id);
@@ -115,8 +143,11 @@ function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: 
       data-testid="member-row"
     >
       <div className="min-w-0 flex-1 space-y-0.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">Character #{characterSheetId}</span>
+          <Badge variant="secondary" className="text-xs">
+            {membership.rank.name}
+          </Badge>
           <Badge variant="outline" className="text-xs">
             {role.name}
           </Badge>
@@ -199,6 +230,28 @@ function MemberRow({ membership, isOwnMembership, viewerIsLeader, covenantId }: 
         </div>
       )}
 
+      {canAssignRank && (
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <label htmlFor={`assign-rank-${membership.id}`} className="sr-only">
+            Assign rank for member {characterSheetId}
+          </label>
+          <select
+            id={`assign-rank-${membership.id}`}
+            data-testid="assign-rank-select"
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={membership.rank.id}
+            disabled={assignRank.isPending}
+            onChange={(e) => handleAssignRank(Number(e.target.value))}
+          >
+            {ranks.map((rank) => (
+              <option key={rank.id} value={rank.id}>
+                {rank.name} (tier {rank.tier})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {canKick && (
         <div className="flex shrink-0 flex-col items-end gap-1">
           <AlertDialog>
@@ -257,6 +310,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
 
   const { data: covenant, isLoading: covenantLoading } = useCovenantDetail(covenantId);
   const { data: membersPage, isLoading: membersLoading } = useCovenantMembers(covenantId);
+  const { data: ranksPage } = useCovenantRanks(covenantId);
   const { data: ritualsData, isLoading: ritualsLoading } = useRituals();
 
   const [inductionOpen, setInductionOpen] = useState(false);
@@ -276,7 +330,21 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
     : null;
 
   const isActiveMember = ownMembership !== null;
-  const viewerIsLeader = ownMembership?.covenant_role.is_leadership ?? false;
+
+  // viewer_capabilities is the same value on every row in one covenant (server memoizes it);
+  // read it from the first result. Now typed directly from the generated schema.
+  const viewerCapabilities: ViewerCapabilities = membersPage?.results?.[0]?.viewer_capabilities ?? {
+    can_invite: false,
+    can_kick: false,
+    can_manage_ranks: false,
+  };
+
+  // Viewer's own rank tier (or Infinity = lowest authority if not a member).
+  const viewerRankTier: number = ownMembership?.rank?.tier ?? Infinity;
+
+  // The covenant's rank ladder, sorted by tier (highest authority first), for the
+  // per-member rank-assignment picker.
+  const ranks = [...(ranksPage?.results ?? [])].sort((a, b) => a.tier - b.tier);
 
   // Find induction ritual
   const allRituals = !ritualsLoading ? ((ritualsData?.results ?? []) as RitualWithSchema[]) : [];
@@ -346,8 +414,10 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
                 key={membership.id}
                 membership={membership}
                 isOwnMembership={membership.character_sheet === characterSheetId}
-                viewerIsLeader={viewerIsLeader}
+                viewerCapabilities={viewerCapabilities}
+                viewerRankTier={viewerRankTier}
                 covenantId={covenantId}
+                ranks={ranks}
               />
             ))}
           </div>
@@ -366,6 +436,11 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
       {/* Per-member passive role powers */}
       <section>
         <RolePowersPanel covenantId={covenantId} />
+      </section>
+
+      {/* Rank ladder management (visible to members with can_manage_ranks) */}
+      <section>
+        <RankManagementPanel covenantId={covenantId} viewerCapabilities={viewerCapabilities} />
       </section>
 
       {/* Induction dialog */}

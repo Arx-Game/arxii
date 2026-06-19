@@ -1,5 +1,3 @@
-/workspaces/arxii/.claude/worktrees/feature-1024-use-item-action/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
-  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -1253,7 +1251,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x75f17559d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x75f17559d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x75f17559d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1296,6 +1294,7 @@
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
   - legend_credits <- societies.CovenantLegendCredit
+  - ranks <- covenants.CovenantRank
   - memberships <- covenants.CharacterCovenantRole
   - rite_instances <- covenants.CovenantRiteInstance
 
@@ -1316,11 +1315,18 @@
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
 
+### CovenantRank
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+**Pointed to by:**
+  - memberships <- covenants.CharacterCovenantRole
+
 ### CharacterCovenantRole
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - covenant_role -> covenants.CovenantRole [FK]
   - covenant -> covenants.Covenant [FK]
+  - rank -> covenants.CovenantRank [FK]
 
 ### CovenantLevelThreshold
 
@@ -1364,29 +1370,36 @@
 
 ### Service Functions
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
-- `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
+- `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
+- `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' — Assign a new rank to a member. Requires can_manage_ranks.`
 - `change_role(*, membership: 'CharacterCovenantRole', new_role: 'CovenantRole') -> 'CharacterCovenantRole' — Close the existing membership row; create a new active row in the same covenant.`
 - `clear_engaged_for_type(*, character_sheet: 'CharacterSheet', covenant_type: 'str') -> 'None' — Un-engage every engaged active membership of the given type for the character.`
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
-- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
+- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
+- `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
+- `delete_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', reassign_to: 'CovenantRank') -> 'None' — Delete a rank after reassigning all active members to ``reassign_to``.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
 - `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' — Return True if a row exists in GearArchetypeCompatibility for this pair.`
-- `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' — A leader removes another (non-leader) member. Soft-ends the target, then`
+- `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' — Remove a member by rank authority. Soft-ends the target, then`
 - `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' — A member voluntarily leaves a covenant. Soft-ends the membership, then`
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' — Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`
 - `precedence_role_for_combat(character_sheet: 'CharacterSheet') -> 'CovenantRole | None' — Pick the single covenant role that governs combat for a character.`
 - `promote_to_subrole(*, membership: 'CharacterCovenantRole', target_subrole: 'CovenantRole') -> 'CharacterCovenantRole' — Promote a character from their current parent role to a sub-role.`
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
+- `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' — Rename a rank. Requires can_manage_ranks.`
+- `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' — Rewrite tiers for the given ranks atomically and uniquely.`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
+- `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
+- `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
 
 
 ## world.goals
@@ -2584,7 +2597,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x75f17559d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x75f17559d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x75f17559d550>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x734b3c33d550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3356,13 +3369,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x75f1703e40f0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x734b3710c120>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x75f1703e40f0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x734b3710c120>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

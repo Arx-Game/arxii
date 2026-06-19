@@ -1,7 +1,12 @@
 # Covenants Slice B — Lifecycle (Formation + Induction) & Engagement UI
 
 **Date:** 2026-05-10
-**Status:** Draft (post-brainstorm; awaiting spec review)
+**Status:** SHIPPED. This document records the Slice B design. **#1027** subsequently
+replaced the `CovenantRole.is_leadership`-based kick gate with a `CovenantRank`
+capability + tier-precedence model. Formation now also builds a default rank ladder
+(top "Founder" rank with all capability flags + base "Member" rank). See
+`docs/roadmap/covenants.md` §"Two Orthogonal Authority Axes" and §"Covenant Exit
+Lifecycle" for the current contracts.
 **Branch:** TBD (e.g. `covenants-slice-b-lifecycle`)
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; Slice B owns "Lifecycle + UI" per the slice decomposition

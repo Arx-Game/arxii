@@ -52,6 +52,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
     tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
     `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
+  - **Spec C Resonance Gain (endorsements + audit — #1138):** `ResonanceGainConfig`
+    (singleton pk=1 tuning surface), `PoseEndorsement` (weekly deferred; `endorser_sheet`
+    FK, `resonance` FK (PROTECT), `persona_snapshot` FK to `scenes.Persona` (SET_NULL),
+    unique `(endorser_sheet, interaction)`), `SceneEntryEndorsement` (immediate flat
+    grant; same FK shape, unique `(endorser_sheet, endorsee_sheet, scene)`),
+    `ResonanceGrant` (universal audit ledger — discriminator `source` + typed source FKs).
+    Read surface: `InteractionListSerializer` now nests `pose_kind`, `endorsee_sheet_id`,
+    `endorsable_resonances`, `pose_endorsers`/`my_pose_endorsement`,
+    `entry_endorsers`/`entry_endorsed_by_me` on every `GET /api/interactions/?scene=<id>`
+    row. Frontend: `EndorsementControl` in `PoseUnit` (`frontend/src/scenes/components/`).
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -131,6 +141,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
+  - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
+  - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
+  - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
 - **API endpoints (dramatic moment tagging — #1139):**
   - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
   - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
@@ -448,9 +461,17 @@ Roleplay session recording with participant tracking and message logging.
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
 - **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
 - **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Read-visibility surface (canonical):**
+  - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
+    anonymous=public. Use in `get_queryset()` / filter chains.
+  - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
+    `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
+    encounter read gate all consume these two forms.
 - **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
 - **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
-- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check), flows (auto-logging via message_location)
+- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
+  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories
@@ -811,20 +832,30 @@ services, and equipment-modifier integration.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles and gear compatibility. Spec D PR1 shipped
-the role-assignment and gear-compatibility data layer; #985 wired the per-role bonus
-authoring model and the combat seams that consume it.
+Magically-empowered group oaths with roles, gear compatibility, and a per-covenant
+rank ladder. Spec D PR1 shipped the role-assignment and gear-compatibility data
+layer; #985 wired per-role bonus authoring and the combat seams; #1027 added
+`CovenantRank` (administrative authority, orthogonal to `CovenantRole` power).
+
+**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
+Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
+These two axes are orthogonal — never re-merge them.
 
 - **Models:**
-  - `CharacterCovenantRole` — per-character record of a covenant role assignment;
-    `left_at IS NULL` = currently active (Spec D §4.4)
+  - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
+    currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
+    boolean, `rank` FK → `CovenantRank` (added #1027).
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
-  - `CovenantRoleBonus` (NEW #985) — authored config: one row per
+  - `CovenantRoleBonus` (#985) — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
-    `char_level × bonus_per_level`; no row → 0. Admin-registered. Default
-    authoring empty → no live numeric effect until staff author rows.
+    `char_level × bonus_per_level`; no row → 0. Admin-registered.
+  - `CovenantRank` (#1027) — per-covenant administrative authority tier.
+    Fields: `covenant` FK (CASCADE, `related_name="ranks"`), `name` (max 60,
+    player-chosen), `tier` (PositiveInt; 1 = top authority), `description`,
+    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
+    `(covenant, tier)` and `(covenant, name)`. Ordered by `["covenant", "tier"]`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
     `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
@@ -832,22 +863,40 @@ authoring model and the combat seams that consume it.
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
+  - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
+    and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
+    `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
   - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
     `char_level × bonus_per_level`; 0 if no row (#985)
+  - **Rank management (#1027)** — all require `actor.rank.can_manage_ranks=True`:
+    `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
+    `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
+    `LastManagerRankError` if an op would leave zero active managers.
 - **Combat seams (#985):** `apply_equipped_armor_soak` adds
   `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top of raw
   soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
   WEAPON_DAMAGE_TARGET_NAME)` to technique budget. Both route through
   `get_modifier_total` → `covenant_role_bonus` equipment walk.
-- **Exceptions:** `CovenantRoleNeverHeldError` (raised by `weave_thread` when
-  `target_kind=COVENANT_ROLE` and character never held the role) — in
-  `world.covenants.exceptions`
+- **Exceptions:** `world.covenants.exceptions` —
+  `CovenantRoleNeverHeldError` (Thread weave gate);
+  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
+  `CannotKickSelfError` (kick service);
+  `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
+  `CrossCovenantRankError`, `IncompleteRankReorderError`,
+  `CannotTransferToDepartedMemberError` (rank management, #1027)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
-    currently-played sheets
+    currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+  - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
+  - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
+  - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
+  - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
+  - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+- **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
+  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
   mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
   `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)

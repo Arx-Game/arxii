@@ -1,7 +1,7 @@
 from datetime import timedelta
 from http import HTTPMethod
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -119,14 +119,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             .prefetch_related(*_build_scene_prefetches())
         )
         if self.action == "list":
-            user = self.request.user
-            if user.is_authenticated:
-                if user.is_staff:
-                    return queryset
-                return queryset.filter(
-                    Q(privacy_mode=ScenePrivacyMode.PUBLIC) | Q(participants=user),
-                )
-            return queryset.filter(privacy_mode=ScenePrivacyMode.PUBLIC)
+            return queryset.viewable_by(self.request.user)
         return queryset
 
     def get_serializer_class(self) -> type[BaseSerializer[Scene]]:
