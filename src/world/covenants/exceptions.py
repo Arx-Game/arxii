@@ -240,24 +240,24 @@ class CovenantExitError(CovenantError):
     )
 
 
-class NotACovenantLeaderError(CovenantExitError):
-    """Raised when a non-leader attempts to remove another member."""
+class NotAuthorizedToKickError(CovenantExitError):
+    """Raised when a member without kick permission attempts to remove another member."""
 
-    user_message = "Only a covenant leader may remove another member."
+    user_message = "You do not have permission to remove members."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
-            "Only a covenant leader may remove another member.",
+            "You do not have permission to remove members.",
         }
     )
 
 
-class CannotKickLeaderError(CovenantExitError):
-    """Raised when a leader attempts to remove a fellow leader."""
+class CannotKickEqualOrHigherRankError(CovenantExitError):
+    """Raised when attempting to remove a member of equal or higher rank."""
 
-    user_message = "You cannot remove a fellow leader of the covenant."
+    user_message = "You can only remove members ranked below you."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
-            "You cannot remove a fellow leader of the covenant.",
+            "You can only remove members ranked below you.",
         }
     )
 
@@ -269,5 +269,49 @@ class CannotKickSelfError(CovenantExitError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
             "To leave the covenant yourself, use Leave rather than Kick.",
+        }
+    )
+
+
+class NotAuthorizedToInviteError(CovenantExitError):
+    """Raised when a member without invite permission attempts to invite another member."""
+
+    user_message = "You do not have permission to invite members."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You do not have permission to invite members.",
+        }
+    )
+
+
+class NotAuthorizedToManageRanksError(CovenantExitError):
+    """Raised when a member without rank management permission attempts to modify ranks."""
+
+    user_message = "You do not have permission to manage covenant ranks."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You do not have permission to manage covenant ranks.",
+        }
+    )
+
+
+class LastManagerRankError(CovenantExitError):
+    """Raised when attempting to remove rank management capability from the last manager."""
+
+    user_message = "The covenant must keep at least one member who can manage ranks."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The covenant must keep at least one member who can manage ranks.",
+        }
+    )
+
+
+class CrossCovenantRankError(CovenantError):
+    """Raised when attempting to use a rank from a different covenant."""
+
+    user_message = "That rank does not belong to this covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That rank does not belong to this covenant.",
         }
     )
