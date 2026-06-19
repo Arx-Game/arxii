@@ -284,12 +284,6 @@ class PemitAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from core_management.permissions import is_staff_observer  # noqa: PLC0415
-
-        # run() does not evaluate prerequisites; enforce the gate here too.
-        if not is_staff_observer(actor):
-            return ActionResult(success=False, message="Staff only.")
-
         text = kwargs.get("text", "")
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
