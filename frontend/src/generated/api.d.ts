@@ -27773,10 +27773,7 @@ export interface operations {
   };
   covenants_ranks_reorder_create: {
     parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -27792,7 +27789,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedCovenantRankList'];
+          'application/json': components['schemas']['CovenantRank'][];
         };
       };
     };

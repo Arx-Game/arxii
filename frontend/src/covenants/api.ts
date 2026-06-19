@@ -416,12 +416,12 @@ export async function assignMemberToRank(
 export async function reorderRanks(
   covenantId: number,
   orderedRankIds: number[]
-): Promise<PaginatedCovenantRankList> {
+): Promise<CovenantRank[]> {
   const res = await apiFetch(`${RANKS_URL}/reorder/`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ covenant: covenantId, ordered_rank_ids: orderedRankIds }),
   });
   if (!res.ok) await parseErrorDetail(res, 'Failed to reorder ranks');
-  return res.json() as Promise<PaginatedCovenantRankList>;
+  return res.json() as Promise<CovenantRank[]>;
 }

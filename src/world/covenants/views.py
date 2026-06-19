@@ -634,9 +634,8 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
     @extend_schema(
         request=ReorderRanksRequestSerializer,
         responses={200: CovenantRankSerializer(many=True)},
-        parameters=[],
     )
-    @action(detail=False, methods=["POST"], url_path="reorder")
+    @action(detail=False, methods=["POST"], url_path="reorder", pagination_class=None)
     def reorder(self, request: Request) -> Response:
         """POST /api/covenants/ranks/reorder/
 

@@ -4591,13 +4591,6 @@ paths:
 
         Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
         Reorders the covenant's ranks — requires can_manage_ranks.
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
       tags:
       - covenants
       requestBody:
@@ -4613,7 +4606,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedCovenantRankList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/CovenantRank'
           description: ''
   /api/covenants/rites/:
     get:
