@@ -7,6 +7,26 @@ from rest_framework.views import APIView
 from world.combat.models import CombatEncounter
 
 
+def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool:
+    """Return True iff ``user`` may view an encounter's effect details.
+
+    Staff, the encounter's scene GM, and encounter participants (PCs in the
+    fight) see effects; everyone else sees none. Stricter than scene
+    visibility by design — effect/power-ledger detail is more sensitive than
+    spectating the scene.
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        return True
+    if encounter.scene is not None and encounter.scene.is_gm(user):
+        return True
+    character_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+    return any(
+        p.character_sheet.character_id in character_ids for p in encounter.participants.all()
+    )
+
+
 def _viewer_character_ids(request: Request, _view: APIView) -> frozenset[int]:
     """Return the request user's played character_sheet ids.
 

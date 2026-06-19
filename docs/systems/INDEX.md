@@ -433,9 +433,17 @@ Roleplay session recording with participant tracking and message logging.
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
 - **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
 - **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Read-visibility surface (canonical):**
+  - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
+    anonymous=public. Use in `get_queryset()` / filter chains.
+  - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
+    `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
+    encounter read gate all consume these two forms.
 - **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
 - **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
-- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check), flows (auto-logging via message_location)
+- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
+  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories

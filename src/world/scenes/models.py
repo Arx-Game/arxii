@@ -22,6 +22,7 @@ from world.scenes.constants import (
     SummaryAction,
     SummaryStatus,
 )
+from world.scenes.managers import SceneManager
 from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
@@ -86,6 +87,8 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         help_text="Accounts that have participated in this scene",
     )
 
+    objects = SceneManager()
+
     class Meta:
         ordering = ["-date_started"]
         constraints = [
@@ -145,6 +148,21 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         if account is None:
             return False
         return any(p.account_id == account.pk and p.is_gm for p in self.participations_cached)
+
+    def is_viewable_by(self, account: AccountDB | None) -> bool:
+        """Return True if ``account`` may view this scene.
+
+        Mirrors ``Scene.objects.viewable_by`` for a single instance. Uses
+        ``participations_cached`` so it costs zero queries when the scene is
+        already in the identity map (same approach as ``is_gm``/``is_owner``).
+        """
+        if self.is_public:
+            return True
+        if account is None or not getattr(account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+            return False
+        if account.is_staff:
+            return True
+        return any(p.account_id == account.pk for p in self.participations_cached)
 
     def finish_scene(self) -> None:
         """Mark the scene as finished and stop recording new messages"""
