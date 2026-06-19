@@ -7,6 +7,7 @@
  */
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { extractErrorMessage } from '@/lib/errors';
 import { useImbueThread } from '../../queries';
 import type { ImbueResponse, Thread } from '../../types';
 
@@ -16,15 +17,6 @@ interface ImbuePanelProps {
   balance: number;
   characterSheetId: number;
   onResult?: (result: ImbueResponse) => void;
-}
-
-/**
- * Parse a user-facing error message from a mutation error.
- * Prefers `error.message` when available.
- */
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return 'An unexpected error occurred.';
 }
 
 export function ImbuePanel({ thread, balance, characterSheetId, onResult }: ImbuePanelProps) {

@@ -22,6 +22,7 @@ import {
 import type { SanctumDetails } from '../../sanctumTypes';
 
 import { useAbsorb } from '../../sanctumQueries';
+import { extractErrorMessage } from '@/lib/errors';
 
 import { HomecomingDialog } from './HomecomingDialog';
 import { WeaveDialog } from './WeaveDialog';
@@ -35,11 +36,6 @@ function formatTimestamp(iso: string | null | undefined): string {
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return 'Never';
   return dt.toLocaleString();
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to absorb from this Sanctum';
 }
 
 export function SanctumCard({ sanctum }: Readonly<SanctumCardProps>) {

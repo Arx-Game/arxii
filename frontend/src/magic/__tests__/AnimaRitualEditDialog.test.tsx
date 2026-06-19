@@ -243,7 +243,7 @@ describe('AnimaRitualEditDialog', () => {
       </Wrapper>
     );
 
-    expect(screen.getByText('Failed to update ritual')).toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
   });
 
   // 8. Cancel closes dialog without submitting

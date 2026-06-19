@@ -1,0 +1,28 @@
+/**
+ * Shared error helpers (#895). Consolidates the `extractErrorMessage` copy
+ * that was duplicated across ~10 magic/ritual dialogs, plus the api-layer
+ * `{detail}` parse-and-throw pattern (mirrors magic/api.ts `parseErrorDetail`).
+ */
+
+/** Best-effort human-readable message from an unknown thrown value. */
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return 'An unexpected error occurred.';
+}
+
+/**
+ * Parse a non-ok DRF Response's `{detail}` and throw an Error carrying it,
+ * falling back to `fallback` when the body is missing/blank/non-JSON.
+ */
+export async function readErrorDetail(res: Response, fallback: string): Promise<never> {
+  let detail = fallback;
+  try {
+    const data = (await res.json()) as { detail?: string };
+    if (typeof data.detail === 'string' && data.detail.trim()) {
+      detail = data.detail;
+    }
+  } catch {
+    // body wasn't JSON; keep the fallback
+  }
+  throw new Error(detail);
+}

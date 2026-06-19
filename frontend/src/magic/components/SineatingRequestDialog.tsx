@@ -32,6 +32,7 @@ import {
 import { searchPersonas } from '@/events/queries';
 import { fetchScenes } from '@/scenes/queries';
 import type { SceneListItem } from '@/scenes/queries';
+import { extractErrorMessage } from '@/lib/errors';
 import { useRequestSineating, useCharacterResonances } from '../queries';
 
 // ---------------------------------------------------------------------------
@@ -59,11 +60,6 @@ export interface SineatingRequestDialogProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to send Sineating request';
-}
 
 async function fetchActiveScenes(): Promise<{ results: SceneListItem[] }> {
   return (await fetchScenes('status=active')) as { results: SceneListItem[] };

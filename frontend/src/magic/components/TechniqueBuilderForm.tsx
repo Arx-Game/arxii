@@ -41,6 +41,7 @@ import type {
   DamageType,
   AppliedConditionRow,
 } from './TechniquePayloadEditors';
+import { extractErrorMessage } from '@/lib/errors';
 
 // ---------------------------------------------------------------------------
 // Types for lookup lists passed in from the page
@@ -95,15 +96,6 @@ const ACTION_CATEGORIES = [
 const TIER_OPTIONS = [1, 2, 3, 4, 5] as const;
 
 const DEBOUNCE_MS = 500;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'An unexpected error occurred.';
-}
 
 // ---------------------------------------------------------------------------
 // Budget Meter

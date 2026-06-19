@@ -398,7 +398,7 @@ describe('SineatingRequestDialog', () => {
     render(<SineatingRequestDialog {...defaultProps} />, { wrapper: createWrapper() });
 
     expect(screen.getByTestId('sineating-error-banner')).toBeInTheDocument();
-    expect(screen.getByText('Failed to send Sineating request')).toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

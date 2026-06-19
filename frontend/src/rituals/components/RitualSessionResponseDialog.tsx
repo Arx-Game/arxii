@@ -37,6 +37,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { extractErrorMessage } from '@/lib/errors';
 import { RitualForm } from './RitualForm';
 import { useAcceptRitualSession, useDeclineRitualSession } from '@/rituals/queries';
 import type { RitualSessionDetail } from '../api';
@@ -62,11 +63,6 @@ export interface RitualSessionResponseDialogProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Operation failed';
-}
 
 /**
  * Extract the target_covenant id from session_kwargs.

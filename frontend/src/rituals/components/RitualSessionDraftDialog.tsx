@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { extractErrorMessage } from '@/lib/errors';
 import { RitualForm } from './RitualForm';
 import { useDraftRitualSession } from '@/rituals/queries';
 import { searchPersonas } from '@/events/queries';
@@ -173,11 +174,6 @@ function hasAllRequired(
       if (typeof v === 'string') return v.trim().length > 0;
       return true;
     });
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to draft ritual session';
 }
 
 // ---------------------------------------------------------------------------

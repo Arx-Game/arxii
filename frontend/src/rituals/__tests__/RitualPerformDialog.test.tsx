@@ -285,7 +285,7 @@ describe('RitualPerformDialog', () => {
       </Wrapper>
     );
 
-    expect(screen.getByText('Failed to perform ritual')).toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
   });
 
   // 9c. Shows the Error.message when there is no detail field but there is a message

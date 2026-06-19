@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { extractErrorMessage } from '@/lib/errors';
 import { usePatchRitual } from '@/rituals/queries';
 import type { RitualWithSchema } from '@/rituals/types';
 
@@ -85,15 +86,6 @@ function isValid(form: FormState): boolean {
     form.skill_id.trim().length > 0 &&
     form.check_type_id.trim().length > 0
   );
-}
-
-// ---------------------------------------------------------------------------
-// Error helper
-// ---------------------------------------------------------------------------
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Failed to update ritual';
 }
 
 // ---------------------------------------------------------------------------
