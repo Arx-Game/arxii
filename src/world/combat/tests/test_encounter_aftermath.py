@@ -43,6 +43,7 @@ from world.combat.factories import (
 )
 from world.combat.interaction_services import render_encounter_outcome_narration
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
+from world.combat.serializers import EncounterDetailSerializer, EncounterListSerializer
 from world.combat.services import _classify_encounter_outcome, complete_encounter, resolve_round
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
@@ -65,6 +66,15 @@ class EncounterOutcomeFieldTests(TestCase):
         encounter = CombatEncounterFactory()
         self.assertEqual(encounter.outcome, "")
         self.assertIsNone(encounter.completed_at)
+
+    def test_serializers_declare_blank_allowing_outcome(self) -> None:
+        # Declared explicitly so drf-spectacular emits the blank-inclusive type the
+        # API actually serves before completion (#959). Guards the regression where
+        # ModelSerializer inference dropped the empty string from the enum.
+        for serializer_cls in (EncounterListSerializer, EncounterDetailSerializer):
+            outcome_field = serializer_cls().fields["outcome"]
+            self.assertTrue(outcome_field.allow_blank, serializer_cls.__name__)
+            self.assertTrue(outcome_field.read_only, serializer_cls.__name__)
 
 
 class EncounterAftermathRuleTests(TestCase):
