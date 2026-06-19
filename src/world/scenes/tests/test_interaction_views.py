@@ -9,8 +9,18 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import (
+    PoseEndorsementFactory,
+    ResonanceFactory,
+    SceneEntryEndorsementFactory,
+)
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    PoseKind,
+    ScenePrivacyMode,
+)
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
@@ -755,3 +765,185 @@ class WithoutPoseLinkFilterTests(APITestCase):
         result_ids = {r["id"] for r in response.data["results"]}
         assert unlinked_action.pk in result_ids
         assert linked_action.pk in result_ids
+
+
+class InteractionListQueryBudgetTests(APITestCase):
+    """Task 5 — pin the query budget for GET /api/interactions/?scene=<id>.
+
+    A fixed N-query budget ensures the endorsement prefetches don't introduce
+    N+1 queries as endorsements scale. If the budget creeps, either a prefetch
+    path is broken or a new one is needed.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        # Build the requesting user's full identity chain.
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.sheet.primary_persona
+
+        # Build two additional "NPC" sheets as authors of poses.
+        cls.alice_sheet = CharacterSheetFactory()
+        cls.alice_persona = cls.alice_sheet.primary_persona
+        cls.bob_sheet = CharacterSheetFactory()
+        cls.bob_persona = cls.bob_sheet.primary_persona
+
+        # Scene with a mix of ENTRY and STANDARD poses.
+        cls.scene = SceneFactory()
+        cls.resonance = ResonanceFactory()
+
+        # ENTRY pose by Alice.
+        cls.entry_pose = InteractionFactory(
+            persona=cls.alice_persona,
+            pose_kind=PoseKind.ENTRY,
+            scene=cls.scene,
+        )
+        # STANDARD pose by Bob.
+        cls.standard_pose = InteractionFactory(
+            persona=cls.bob_persona,
+            pose_kind=PoseKind.STANDARD,
+            scene=cls.scene,
+        )
+        # Another ENTRY pose by Bob.
+        cls.bob_entry_pose = InteractionFactory(
+            persona=cls.bob_persona,
+            pose_kind=PoseKind.ENTRY,
+            scene=cls.scene,
+        )
+
+        # Several PoseEndorsements across multiple endorsers.
+        cls.endorsement_a = PoseEndorsementFactory(
+            endorser_sheet=cls.bob_sheet,
+            endorsee_sheet=cls.alice_sheet,
+            interaction=cls.entry_pose,
+            resonance=cls.resonance,
+        )
+        cls.endorsement_b = PoseEndorsementFactory(
+            endorser_sheet=cls.sheet,
+            endorsee_sheet=cls.alice_sheet,
+            interaction=cls.entry_pose,
+            resonance=cls.resonance,
+        )
+        # SceneEntryEndorsements for the ENTRY poses.
+        cls.scene_entry_a = SceneEntryEndorsementFactory(
+            endorser_sheet=cls.bob_sheet,
+            endorsee_sheet=cls.alice_sheet,
+            scene=cls.scene,
+            resonance=cls.resonance,
+        )
+        cls.scene_entry_b = SceneEntryEndorsementFactory(
+            endorser_sheet=cls.sheet,
+            endorsee_sheet=cls.bob_sheet,
+            scene=cls.scene,
+            resonance=cls.resonance,
+        )
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.client.force_authenticate(user=self.account)
+
+    def test_interaction_list_query_budget_is_constant(self) -> None:
+        """GET ?scene=<id> must not produce N+1 queries as endorsement count grows.
+
+        Query budget pinned after initial observation. If this test fails with a
+        higher count, check whether a new prefetch path is needed.
+        """
+        url = reverse("interaction-list")
+        # Run once to observe the count, then assert.
+        with self.assertNumQueries(48):
+            response = self.client.get(url, {"scene": self.scene.pk})
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 3
+
+    def test_interaction_list_query_budget_does_not_scale_with_endorser_count(self) -> None:
+        """Query count must stay constant as endorser count grows (endorsement prefetches
+        must not degenerate into N+1 queries per endorser).
+
+        Uses the same interaction count as the small dataset (3 interactions) but with
+        5+ endorsers per pose instead of 2, then asserts the same 48-query budget.
+        If this fails with a higher count, an endorser-prefetch path is broken.
+        """
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        # Five extra endorser sheets (more than the 2 in the small dataset).
+        extra_sheets = [CharacterSheetFactory() for _ in range(5)]
+        extra_personas = [s.primary_persona for s in extra_sheets]
+
+        dense_scene = SceneFactory()
+        dense_resonance = ResonanceFactory()
+
+        # Same interaction structure as the small dataset: 1 ENTRY + 1 STANDARD + 1 ENTRY.
+        dense_entry_a = InteractionFactory(
+            persona=extra_personas[0],
+            pose_kind=PoseKind.ENTRY,
+            scene=dense_scene,
+        )
+        dense_standard = InteractionFactory(
+            persona=extra_personas[1],
+            pose_kind=PoseKind.STANDARD,
+            scene=dense_scene,
+        )
+        dense_entry_b = InteractionFactory(
+            persona=extra_personas[2],
+            pose_kind=PoseKind.ENTRY,
+            scene=dense_scene,
+        )
+
+        # 5 PoseEndorsements on each ENTRY pose (vs. 2 in the small dataset).
+        for endorser_sheet in extra_sheets[1:]:
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[0],
+                interaction=dense_entry_a,
+                resonance=dense_resonance,
+            )
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[2],
+                interaction=dense_entry_b,
+                resonance=dense_resonance,
+            )
+        # Also endorse the STANDARD pose.
+        for endorser_sheet in extra_sheets[1:]:
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[1],
+                interaction=dense_standard,
+                resonance=dense_resonance,
+            )
+
+        # 5+ SceneEntryEndorsements (vs. 2 in the small dataset).
+        for endorser_sheet in extra_sheets[1:]:
+            SceneEntryEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[0],
+                scene=dense_scene,
+                resonance=dense_resonance,
+            )
+            SceneEntryEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[2],
+                scene=dense_scene,
+                resonance=dense_resonance,
+            )
+
+        url = reverse("interaction-list")
+        with self.assertNumQueries(48):
+            response = self.client.get(url, {"scene": dense_scene.pk})
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 3  # same count as small dataset

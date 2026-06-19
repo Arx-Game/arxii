@@ -216,11 +216,12 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
   `scene_entry_grant`, `residence_daily_trickle_per_resonance`, etc. Lazy-created via
   `get_resonance_gain_config()`.
 - `PoseEndorsement` - Unsettled endorsement of a pose; settles at weekly tick. FK to
-  `endorser_sheet`, M2M to `Resonance`. Unique per `(endorser_sheet, interaction)`.
-  Captures `persona_snapshot` (CharField) for masquerade audit. Fields: `created_at`,
-  `settled_at` (NULL until weekly settlement).
+  `endorser_sheet`, single `resonance` FK (PROTECT). Unique per `(endorser_sheet, interaction)`.
+  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit. Fields:
+  `created_at`, `settled_at` (NULL until weekly settlement).
 - `SceneEntryEndorsement` - Immediate flat grant for endorsing a character's scene entry
-  pose. FK `endorser_sheet`, FK `endorsee_sheet`, FK `scene`, M2M `resonance`. Unique per
+  pose. FK `endorser_sheet`, FK `endorsee_sheet`, FK `scene`, single `resonance` FK (PROTECT).
+  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit. Unique per
   `(endorser_sheet, endorsee_sheet, scene)`. Fires `grant_resonance` synchronously on creation.
 - `ResonanceGrant` - Universal audit ledger. Discriminator `source` (TextChoice: POSE_ENDORSEMENT,
   SCENE_ENTRY, ROOM_RESIDENCE, OUTFIT_ITEM, STAFF_GRANT) + typed FKs: `source_room_profile`,

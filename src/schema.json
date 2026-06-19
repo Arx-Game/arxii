@@ -29084,6 +29084,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
+        endorsee_sheet_id:
+          type: integer
+          readOnly: true
         is_favorited:
           type: boolean
           readOnly: true
@@ -29135,6 +29147,57 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        endorsable_resonances:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of resonances claimed by the endorsee (pose author).
+
+            Reads from the prefetched ``persona__character_sheet__resonances``
+            path (set up in ``interaction_views.get_queryset``) via the
+            ``cached_resonances`` to_attr. Falls back to a live query if the attr
+            is absent (e.g. serializer used outside the view's queryset pipeline).
+          readOnly: true
+        pose_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who endorsed this pose, with persona info.
+
+            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+            view queryset). Each endorser's primary persona is pre-loaded via
+            ``cached_primary_persona`` (another nested Prefetch).
+          readOnly: true
+        my_pose_endorsement:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the viewer's own endorsement for this pose, or None.
+
+            Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+            each cached endorsement's ``endorser_sheet_id``.
+          readOnly: true
+        entry_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who gave this character a scene-entry endorsement.
+
+            Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+            context (populated by the view's ``get_serializer_context``).
+          readOnly: true
+        entry_endorsed_by_me:
+          type: boolean
+          description: True when the viewer has given this character a scene-entry
+            endorsement.
+          readOnly: true
         receivers:
           type: array
           items:
@@ -29143,10 +29206,16 @@ components:
       required:
       - action_links
       - content
+      - endorsable_resonances
+      - endorsee_sheet_id
+      - entry_endorsed_by_me
+      - entry_endorsers
       - id
       - is_favorited
+      - my_pose_endorsement
       - persona
       - place_name
+      - pose_endorsers
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -29236,6 +29305,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
+        endorsee_sheet_id:
+          type: integer
+          readOnly: true
         is_favorited:
           type: boolean
           readOnly: true
@@ -29287,13 +29368,70 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        endorsable_resonances:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of resonances claimed by the endorsee (pose author).
+
+            Reads from the prefetched ``persona__character_sheet__resonances``
+            path (set up in ``interaction_views.get_queryset``) via the
+            ``cached_resonances`` to_attr. Falls back to a live query if the attr
+            is absent (e.g. serializer used outside the view's queryset pipeline).
+          readOnly: true
+        pose_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who endorsed this pose, with persona info.
+
+            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+            view queryset). Each endorser's primary persona is pre-loaded via
+            ``cached_primary_persona`` (another nested Prefetch).
+          readOnly: true
+        my_pose_endorsement:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the viewer's own endorsement for this pose, or None.
+
+            Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+            each cached endorsement's ``endorser_sheet_id``.
+          readOnly: true
+        entry_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who gave this character a scene-entry endorsement.
+
+            Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+            context (populated by the view's ``get_serializer_context``).
+          readOnly: true
+        entry_endorsed_by_me:
+          type: boolean
+          description: True when the viewer has given this character a scene-entry
+            endorsement.
+          readOnly: true
       required:
       - action_links
       - content
+      - endorsable_resonances
+      - endorsee_sheet_id
+      - entry_endorsed_by_me
+      - entry_endorsers
       - id
       - is_favorited
+      - my_pose_endorsement
       - persona
       - place_name
+      - pose_endorsers
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -29336,6 +29474,15 @@ components:
 
             * `default` - Default
             * `very_private` - Very Private
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
       required:
       - content
     InteractionOffer:
@@ -37598,6 +37745,16 @@ components:
       required:
       - interaction
       - resonance
+    PoseKindEnum:
+      enum:
+      - standard
+      - entry
+      - departure
+      type: string
+      description: |-
+        * `standard` - Standard
+        * `entry` - Entry
+        * `departure` - Departure
     PositionAdjacencyItem:
       type: object
       description: |-

@@ -678,6 +678,28 @@ Standard DRF ModelSerializers. `PoseEndorsement` serializer exposes
 until settled. `SceneEntryEndorsement` serializer exposes
 `granted_amount` as read-only (captured at creation).
 
+### 4.4 Scene interaction read surface (implemented — #1138)
+
+The existing `GET /api/interactions/?scene=<id>` response was extended to nest
+endorsement state directly on each `Interaction` row, so the scene view does not
+need a separate endorsement fetch. Fields added to `InteractionListSerializer`:
+
+| Field | Type | Description |
+|---|---|---|
+| `pose_kind` | `string` | STANDARD / ENTRY / DEPARTURE — identifies endorsable entry poses |
+| `endorsee_sheet_id` | `int \| null` | The pose author's CharacterSheet id — used to filter own poses |
+| `endorsable_resonances` | `[{id, name}]` | The author's claimed resonances — the endorsement picker source |
+| `pose_endorsers` | `[{persona_id, persona_name, thumbnail_url, resonance_id}]` | Who endorsed this pose and for which resonance |
+| `my_pose_endorsement` | `{id, resonance_id, settled: bool} \| null` | Viewer's own endorsement on this pose (null if none) |
+| `entry_endorsers` | `[{persona_id, persona_name, thumbnail_url, resonance_id}]` | Who endorsed this entry (ENTRY poses only) |
+| `entry_endorsed_by_me` | `bool` | Whether the viewer has endorsed this entry (ENTRY poses only) |
+
+**Frontend:** `EndorsementControl` component (in `frontend/src/scenes/components/`) mounts
+in `PoseUnit` next to `ReactionsFooter`. It shows an endorsement picker (source:
+`endorsable_resonances`), endorser badges (`pose_endorsers` / `entry_endorsers`), and
+retract affordance for unsettled pose endorsements. ENTRY poses render two controls:
+one for pose endorsement and one for scene-entry endorsement.
+
 ---
 
 ## 5. Gain Surface Rules Summary

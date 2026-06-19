@@ -16,9 +16,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
+    PersonaType,
     PoseKind,
     ReactionWindowKind,
     ScenePrivacyMode,
@@ -92,6 +94,30 @@ class InteractionViewSet(
         # Per-viewer my_reaction on reaction windows (#904) — context, never
         # Prefetch(to_attr) on the shared instances.
         context["persona_ids"] = set(get_account_personas(self.request))
+        # Viewer's character sheet PKs — used for my_pose_endorsement and
+        # entry_endorsed_by_me (#1138).
+        context["character_sheet_ids"] = (
+            {e.character_sheet_id for e in entries} if entries else set()
+        )
+        # Scene-entry endorsements indexed by endorsee_sheet_id — loaded once
+        # per list request, keyed by the scene query param (#1138).
+        scene_id = self.request.query_params.get("scene")  # noqa: USE_FILTERSET
+        entry_map: dict[int, list] = {}
+        if scene_id:
+            rows = (
+                SceneEntryEndorsement.objects.filter(scene_id=scene_id)
+                .select_related("endorser_sheet", "resonance")
+                .prefetch_related(
+                    Prefetch(
+                        "endorser_sheet__personas",
+                        queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
+                        to_attr="cached_primary_persona",
+                    )
+                )
+            )
+            for r in rows:
+                entry_map.setdefault(r.endorsee_sheet_id, []).append(r)
+        context["scene_entry_endorsements"] = entry_map
         return context
 
     def get_queryset(self) -> QuerySet[Interaction]:
@@ -107,6 +133,24 @@ class InteractionViewSet(
             "scene",
             "place",
         ).prefetch_related(
+            Prefetch(
+                "persona__character_sheet__resonances",
+                queryset=CharacterResonance.objects.select_related("resonance"),
+                to_attr="cached_resonances",
+            ),
+            Prefetch(
+                "endorsements",
+                queryset=PoseEndorsement.objects.select_related(
+                    "endorser_sheet", "resonance"
+                ).prefetch_related(
+                    Prefetch(
+                        "endorser_sheet__personas",
+                        queryset=Persona.objects.filter(persona_type=PersonaType.PRIMARY),
+                        to_attr="cached_primary_persona",
+                    )
+                ),
+                to_attr="cached_endorsements",
+            ),
             Prefetch(
                 "target_personas",
                 queryset=Persona.objects.all(),
@@ -343,6 +387,7 @@ class InteractionViewSet(
         interaction.cached_favorites = []
         interaction.cached_reactions = []
         interaction.cached_action_links = []
+        interaction.cached_endorsements = []
         # ENTRY poses opened a window above; let the serializer query it (no
         # cached attr) so the fresh response includes the reactable strip.
         interaction.cached_reaction_windows = None

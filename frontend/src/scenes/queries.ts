@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 
 // ---------------------------------------------------------------------------
@@ -144,4 +145,55 @@ export async function reactToWindow(
     const detail = Array.isArray(data?.detail) ? data.detail[0] : data?.detail;
     throw new Error(detail || 'Failed to react');
   }
+}
+
+export async function createPoseEndorsement(body: { interaction: number; resonance: number }) {
+  const res = await apiFetch('/api/magic/pose-endorsements/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to endorse pose');
+  return res.json();
+}
+
+export async function deletePoseEndorsement(id: number) {
+  const res = await apiFetch(`/api/magic/pose-endorsements/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to retract endorsement');
+}
+
+export async function createSceneEntryEndorsement(body: {
+  endorsee_sheet: number;
+  scene: number;
+  resonance: number;
+}) {
+  const res = await apiFetch('/api/magic/scene-entry-endorsements/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to endorse entry');
+  return res.json();
+}
+
+export function useCreatePoseEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createPoseEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
+export function useDeletePoseEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deletePoseEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
+export function useCreateSceneEntryEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createSceneEntryEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
 }

@@ -18,6 +18,7 @@ import { FormattedContent } from '@/components/FormattedContent';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
 import { ReactionStrip } from './ReactionStrip';
+import { EndorsementControl } from './EndorsementControl';
 import { postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
 import type { ActionAttachmentInfo } from '../actionTypes';
@@ -151,6 +152,12 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
         </button>
         {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
         <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+        {/* Standalone ACTION rows are authored content (claimed resonances) and
+            are endorsable per spec — this is intentional, not a slip. */}
+        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
+        {interaction.pose_kind === 'entry' && (
+          <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
+        )}
       </div>
     );
   }
@@ -226,6 +233,10 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
 
       <ReactionStrip windows={interaction.reaction_windows ?? []} sceneId={sceneId} />
       <ReactionsFooter interaction={interaction} sceneId={sceneId} />
+      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
+      {interaction.pose_kind === 'entry' && (
+        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
+      )}
     </div>
   );
 }
