@@ -461,15 +461,6 @@ def dissolve_soul_tether(
 # Sineating helpers
 # =============================================================================
 
-#: Anima deducted per accepted unit (tunable — Phase 12 may adjust).
-_ANIMA_COST_PER_UNIT: int = 2
-
-#: Social fatigue added per accepted unit (tunable — Phase 12 may adjust).
-_FATIGUE_COST_PER_UNIT: int = 1
-
-#: Hard upper limit on units per scene (tunable baseline; formula below may lower it).
-_PER_SCENE_CAP_HARD_MAX: int = 20
-
 
 def _get_sinner_tether_thread(
     sinner_sheet: CharacterSheet,
@@ -500,9 +491,11 @@ def _compute_per_scene_sineating_cap(
 ) -> int:
     """Compute how many units can be Sineated in one scene.
 
-    Formula (tunable — values are placeholders pending Phase 12 tuning):
-        cap = min(_PER_SCENE_CAP_HARD_MAX, thread.level * 2 + 5)
+    Formula (tunable via SoulTetherConfig singleton):
+        cap = min(cfg.per_scene_cap_hard_max,
+                  thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base)
 
+    Defaults reproduce original behaviour (hard_max=20, level_mult=2, base=5).
     When no Sinner Thread exists the bond has no Hollow; cap is 0.
     The ``relationship`` parameter is accepted for future formula tuning
     (e.g., capping on ``developed_absolute_value``).
@@ -518,14 +511,20 @@ def _compute_per_scene_sineating_cap(
     """
     if sinner_thread is None:
         return 0
-    return min(_PER_SCENE_CAP_HARD_MAX, sinner_thread.level * 2 + 5)
+    cfg = get_soul_tether_config()
+    return min(
+        cfg.per_scene_cap_hard_max,
+        sinner_thread.level * cfg.per_scene_cap_level_mult + cfg.per_scene_cap_base,
+    )
 
 
 def _compute_hollow_max(sinner_thread: Thread) -> int:
     """Compute the Hollow's theoretical maximum for a given Thread.
 
-    Placeholder formula (tunable — Phase 12 may adjust):
-        hollow_max = thread.level * 10
+    Formula (tunable via SoulTetherConfig singleton):
+        hollow_max = thread.level * cfg.hollow_max_level_mult
+
+    Default multiplier is 10, reproducing the original behaviour.
 
     Args:
         sinner_thread: The Sinner's RELATIONSHIP_CAPSTONE Thread.
@@ -533,7 +532,8 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     Returns:
         The maximum number of units the Hollow can hold.
     """
-    return max(0, sinner_thread.level * 10)
+    cfg = get_soul_tether_config()
+    return max(0, sinner_thread.level * cfg.hollow_max_level_mult)
 
 
 def _increment_stat_safe(
@@ -651,6 +651,7 @@ def request_sineating(
     #    rather than raising an integrity error on repeat requests.
     from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
 
+    cfg = get_soul_tether_config()
     SineatingPendingOffer.objects.update_or_create(
         sinner_sheet=sinner_sheet,
         sineater_sheet=sineater_sheet,
@@ -659,8 +660,8 @@ def request_sineating(
             "scene": scene,
             "resonance": resonance,
             "units_offered": max_units_offered,
-            "anima_cost_per_unit": _ANIMA_COST_PER_UNIT,
-            "fatigue_cost_per_unit": _FATIGUE_COST_PER_UNIT,
+            "anima_cost_per_unit": cfg.anima_cost_per_unit,
+            "fatigue_cost_per_unit": cfg.fatigue_cost_per_unit,
         },
     )
 
@@ -673,8 +674,8 @@ def request_sineating(
         relationship=relationship,
         resonance=resonance,
         max_units_offered=max_units_offered,
-        anima_cost_per_unit=_ANIMA_COST_PER_UNIT,
-        fatigue_cost_per_unit=_FATIGUE_COST_PER_UNIT,
+        anima_cost_per_unit=cfg.anima_cost_per_unit,
+        fatigue_cost_per_unit=cfg.fatigue_cost_per_unit,
         current_hollow=current_hollow,
         hollow_max=hollow_max,
         sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage

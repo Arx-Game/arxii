@@ -1,6 +1,42 @@
 """Tests for SoulTetherConfig singleton model and getter."""
 
+from unittest.mock import MagicMock
+
 from django.test import TestCase
+
+
+class SoulTetherConfigSineatingKnobsTest(TestCase):
+    """Verify the sineating helpers read from SoulTetherConfig, not module constants."""
+
+    def _make_thread(self, level: int) -> MagicMock:
+        """Return a minimal mock Thread with the given level."""
+        t = MagicMock()
+        t.level = level
+        return t
+
+    def test_hollow_max_reads_level_mult_from_config(self):
+        from world.magic.services.soul_tether import _compute_hollow_max, get_soul_tether_config
+
+        cfg = get_soul_tether_config()
+        cfg.hollow_max_level_mult = 7
+        cfg.save()
+        thread = self._make_thread(level=2)
+        self.assertEqual(_compute_hollow_max(thread), 14)  # 2 * 7
+
+    def test_per_scene_cap_reads_knobs_from_config(self):
+        from world.magic.services.soul_tether import (
+            _compute_per_scene_sineating_cap,
+            get_soul_tether_config,
+        )
+
+        cfg = get_soul_tether_config()
+        cfg.per_scene_cap_level_mult = 3
+        cfg.per_scene_cap_base = 10
+        cfg.per_scene_cap_hard_max = 100
+        cfg.save()
+        thread = self._make_thread(level=4)
+        # min(100, 4*3 + 10) = min(100, 22) = 22
+        self.assertEqual(_compute_per_scene_sineating_cap(thread, MagicMock()), 22)
 
 
 class SoulTetherConfigKnobsTest(TestCase):

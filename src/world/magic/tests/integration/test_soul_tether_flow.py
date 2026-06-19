@@ -233,16 +233,14 @@ def _build_sineating_offer(
     max_units: int = 5,
 ) -> SineatingOffer:
     """Construct a SineatingOffer directly, bypassing scene/roster validation."""
-    from world.magic.services.soul_tether import _ANIMA_COST_PER_UNIT, _FATIGUE_COST_PER_UNIT
-
     return SineatingOffer(
         sinner_sheet=sinner,  # type: ignore[arg-type]
         sineater_sheet=sineater,  # type: ignore[arg-type]
         relationship=relationship,  # type: ignore[arg-type]
         resonance=resonance,  # type: ignore[arg-type]
         max_units_offered=max_units,
-        anima_cost_per_unit=_ANIMA_COST_PER_UNIT,
-        fatigue_cost_per_unit=_FATIGUE_COST_PER_UNIT,
+        anima_cost_per_unit=2,  # default from SoulTetherConfig
+        fatigue_cost_per_unit=1,  # default from SoulTetherConfig
         current_hollow=0,
         hollow_max=100,
         sineater_current_strain_stage=0,
