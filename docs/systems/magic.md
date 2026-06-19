@@ -224,6 +224,17 @@ authored, falling back to a generic public-fact composition; ceremony text is ne
 No deed is created when `threshold.risk == NONE` or when the sheet has no primary
 persona (`legend_entry` stays null).
 
+### Dramatic Moment Tagging (#545 / #1139)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `DramaticMomentType` | Staff-authored lookup inheriting `RenownAwardConfig`. Describes a taggable scene moment category. | `label`, `description`, `resonance` FK, `resonance_amount` (default 15), `per_scene_cap` (default 1), plus inherited `magnitude`/`risk`/`reach`/`archetypes` |
+| `DramaticMomentTag` | Per-event record of a staff tag on a character in a scene | `moment_type` FK, `character_sheet` FK, `scene` FK (nullable/SET_NULL), `tagged_by` FK AccountDB (PROTECT), `interaction` FK (nullable/SET_NULL, `db_constraint=False` — partitioned table), `interaction_timestamp` (denormalized), `tagged_at` |
+
+**Admin:** `DramaticMomentTypeAdmin` — full CRUD (staff author the catalog); `DramaticMomentTagAdmin` — read-only for provenance audit.
+
+**Context fields on scenes serializers:** `SceneDetailSerializer.viewer_can_gm` (bool — True when the requesting user is the scene's GM, owner, or staff; controls GM control visibility); `InteractionSerializer.dramatic_moment_tags` (list — tags anchored to the pose; drives the interaction badge); `SceneParticipationSerializer.dramatic_moment_count` (int — per-participant tally in the scene).
+
 ### Other
 
 | Model | Purpose |
@@ -597,6 +608,16 @@ the legacy ThreadType lookup no longer exists.
 `/thread-resonances/` — the underlying models were deleted. Journaling now
 flows through relationships-app writeups for relationship-anchored threads,
 and `JournalEntry.related_threads` M2M for all thread kinds.
+
+### Dramatic Moment Tagging (#1139)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dramatic-moment-types/` | GET | Read-only catalog of authored `DramaticMomentType` rows; unpaginated; authenticated |
+| `/dramatic-moment-tags/` | POST | Tag a character's dramatic moment (gated by `IsSceneGMOrOwnerOrStaff`); body: `character_sheet_id`, `moment_type_id`, optional `scene_id`, optional `interaction_id`; service errors → 400 with `user_message` |
+| `/dramatic-moment-tags/` | GET | List tags; filterable by `character_sheet` and `scene`; paginated |
+
+No `DELETE` — tags are immutable provenance records.
 
 ---
 
