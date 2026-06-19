@@ -247,6 +247,13 @@ class EntryFlourishRecord(SharedMemoryModel):
                 name="entry_flourish_sheet_time_idx",
             ),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "scene"],
+                condition=models.Q(scene__isnull=False),
+                name="one_entry_flourish_per_sheet_scene",
+            ),
+        ]
 
     def __str__(self) -> str:
         return (
