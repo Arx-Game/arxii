@@ -15403,7 +15403,7 @@ export interface components {
       capacity: number;
       /** Format: double */
       percentage: number;
-      zone: string;
+      zone: components['schemas']['ZoneEnum'];
     };
     FormTrait: {
       readonly id: number;
@@ -23220,6 +23220,15 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /**
+     * @description * `fresh` - Fresh
+     *     * `strained` - Strained
+     *     * `tired` - Tired
+     *     * `overexerted` - Overexerted
+     *     * `exhausted` - Exhausted
+     * @enum {string}
+     */
+    ZoneEnum: 'fresh' | 'strained' | 'tired' | 'overexerted' | 'exhausted';
     /** @description One polish category's value + derived tier label for a building. */
     _CategoryPolish: {
       category_id: number;
