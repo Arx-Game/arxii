@@ -711,9 +711,8 @@ class ThreadSerializer(serializers.ModelSerializer):
 
     Read-only computed fields (SerializerMethodFields):
     - path_cap: the path-side cap (compute_path_cap)
-    - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
-      (AnchorCapNotImplemented is not yet spec'd)
-    - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
+    - anchor_cap: the anchor-side cap (compute_anchor_cap)
+    - effective_cap: min(path_cap, anchor_cap)
     """
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
@@ -765,29 +764,20 @@ class ThreadSerializer(serializers.ModelSerializer):
 
         return compute_path_cap(obj.owner)
 
-    def get_anchor_cap(self, obj: Thread) -> int | None:
-        """Return the anchor-side cap, or None for ROOM threads (not yet implemented)."""
-        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+    def get_anchor_cap(self, obj: Thread) -> int:
+        """Return the anchor-side cap for this thread."""
         from world.magic.services.threads import compute_anchor_cap  # noqa: PLC0415
 
-        try:
-            return compute_anchor_cap(obj)
-        except AnchorCapNotImplemented:
-            return None
+        return compute_anchor_cap(obj)
 
-    def get_effective_cap(self, obj: Thread) -> int | None:
-        """Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable."""
-        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+    def get_effective_cap(self, obj: Thread) -> int:
+        """Return min(path_cap, anchor_cap)."""
         from world.magic.services.threads import (  # noqa: PLC0415
             compute_anchor_cap,
             compute_path_cap,
         )
 
-        try:
-            anchor = compute_anchor_cap(obj)
-        except AnchorCapNotImplemented:
-            return None
-        return min(compute_path_cap(obj.owner), anchor)
+        return min(compute_path_cap(obj.owner), compute_anchor_cap(obj))
 
     def validate_target_kind(self, value: str) -> str:
         """Ensure the discriminator is a valid TargetKind."""
@@ -814,8 +804,6 @@ class ThreadSerializer(serializers.ModelSerializer):
     def _resolve_target(target_kind: str, target_id: int) -> object:
         """Look up the target model instance for a given (target_kind, target_id)."""
         # In-function imports avoid app-boot circular deps (magic ↔ traits ↔ relationships).
-        from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
         from world.covenants.models import CovenantRole  # noqa: PLC0415
         from world.items.models import Mantle  # noqa: PLC0415
         from world.magic.models import (  # noqa: PLC0415
@@ -831,7 +819,6 @@ class ThreadSerializer(serializers.ModelSerializer):
         model_map: dict[str, type] = {
             TargetKind.TRAIT: Trait,
             TargetKind.TECHNIQUE: TechniqueModel,
-            TargetKind.ROOM: ObjectDB,
             TargetKind.RELATIONSHIP_TRACK: RelationshipTrackProgress,
             TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
             TargetKind.FACET: Facet,
@@ -3163,7 +3150,6 @@ class ApplicablePullsRequestSerializer(serializers.Serializer):
     character_sheet_id = serializers.IntegerField()
     technique_id = serializers.IntegerField(required=False, allow_null=True)
     effect_type_id = serializers.IntegerField(required=False, allow_null=True)
-    target_object_id = serializers.IntegerField(required=False, allow_null=True)
     target_persona_id = serializers.IntegerField(required=False, allow_null=True)
     scene_id = serializers.IntegerField(required=False, allow_null=True)
 

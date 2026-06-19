@@ -38,6 +38,7 @@ from world.magic.models import (
     RitualComponentRequirement,
     SceneEntryEndorsement,
     SoulfrayConfig,
+    SoulTetherConfig,
     StandingCapBand,
     Technique,
     TechniqueCapabilityGrant,
@@ -566,7 +567,6 @@ class ThreadAdmin(admin.ModelAdmin):
         "owner",
         "target_trait",
         "target_technique",
-        "target_object",
         "target_relationship_track",
         "target_capstone",
     ]
@@ -591,13 +591,11 @@ class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
     search_fields = [
         "unlock_trait__name",
         "unlock_gift__name",
-        "unlock_room_property__name",
         "unlock_track__name",
     ]
     raw_id_fields = [
         "unlock_trait",
         "unlock_gift",
-        "unlock_room_property",
         "unlock_track",
     ]
     filter_horizontal = ["paths"]
@@ -709,3 +707,25 @@ class MagicProgressionMilestoneAdmin(admin.ModelAdmin):
     list_display = ("stage", "kind", "codex_entry", "sort_order")
     list_filter = ("stage", "kind")
     autocomplete_fields = ("codex_entry",)
+
+
+@admin.register(SoulTetherConfig)
+class SoulTetherConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the Soul Tether bond mechanic — one row per environment."""
+
+    list_display = (
+        "pk",
+        "anima_cost_per_unit",
+        "fatigue_cost_per_unit",
+        "per_scene_cap_hard_max",
+        "rescue_strain_stage3",
+        "rescue_strain_stage4",
+        "rescue_strain_stage5",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not SoulTetherConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

@@ -28,8 +28,9 @@ from world.magic.types import (
 )
 
 from world.magic.constants import (
-    TargetKind,              # Thread discriminator: TRAIT, TECHNIQUE, ITEM, ROOM,
-                             # RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE
+    TargetKind,              # Thread discriminator: TRAIT, TECHNIQUE, FACET,
+                             # RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE,
+                             # COVENANT_ROLE, MANTLE, SANCTUM
     EffectKind,              # ThreadPullEffect payload: FLAT_BONUS,
                              # INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT,
                              # NARRATIVE_ONLY
@@ -131,23 +132,24 @@ must be in Path's allowed_styles).
 The legacy 5-axis `Thread` / `ThreadType` / `ThreadJournal` / `ThreadResonance`
 family was deleted in favor of a discriminator + typed-FK design. A Thread is
 owned by a CharacterSheet, channels a single Resonance, and is anchored to
-exactly one of: Trait / Technique / Item-ObjectDB / Room-ObjectDB /
-RelationshipTrackProgress / RelationshipCapstone.
+exactly one of: Trait / Technique / Facet / RelationshipTrackProgress /
+RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
+`target_kind` was removed; SANCTUM is the leveled room anchor.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_object` / `target_relationship_track` / `target_capstone` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire) |
+| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER) |
 | `ThreadLevelUnlock` | Per-thread XP-locked-boundary receipt | `thread` FK, `unlocked_level`, `xp_spent`, `acquired_at` (unique per (thread, unlocked_level)) |
 
 **Integrity layers on Thread.** (1) `clean()` asserts exactly one `target_*`
-FK is populated and matches `target_kind`, and validates ITEM typeclass paths
-against `THREADWEAVING_ITEM_TYPECLASSES`. (2) Per-kind `CheckConstraint`s
-mirror the same rule at the DB layer. (3) Per-kind partial
-`UniqueConstraint`s prevent duplicate threads for the same
-(owner, resonance, target_kind, target_*) combination while still allowing
-both an ITEM thread and a ROOM thread on the same ObjectDB. All typed FKs
-use `on_delete=PROTECT` — anchors cannot be deleted while threads reference
-them.
+FK is populated and matches `target_kind`, validates ITEM typeclass paths against
+`THREADWEAVING_ITEM_TYPECLASSES`, and requires `slot_kind` for SANCTUM threads.
+(2) Per-kind `CheckConstraint`s mirror the same rule at the DB layer. (3) Per-kind
+partial `UniqueConstraint`s prevent duplicate threads for the same
+(owner, resonance, target_kind, target_*) combination. All typed FKs use
+`on_delete=PROTECT` — anchors cannot be deleted while threads reference them.
+**SANCTUM anchor cap:** `sanctum.feature_instance.level × 10`; thread is
+pull-applicable while the character is in the Sanctum's room (in-sanctum boost).
 
 ### Thread Lookup / Authoring Catalogs (Spec A §2.1 and §4.3)
 
@@ -157,6 +159,7 @@ All SharedMemoryModel lookups.
 |-------|---------|------------|
 | `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `spend_resonance_for_pull`; this table only holds the per-tier numbers |
 | `ThreadXPLockedLevel` | XP-locked-boundary price list | `level` (unique; 20/30/40 on the internal scale), `xp_cost` |
+| `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_level_mult`, `per_scene_cap_base`, `hollow_max_level_mult`. Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
 | `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level). CheckConstraints enforce payload/effect_kind alignment |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload |
@@ -170,7 +173,7 @@ thread anchors — they appear here only as unlock dimensions.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ThreadWeavingUnlock` | Authored unlock catalog | `target_kind`, one of (`unlock_trait` FK Trait / `unlock_gift` FK Gift / `unlock_item_typeclass_path` str / `unlock_room_property` FK Property / `unlock_track` FK RelationshipTrack), `xp_cost`, `paths` M2M (in-band Paths), `out_of_path_multiplier` Decimal default 2.0. Per-kind partial unique constraints guarantee one unlock per anchor. CheckConstraints mirror the typed-FK rule; `target_kind=RELATIONSHIP_CAPSTONE` is forbidden (inherited from parent track). Has a derived `display_name` property |
+| `ThreadWeavingUnlock` | Authored unlock catalog | `target_kind`, one of (`unlock_trait` FK Trait / `unlock_gift` FK Gift / `unlock_item_typeclass_path` str / `unlock_track` FK RelationshipTrack), `xp_cost`, `paths` M2M (in-band Paths), `out_of_path_multiplier` Decimal default 2.0. Per-kind partial unique constraints guarantee one unlock per anchor. CheckConstraints mirror the typed-FK rule; `target_kind=RELATIONSHIP_CAPSTONE` is forbidden (inherited from parent track). SANCTUM threads do not use this model — no unlock row needed. Has a derived `display_name` property |
 | `CharacterThreadWeavingUnlock` | Per-character purchase record | `character` FK CharacterSheet, `unlock` FK, `acquired_at`, `xp_spent` (actual — in-Path=xp_cost, out-of-Path=xp_cost × multiplier), optional `teacher` FK RosterTenure. Unique per (character, unlock) |
 | `ThreadWeavingTeachingOffer` | Teacher-side offer | `teacher` FK RosterTenure, `unlock` FK, `pitch`, `gold_cost`, `banked_ap`, `created_at`. Mirrors `CodexTeachingOffer` |
 
@@ -425,9 +428,11 @@ threads = Thread.objects.filter(
     "resonance__affinity",
     "target_trait",
     "target_technique",
-    "target_object",
+    "target_facet",
     "target_relationship_track",
     "target_capstone",
+    "target_covenant_role",
+    "target_sanctum_details__feature_instance",
 )
 ```
 
@@ -582,10 +587,9 @@ the legacy ThreadType lookup no longer exists.
 - All mutations that need a character context require an explicit
   `character_sheet_id` — no implicit first-sheet selection.
 - Service functions raise typed exceptions with `user_message` properties
-  (`AnchorCapExceeded`, `AnchorCapNotImplemented`, `InvalidImbueAmount`,
-  `ResonanceInsufficient`, `WeavingUnlockMissing`, `XPInsufficient`,
-  `RitualComponentError`). Views surface those messages as HTTP 400 detail
-  (never raw `str(exc)`).
+  (`AnchorCapExceeded`, `InvalidImbueAmount`, `ResonanceInsufficient`,
+  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError`). Views
+  surface those messages as HTTP 400 detail (never raw `str(exc)`).
 - `ThreadViewSet` uses `IsThreadOwner` permission plus ownership filtering
   in `get_queryset()`; staff see all.
 
@@ -655,9 +659,13 @@ execute_flow("cast_power", context={
 
 - **Aura validation** - CharacterAura enforces percentages sum to 100 via `clean()`
 - **Thread uniqueness (Spec A)** - One thread per (owner, resonance, target_kind, target_*) combination, enforced via per-kind partial `UniqueConstraint`s. Soft-retired threads (retired_at set) don't block new ones at the uniqueness level but are filtered out of handler caches and API listings.
-- **Thread PROTECT FKs** - All five typed `target_*` FKs use `on_delete=PROTECT`. Anchors cannot be deleted while threads reference them. This is why `CharacterThreadHandler.passive_vital_bonuses` doesn't need an anchor-in-scope runtime filter.
+- **Thread PROTECT FKs** - All typed `target_*` FKs use `on_delete=PROTECT`. Anchors cannot be deleted while threads reference them. This is why `CharacterThreadHandler.passive_vital_bonuses` doesn't need an anchor-in-scope runtime filter.
+- **SANCTUM room anchor** - `target_sanctum_details` (FK to `SanctumDetails`) is the leveled room anchor. Cap = `sanctum.feature_instance.level × 10`. Thread is pull-applicable (in-sanctum boost) while the character is in the Sanctum's room. Bare ROOM `target_kind` was removed.
 - **Currency has no cap** - `CharacterResonance.balance` grows freely; the strategic tension is over allocation, not over a ceiling.
 - **Pull-cost tuning surface** - `ThreadPullCost` rows hold per-tier numbers; the cost *formula shape* lives in `spend_resonance_for_pull`. Both the model docstring and service docstring cross-reference this split.
+- **SoulTetherConfig tuning** - `SoulTetherConfig` singleton (pk=1) holds all Soul Tether tuning knobs (sineating costs, rescue budgets/thresholds). Read via `get_soul_tether_config()`. Staff-tunable via admin.
+- **SOUL_TETHER_DISSOLVED** - Emitted by `dissolve_soul_tether` in `flows/constants.py` after bond dissolution.
+- **CharacterSheet.get_tether_strain_stage()** - Returns the Sineater's current Tether Strain stage. Used by sineating offer payloads.
 - **SharedMemoryModel** - All lookup tables + identity rows use Evennia's identity-map cache
 - **Affinity/Resonance are domain models** - First-class models in this app with optional OneToOne links to `ModifierTarget` for modifier integration
 - **Techniques are player-created** - Unlike lookup tables, techniques are unique per character

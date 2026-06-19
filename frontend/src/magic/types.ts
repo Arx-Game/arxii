@@ -194,8 +194,7 @@ export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingO
 // ---------------------------------------------------------------------------
 // Room Brief
 //
-// GET /api/magic/rooms-by-property/ — schema now correct via @extend_schema.
-// Re-export the generated shape.
+// Re-export of the generated shape. Endpoint tracked for frontend removal in #1199.
 // ---------------------------------------------------------------------------
 
 export type RoomBrief = components['schemas']['RoomBrief'];

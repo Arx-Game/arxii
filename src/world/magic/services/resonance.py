@@ -348,13 +348,14 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
-    if thread.target_kind == TargetKind.ROOM:
-        return thread.target_object_id in ctx.involved_objects
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         sheet = thread.owner
         engaged_roles = sheet.character.covenant_roles.currently_engaged_roles()
         target_pk = thread.target_covenant_role_id
         return any(role.pk == target_pk for role in engaged_roles)
+    if thread.target_kind == TargetKind.SANCTUM:
+        room_obj_id = thread.target_sanctum_details.feature_instance.room_profile.objectdb_id
+        return room_obj_id in ctx.involved_objects
     return False
 
 

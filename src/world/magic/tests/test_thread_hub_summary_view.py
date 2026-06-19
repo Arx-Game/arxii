@@ -28,7 +28,6 @@ from world.magic.factories import (
     ThreadWeavingUnlockFactory,
     ThreadXPLockedLevelFactory,
 )
-from world.mechanics.factories import PropertyFactory
 from world.relationships.factories import RelationshipTrackFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
@@ -249,7 +248,7 @@ class ThreadHubSummaryAltGuardTests(APITestCase):
 
 
 class ThreadHubSummaryPickerDataTests(APITestCase):
-    """Picker data fields (weavable_traits, weavable_techniques, room_property_ids,
+    """Picker data fields (weavable_traits, weavable_techniques,
     weavable_relationship_track_ids) are populated from the character's handlers + unlocks."""
 
     @classmethod
@@ -265,7 +264,6 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
             target_kind="TRAIT",
             unlock_trait=cls.trait,
             unlock_gift=None,
-            unlock_room_property=None,
             unlock_track=None,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.trait_unlock)
@@ -282,22 +280,10 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
             target_kind="TECHNIQUE",
             unlock_trait=None,
             unlock_gift=cls.gift,
-            unlock_room_property=None,
             unlock_track=None,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.tech_unlock)
         CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
-
-        # ROOM unlock
-        cls.prop = PropertyFactory(name="Sacred Ground")
-        cls.room_unlock = ThreadWeavingUnlockFactory(
-            target_kind="ROOM",
-            unlock_trait=None,
-            unlock_gift=None,
-            unlock_room_property=cls.prop,
-            unlock_track=None,
-        )
-        CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.room_unlock)
 
         # RELATIONSHIP_TRACK unlock
         cls.track = RelationshipTrackFactory(name="Loyalty")
@@ -305,7 +291,6 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
             target_kind="RELATIONSHIP_TRACK",
             unlock_trait=None,
             unlock_gift=None,
-            unlock_room_property=None,
             unlock_track=cls.track,
         )
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=cls.track_unlock)
@@ -332,7 +317,6 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
             target_kind="TRAIT",
             unlock_trait=zero_trait,
             unlock_gift=None,
-            unlock_room_property=None,
             unlock_track=None,
         )
         CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=zero_unlock)
@@ -353,18 +337,13 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         self.assertEqual(techniques[0]["gift_id"], self.gift.pk)
         self.assertEqual(techniques[0]["gift_name"], "TestGift")
 
-    def test_room_property_id_appears(self) -> None:
-        response = self.client.get(_URL)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(self.prop.pk, response.data["room_property_ids"])
-
     def test_relationship_track_id_appears(self) -> None:
         response = self.client.get(_URL)
         self.assertEqual(response.status_code, 200)
         self.assertIn(self.track.pk, response.data["weavable_relationship_track_ids"])
 
     def test_empty_character_has_empty_picker_lists(self) -> None:
-        """Character with no weaving unlocks gets four empty lists."""
+        """Character with no weaving unlocks gets empty picker lists."""
         empty_account = AccountFactory(username="picker_empty_account")
         empty_char = CharacterFactory(db_key="PickerEmptyChar")
         empty_sheet = CharacterSheetFactory(character=empty_char)

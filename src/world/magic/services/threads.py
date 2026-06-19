@@ -27,7 +27,6 @@ from world.magic.constants import (
 )
 from world.magic.exceptions import (
     AnchorCapExceeded,
-    AnchorCapNotImplemented,
     InvalidImbueAmount,
     MantleNotClearedError,
     WeavingUnlockMissing,
@@ -122,7 +121,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
       Use-based (issue #517): personal investment adds on top of the covenant floor.
     - MANTLE: max cleared mantle level × 10 (Spec D §6.2). Cap grows as the
       character clears higher mantle ranks via codex research.
-    - ROOM: not yet implemented — raises AnchorCapNotImplemented.
+    - SANCTUM: target_sanctum_details.feature_instance.level × 10 (Plan 4 §F).
+      Cap scales with the Sanctum's upgrade level (1–5 → 10–50).
     """
     match thread.target_kind:
         case TargetKind.TRAIT:
@@ -167,9 +167,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             mantle = thread.target_mantle
             max_level = thread.owner.character.mantle_clearances.max_cleared_level(mantle)
             return max_level * 10
-        case TargetKind.ROOM:
-            msg = thread.target_kind + " anchor cap awaits Spec D."
-            raise AnchorCapNotImplemented(msg)
+        case TargetKind.SANCTUM:
+            return thread.target_sanctum_details.feature_instance.level * 10
     return 0
 
 
@@ -284,19 +283,6 @@ def _has_weaving_unlock(
             return base.filter(unlock__unlock_trait=target).exists()
         case TargetKind.TECHNIQUE:
             return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
-        case TargetKind.ROOM:
-            # Match if the unlock's room property is one of the anchor's properties.
-            # ObjectDB exposes object_properties (ObjectProperty rows); we extract
-            # Property PKs via values_list and filter the unlock FK against them.
-            property_ids = list(
-                target.object_properties.values_list("property_id", flat=True)  # type: ignore[union-attr]
-            )
-            return (
-                bool(property_ids)
-                and base.filter(
-                    unlock__unlock_room_property_id__in=property_ids,
-                ).exists()
-            )
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL
@@ -325,7 +311,7 @@ def weave_thread(  # noqa: PLR0913
     Args:
         character_sheet: Character creating the thread.
         target_kind: TargetKind discriminator string.
-        target: The anchor object (Trait, Technique, ObjectDB, RelationshipTrackProgress,
+        target: The anchor object (Trait, Technique, RelationshipTrackProgress,
                 RelationshipCapstone, Facet, CovenantRole).
         resonance: Resonance this thread channels.
         name: Optional narrative name.
@@ -362,7 +348,6 @@ def weave_thread(  # noqa: PLR0913
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",
         TargetKind.TECHNIQUE: "target_technique",
-        TargetKind.ROOM: "target_object",
         TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
         TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
         TargetKind.FACET: "target_facet",
@@ -429,7 +414,6 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
             "resonance__affinity",
             "target_trait",
             "target_technique",
-            "target_object",
             "target_relationship_track",
             "target_capstone",
         )

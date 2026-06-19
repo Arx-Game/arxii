@@ -26,7 +26,6 @@ def _empty_context(**overrides: object) -> PullActionContext:
     defaults: dict[str, object] = {
         "technique": None,
         "effect_type_id": None,
-        "target_object_id": None,
         "target_persona_id": None,
         "scene_id": None,
     }

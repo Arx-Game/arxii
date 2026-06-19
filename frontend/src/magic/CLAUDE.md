@@ -1,7 +1,7 @@
 # Magic Module
 
 Frontend for the magic system's Soul Tether, Thread, CharacterResonance,
-Thread Hub Summary, Thread mutations, teaching offers, and rooms-by-property surfaces.
+Thread Hub Summary, Thread mutations, and teaching offers surfaces.
 Implemented in Phase 3 of the Soul Tether UI (branch: soul-tether-ui);
 extended in the thread-spending-ui-design branch (Tasks 8–10).
 
@@ -115,7 +115,6 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `getCharacterResonances()` — GET `/api/magic/character-resonances/`
 - `getThreadHubSummary(characterSheetId?)` — GET `/api/magic/thread-hub-summary/`
 - `getTeachingOffers()` — GET `/api/magic/teaching-offers/`
-- `getRoomsByProperty(propertyIds)` — GET `/api/magic/rooms-by-property/?property_id=...`
 
 **Thread mutations:**
 

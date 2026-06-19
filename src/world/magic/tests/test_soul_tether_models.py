@@ -94,11 +94,13 @@ class TypesImportTests(TestCase):
         from world.magic.factories import ResonanceFactory
         from world.magic.types.soul_tether import SineatingOffer
         from world.relationships.factories import CharacterRelationshipFactory
+        from world.scenes.factories import SceneFactory
 
         sinner = CharacterSheetFactory()
         sineater = CharacterSheetFactory()
         relationship = CharacterRelationshipFactory(source=sinner, target=sineater)
         resonance = ResonanceFactory()
+        scene = SceneFactory()
 
         offer = SineatingOffer(
             sinner_sheet=sinner,
@@ -111,6 +113,7 @@ class TypesImportTests(TestCase):
             current_hollow=5,
             hollow_max=20,
             sineater_current_strain_stage=0,
+            scene=scene,
         )
         self.assertEqual(offer.max_units_offered, 10)
         # Verify it's frozen (immutable)

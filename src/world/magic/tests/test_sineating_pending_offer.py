@@ -32,8 +32,6 @@ from world.magic.factories import (
 )
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
 from world.magic.services.soul_tether import (
-    _ANIMA_COST_PER_UNIT,
-    _FATIGUE_COST_PER_UNIT,
     accept_soul_tether,
     request_sineating,
     resolve_sineating_from_db,
@@ -46,6 +44,10 @@ from world.relationships.factories import (
 from world.relationships.models import CharacterRelationship
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+# Default per-unit costs — match SoulTetherConfig defaults (anima=2, fatigue=1).
+_ANIMA_COST_PER_UNIT: int = 2
+_FATIGUE_COST_PER_UNIT: int = 1
 
 # =============================================================================
 # Shared helpers

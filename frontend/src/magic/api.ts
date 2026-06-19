@@ -47,7 +47,6 @@ import type {
   PullPreviewResponse,
   RescueOutcome,
   RescueRequest,
-  RoomBrief,
   SineatingOffer,
   SineatingPendingOffer,
   SineatingRequest,
@@ -100,7 +99,6 @@ const THREAD_HUB_SUMMARY_URL = '/api/magic/thread-hub-summary/';
 const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
 const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
-const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
@@ -667,24 +665,6 @@ export async function acceptTeachingOffer(
     await parseErrorDetail(res, `Failed to accept teaching offer ${offerId}`);
   }
   return res.json() as Promise<AcceptTeachingOfferResponse>;
-}
-
-// ---------------------------------------------------------------------------
-// Rooms by property
-// ---------------------------------------------------------------------------
-
-/**
- * GET /api/magic/rooms-by-property/?property_id=N&property_id=M...
- *
- * Returns rooms that have all specified property tags.
- * Used by the thread-weaving room picker.
- */
-export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBrief[]> {
-  const params = propertyIds.map((id) => `property_id=${id}`).join('&');
-  const url = params ? `${ROOMS_BY_PROPERTY_URL}?${params}` : ROOMS_BY_PROPERTY_URL;
-  const res = await apiFetch(url);
-  if (!res.ok) throw new Error('Failed to load rooms by property');
-  return res.json() as Promise<RoomBrief[]>;
 }
 
 // ---------------------------------------------------------------------------

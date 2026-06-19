@@ -24,12 +24,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
-    `target_trait` / `target_technique` / `target_object` / `target_relationship_track`
-    / `target_capstone` / `target_facet` / `target_covenant_role` — last two added in
-    Spec D PR1), `ThreadLevelUnlock`, `ThreadPullCost`,
+    `target_trait` / `target_technique` / `target_facet` / `target_relationship_track`
+    / `target_capstone` / `target_covenant_role` / `target_sanctum_details` — bare
+    `ROOM` removed; SANCTUM is the leveled room anchor, cap = sanctum level × 10,
+    in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
     `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
-    `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`
+    `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
+    `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
   - **Audere Majora + legend-deed minting (#953):**
@@ -63,10 +65,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `threads_blocked_by_cap(character_sheet)`
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
-  - Cap helpers: `compute_anchor_cap(thread) -> int` (Spec D PR1: FACET uses
+  - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
     `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
-    COVENANT_ROLE uses `current_level × 10`),
+    COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
+    `sanctum.feature_instance.level × 10`),
     `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+  - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
+  - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
+  - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
+    Strain stage for the active resonance; used in sineating offer payloads)
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
     `apply_damage_reduction_from_threads(character, damage_amount) -> int`
   - Resonance-environment (2026-05-16): `magical_profile(character_sheet) -> CharacterAura | None`
@@ -83,13 +90,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Key Methods:** `CharacterAura.dominant_affinity`,
   `Thread.target` (populated FK), `Thread.display_name`,
   `ThreadWeavingUnlock.display_name`
-- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — Spec D PR1 added
-  `FACET` and `COVENANT_ROLE`), `EffectKind` (ThreadPullEffect), `VitalBonusTarget`,
-  `RitualExecutionKind`, `AnimaRitualCategory`,
+- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — values: TRAIT,
+  TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
+  MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect),
+  `VitalBonusTarget`, `RitualExecutionKind`, `AnimaRitualCategory`,
   `PendingAlterationStatus`, `AlterationTier`
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
-  `AnchorCapNotImplemented`, `InvalidImbueAmount`, `ResonanceInsufficient`,
-  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError`,
+  `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
+  `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
@@ -98,7 +106,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   journals (`JournalEntry.related_threads` M2M), combat (CombatPull,
   DamagePreApply for DAMAGE_TAKEN_REDUCTION), vitals
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
-  mechanics (Property via Thread ROOM anchor + Ritual site_property),
+  mechanics (Property via Ritual site_property),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
   flows (Ritual FLOW dispatch via FlowDefinition)
 - **API endpoints (Spec A §4.5):**
