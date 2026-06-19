@@ -5,7 +5,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import permissions, serializers, status, viewsets
+from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
@@ -277,9 +277,20 @@ class SceneViewSet(viewsets.ModelViewSet):
         return Response(SceneActivitySerializer({"band": band.label}).data)
 
 
-class PersonaViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing personas within scenes
+class PersonaViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read + actions over a character's personas (#1127 hardening).
+
+    Deliberately **not** a ``ModelViewSet``: the raw create/update/destroy were an
+    undesigned, identity-security-critical surface (a player could POST any
+    ``persona_type`` / ``is_fake_name`` and mint arbitrary alt identities). Personas are
+    created by the system (PRIMARY at character creation) and, in future, by designed IC
+    flows (mask command / disguise kit / formal alternate-identity process) that call the
+    creation at the service layer with their own gating and consequences. This viewset only
+    exposes reads + the player-facing actions (``set-active``, renown, spread, …).
     """
 
     serializer_class = PersonaSerializer
