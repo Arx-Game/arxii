@@ -739,9 +739,6 @@ class DramaticMomentTypeAdmin(admin.ModelAdmin):
     list_filter = ("magnitude", "risk")
     filter_horizontal = ("archetypes",)
 
-    def has_add_permission(self, request) -> bool:  # noqa: ARG002
-        return True
-
 
 @admin.register(DramaticMomentTag)
 class DramaticMomentTagAdmin(admin.ModelAdmin):
