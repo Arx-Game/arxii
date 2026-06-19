@@ -16262,6 +16262,15 @@ export interface components {
       visibility?: components['schemas']['VisibilityF91Enum'];
       /** Format: date-time */
       readonly timestamp: string;
+      /**
+       * @description Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+       *
+       *     * `standard` - Standard
+       *     * `entry` - Entry
+       *     * `departure` - Departure
+       */
+      pose_kind?: components['schemas']['PoseKindEnum'];
+      readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -16282,6 +16291,47 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description List of resonances claimed by the endorsee (pose author).
+       *
+       *     Reads from the prefetched ``persona__character_sheet__resonances``
+       *     path (set up in ``interaction_views.get_queryset``) via the
+       *     ``cached_resonances`` to_attr. Falls back to a live query if the attr
+       *     is absent (e.g. serializer used outside the view's queryset pipeline).
+       */
+      readonly endorsable_resonances: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description List of peers who endorsed this pose, with persona info.
+       *
+       *     Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+       *     view queryset). Each endorser's primary persona is pre-loaded via
+       *     ``cached_primary_persona`` (another nested Prefetch).
+       */
+      readonly pose_endorsers: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description Return the viewer's own endorsement for this pose, or None.
+       *
+       *     Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+       *     each cached endorsement's ``endorser_sheet_id``.
+       */
+      readonly my_pose_endorsement: {
+        [key: string]: unknown;
+      } | null;
+      /**
+       * @description List of peers who gave this character a scene-entry endorsement.
+       *
+       *     Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+       *     context (populated by the view's ``get_serializer_context``).
+       */
+      readonly entry_endorsers: {
+        [key: string]: unknown;
+      }[];
+      /** @description True when the viewer has given this character a scene-entry endorsement. */
+      readonly entry_endorsed_by_me: boolean;
       readonly receivers: components['schemas']['InteractionReceiver'][];
     };
     InteractionFavorite: {
@@ -16331,6 +16381,15 @@ export interface components {
       visibility?: components['schemas']['VisibilityF91Enum'];
       /** Format: date-time */
       readonly timestamp: string;
+      /**
+       * @description Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+       *
+       *     * `standard` - Standard
+       *     * `entry` - Entry
+       *     * `departure` - Departure
+       */
+      pose_kind?: components['schemas']['PoseKindEnum'];
+      readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -16351,6 +16410,47 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description List of resonances claimed by the endorsee (pose author).
+       *
+       *     Reads from the prefetched ``persona__character_sheet__resonances``
+       *     path (set up in ``interaction_views.get_queryset``) via the
+       *     ``cached_resonances`` to_attr. Falls back to a live query if the attr
+       *     is absent (e.g. serializer used outside the view's queryset pipeline).
+       */
+      readonly endorsable_resonances: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description List of peers who endorsed this pose, with persona info.
+       *
+       *     Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+       *     view queryset). Each endorser's primary persona is pre-loaded via
+       *     ``cached_primary_persona`` (another nested Prefetch).
+       */
+      readonly pose_endorsers: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description Return the viewer's own endorsement for this pose, or None.
+       *
+       *     Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+       *     each cached endorsement's ``endorser_sheet_id``.
+       */
+      readonly my_pose_endorsement: {
+        [key: string]: unknown;
+      } | null;
+      /**
+       * @description List of peers who gave this character a scene-entry endorsement.
+       *
+       *     Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+       *     context (populated by the view's ``get_serializer_context``).
+       */
+      readonly entry_endorsers: {
+        [key: string]: unknown;
+      }[];
+      /** @description True when the viewer has given this character a scene-entry endorsement. */
+      readonly entry_endorsed_by_me: boolean;
     };
     InteractionListRequest: {
       /** @description Scene container if one was active */
@@ -16379,6 +16479,14 @@ export interface components {
        *     * `very_private` - Very Private
        */
       visibility?: components['schemas']['VisibilityF91Enum'];
+      /**
+       * @description Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+       *
+       *     * `standard` - Standard
+       *     * `entry` - Entry
+       *     * `departure` - Departure
+       */
+      pose_kind?: components['schemas']['PoseKindEnum'];
     };
     /** @description One eligible offer in the interaction state response. */
     InteractionOffer: {
@@ -20936,6 +21044,13 @@ export interface components {
       interaction: number;
       resonance: number;
     };
+    /**
+     * @description * `standard` - Standard
+     *     * `entry` - Entry
+     *     * `departure` - Departure
+     * @enum {string}
+     */
+    PoseKindEnum: 'standard' | 'entry' | 'departure';
     /**
      * @description Read-only serializer for a single PositionAdjacency entry.
      *
