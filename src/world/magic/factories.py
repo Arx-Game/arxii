@@ -64,6 +64,7 @@ from world.magic.models import (
     RitualCheckConfig,
     RitualComponentRequirement,
     SoulfrayConfig,
+    StandingCapBand,
     Technique,
     TechniqueAppliedCondition,
     TechniqueBudgetConfig,
@@ -2582,7 +2583,17 @@ class AuraPowerConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
     affinity_alignment_bonus = 0
     resonance_standing_bonus = 0
-    resonance_standing_cap = 0
+
+
+class StandingCapBandFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = StandingCapBand
+        django_get_or_create = ("min_level",)
+
+    min_level = 1
+    cap = 50
+    mode = "HARD"
+    diminish_pct = 0
 
 
 class TechniqueTierBudgetFactory(factory.django.DjangoModelFactory):
