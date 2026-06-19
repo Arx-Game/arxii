@@ -143,8 +143,11 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     Returns:
         The created Interaction.
     """
+    # Pin the writer's account at creation (#1219) — party identity for private-content
+    # log visibility, stable across later persona hand-offs.
     interaction = Interaction.objects.create(
         persona=persona,
+        writer_account_id=_get_account_for_persona(persona),
         content=content,
         mode=mode,
         scene=scene,
@@ -165,12 +168,15 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         )
 
     if effective_receivers:
+        # Pin each receiver's account too (#1219), batched to one query for the whole room.
+        receiver_accounts = _accounts_for_personas(effective_receivers)
         InteractionReceiver.objects.bulk_create(
             [
                 InteractionReceiver(
                     interaction=interaction,
                     timestamp=interaction.timestamp,
                     persona=recv_persona,
+                    account_id=receiver_accounts.get(recv_persona.pk),
                 )
                 for recv_persona in effective_receivers
             ]
@@ -464,6 +470,29 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 def _get_account_for_persona(persona: Persona) -> int | None:
     """Get the account ID for a persona's character via roster tenure."""
     return _get_account_for_character(persona.character_sheet_id)
+
+
+def _accounts_for_personas(personas: list[Persona]) -> dict[int, int]:
+    """Map persona pk -> current account id for a batch of personas, in one query (#1219).
+
+    The batched form of ``_get_account_for_persona`` — used when pinning receiver accounts at
+    interaction creation so a place-scoped (whole-room) interaction stays O(1) queries.
+    Personas whose character has no current tenure are simply absent from the map.
+    """
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    sheet_ids = {p.character_sheet_id for p in personas}
+    sheet_to_account = dict(
+        RosterTenure.objects.filter(
+            roster_entry__character_sheet_id__in=sheet_ids,
+            end_date__isnull=True,
+        ).values_list("roster_entry__character_sheet_id", "player_data__account_id")
+    )
+    return {
+        p.pk: sheet_to_account[p.character_sheet_id]
+        for p in personas
+        if p.character_sheet_id in sheet_to_account
+    }
 
 
 def _get_account_for_character(character_id: int) -> int | None:
