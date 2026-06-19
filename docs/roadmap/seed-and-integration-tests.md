@@ -1,6 +1,6 @@
 # Seed Mechanism + Integration Test Coverage
 
-**Status:** Phase 1 complete; Phase 2 in-progress
+**Status:** Phase 1 complete; Phase 2 in-progress; Phase 3 core delivered (3.1, 3.3–3.6 done; 3.2 deferred; 3.7 added; 3.8 optional)
 **Audit:** [`docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`](../audits/2026-04-26-seed-and-integration-coverage-audit.md)
 
 ## Why this exists
@@ -140,13 +140,13 @@ These three can run in parallel with the mechanical seeding work.
 
 | Task | Unlocks |
 |------|---------|
-| **3.1** — Choose seed module location. Suggested: `src/world/seeds/` with one module per cluster (magic, combat, character, narrative, infrastructure), or `src/seeds/` at top level. **Should NOT be under `integration_tests/`.** | A clear home for production-callable seed code. |
-| **3.2** — Migrate content from `integration_tests/game_content/*` into the new home, preserving the test-callable surface so existing tests continue to work. | Single source of truth for seed orchestration. Test code and seed code share the same factories. |
-| **3.3** — Add `arx seed dev` CLI command. Wraps a top-level `seed_dev_database()` orchestrator that calls every cluster's seed function. **Project-rule exception:** the "no management commands" rule has been overridden by user request for this specific command. | Anyone running `arx seed dev` gets a populated dev DB. |
-| **3.4** — Enforce create-if-missing semantics across every seed function. Audit existing seed functions for `update_or_create` usage and replace with `get_or_create(natural_key, defaults={...})`. | Re-running on an edited DB preserves edits. Per project rule. |
-| **3.5** — Add idempotency regression test: `arx seed dev` on a fresh DB succeeds; second run is a pure no-op (no DB writes). | Guarantee against accidental destructive seeds. |
-| **3.6** — Add non-overwrite regression test: edit a seeded row via factory, re-run seed, verify edit is preserved. | Guarantee against accidental data loss. |
-| **3.7** — Add a README section to project README explaining the clone-and-seed flow. | New contributors / clone hosts have onboarding docs. |
+| ✅ **3.1** — Seed module location: `src/world/seeds/` with `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (check-resolution cluster), and `types.py` (SeedReport). | A clear home for production-callable seed code. |
+| **3.2** — *(Deferred — interim facade)* Physical relocation of cluster masters out of `integration_tests/game_content/` into `src/world/seeds/`. **Current design:** `src/world/seeds/clusters.py` imports the existing `seed_magic_dev()`, `seed_items_dev()`, `seed_penetration_contest()`, and `seed_flee_check()` masters from `integration_tests.game_content` at call time. This is documented in the module docstring as an interim facade. Tests continue to work unchanged. Full relocation tracked in the #1220 epic. | Single source of truth for seed orchestration. |
+| ✅ **3.3** — `arx seed dev` CLI command added (`src/core_management/management/commands/seed.py`). Wraps `seed_dev_database()` with `--verbose` support. **Project-rule exception:** the "no management commands" rule has been overridden by user request for this specific command. | Anyone running `arx seed dev` gets a populated dev DB. |
+| ✅ **3.4** — Create-if-missing semantics enforced: all seed functions use `get_or_create(natural_key, defaults={...})`, never `update_or_create`. | Re-running on an edited DB preserves edits. Per project rule. |
+| ✅ **3.5** — Idempotency regression test: `test_idempotency.py` verifies a fresh `seed_dev_database()` run followed by a second run produces zero additional DB writes. | Guarantee against accidental destructive seeds. |
+| ✅ **3.6** — Non-overwrite regression test: `test_database.py` edits a seeded row, re-runs the seed, verifies the edit is preserved. | Guarantee against accidental data loss. |
+| ✅ **3.7** — "First-run seeding" section added to project README explaining `arx seed dev` and the Django admin "Load sane defaults" button. | New contributors / clone hosts have onboarding docs. |
 | **3.8** — Optional: extract per-cluster seed regression tests so each cluster's seed function is independently verified to not crash. | Catches regressions in seed orchestration when models change. |
 | ✅ **3.9** — Check-resolution spine + playable slice (#651). `src/world/seeds/checks.py` `seed_check_resolution_tables()` seeds the rows `perform_check` needs to turn a roll into a real `CheckOutcome` — STAT/SKILL `PointConversionRange` (1 pt/level over 1-100), the four-rung `CheckRank` ladder (0/10/25/50), the four-outcome catalog, and the five `ResultChart` rows (rank-diff −2…+2) with their per-roll `ResultChartOutcome` bands — all via `get_or_create` on natural keys (idempotent). Values promoted verbatim from `CheckSystemSetupFactory` and the checks/traits test setup (Phase B #1221 makes them tunable). Registered as the `"checks"` cluster in `CLUSTER_SEEDERS`. `test_playable_slice.py` proves a fresh `seed_dev_database()` resolves a factory character's check (against the seeded `flee` CheckType) to a real non-null `CheckOutcome`. | A fresh seeded DB resolves a real check to a real outcome — the check-resolution spine is provably playable. |
 
