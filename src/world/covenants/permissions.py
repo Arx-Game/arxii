@@ -36,10 +36,11 @@ class IsOwnMembership(permissions.BasePermission):
 
 class CanKickFromCovenant(permissions.BasePermission):
     """Permits kicking ``obj`` (a target CharacterCovenantRole) only if the requester
-    plays an active character whose rank has can_kick=True and whose tier is strictly
-    less than the target's rank tier (lower tier = higher authority).
+    plays an active character in the same covenant whose rank has can_kick=True.
 
-    The CannotKickEqualOrHigherRankError detail is enforced in the service layer (→ 400).
+    Tier precedence (equal/higher-rank target) is enforced by the service layer
+    (kick_member raises CannotKickEqualOrHigherRankError → 400), not here.
+    This permission answers only: "is this user a kicker at all?"
     """
 
     def has_object_permission(
@@ -50,14 +51,13 @@ class CanKickFromCovenant(permissions.BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        # The actor must be: active, in the same covenant, can_kick=True, and
-        # have a strictly lower tier (higher authority) than the target.
+        # The actor must be: active, in the same covenant, can_kick=True.
+        # Exclude the target's own membership (can't kick yourself via this path).
         return (
             CharacterCovenantRole.objects.filter(
                 covenant_id=obj.covenant_id,
                 left_at__isnull=True,
                 rank__can_kick=True,
-                rank__tier__lt=obj.rank.tier,
                 character_sheet__roster_entry__tenures__end_date__isnull=True,
                 character_sheet__roster_entry__tenures__player_data__account=request.user,
             )

@@ -1035,6 +1035,65 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
         target_m.refresh_from_db()
         self.assertEqual(target_m.rank_id, top.pk)
 
+    def test_transfer_top_action_success(self) -> None:
+        """POST transfer-top/ — manager transfers top rank to another active member (200)."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+
+        cov5 = CovenantFactory(name="TransferTopCov")
+        top_rank = CovenantManagerRankFactory(covenant=cov5, tier=1, name="Leader")
+        base_rank = CovenantRankFactory(covenant=cov5, tier=2, name="Base")
+        mgr_m = CharacterCovenantRoleFactory(
+            character_sheet=self.mgr_sheet, covenant=cov5, rank=top_rank
+        )
+        recipient_m = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov5, rank=base_rank
+        )
+        response = self.client.post(
+            f"/api/covenants/ranks/{top_rank.pk}/transfer-top/",
+            {"new_top_membership": recipient_m.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recipient_m.refresh_from_db()
+        mgr_m.refresh_from_db()
+        self.assertEqual(recipient_m.rank_id, top_rank.pk)
+        self.assertEqual(mgr_m.rank_id, base_rank.pk)
+
+    def test_transfer_top_non_manager_denied(self) -> None:
+        """POST transfer-top/ by a member without can_manage_ranks is denied with 403."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+            CovenantRankFactory,
+        )
+
+        cov6 = CovenantFactory(name="TransferTopDeniedCov")
+        top_rank = CovenantManagerRankFactory(covenant=cov6, tier=1, name="Leader6")
+        base_rank = CovenantRankFactory(covenant=cov6, tier=2, name="Base6")
+        CharacterCovenantRoleFactory(character_sheet=self.mgr_sheet, covenant=cov6, rank=top_rank)
+        # non_mgr_sheet must be a member so the non-manager can see the rank via get_queryset.
+        CharacterCovenantRoleFactory(
+            character_sheet=self.non_mgr_sheet, covenant=cov6, rank=base_rank
+        )
+        recipient_m = CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov6, rank=base_rank
+        )
+        client = self._non_mgr_client()
+        response = client.post(
+            f"/api/covenants/ranks/{top_rank.pk}/transfer-top/",
+            {"new_top_membership": recipient_m.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_unauthenticated_denied(self) -> None:
         """Unauthenticated requests receive 403."""
         unauthenticated_client = APIClient()

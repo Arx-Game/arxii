@@ -191,7 +191,7 @@ class KickActionTests(TestCase):
         self.assertIsNone(self.target_membership.left_at)
 
     def test_leader_cannot_kick_equal_rank(self) -> None:
-        """Kicking a member of equal rank (tier 1) is denied — CanKickFromCovenant rejects (403)."""
+        """Kicking a member of equal rank (tier 1) is denied — service raises 400 with message."""
         second_leader_user = _make_user("exit_kick_leader2")
         second_leader_sheet = _setup_user_with_sheet(second_leader_user)
         second_leader_membership = CharacterCovenantRoleFactory(
@@ -203,8 +203,11 @@ class KickActionTests(TestCase):
         response = self.leader_client.post(
             f"/api/covenants/character-roles/{second_leader_membership.pk}/kick/"
         )
-        # Equal rank tier: CanKickFromCovenant denies (403) — no actor whose tier < target.tier
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Equal rank tier: permission passes (requester is a kicker), but the service
+        # raises CannotKickEqualOrHigherRankError → 400 with the specific user_message.
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+        self.assertEqual(response.data["detail"], "You can only remove members ranked below you.")
         second_leader_membership.refresh_from_db()
         self.assertIsNone(second_leader_membership.left_at)
 

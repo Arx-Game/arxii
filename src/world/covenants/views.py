@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -13,9 +14,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from world.covenants.exceptions import (
+    CannotTransferToDepartedMemberError,
     CovenantEngagementPrerequisiteNotMetError,
     CovenantExitError,
     CrossCovenantRankError,
+    IncompleteRankReorderError,
     LastManagerRankError,
     NotAStandingBattleCovenantError,
     NotAuthorizedToKickError,
@@ -45,6 +48,7 @@ from world.covenants.permissions import (
     IsOwnMembership,
 )
 from world.covenants.serializers import (
+    AssignMemberRequestSerializer,
     CharacterCovenantRoleSerializer,
     CovenantLevelThresholdSerializer,
     CovenantRankSerializer,
@@ -54,6 +58,8 @@ from world.covenants.serializers import (
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
     PromoteSubroleSerializer,
+    ReorderRanksRequestSerializer,
+    TransferTopRequestSerializer,
 )
 from world.covenants.services import (
     assign_rank,
@@ -224,6 +230,7 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             kick_member(target=target, actor=actor)
         except CovenantExitError as exc:
+            # CannotKickEqualOrHigherRankError (and CannotKickSelfError) arrive here → 400.
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(target).data)
 
@@ -620,6 +627,10 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(
+        request=ReorderRanksRequestSerializer,
+        responses=CovenantRankSerializer(many=True),
+    )
     @action(detail=False, methods=["POST"], url_path="reorder")
     def reorder(self, request: Request) -> Response:
         """POST /api/covenants/ranks/reorder/
@@ -647,10 +658,14 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
             ranks = reorder_ranks(covenant=covenant, actor=actor, ordered_rank_ids=ordered_rank_ids)
         except NotAuthorizedToManageRanksError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except IncompleteRankReorderError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(CovenantRankSerializer(ranks, many=True).data)
 
+    @extend_schema(
+        request=AssignMemberRequestSerializer,
+        responses=CharacterCovenantRoleSerializer,
+    )
     @action(detail=True, methods=["POST"], url_path="assign-member")
     def assign_member(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/covenants/ranks/{pk}/assign-member/
@@ -683,6 +698,10 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
         ser = CharacterCovenantRoleSerializer(membership, context={"request": request})
         return Response(ser.data)
 
+    @extend_schema(
+        request=TransferTopRequestSerializer,
+        responses=CovenantRankSerializer,
+    )
     @action(detail=True, methods=["POST"], url_path="transfer-top")
     def transfer_top_rank(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/covenants/ranks/{pk}/transfer-top/
@@ -720,8 +739,6 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
             transfer_top(covenant=rank.covenant, actor=actor, new_top_membership=new_top_membership)
         except NotAuthorizedToManageRanksError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
-        except CrossCovenantRankError as exc:
+        except (CrossCovenantRankError, CannotTransferToDepartedMemberError) as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(CovenantRankSerializer(rank).data)

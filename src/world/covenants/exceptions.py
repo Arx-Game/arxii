@@ -315,3 +315,25 @@ class CrossCovenantRankError(CovenantError):
             "That rank does not belong to this covenant.",
         }
     )
+
+
+class IncompleteRankReorderError(CovenantError):
+    """Raised when ordered_rank_ids does not include all of a covenant's ranks."""
+
+    user_message = "You must reorder all of the covenant's ranks at once."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You must reorder all of the covenant's ranks at once.",
+        }
+    )
+
+
+class CannotTransferToDepartedMemberError(CovenantError):
+    """Raised when attempting to transfer leadership to a member who has left."""
+
+    user_message = "You cannot transfer leadership to a member who has left."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You cannot transfer leadership to a member who has left.",
+        }
+    )

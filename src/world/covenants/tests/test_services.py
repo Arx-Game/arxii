@@ -14,8 +14,10 @@ from world.covenants.constants import (
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
+    CannotTransferToDepartedMemberError,
     CrossCovenantRankError,
     DuplicateFounderError,
+    IncompleteRankReorderError,
     InsufficientFoundersError,
     LastManagerRankError,
     NotAuthorizedToKickError,
@@ -1461,12 +1463,12 @@ class RankManagementTests(TestCase):
     # --- transfer_top (review findings) ---
 
     def test_transfer_top_to_departed_member_raises(self) -> None:
-        """Transferring leadership to a departed (left_at set) member raises ValueError."""
+        """Transferring to a departed member raises CannotTransferToDepartedMemberError."""
         import datetime
 
         self.base_member.left_at = datetime.datetime.now(datetime.UTC)
         self.base_member.save(update_fields=["left_at"])
-        with self.assertRaises(ValueError, msg="Cannot transfer leadership to a departed member."):
+        with self.assertRaises(CannotTransferToDepartedMemberError):
             transfer_top(
                 covenant=self.cov,
                 actor=self.manager_member,
@@ -1488,9 +1490,9 @@ class RankManagementTests(TestCase):
     # --- reorder_ranks (review findings) ---
 
     def test_reorder_ranks_partial_list_raises(self) -> None:
-        """Providing only a subset of a covenant's ranks raises ValueError."""
+        """Providing only a subset of a covenant's ranks raises IncompleteRankReorderError."""
         # manager_rank is omitted — only base_rank supplied.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(IncompleteRankReorderError):
             reorder_ranks(
                 covenant=self.cov,
                 actor=self.manager_member,

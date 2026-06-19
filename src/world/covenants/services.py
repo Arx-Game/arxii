@@ -12,11 +12,13 @@ from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
+    CannotTransferToDepartedMemberError,
     CovenantLevelTooLowError,
     CovenantNameConflictError,
     CovenantRiteError,
     CrossCovenantRankError,
     DuplicateFounderError,
+    IncompleteRankReorderError,
     InsufficientFoundersError,
     LastManagerRankError,
     NoActiveBattleError,
@@ -667,13 +669,7 @@ def reorder_ranks(
     all_rank_ids = set(CovenantRank.objects.filter(covenant=covenant).values_list("pk", flat=True))
     provided_ids = set(ordered_rank_ids)
     if provided_ids != all_rank_ids:
-        missing = all_rank_ids - provided_ids
-        extra = provided_ids - all_rank_ids
-        msg = (
-            f"ordered_rank_ids must contain exactly all rank ids for the covenant. "
-            f"Missing: {missing!r}. Extra: {extra!r}."
-        )
-        raise ValueError(msg)
+        raise IncompleteRankReorderError
 
     ranks = list(CovenantRank.objects.filter(covenant=covenant, pk__in=ordered_rank_ids))
     rank_map = {r.pk: r for r in ranks}
@@ -794,8 +790,7 @@ def transfer_top(
     if new_top_membership.covenant_id != covenant.pk:
         raise CrossCovenantRankError
     if new_top_membership.left_at is not None:
-        msg = "Cannot transfer leadership to a departed member."
-        raise ValueError(msg)
+        raise CannotTransferToDepartedMemberError
 
     top_rank = actor.rank
     base = _base_rank(covenant)

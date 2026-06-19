@@ -4539,7 +4539,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CovenantRankRequest'
+              $ref: '#/components/schemas/AssignMemberRequestRequest'
         required: true
       security:
       - cookieAuth: []
@@ -4548,7 +4548,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CovenantRank'
+                $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
   /api/covenants/ranks/{id}/transfer-top/:
     post:
@@ -4571,7 +4571,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CovenantRankRequest'
+              $ref: '#/components/schemas/TransferTopRequestRequest'
         required: true
       security:
       - cookieAuth: []
@@ -4590,13 +4590,20 @@ paths:
 
         Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
         Reorders the covenant's ranks — requires can_manage_ranks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - covenants
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CovenantRankRequest'
+              $ref: '#/components/schemas/ReorderRanksRequestRequest'
         required: true
       security:
       - cookieAuth: []
@@ -4605,7 +4612,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CovenantRank'
+                $ref: '#/components/schemas/PaginatedCovenantRankList'
           description: ''
   /api/covenants/rites/:
     get:
@@ -21881,6 +21888,15 @@ components:
       required:
       - id
       - name
+    AssignMemberRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/{pk}/assign-member/.
+      properties:
+        membership:
+          type: integer
+          description: PK of the CharacterCovenantRole to assign to this rank.
+      required:
+      - membership
     AssistantGMClaim:
       type: object
       description: Read-only serializer for AssistantGMClaim records.
@@ -23486,6 +23502,10 @@ components:
           description: |-
             Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
             active membership in the same covenant, or all-False when not a member.
+
+            Results are memoized per covenant_id in the serializer context so a list
+            response of N memberships from the same covenant issues only one query
+            rather than one per row.
           readOnly: true
       required:
       - can_engage
@@ -38299,6 +38319,22 @@ components:
       - persona_name
       - visible_deeds
       - visible_reputation
+    ReorderRanksRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/reorder/.
+      properties:
+        covenant:
+          type: integer
+          description: PK of the Covenant whose rank ladder is being reordered.
+        ordered_rank_ids:
+          type: array
+          items:
+            type: integer
+          description: All rank PKs for this covenant in desired order (index 0 =
+            top authority / tier 1).
+      required:
+      - covenant
+      - ordered_rank_ids
     RequiredOutcomeEnum:
       enum:
       - unsatisfied
@@ -42505,6 +42541,15 @@ components:
         * `skill` - Skill
         * `modifier` - Modifier
         * `other` - Other
+    TransferTopRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/{pk}/transfer-top/.
+      properties:
+        new_top_membership:
+          type: integer
+          description: PK of the CharacterCovenantRole that will receive the top rank.
+      required:
+      - new_top_membership
     Transition:
       type: object
       description: |-

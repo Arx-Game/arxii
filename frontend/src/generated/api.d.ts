@@ -12901,6 +12901,11 @@ export interface components {
       /** @description Description of what this aspect represents */
       description?: string;
     };
+    /** @description Request body for POST /api/covenants/ranks/{pk}/assign-member/. */
+    AssignMemberRequestRequest: {
+      /** @description PK of the CharacterCovenantRole to assign to this rank. */
+      membership: number;
+    };
     /** @description Read-only serializer for AssistantGMClaim records. */
     AssistantGMClaim: {
       readonly id: number;
@@ -13660,6 +13665,10 @@ export interface components {
       /**
        * @description Return can_invite/can_kick/can_manage_ranks for the REQUESTING user's own
        *     active membership in the same covenant, or all-False when not a member.
+       *
+       *     Results are memoized per covenant_id in the serializer context so a list
+       *     response of N memberships from the same covenant issues only one query
+       *     rather than one per row.
        */
       readonly viewer_capabilities: {
         [key: string]: unknown;
@@ -21269,6 +21278,13 @@ export interface components {
       visible_deeds: components['schemas']['_Deed'][];
       visible_reputation: components['schemas']['_SocietyReputation'][];
     };
+    /** @description Request body for POST /api/covenants/ranks/reorder/. */
+    ReorderRanksRequestRequest: {
+      /** @description PK of the Covenant whose rank ladder is being reordered. */
+      covenant: number;
+      /** @description All rank PKs for this covenant in desired order (index 0 = top authority / tier 1). */
+      ordered_rank_ids: number[];
+    };
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success
@@ -23322,6 +23338,11 @@ export interface components {
      * @enum {string}
      */
     TraitTraitTypeEnum: 'stat' | 'skill' | 'modifier' | 'other';
+    /** @description Request body for POST /api/covenants/ranks/{pk}/transfer-top/. */
+    TransferTopRequestRequest: {
+      /** @description PK of the CharacterCovenantRole that will receive the top rank. */
+      new_top_membership: number;
+    };
     /**
      * @description Full serializer for Transition — guarded episode graph edges.
      *
@@ -27714,7 +27735,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CovenantRankRequest'];
+        'application/json': components['schemas']['AssignMemberRequestRequest'];
       };
     };
     responses: {
@@ -27723,7 +27744,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CovenantRank'];
+          'application/json': components['schemas']['CharacterCovenantRole'];
         };
       };
     };
@@ -27739,7 +27760,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CovenantRankRequest'];
+        'application/json': components['schemas']['TransferTopRequestRequest'];
       };
     };
     responses: {
@@ -27755,14 +27776,17 @@ export interface operations {
   };
   covenants_ranks_reorder_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['CovenantRankRequest'];
+        'application/json': components['schemas']['ReorderRanksRequestRequest'];
       };
     };
     responses: {
@@ -27771,7 +27795,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CovenantRank'];
+          'application/json': components['schemas']['PaginatedCovenantRankList'];
         };
       };
     };
