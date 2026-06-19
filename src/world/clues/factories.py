@@ -2,7 +2,7 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.clues.constants import ClueTargetKind
-from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
+from world.clues.models import CharacterClue, Clue, ClueTrigger, ItemClueTrigger, RoomClue
 
 
 class ClueFactory(DjangoModelFactory):
@@ -41,5 +41,14 @@ class ClueTriggerFactory(DjangoModelFactory):
         model = ClueTrigger
 
     room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    clue = factory.SubFactory(ClueFactory)
+    is_active = True
+
+
+class ItemClueTriggerFactory(DjangoModelFactory):
+    class Meta:
+        model = ItemClueTrigger
+
+    item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
     clue = factory.SubFactory(ClueFactory)
     is_active = True

@@ -7,14 +7,17 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.clues.constants import ClueResolution, ClueTargetKind
-from world.clues.models import CharacterClue, Clue, ClueTrigger, RoomClue
+from world.clues.models import CharacterClue, Clue, ClueTrigger, ItemClueTrigger, RoomClue
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
     from world.captivity.models import Captivity
     from world.checks.models import CheckType
+    from world.items.models import ItemInstance
     from world.predicates.predicates import CharacterPredicateContext
     from world.roster.models import RosterEntry
 
@@ -234,7 +237,6 @@ def maybe_grant_clue_triggers(character: ObjectDB, room: ObjectDB) -> list[Clue]
     triggers here?" query short-circuits ordinary rooms.
     """
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-    from world.predicates.predicates import evaluate  # noqa: PLC0415
 
     try:
         room_profile = room.room_profile
@@ -248,6 +250,46 @@ def maybe_grant_clue_triggers(character: ObjectDB, room: ObjectDB) -> list[Clue]
     roster_entry = _roster_entry_for(character)
     if roster_entry is None:
         return []
+    return _grant_triggered_clues(character, roster_entry, triggers)
+
+
+def maybe_grant_item_acquisition_clues(character: ObjectDB, item: ItemInstance) -> list[Clue]:
+    """Grant clues triggered passively by ``character`` acquiring ``item`` (#1160).
+
+    The item-anchored sibling of ``maybe_grant_clue_triggers``: for each active
+    ``ItemClueTrigger`` on the acquired item's template the character is eligible for and
+    hasn't already held, acquire the clue, resolve it (AUTOMATIC), and notify. Best-effort
+    entry point — called from the inventory give/pick-up chokepoint (after commit, wrapped)
+    so a hiccup never breaks the transfer; the cheap "any triggers for this kind?" query
+    short-circuits ordinary items.
+    """
+    triggers = list(
+        ItemClueTrigger.objects.filter(
+            item_template_id=item.template_id, is_active=True
+        ).select_related("clue")
+    )
+    if not triggers:
+        return []
+    roster_entry = _roster_entry_for(character)
+    if roster_entry is None:
+        return []
+    return _grant_triggered_clues(character, roster_entry, triggers)
+
+
+def _grant_triggered_clues(
+    character: ObjectDB,
+    roster_entry: RosterEntry,
+    triggers: Sequence[ClueTrigger | ItemClueTrigger],
+) -> list[Clue]:
+    """Grant each trigger's clue to an eligible, not-yet-holding character (#1160).
+
+    Shared by the room-entry and item-acquisition trigger paths. Each row exposes ``.clue``
+    and ``.eligibility_rule``; the predicate context is built lazily, only when a gated
+    trigger is actually hit. Held clues are skipped (idempotent), AUTOMATIC clues resolve
+    their target on the spot, and each grant is announced to the player.
+    """
+    from world.predicates.predicates import evaluate  # noqa: PLC0415
+
     held_ids = set(
         CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
     )
