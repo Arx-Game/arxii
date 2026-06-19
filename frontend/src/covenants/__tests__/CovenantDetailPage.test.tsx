@@ -37,6 +37,7 @@ vi.mock('@/covenants/queries', () => ({
   useCovenantRanks: vi.fn(() => ({
     data: { count: 0, next: null, previous: null, results: [] },
   })),
+  useAssignMemberToRank: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock('@/rituals/queries', () => ({
@@ -119,7 +120,7 @@ vi.mock('react-redux', async (importOriginal) => {
   };
 });
 
-import { useCovenantDetail, useCovenantMembers } from '@/covenants/queries';
+import { useCovenantDetail, useCovenantMembers, useCovenantRanks } from '@/covenants/queries';
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -207,6 +208,12 @@ function mockMembers(members: CharacterCovenantRole[], isLoading = false) {
   vi.mocked(useCovenantMembers).mockReturnValue({
     data: isLoading ? undefined : data,
     isLoading,
+  } as never);
+}
+
+function mockRanks(ranks: Array<{ id: number; name: string; tier: number }>) {
+  vi.mocked(useCovenantRanks).mockReturnValue({
+    data: { count: ranks.length, next: null, previous: null, results: ranks },
   } as never);
 }
 
@@ -381,5 +388,50 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
 
     expect(screen.getByText('Founder')).toBeInTheDocument();
     expect(screen.getByText('Recruit')).toBeInTheDocument();
+  });
+
+  it('shows a rank-assignment dropdown per active member when viewer can_manage_ranks', () => {
+    mockDetail(makeCovenant());
+    mockRanks([
+      { id: 1, name: 'Founder', tier: 1 },
+      { id: 2, name: 'Member', tier: 2 },
+    ]);
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        rank: { id: 1, name: 'Founder', tier: 1 },
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: true },
+      }),
+      makeMembership({
+        id: 101,
+        character_sheet: 999,
+        rank: { id: 2, name: 'Member', tier: 2 },
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: true },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.getAllByTestId('assign-rank-select')).toHaveLength(2);
+  });
+
+  it('hides the rank-assignment dropdown when viewer lacks can_manage_ranks', () => {
+    mockDetail(makeCovenant());
+    mockRanks([
+      { id: 1, name: 'Founder', tier: 1 },
+      { id: 2, name: 'Member', tier: 2 },
+    ]);
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('assign-rank-select')).not.toBeInTheDocument();
   });
 });

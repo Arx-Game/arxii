@@ -39,6 +39,8 @@ import {
   useDisengageMembership,
   useLeaveMembership,
   useKickMember,
+  useCovenantRanks,
+  useAssignMemberToRank,
 } from '@/covenants/queries';
 import { useRituals } from '@/rituals/queries';
 import { RitualSessionDraftDialog } from '@/rituals/components/RitualSessionDraftDialog';
@@ -47,7 +49,7 @@ import { RitesPanel } from '@/covenants/components/RitesPanel';
 import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
 import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
 import { RankManagementPanel } from '@/covenants/components/RankManagementPanel';
-import type { CharacterCovenantRole, ViewerCapabilities } from '@/covenants/api';
+import type { CharacterCovenantRole, CovenantRank, ViewerCapabilities } from '@/covenants/api';
 import type { RitualWithSchema, RitualInputSchema } from '@/rituals/types';
 
 // ---------------------------------------------------------------------------
@@ -81,6 +83,7 @@ interface MemberRowProps {
   viewerCapabilities: ViewerCapabilities;
   viewerRankTier: number;
   covenantId: number;
+  ranks: CovenantRank[];
 }
 
 function MemberRow({
@@ -89,11 +92,13 @@ function MemberRow({
   viewerCapabilities,
   viewerRankTier,
   covenantId,
+  ranks,
 }: MemberRowProps) {
   const engage = useEngageMembership(covenantId);
   const disengage = useDisengageMembership(covenantId);
   const leave = useLeaveMembership(covenantId);
   const kick = useKickMember(covenantId);
+  const assignRank = useAssignMemberToRank(covenantId);
   const isBusy = engage.isPending || disengage.isPending;
   const [promoteOpen, setPromoteOpen] = useState(false);
 
@@ -106,6 +111,15 @@ function MemberRow({
     !isOwnMembership &&
     membership.is_active &&
     membership.rank.tier > viewerRankTier;
+  // Rank assignment (promote/demote) is offered to managers on any active member.
+  const canAssignRank =
+    viewerCapabilities.can_manage_ranks && membership.is_active && ranks.length > 0;
+
+  function handleAssignRank(rankId: number) {
+    if (rankId !== membership.rank.id) {
+      assignRank.mutate({ rankId, membershipId: membership.id });
+    }
+  }
 
   function handleEngage() {
     engage.mutate(membership.id);
@@ -216,6 +230,28 @@ function MemberRow({
         </div>
       )}
 
+      {canAssignRank && (
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <label htmlFor={`assign-rank-${membership.id}`} className="sr-only">
+            Assign rank for member {characterSheetId}
+          </label>
+          <select
+            id={`assign-rank-${membership.id}`}
+            data-testid="assign-rank-select"
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={membership.rank.id}
+            disabled={assignRank.isPending}
+            onChange={(e) => handleAssignRank(Number(e.target.value))}
+          >
+            {ranks.map((rank) => (
+              <option key={rank.id} value={rank.id}>
+                {rank.name} (tier {rank.tier})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {canKick && (
         <div className="flex shrink-0 flex-col items-end gap-1">
           <AlertDialog>
@@ -274,6 +310,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
 
   const { data: covenant, isLoading: covenantLoading } = useCovenantDetail(covenantId);
   const { data: membersPage, isLoading: membersLoading } = useCovenantMembers(covenantId);
+  const { data: ranksPage } = useCovenantRanks(covenantId);
   const { data: ritualsData, isLoading: ritualsLoading } = useRituals();
 
   const [inductionOpen, setInductionOpen] = useState(false);
@@ -302,6 +339,10 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
 
   // Viewer's own rank tier (or Infinity = lowest authority if not a member).
   const viewerRankTier: number = ownMembership?.rank?.tier ?? Infinity;
+
+  // The covenant's rank ladder, sorted by tier (highest authority first), for the
+  // per-member rank-assignment picker.
+  const ranks = [...(ranksPage?.results ?? [])].sort((a, b) => a.tier - b.tier);
 
   // Find induction ritual
   const allRituals = !ritualsLoading ? ((ritualsData?.results ?? []) as RitualWithSchema[]) : [];
@@ -374,6 +415,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
                 viewerCapabilities={viewerCapabilities}
                 viewerRankTier={viewerRankTier}
                 covenantId={covenantId}
+                ranks={ranks}
               />
             ))}
           </div>
