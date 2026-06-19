@@ -157,7 +157,8 @@ export interface Interaction {
   target_persona_ids: number[];
   /** ACTION Interactions linked to this POSE (populated only for POSE-mode rows). */
   action_links?: ActionLink[];
-  pose_kind: string;
+  /** Classifies the pose for entry-endorsement filtering. Matches PoseKind TextChoices (lowercase wire format). */
+  pose_kind: 'standard' | 'entry' | 'departure';
   endorsee_sheet_id: number | null;
   endorsable_resonances: { id: number; name: string }[];
   pose_endorsers: EndorserBadge[];

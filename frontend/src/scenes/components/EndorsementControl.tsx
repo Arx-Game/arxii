@@ -12,8 +12,11 @@
  * Hidden entirely when:
  *   - endorsable_resonances is empty (nothing to endorse with)
  *   - the pose belongs to the viewer (self-endorsement guard)
- *   - mode === 'WHISPER' or visibility === 'VERY_PRIVATE'
+ *   - mode === 'whisper' or visibility === 'very_private'
  *   - kind='entry' and endorsee_sheet_id is null (impossible in practice but typed)
+ *
+ * For kind='entry': shows a display-only "Endorsed ✓" indicator when
+ * entry_endorsed_by_me is true (entry endorsements are permanent — no retract).
  */
 
 import { useMemo } from 'react';
@@ -92,8 +95,8 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
   if (
     interaction.endorsable_resonances.length === 0 ||
     isSelfPose ||
-    interaction.mode === 'WHISPER' ||
-    interaction.visibility === 'VERY_PRIVATE'
+    interaction.mode === 'whisper' ||
+    interaction.visibility === 'very_private'
   ) {
     return null;
   }
@@ -128,6 +131,7 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
   const isPending = isPose ? createPose.isPending : createEntry.isPending;
   const myEndorsement = isPose ? interaction.my_pose_endorsement : null;
   const isEndorsed = myEndorsement != null;
+  const isEntryEndorsedByMe = !isPose && interaction.entry_endorsed_by_me;
   const label = isPose ? 'Endorse' : 'Endorse entry';
 
   return (
@@ -149,6 +153,14 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
         >
           Retract
         </button>
+      ) : isEntryEndorsedByMe ? (
+        /* Entry endorsements are permanent — no retract affordance, just a display indicator. */
+        <span
+          data-testid="entry-endorsed-indicator"
+          className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          Endorsed ✓
+        </span>
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

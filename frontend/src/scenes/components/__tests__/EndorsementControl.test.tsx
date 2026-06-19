@@ -85,7 +85,7 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
     receiver_persona_ids: [],
     target_persona_ids: [],
     action_links: [],
-    pose_kind: 'ENTRY',
+    pose_kind: 'entry',
     endorsee_sheet_id: 20,
     endorsable_resonances: [
       { id: 5, name: 'Courage' },
@@ -223,10 +223,10 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('hides for WHISPER mode', () => {
+  it('hides for whisper mode', () => {
     const { container } = render(
       <EndorsementControl
-        interaction={makeInteraction({ mode: 'WHISPER' })}
+        interaction={makeInteraction({ mode: 'whisper' })}
         sceneId="1"
         kind="pose"
       />,
@@ -235,10 +235,10 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('hides for VERY_PRIVATE visibility', () => {
+  it('hides for very_private visibility', () => {
     const { container } = render(
       <EndorsementControl
-        interaction={makeInteraction({ visibility: 'VERY_PRIVATE' })}
+        interaction={makeInteraction({ visibility: 'very_private' })}
         sceneId="1"
         kind="pose"
       />,
@@ -319,6 +319,21 @@ describe('EndorsementControl — kind="entry"', () => {
       { wrapper: createWrapper() }
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('shows endorsed indicator (not picker) when entry_endorsed_by_me=true', () => {
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({ entry_endorsed_by_me: true })}
+        sceneId="1"
+        kind="entry"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('entry-endorsed-indicator')).toBeInTheDocument();
+    // No "Endorse entry" button — endorsement is permanent, no retract.
+    expect(screen.queryByRole('button', { name: /endorse entry/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
   });
 
   it('hides and fires no mutation when endorsee_sheet_id is null (safe null guard)', async () => {

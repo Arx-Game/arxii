@@ -24,7 +24,7 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     receiver_persona_ids: payload.receiver_persona_ids ?? [],
     target_persona_ids: payload.target_persona_ids ?? [],
     // Endorsement fields are not present in WS payloads; initialise as empty.
-    pose_kind: 'STANDARD',
+    pose_kind: 'standard',
     endorsee_sheet_id: null,
     endorsable_resonances: [],
     pose_endorsers: [],

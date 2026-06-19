@@ -867,3 +867,83 @@ class InteractionListQueryBudgetTests(APITestCase):
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
+
+    def test_interaction_list_query_budget_does_not_scale_with_endorser_count(self) -> None:
+        """Query count must stay constant as endorser count grows (endorsement prefetches
+        must not degenerate into N+1 queries per endorser).
+
+        Uses the same interaction count as the small dataset (3 interactions) but with
+        5+ endorsers per pose instead of 2, then asserts the same 48-query budget.
+        If this fails with a higher count, an endorser-prefetch path is broken.
+        """
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        # Five extra endorser sheets (more than the 2 in the small dataset).
+        extra_sheets = [CharacterSheetFactory() for _ in range(5)]
+        extra_personas = [s.primary_persona for s in extra_sheets]
+
+        dense_scene = SceneFactory()
+        dense_resonance = ResonanceFactory()
+
+        # Same interaction structure as the small dataset: 1 ENTRY + 1 STANDARD + 1 ENTRY.
+        dense_entry_a = InteractionFactory(
+            persona=extra_personas[0],
+            pose_kind=PoseKind.ENTRY,
+            scene=dense_scene,
+        )
+        dense_standard = InteractionFactory(
+            persona=extra_personas[1],
+            pose_kind=PoseKind.STANDARD,
+            scene=dense_scene,
+        )
+        dense_entry_b = InteractionFactory(
+            persona=extra_personas[2],
+            pose_kind=PoseKind.ENTRY,
+            scene=dense_scene,
+        )
+
+        # 5 PoseEndorsements on each ENTRY pose (vs. 2 in the small dataset).
+        for endorser_sheet in extra_sheets[1:]:
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[0],
+                interaction=dense_entry_a,
+                resonance=dense_resonance,
+            )
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[2],
+                interaction=dense_entry_b,
+                resonance=dense_resonance,
+            )
+        # Also endorse the STANDARD pose.
+        for endorser_sheet in extra_sheets[1:]:
+            PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[1],
+                interaction=dense_standard,
+                resonance=dense_resonance,
+            )
+
+        # 5+ SceneEntryEndorsements (vs. 2 in the small dataset).
+        for endorser_sheet in extra_sheets[1:]:
+            SceneEntryEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[0],
+                scene=dense_scene,
+                resonance=dense_resonance,
+            )
+            SceneEntryEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=extra_sheets[2],
+                scene=dense_scene,
+                resonance=dense_resonance,
+            )
+
+        url = reverse("interaction-list")
+        with self.assertNumQueries(48):
+            response = self.client.get(url, {"scene": dense_scene.pk})
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 3  # same count as small dataset

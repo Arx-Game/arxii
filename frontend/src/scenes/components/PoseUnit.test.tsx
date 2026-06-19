@@ -60,7 +60,7 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
     receiver_persona_ids: [],
     target_persona_ids: [],
     action_links: [],
-    pose_kind: 'STANDARD',
+    pose_kind: 'standard',
     endorsee_sheet_id: 20,
     endorsable_resonances: [{ id: 5, name: 'Courage' }],
     pose_endorsers: [],
@@ -419,7 +419,7 @@ describe('PoseUnit endorsement control mounting', () => {
   it('ENTRY pose renders TWO endorsement controls (pose + entry)', () => {
     const interaction = makeInteraction({
       mode: 'pose',
-      pose_kind: 'ENTRY',
+      pose_kind: 'entry',
     });
 
     render(
@@ -435,7 +435,7 @@ describe('PoseUnit endorsement control mounting', () => {
   it('STANDARD pose renders ONE endorsement control (pose only)', () => {
     const interaction = makeInteraction({
       mode: 'pose',
-      pose_kind: 'STANDARD',
+      pose_kind: 'standard',
     });
 
     render(
@@ -467,7 +467,7 @@ describe('PoseUnit endorsement control mounting', () => {
   it('standalone ACTION branch also renders an endorsement control', () => {
     const interaction = makeInteraction({
       mode: 'action',
-      pose_kind: 'STANDARD',
+      pose_kind: 'standard',
     });
 
     render(
@@ -487,8 +487,8 @@ describe('PoseUnit endorsement control mounting', () => {
   // through to EndorsementControl, so the real component receives the data it needs
   // to apply its own guard.
 
-  it('WHISPER pose: PoseUnit forwards interaction with mode=WHISPER to EndorsementControl', () => {
-    const interaction = makeInteraction({ mode: 'WHISPER', pose_kind: 'STANDARD' });
+  it('whisper pose: PoseUnit forwards interaction with mode=whisper to EndorsementControl', () => {
+    const interaction = makeInteraction({ mode: 'whisper', pose_kind: 'standard' });
     render(
       <Wrapper>
         <PoseUnit interaction={interaction} sceneId="1" />
@@ -497,13 +497,13 @@ describe('PoseUnit endorsement control mounting', () => {
 
     // The stub renders data-mode from the forwarded interaction prop.
     // If PoseUnit passes the right interaction, the real EndorsementControl will
-    // see mode='WHISPER' and return null — suppression tested in EndorsementControl.test.tsx.
+    // see mode='whisper' and return null — suppression tested in EndorsementControl.test.tsx.
     const control = screen.getByTestId('endorsement-control-pose');
-    expect(control).toHaveAttribute('data-mode', 'WHISPER');
+    expect(control).toHaveAttribute('data-mode', 'whisper');
   });
 
-  it('VERY_PRIVATE pose: PoseUnit forwards interaction with visibility=VERY_PRIVATE to EndorsementControl', () => {
-    const interaction = makeInteraction({ visibility: 'VERY_PRIVATE', pose_kind: 'STANDARD' });
+  it('very_private pose: PoseUnit forwards interaction with visibility=very_private to EndorsementControl', () => {
+    const interaction = makeInteraction({ visibility: 'very_private', pose_kind: 'standard' });
     render(
       <Wrapper>
         <PoseUnit interaction={interaction} sceneId="1" />
@@ -511,6 +511,6 @@ describe('PoseUnit endorsement control mounting', () => {
     );
 
     const control = screen.getByTestId('endorsement-control-pose');
-    expect(control).toHaveAttribute('data-visibility', 'VERY_PRIVATE');
+    expect(control).toHaveAttribute('data-visibility', 'very_private');
   });
 });
