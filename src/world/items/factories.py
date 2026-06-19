@@ -5,6 +5,7 @@ from decimal import Decimal
 import factory
 
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+from world.items.crafting.constants import CraftingRecipeKind
 from world.items.models import (
     EquippedItem,
     FacetCraftingConfig,
@@ -346,7 +347,7 @@ class CraftingRecipeFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
-    kind = "facet_attach"
+    kind = CraftingRecipeKind.FACET_ATTACH
     base_difficulty = 0
     success_level_step = 10
     min_success_level = 1

@@ -1,5 +1,6 @@
 """Tests for world.items.crafting models — Task 1: CraftingRecipe."""
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from world.items.crafting.constants import PARTIAL_FRACTION, CostConsumption, CraftingRecipeKind
@@ -41,8 +42,6 @@ class CraftingRecipeModelTests(TestCase):
 
     def test_unique_kind_constraint(self) -> None:
         """Two recipes with the same kind violate the unique constraint."""
-        from django.db import IntegrityError
-
         CraftingRecipeFactory(name="Attach Facet", kind=CraftingRecipeKind.FACET_ATTACH)
         with self.assertRaises(IntegrityError):
             CraftingRecipeFactory(name="Attach Facet 2", kind=CraftingRecipeKind.FACET_ATTACH)
