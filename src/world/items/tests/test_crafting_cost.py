@@ -390,3 +390,22 @@ class ConsumeCostApPoolCreationTests(_CraftingCostBase):
         pool = ActionPointPool.objects.get(character=self.character)
         # Default created with 200 current (from ActionPointConfig default), then spent 10.
         self.assertEqual(pool.current, 190)
+
+
+class ConsumeCostApShortfallTests(_CraftingCostBase):
+    """consume_cost raises CraftingCostUnaffordable when AP is drained after staging."""
+
+    def test_ap_drained_between_stage_and_consume_raises(self) -> None:
+        """If the pool is emptied after staging, consume_cost raises instead of lying."""
+        staged = StagedCost(action_points=50, anima=0, material_pks=[])
+
+        # Simulate a concurrent spend draining the pool below the staged amount.
+        self.pool.current = 0
+        self.pool.save(update_fields=["current"])
+
+        with self.assertRaises(CraftingCostUnaffordable):
+            consume_cost(
+                crafter_character=self.character,
+                staged=staged,
+                consumption=CostConsumption.FULL,
+            )

@@ -161,7 +161,9 @@ def consume_cost(
     # Deduct AP
     if ap_to_spend > 0:
         pool = ActionPointPool.get_or_create_for_character(crafter_character)
-        pool.spend(ap_to_spend)
+        if not pool.spend(ap_to_spend):
+            msg = "Action points were spent elsewhere before crafting completed."
+            raise CraftingCostUnaffordable(msg)
 
     # Deduct Anima
     if anima_to_spend > 0:
