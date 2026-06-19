@@ -119,7 +119,7 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
 
 
 def _aura_standing(ctx: PowerTermContext, config: AuraPowerConfig, resonances: list) -> int:
-    """Resonance-standing contribution: summed lifetime_earned x bonus, soft-capped."""
+    """Resonance-standing contribution: summed lifetime_earned x bonus, per-level cap-banded."""
     from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
 
     if not config.resonance_standing_bonus:
@@ -141,7 +141,8 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     Affinity axis: caster's CharacterAura % in each distinct affinity of the
     technique's resonances, proportional to ``affinity_alignment_bonus``.
     Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
-    in those resonances x ``resonance_standing_bonus``, soft-capped.
+    in those resonances x ``resonance_standing_bonus``, then capped per character
+    level by the applicable ``StandingCapBand`` (HARD clamp / SOFT diminish; #853).
     Returns 0 when unconfigured or when the cast has no technique.
     """
     config = get_aura_power_config()
