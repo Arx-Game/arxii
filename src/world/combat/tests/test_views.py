@@ -7,13 +7,14 @@ from evennia.objects.models import ObjectDB
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
+from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, EncounterStatus, EncounterType, ParticipantStatus
+from world.combat.constants import EncounterStatus, EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -27,6 +28,7 @@ from world.conditions.models import ConditionInstance
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
+    CharacterTechniqueFactory,
     EffectTypeFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
@@ -737,15 +739,24 @@ class DeclareAndResolveE2ETest(TestCase):
         expected_condition_template = applied_condition_row.condition
 
         # --- Step 1: Player declares the technique targeting the opponent ---
+        # CharacterTechniqueFactory links the technique to the player's sheet so the
+        # COMBAT backend ref resolves (dispatch validates against current availability).
+        CharacterTechniqueFactory(character=self.player_sheet, technique=technique)
+
         client = APIClient()
         client.force_authenticate(user=self.player_account)
         declare_response = client.post(
-            f"/api/combat/{encounter.pk}/declare/",
+            f"/api/actions/characters/{self.player_character.pk}/dispatch/",
             {
-                "focused_action": technique.pk,
-                "focused_category": ActionCategory.PHYSICAL,
-                "effort_level": "medium",
-                "focused_opponent_target": opponent.pk,
+                "ref": {
+                    "backend": ActionBackend.COMBAT,
+                    "technique_id": technique.pk,
+                    "action_slot": "focused",
+                },
+                "kwargs": {
+                    "effort_level": "medium",
+                    "focused_opponent_target_id": opponent.pk,
+                },
             },
             format="json",
         )
