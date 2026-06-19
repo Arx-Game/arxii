@@ -62,6 +62,8 @@ export interface PersonaPosition {
 export interface SceneDetail extends SceneListItem {
   is_active: boolean;
   is_owner: boolean;
+  /** True when the viewer is the scene GM/owner or has staff privileges. */
+  viewer_can_gm: boolean;
   /** Personas reachable via the scene's interactions; the delivery-receiver pool. */
   personas?: ScenePersona[];
   /** Room positions defined for this scene's location (#1017). */
@@ -130,6 +132,12 @@ export interface ReactionWindowPayload {
   my_reaction: string | null;
 }
 
+/** Compact dramatic-moment tag embedded in interaction payloads (#1139). */
+export interface DramaticMomentTagSummary {
+  moment_type_label: string;
+  character_sheet_id: number | null;
+}
+
 export interface Interaction {
   id: number;
   persona: InteractionPersona;
@@ -150,4 +158,6 @@ export interface Interaction {
   target_persona_ids: number[];
   /** ACTION Interactions linked to this POSE (populated only for POSE-mode rows). */
   action_links?: ActionLink[];
+  /** Dramatic-moment tags on this interaction (#1139); absent/empty for untagged rows. */
+  dramatic_moment_tags?: DramaticMomentTagSummary[];
 }
