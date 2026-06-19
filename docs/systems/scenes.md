@@ -79,10 +79,11 @@ scene.is_viewable_by(account)
 ```
 
 **Consumers:**
-- `SceneViewSet.get_queryset()` calls `Scene.objects.viewable_by(request.user)` for
-  list/retrieve (`src/world/scenes/views.py`).
+- `SceneViewSet.get_queryset()` calls `Scene.objects.viewable_by(request.user)` for the
+  `list` action (`src/world/scenes/views.py`); retrieve is gated separately via the
+  object-permission path below.
 - `ReadOnlyOrSceneParticipant.has_object_permission()` calls `scene.is_viewable_by()`
-  to gate read access on the scene detail (`src/world/scenes/permissions.py`).
+  to gate read access on the scene detail / retrieve (`src/world/scenes/permissions.py`).
 - `CombatEncounterViewSet._filter_readable()` calls `Scene.objects.viewable_by(user)`
   as the base of the encounter read-gate, unioned with encounter-participant membership
   (`src/world/combat/views.py`).
