@@ -268,7 +268,7 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 ### Path Options (transition-generic)
 
-- `GET /api/progression/path-options/?character_id={id}` — Returns `{ current_path, options }` (`PathOptionsSerializer`)
+- `GET /api/progression/path-options/` — Returns `{ current_path, options }` (`PathOptionsSerializer`); character resolved via `X-Character-ID` header
   - `current_path` — the character's current `Path` from `CharacterPathHistory`, or `null`
   - `options` — active child paths at the next stage (or all top-level paths if no current path)
   - **Transition-generic:** reused beyond Audere Majora; any feature needing "what can this character pick next?" should use this endpoint
@@ -276,9 +276,9 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 ### Path Intent
 
-- `GET /api/progression/path-intent/?character_id={id}` — Returns `{ intent: { id, intended_path: { id, name, stage, stage_display, description }, declared_at } | null }`
-- `PUT /api/progression/path-intent/` — Declare intent; body `{ character_id, path_id }`; upserts one `PathIntent` row per character sheet
-- `DELETE /api/progression/path-intent/?character_id={id}` — Clear declared intent
+- `GET /api/progression/path-intent/` — Returns `{ intent: { id, intended_path: { id, name, stage, stage_display, description }, declared_at } | null }` (character via `X-Character-ID` header)
+- `PUT /api/progression/path-intent/` — Declare intent; body `{ path_id }` (character via `X-Character-ID` header); upserts one `PathIntent` row per character sheet
+- `DELETE /api/progression/path-intent/` — Clear declared intent (character via `X-Character-ID` header)
 
 **Crossing pre-selection wire:** `PendingAudereMajoraOfferSerializer.get_intended_path_id` (`src/world/magic/serializers.py:2353`) reads the character's `PathIntent` and returns `intended_path_id` only when it is among the offer's `eligible_paths` — ensuring the Audere Majora dialog pre-selects the declared path.
 

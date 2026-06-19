@@ -150,13 +150,13 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 
 **PathIntent reads (progression, #954):**
 
-- `getPathIntent(characterId)` — GET `/api/progression/path-intent/?character_id={id}` → `PathIntentResponse`
-- `getNextPathOptions(characterId)` — GET `/api/progression/path-options/?character_id={id}` → `PathOptions`
+- `getPathIntent(characterId)` — GET `/api/progression/path-intent/` (`X-Character-ID` header) → `PathIntentResponse`
+- `getNextPathOptions(characterId)` — GET `/api/progression/path-options/` (`X-Character-ID` header) → `PathOptions`
 
 **PathIntent mutations (progression, #954):**
 
-- `putPathIntent(characterId, pathId)` — PUT `/api/progression/path-intent/` → `PathIntentResponse` (declare intent)
-- `deletePathIntent(characterId)` — DELETE `/api/progression/path-intent/?character_id={id}` → `void` (clear intent)
+- `putPathIntent(characterId, pathId)` — PUT `/api/progression/path-intent/` (`X-Character-ID` header), body `{ path_id }` → `PathIntentResponse` (declare intent)
+- `deletePathIntent(characterId)` — DELETE `/api/progression/path-intent/` (`X-Character-ID` header) → `void` (clear intent)
 
 **Test helper:**
 
