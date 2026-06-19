@@ -58,6 +58,35 @@ scene.finish_scene()
 scene.participations_cached  # list of SceneParticipation with select_related("account")
 ```
 
+### Read-Visibility Surface (canonical)
+
+These are the **single source of truth** for scene read-access. All read gates in the
+codebase consume one of these two forms — never inline the logic elsewhere.
+
+```python
+from world.scenes.models import Scene
+
+# Queryset form — use in get_queryset() / filter() chains
+Scene.objects.viewable_by(account)
+# staff        → all scenes
+# authenticated non-staff → public OR participant
+# anonymous / None → public only
+
+# Predicate form — use for per-instance object-permission checks
+scene.is_viewable_by(account)
+# Same semantics; reads participations_cached (zero queries when the scene
+# is already in the identity map — same approach as is_gm / is_owner).
+```
+
+**Consumers:**
+- `SceneViewSet.get_queryset()` calls `Scene.objects.viewable_by(request.user)` for
+  list/retrieve (`src/world/scenes/views.py`).
+- `ReadOnlyOrSceneParticipant.has_object_permission()` calls `scene.is_viewable_by()`
+  to gate read access on the scene detail (`src/world/scenes/permissions.py`).
+- `CombatEncounterViewSet._filter_readable()` calls `Scene.objects.viewable_by(user)`
+  as the base of the encounter read-gate, unioned with encounter-participant membership
+  (`src/world/combat/views.py`).
+
 ### SceneMessage
 
 ```python
@@ -133,7 +162,7 @@ broadcast_scene_message(scene, "end")     # Sets location.active_scene = None
 | `IsMessageSenderOrStaff` | Message edit/delete | Persona's account matches user AND scene is active |
 | `CanCreatePersonaInScene` | Persona creation | User must own the participation referenced |
 | `CanCreateMessageInScene` | Message creation | User must own the persona AND be a scene participant |
-| `ReadOnlyOrSceneParticipant` | Scene retrieve | Public scenes readable by all; private scenes require participation |
+| `ReadOnlyOrSceneParticipant` | Scene retrieve | Delegates read check to `scene.is_viewable_by(request.user)` (the canonical predicate) |
 
 ---
 
