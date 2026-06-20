@@ -605,9 +605,15 @@ What was built:
 - **E2E:** `integration_tests/test_crafting_facet_pull.py` chains craft → wear → pull on
   a FACET thread — the crafted facet is what satisfies the worn-items gate at pull time.
 
-Deferred (follow-ups): crafter-skill-gated quality caps + material/effort cost;
-per-facet difficulty override; grid-card facet chips; a marketplace / sale-pricing
-mechanic; a telnet crafting action.
+Delivered in #1031 (Spec D PR2 continuation): crafter-skill-gated quality caps
+(`CraftingSkillCap` ladder + `resolve_capped_tier`), multi-vector material/AP/anima
+cost with graded `CostConsumption` (NONE/PARTIAL/FULL per consequence), and the
+generic `CraftingRecipe` / handler-registry framework covering both facet and style
+attachment.
+
+Remaining deferred (follow-ups): per-facet difficulty override; grid-card facet chips;
+a marketplace / sale-pricing mechanic; a telnet crafting action; crafting-station
+durability and repair economy (#1234).
 
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 

@@ -32,6 +32,7 @@ TARGET_APPS = [
     "world.conditions",
     "world.covenants",
     "world.goals",
+    "world.items",
     "world.locations",
     "world.magic",
     "world.mechanics",

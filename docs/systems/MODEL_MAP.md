@@ -1,3 +1,5 @@
+/workspaces/arxii/.claude/worktrees/feature-1031-facet-quality-cap-cost/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -1251,7 +1253,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7371741c9400>, default_factory=<dataclasses._MISSING_TYPE object at 0x7371741c9400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7371741c9400>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1420,6 +1422,220 @@
 - `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int — Get the goal bonus for a specific domain, applying percentage modifiers.`
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] — Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
+
+
+## world.items
+
+### QualityTier
+**Pointed to by:**
+  - minimum_for_templates <- items.ItemTemplate
+  - item_instances <- items.ItemInstance
+  - itemfacet_attachments <- items.ItemFacet
+  - itemstyle_attachments <- items.ItemStyle
+
+### InteractionType
+**Pointed to by:**
+  - templates <- items.ItemTemplate
+  - template_bindings <- items.TemplateInteraction
+
+### ItemTemplate
+**Foreign Keys:**
+  - on_use_pool -> actions.ConsequencePool [FK] (nullable)
+  - on_use_check_type -> checks.CheckType [FK] (nullable)
+  - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - weapon_damage_type -> conditions.DamageType [FK] (nullable)
+  - polish_category -> buildings.PolishCategory [FK] (nullable)
+**Pointed to by:**
+  - ritual_requirements <- magic.RitualComponentRequirement
+  - clue_triggers <- clues.ItemClueTrigger
+  - slots <- items.TemplateSlot
+  - instances <- items.ItemInstance
+  - interaction_bindings <- items.TemplateInteraction
+  - check_modifiers <- items.ItemCheckModifier
+  - lore_effects <- buildings.MaterialLoreEffect
+  - building_uses <- buildings.BuildingMaterial
+
+### TemplateSlot
+**Foreign Keys:**
+  - template -> items.ItemTemplate [FK]
+
+### ItemInstance
+**Foreign Keys:**
+  - currency_instrument -> currency.CurrencyInstrumentDetails [OneToOne] (nullable)
+  - room_placement -> items.RoomItem [OneToOne] (nullable)
+  - mantle -> items.Mantle [OneToOne] (nullable)
+  - building_permit_details -> buildings.BuildingPermitDetails [OneToOne] (nullable)
+  - template -> items.ItemTemplate [FK]
+  - game_object -> objects.ObjectDB [OneToOne] (nullable)
+  - quality_tier -> items.QualityTier [FK] (nullable)
+  - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - crafter_persona_display -> scenes.Persona [FK] (nullable)
+  - contained_in -> items.ItemInstance [FK] (nullable)
+  - image -> evennia_extensions.PlayerMedia [FK] (nullable)
+**Pointed to by:**
+  - contents <- items.ItemInstance
+  - equipped_slots <- items.EquippedItem
+  - ownership_events <- items.OwnershipEvent
+  - item_facets <- items.ItemFacet
+  - item_styles <- items.ItemStyle
+  - stored_outfits <- items.Outfit
+  - outfit_slots <- items.OutfitSlot
+  - project_contributions <- projects.Contribution
+
+### TemplateInteraction
+**Foreign Keys:**
+  - template -> items.ItemTemplate [FK]
+  - interaction_type -> items.InteractionType [FK]
+
+### EquippedItem
+**Foreign Keys:**
+  - character -> objects.ObjectDB [FK]
+  - item_instance -> items.ItemInstance [FK]
+
+### RoomItem
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+
+### OwnershipEvent
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK] (nullable)
+  - from_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - from_persona_display -> scenes.Persona [FK] (nullable)
+  - to_persona_display -> scenes.Persona [FK] (nullable)
+
+### CurrencyBalance
+**Foreign Keys:**
+  - character -> objects.ObjectDB [OneToOne]
+
+### ItemFacet
+**Foreign Keys:**
+  - applied_by_account -> accounts.AccountDB [FK] (nullable)
+  - attachment_quality_tier -> items.QualityTier [FK]
+  - item_instance -> items.ItemInstance [FK]
+  - facet -> magic.Facet [FK]
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
+
+### ItemStyle
+**Foreign Keys:**
+  - applied_by_account -> accounts.AccountDB [FK] (nullable)
+  - attachment_quality_tier -> items.QualityTier [FK]
+  - item_instance -> items.ItemInstance [FK]
+  - style -> items.Style [FK]
+
+### Outfit
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - wardrobe -> items.ItemInstance [FK]
+**Pointed to by:**
+  - slots <- items.OutfitSlot
+  - presentations <- items.FashionPresentation
+
+### OutfitSlot
+**Foreign Keys:**
+  - outfit -> items.Outfit [FK]
+  - item_instance -> items.ItemInstance [FK]
+
+### FashionPresentation
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - presenter -> character_sheets.CharacterSheet [FK]
+  - outfit -> items.Outfit [FK] (nullable)
+  - perceiving_society -> societies.Society [FK]
+**Pointed to by:**
+  - endorsements <- magic.PresentationEndorsement
+
+### FacetVogueMomentum
+**Foreign Keys:**
+  - society -> societies.Society [FK]
+  - facet -> magic.Facet [FK]
+
+### ItemCheckModifier
+**Foreign Keys:**
+  - template -> items.ItemTemplate [FK]
+  - check_type -> checks.CheckType [FK]
+
+### FashionStyle
+**Pointed to by:**
+  - societies_current <- societies.Society
+  - bonuses <- items.FashionStyleBonus
+  - trendsetter_crownings <- items.Trendsetter
+
+### Style
+**Pointed to by:**
+  - motif_usages <- magic.MotifResonanceStyle
+  - item_attachments <- items.ItemStyle
+  - vogue_in <- items.FashionStyle
+
+### FashionStyleBonus
+**Foreign Keys:**
+  - fashion_style -> items.FashionStyle [FK]
+  - target -> mechanics.ModifierTarget [FK]
+
+### Mantle
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+**Pointed to by:**
+  - anchored_threads <- magic.Thread
+  - level_defs <- items.MantleLevelDefinition
+  - clearances <- items.MantleLevelClearance
+
+### MantleLevelDefinition
+**Foreign Keys:**
+  - mantle -> items.Mantle [FK]
+  - codex_entry_required -> codex.CodexEntry [FK]
+
+### MantleLevelClearance
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - mantle -> items.Mantle [FK]
+
+### Trendsetter
+**Foreign Keys:**
+  - society -> societies.Society [FK]
+  - persona -> scenes.Persona [FK]
+  - fashion_style -> items.FashionStyle [FK]
+
+### CraftingRecipe
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK] (nullable)
+  - skill_trait -> traits.Trait [FK] (nullable)
+**Pointed to by:**
+  - material_requirements <- items.CraftingMaterialRequirement
+  - skill_caps <- items.CraftingSkillCap
+  - consequence_rows <- items.CraftingRecipeConsequence
+
+### CraftingMaterialRequirement
+**Foreign Keys:**
+  - recipe -> items.CraftingRecipe [FK]
+  - item_template -> items.ItemTemplate [FK]
+  - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### CraftingSkillCap
+**Foreign Keys:**
+  - recipe -> items.CraftingRecipe [FK]
+  - max_quality_tier -> items.QualityTier [FK]
+
+### CraftingRecipeConsequence
+**Foreign Keys:**
+  - recipe -> items.CraftingRecipe [FK]
+  - consequence -> checks.Consequence [FK]
+
+### Service Functions
+- `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
+- `consume_item_charges(*, item_instance: 'ItemInstance', amount: 'int' = 1) -> 'ItemInstance' — Spend ``amount`` charges atomically (row-locked). Logs ACTIVATED; at 0`
+- `equip_item(*, character_sheet: 'object', item_instance: 'ItemInstance', body_region: 'str', equipment_layer: 'str') -> 'EquippedItem' — Place ``item_instance`` on ``character_sheet``'s slot.`
+- `get_max_cleared_mantle_level(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'int' — Return the highest cleared level for (sheet, mantle), or 0 if none.`
+- `grant_mantle_clearance(sheet: 'CharacterSheet', mantle: 'Mantle', level: 'int') -> 'MantleLevelClearance' — Staff override: record a clearance at ``level`` without the codex check.`
+- `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' — Idempotently record codex-gated mantle clearances for ``sheet``.`
+- `remove_facet_from_item(*, item_facet: 'ItemFacet') -> 'None' — Remove a facet attachment and invalidate wearers' handler caches.`
+- `unequip_item(*, equipped_item: 'EquippedItem') -> 'None' — Remove an EquippedItem and invalidate the character's handler cache.`
+- `use_item(*, item_instance: 'ItemInstance', user: 'ObjectDB', target: 'ObjectDB | None' = None) -> 'UseItemResult' — Use an item with an on-use pool: apply its effects (deterministic when the`
+- `visible_worn_items_for(character: 'ObjectDB', observer: 'object | None' = None) -> 'list[VisibleWornItem]' — Return ``character``'s worn items visible to ``observer``.`
 
 
 ## world.locations
@@ -2582,7 +2798,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x739e9a455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x739e9a455400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7371741c9400>, default_factory=<dataclasses._MISSING_TYPE object at 0x7371741c9400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7371741c9400>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3160,6 +3376,7 @@
   - action_request_result -> scenes.SceneActionRequest [OneToOne] (nullable)
   - action_request_action -> scenes.SceneActionRequest [OneToOne] (nullable)
   - persona -> scenes.Persona [FK]
+  - writer_account -> accounts.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - place -> scenes.Place [FK] (nullable)
   - fury_committed -> magic.FuryTier [FK] (nullable)
@@ -3284,6 +3501,7 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
+  - account -> accounts.AccountDB [FK] (nullable)
 
 ### ReactionWindow
 **Foreign Keys:**
@@ -3354,13 +3572,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x739e951640e0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x73716fcb82a0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x739e951640e0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x73716fcb82a0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

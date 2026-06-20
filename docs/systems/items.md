@@ -241,6 +241,158 @@ See `docs/systems/magic.md` for the full thread and ritual model lineup.
 
 ---
 
+## Crafting Framework (Spec D PR2 / #1031)
+
+Generic check-driven crafting engine living in `src/world/items/crafting/`. The old
+`FacetCraftingConfig` singleton was replaced by this data-driven system. New kinds
+(alchemy, wand-crafting, etc.) plug in by authoring a recipe row + registering a thin
+handler — no schema change required.
+
+### Constants (`crafting/constants.py`)
+
+| Name | Type | Values |
+|------|------|--------|
+| `CraftingRecipeKind` | TextChoices | `FACET_ATTACH`, `STYLE_ATTACH` |
+| `CostConsumption` | TextChoices | `NONE`, `PARTIAL`, `FULL` |
+| `PARTIAL_FRACTION` | float | `0.5` (fraction of AP/Anima consumed on PARTIAL outcomes) |
+
+### Models (`crafting/models.py` — registered under the `items` app)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `CraftingRecipe` | Top-level recipe; one per `kind` (unique) | `name`, `kind` (unique FK), `check_type` (FK; null = disabled), `base_difficulty`, `success_level_step`, `min_success_level`, `skill_trait` (FK to Trait, nullable), `action_point_cost`, `anima_cost`, `default_cost_consumption` |
+| `CraftingMaterialRequirement` | Ingredient rows for a recipe | `recipe` (FK), `item_template` (FK), `quantity`, `min_quality_tier` (FK, nullable) |
+| `CraftingSkillCap` | Maps a skill-rank band to a quality ceiling | `recipe` (FK), `min_skill_value`, `max_quality_tier` (FK); unique on (recipe, min_skill_value) |
+| `CraftingRecipeConsequence` | Weighted consequence pool entry per recipe | `recipe` (FK), `consequence` (FK), `weight_override` (nullable), `cost_consumption`; unique on (recipe, consequence) |
+
+`CraftingSkillCap.for_skill(recipe, skill_value)` returns the `max_quality_tier` for
+the highest band at or below the crafter's skill rank (or `None` when no rows exist /
+skill is below every band).
+
+### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
+
+`CraftingHandler` is an ABC with two abstract methods:
+
+- `pre_validate(item_instance, target)` — raise a typed exception before a roll is
+  wasted (capacity exceeded, duplicate, etc.)
+- `apply(crafter_account, item_instance, target, quality_tier) -> row` — create and
+  return the attachment row
+
+Both concrete handlers are registered at module-import time:
+
+| Kind | Handler | pre_validate delegates to | apply delegates to |
+|------|---------|--------------------------|-------------------|
+| `FACET_ATTACH` | `FacetAttachHandler` | `assert_facet_attachable` | `attach_facet_to_item` |
+| `STYLE_ATTACH` | `StyleAttachHandler` | `assert_style_attachable` | `attach_style_to_item` |
+
+`get_handler(kind)` returns the registered handler; `register(kind, handler)` adds one.
+
+### Orchestrator (`crafting/services.py`)
+
+`run_crafting_recipe(*, kind, crafter_account, crafter_character, item_instance, target)`
+is the single transactional entry point. Pipeline (all inside one `@transaction.atomic`
+block):
+
+1. **Resolve recipe** — `CraftingRecipe.objects.get(kind=kind)`; raise
+   `CraftingNotConfigured` if missing or `check_type` is null.
+2. **Pre-validate** — `handler.pre_validate(item_instance, target)` before any roll;
+   a capacity/duplicate error never wastes a crafting attempt.
+3. **Stage affordability** — `stage_and_assert_affordable(recipe, crafter_character,
+   crafter_character_sheet)` → `StagedCost`; raises `CraftingCostUnaffordable` on
+   first shortfall (AP, Anima, or materials checked in order).
+4. **Roll** — `perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)`.
+5. **Select consequence** — `select_consequence_from_result` over the recipe's
+   `consequence_rows` pool using `WeightedConsequence` (weight override when set,
+   otherwise consequence default).
+6. **Consume cost** — `consume_cost(crafter_character, staged, consumption)` per the
+   selected consequence's `cost_consumption` (or `recipe.default_cost_consumption` when
+   the tier has no authored consequence row).
+7. **Apply consequence effects** — `apply_resolution(pending, ResolutionContext(character))`.
+8. **Resolve quality + attach** — when `check_result.success_level >= recipe.min_success_level`,
+   call `resolve_capped_tier(recipe, crafter_character, check_result)` → `QualityTier`,
+   then `handler.apply(crafter_account, item_instance, target, tier)`.
+
+Returns a `CraftRunResult(attached, outcome, row, quality_tier, consumed, consequence_label)`.
+
+### Cost Layer (`crafting/cost.py`)
+
+`stage_and_assert_affordable(*, recipe, crafter_character, crafter_character_sheet) -> StagedCost`
+checks AP (`ActionPointPool`), Anima (`CharacterAnima`), and materials (via
+`gather_consumable_pks`) in sequence; raises `CraftingCostUnaffordable` on first
+shortfall.
+
+`consume_cost(*, crafter_character, staged, consumption) -> dict` applies
+`CostConsumption` semantics:
+
+- `NONE` — nothing deducted.
+- `PARTIAL` — `ceil(cost × PARTIAL_FRACTION)` of AP and Anima; **all** materials
+  consumed in full.
+- `FULL` — all AP, Anima, and materials consumed.
+
+Returns `{"action_points": n, "anima": n, "materials": k}`.
+
+### Quality Resolution (`crafting/quality.py`)
+
+`resolve_capped_tier(*, recipe, crafter_character, check_result) -> QualityTier`:
+
+1. `compute_quality_score(check_result, step=recipe.success_level_step,
+   min_success_level=recipe.min_success_level)` →
+   `check_result.total_points + max(0, success_level - min_success_level) * step`.
+2. Look up crafter's `skill_trait` rank; find the highest `CraftingSkillCap` band ≤ rank.
+3. If a cap exists, clamp score to `cap_tier.numeric_max`.
+4. `QualityTier.for_score(score)` → final tier.
+
+### Shared Material Helper (`services/materials.py`)
+
+Used by both crafting (`stage_and_assert_affordable`) and the ritual path
+(`PerformRitualAction`):
+
+- `gather_consumable_pks(available, requirements) -> list[int]` — validates inventory
+  against requirements, returns PKs to delete; raises `InsufficientMaterials` on first
+  shortfall.
+- `consume_pks(pks) -> None` — deletes `ItemInstance` rows by PK.
+- `meets_quality_tier(inst, requirement) -> bool` — True when the instance satisfies
+  the requirement's `min_quality_tier` (or when no minimum is set).
+
+### Wrappers (`services/crafting.py`)
+
+`craft_attach_facet(crafter_account, crafter_character, item_instance, facet) -> FacetCraftResult`
+and
+`craft_attach_style(crafter_account, crafter_character, item_instance, style) -> StyleCraftResult`
+are thin domain wrappers over `run_crafting_recipe` that map `CraftRunResult` onto the
+domain-specific result dataclasses.
+
+`compute_quality_score(check_result, *, step, min_success_level) -> int` is co-located
+here (imported by `crafting/quality.py`).
+
+### Quote Endpoint (`crafting/services.py` + `views.py`)
+
+`build_crafting_quote(*, kind, crafter_character, crafter_character_sheet, target) -> CraftingQuote`
+is a read-only cost snapshot — no mutation, no roll. Returns:
+
+- `costs` (`CraftingQuoteCost`): AP, Anima, and per-material requirements with current
+  holdings.
+- `affordable` (bool): True iff all vectors are satisfied.
+- `max_quality_tier`: Skill-capped ceiling tier (None if no cap rows exist).
+- `failure_risk`: List of `CraftingQuoteRisk(outcome_name, cost_consumption, label)` from
+  the consequence pool.
+
+Exposed as read-only `GET` actions on the facet and style ViewSets:
+
+| Endpoint | Query params | Response |
+|----------|-------------|----------|
+| `GET /api/items/item-facets/quote/` | `item_instance`, `facet` | `CraftingQuoteSerializer` |
+| `GET /api/items/item-styles/quote/` | `item_instance`, `style` | `CraftingQuoteSerializer` |
+
+### Exceptions (`items/exceptions.py`)
+
+| Exception | Raised by |
+|-----------|-----------|
+| `CraftingNotConfigured` | No recipe for kind, or `check_type` is null |
+| `CraftingCostUnaffordable` | AP / Anima / materials insufficient |
+
+---
+
 ## What's Not Yet Built
 
 - **ItemCapabilityGrant model** — links items to capabilities (parallel to TechniqueCapabilityGrant)
@@ -249,4 +401,3 @@ See `docs/systems/magic.md` for the full thread and ritual model lineup.
 - **use-item Action class** — action-layer `UseItemAction` in `actions/definitions/` converging on
   `action.run()` alongside equip/unequip; the REST endpoint (`POST /api/items/inventory/<pk>/use/`)
   currently handles frontend use-item requests directly
-- **Time-based cleanup** — cron purge of soft-deleted, non-lore-critical item instances
