@@ -155,6 +155,15 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   `CAPABILITY_GRANT` (FK to `CapabilityType`) / `NARRATIVE_ONLY`. Tier 0 is
   always-on passive; tiers 1–3 are paid pulls. `clean()` + CheckConstraints
   enforce payload/effect_kind shape.
+- `ThreadSurvivabilityTuning` - Per-`VitalBonusTarget` tuning row for the
+  universal thread survivability baseline (#1175). One row per target
+  (DR and MAX_HEALTH at launch). Fields: `vital_target` (unique choice),
+  `coefficient` (linear multiplier on investment score S), `cap` (ceiling the
+  baseline asymptotes toward), `half_saturation` (S at which baseline = cap/2).
+  Formula: `round(cap × S / (S + half_saturation))` where
+  `S = coefficient × Σ max(1, thread.level // 10)` over all owned threads.
+  Seeded idempotently via `seed_thread_survivability_tuning()` (called by the
+  integration-test dev seed); inert until rows exist. Staff-tunable in admin.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
   `unlock_gift`, `unlock_track`. `xp_cost` + M2M to `Path` (in-band) +
@@ -194,6 +203,29 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
 - `ThreadWeavingTeachingOffer` - Teacher-side offer. FK to RosterTenure +
   ThreadWeavingUnlock. Mirrors `CodexTeachingOffer` shape (pitch, gold_cost,
   banked_ap). Path multiplier computed at acceptance time, not stored.
+
+**Universal survivability baseline (services/threads.py, #1175):**
+
+A character's breadth × depth of thread investment contributes a passive survivability
+bonus to both max-health and damage reduction, independent of authored `VITAL_BONUS`
+pull-effects. Three service functions implement this:
+
+- `seed_thread_survivability_tuning()` — idempotently creates the two default
+  `ThreadSurvivabilityTuning` rows (DR: coeff=1, cap=20, half=8;
+  MAX_HEALTH: coeff=1, cap=80, half=10). Called by the dev seed.
+- `get_thread_survivability_tuning(vital_target) -> ThreadSurvivabilityTuning | None` —
+  fetches the tuning row for a given `VitalBonusTarget`; returns `None` if not yet seeded
+  (baseline is 0 when absent).
+- `survivability_baseline(character, vital_target) -> int` — computes the baseline
+  for a character: `round(cap × S / (S + half_saturation))` where
+  `S = coefficient × Σ max(1, thread.level // 10)` over all owned threads.
+
+The baseline is injected at two call sites:
+
+- `apply_damage_reduction_from_threads(character, damage_amount) -> int` — subtracts
+  the DR baseline before returning the adjusted damage amount.
+- `recompute_max_health_with_threads(character_sheet) -> int` — adds the MAX_HEALTH
+  baseline to the base max-health figure. Called at weave and imbue time.
 
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
