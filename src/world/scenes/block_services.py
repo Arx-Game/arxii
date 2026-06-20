@@ -4,15 +4,17 @@ The coded enforcement primitive the rest of the system will call: "is there an a
 between these two (player, persona) sides?" Block is mutual — it hides each side from the other —
 and keyed on PlayerData (account), so it follows the *person* across re-rosters.
 
-Slice 1 is resolution + lifecycle only; wiring it into the profile gate, scene visibility, the
-target picker, the awareness/flag layer, and the cron job are follow-up slices.
+Slice 1 added resolution + lifecycle; slice 2 wires the **profile gate**
+(``sheet_blocked_for_viewer`` → the character-sheet view 404s for a blocked viewer). Scene
+visibility / the target picker, the Mute sibling, the awareness/flag + generic "Character Has You
+Blocked" surface, and the cron job remain follow-up slices.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from world.scenes.models import Block
@@ -21,7 +23,15 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from evennia_extensions.models import PlayerData
+    from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
+
+
+def _active_blocks() -> QuerySet[Block]:
+    """Blocks not past their lift grace window (#1278)."""
+    return Block.objects.filter(
+        Q(pending_removal_at__isnull=True) | Q(pending_removal_at__gt=timezone.now())
+    )
 
 
 def coded_block_active(
@@ -43,9 +53,9 @@ def coded_block_active(
     by the separate awareness/flag layer (a later slice) — never here, to preserve the
     anti-derivation invariant.
     """
-    candidates = Block.objects.filter(
+    candidates = _active_blocks().filter(
         Q(owner=player_a, blocked_player=player_b) | Q(owner=player_b, blocked_player=player_a)
-    ).filter(Q(pending_removal_at__isnull=True) | Q(pending_removal_at__gt=timezone.now()))
+    )
 
     for block in candidates:
         # Orient the provided sides against this row: which one is the blocked player?
@@ -93,3 +103,42 @@ def finalize_expired_blocks(*, now: datetime) -> int:
     count = expired.count()
     expired.delete()
     return count
+
+
+def sheet_blocked_for_viewer(*, viewer_account: Any, sheet: CharacterSheet) -> bool:
+    """True if an active block hides this character's *sheet* from this viewer (#1278).
+
+    The no-persona-pair surface (viewing a profile / OOC sheet): the viewer isn't presenting a
+    face toward the sheet, so resolution is keyed on the *sheet's* personas rather than a pair.
+    Both modes Apostate ratified are applied here:
+
+    - **Persona-scoped (either direction):** the sheet hosts the exact blocked face (the viewer
+      blocked this character) or the exact blocker face (this character blocked the viewer). Only
+      *this* sheet is hidden — never the player's other characters — so the block cannot be used
+      to derive their alts (the anti-derivation invariant).
+    - **Account-level:** this sheet's current player has an ``account_level`` block against the
+      viewer, so *all* of their characters are hidden — the blocker's conscious choice to expose
+      that those characters share a player.
+
+    One indexed ``exists()`` query (the sheet's current player is read from the prefetched tenure).
+    Staff bypass blocks (handled by the caller). Returns False for an anonymous viewer.
+    """
+    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+
+    # Persona-scoped, either direction — keyed on the viewer's account and only this sheet's faces.
+    conditions = Q(owner__account=viewer_account, blocked_persona__character_sheet_id=sheet.pk) | Q(
+        blocked_player__account=viewer_account, blocker_persona__character_sheet_id=sheet.pk
+    )
+
+    # Account-level block by this sheet's current player (read from the prefetched tenure).
+    roster_entry = sheet.roster_entry
+    current = roster_entry.current_tenure if roster_entry is not None else None
+    if current is not None:
+        conditions |= Q(
+            owner=current.player_data,
+            blocked_player__account=viewer_account,
+            account_level=True,
+        )
+
+    return _active_blocks().filter(conditions).exists()
