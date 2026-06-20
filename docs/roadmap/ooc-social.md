@@ -23,6 +23,27 @@ The out-of-character social infrastructure that keeps the game community healthy
 - **Frontend:** Progression XP/Kudos page
 - **Tests:** Kudos tests, visibility tests
 
+## Built — Social Consent (#1141)
+Per-category social consent settings UI and enforcement, merged [branch: feature-1141-social-consent-settings-ui-player-config].
+
+- **Models (world/consent):** `SocialConsentCategory` (NaturalKey slug, staff-authored),
+  `SocialConsentPreference` (OneToOne per tenure, master allow/deny switch),
+  `SocialConsentCategoryRule` (per-category EVERYONE/ALLOWLIST mode),
+  `SocialConsentWhitelist` (owner/allowed/category triples).
+- **ActionTemplate.consent_category:** nullable FK tagging social templates with their category.
+- **Enforcement:** `_tenure_blocks_actor` / `_social_consent_exclusions` in
+  `src/actions/player_interface.py`; wired into social action target-spec building.
+- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist.
+  `IsTenureOwner` permission scopes all writes to the requesting player's tenures.
+- **Frontend:** `frontend/src/consent/` — Privacy tab at `/profile/privacy` with global toggle,
+  per-category mode selectors, and per-category whitelist management.
+- **Default categories + seed:** Romantic, Hostile, Manipulative, General seeded via
+  `world/seeds/consent.py` (`arx seed dev` cluster `"consent"`). ActionTemplate tagging:
+  Flirt→Romantic; Intimidate→Hostile; Deceive, Persuade→Manipulative;
+  Perform, Entrance, Restore to Sense→General.
+- **Admin:** `SocialConsentCategoryAdmin`, `SocialConsentPreferenceAdmin` (with category-rule
+  inline), `SocialConsentWhitelistAdmin` (raw_id_fields for tenures + category).
+
 ## What's Needed for MVP
 - Friend list system — explicit friend tracking with online status
 - Player finder — who's online, who's in scenes, who's looking for RP

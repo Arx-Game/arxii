@@ -19,6 +19,9 @@ They do not use the command system, dispatchers, or handlers.
 - **`base.py`**: `Action` dataclass — base class with `run()`, `execute()`, `check_availability()`
 - **`types.py`**: `ActionResult`, `ActionAvailability`, `ActionContext`, `TargetType`, `ActionInterrupted`
 - **`models.py`**: `ActionEnhancement` — explicit FK model linking sources to base actions
+- **`models/action_templates.py`**: `ActionTemplate` — includes `consent_category` (nullable FK →
+  `SocialConsentCategory`). Social templates are tagged by staff (or the seed loader); uncategorized
+  templates are gated only by the master `allow_social_actions` switch. See `docs/systems/consent.md`.
 - **`effect_configs.py`**: FK-backed config models (`ModifyKwargsConfig`, `AddModifierConfig`, `ConditionOnCheckConfig`)
 - **`effects/`**: Effect handler package — dispatch registry and typed handlers
 - **`enhancements.py`**: `get_involuntary_enhancements()` — query function for auto-applied enhancements

@@ -33,6 +33,7 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - consent_category -> consent.SocialConsentCategory [FK] (nullable)
 **Pointed to by:**
   - gates <- actions.ActionTemplateGate
   - techniques <- magic.Technique
@@ -1279,6 +1280,44 @@
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] — Remove all conditions in a category from a target.`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool — Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool — Remove suppression from a condition.`
+
+
+## world.consent
+
+### ConsentGroup
+**Foreign Keys:**
+  - owner -> roster.RosterTenure [FK]
+**Pointed to by:**
+  - members <- consent.ConsentGroupMember
+  - codexteachingoffer_visible <- codex.CodexTeachingOffer
+
+### ConsentGroupMember
+**Foreign Keys:**
+  - group -> consent.ConsentGroup [FK]
+  - tenure -> roster.RosterTenure [FK]
+
+### SocialConsentCategory
+**Pointed to by:**
+  - action_templates <- actions.ActionTemplate
+  - rules <- consent.SocialConsentCategoryRule
+  - whitelist_entries <- consent.SocialConsentWhitelist
+
+### SocialConsentPreference
+**Foreign Keys:**
+  - tenure -> roster.RosterTenure [OneToOne]
+**Pointed to by:**
+  - category_rules <- consent.SocialConsentCategoryRule
+
+### SocialConsentCategoryRule
+**Foreign Keys:**
+  - preference -> consent.SocialConsentPreference [FK]
+  - category -> consent.SocialConsentCategory [FK]
+
+### SocialConsentWhitelist
+**Foreign Keys:**
+  - owner_tenure -> roster.RosterTenure [FK]
+  - allowed_tenure -> roster.RosterTenure [FK]
+  - category -> consent.SocialConsentCategory [FK]
 
 
 ## world.covenants

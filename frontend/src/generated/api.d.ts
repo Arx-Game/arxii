@@ -2846,6 +2846,280 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/consent/categories/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only viewset for social consent categories.
+     *
+     *     Categories are authored by staff and shared across all players.
+     */
+    get: operations['consent_categories_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/categories/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only viewset for social consent categories.
+     *
+     *     Categories are authored by staff and shared across all players.
+     */
+    get: operations['consent_categories_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/category-rules/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    get: operations['consent_category_rules_list'];
+    put?: never;
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    post: operations['consent_category_rules_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/category-rules/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    get: operations['consent_category_rules_retrieve'];
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    put: operations['consent_category_rules_update'];
+    post?: never;
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    delete: operations['consent_category_rules_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for per-category consent rules.
+     *
+     *     Rules are owned by the player through their SocialConsentPreference.
+     *     Results are scoped to the requesting player's own tenures.
+     */
+    patch: operations['consent_category_rules_partial_update'];
+    trace?: never;
+  };
+  '/api/consent/preferences/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    get: operations['consent_preferences_list'];
+    put?: never;
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    post: operations['consent_preferences_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/preferences/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    get: operations['consent_preferences_retrieve'];
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    put: operations['consent_preferences_update'];
+    post?: never;
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    delete: operations['consent_preferences_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for per-tenure social consent preferences.
+     *
+     *     Each tenure has at most one preference row. Results are scoped to
+     *     the requesting player's own tenures — other players' rows return 404.
+     */
+    patch: operations['consent_preferences_partial_update'];
+    trace?: never;
+  };
+  '/api/consent/preferences/for-tenure/{tenure_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Return the preference for a specific tenure, or a default if absent.
+     *
+     *     The synthesized default is not persisted — the UI uses it to display
+     *     initial state before the player has saved any settings.
+     */
+    get: operations['consent_preferences_for_tenure_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/whitelist/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    get: operations['consent_whitelist_list'];
+    put?: never;
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    post: operations['consent_whitelist_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/whitelist/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    get: operations['consent_whitelist_retrieve'];
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    put: operations['consent_whitelist_update'];
+    post?: never;
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    delete: operations['consent_whitelist_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for consent whitelist entries.
+     *
+     *     Whitelist entries allow specific tenures to target the owner with social
+     *     actions when the owner's category rule is ALLOWLIST mode.
+     *     Results are scoped to the requesting player's own owner tenures.
+     */
+    patch: operations['consent_whitelist_partial_update'];
+    trace?: never;
+  };
   '/api/covenants/character-roles/': {
     parameters: {
       query?: never;
@@ -19392,6 +19666,66 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SituationTemplateList'][];
     };
+    PaginatedSocialConsentCategoryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SocialConsentCategory'][];
+    };
+    PaginatedSocialConsentCategoryRuleList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SocialConsentCategoryRule'][];
+    };
+    PaginatedSocialConsentPreferenceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SocialConsentPreference'][];
+    };
+    PaginatedSocialConsentWhitelistList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SocialConsentWhitelist'][];
+    };
     PaginatedSocietySearchList: {
       /** @example 123 */
       count: number;
@@ -20524,6 +20858,34 @@ export interface components {
        *     * `ephemeral` - Ephemeral
        */
       privacy_mode?: components['schemas']['PrivacyModeEnum'];
+    };
+    /** @description Serializer for per-category consent rules. */
+    PatchedSocialConsentCategoryRuleRequest: {
+      preference?: number;
+      category?: number;
+      /**
+       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       *
+       *     * `everyone` - Everyone
+       *     * `allowlist` - Allowlist only
+       */
+      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+    };
+    /** @description Serializer for per-tenure social consent preferences. */
+    PatchedSocialConsentPreferenceRequest: {
+      /** @description One preference record per tenure. */
+      tenure?: number;
+      /** @description If False, this character never appears as a valid social action target. */
+      allow_social_actions?: boolean;
+    };
+    /** @description Serializer for consent whitelist entries. */
+    PatchedSocialConsentWhitelistRequest: {
+      /** @description Tenure that owns the preference (receives social actions). */
+      owner_tenure?: number;
+      /** @description Tenure permitted to target owner_tenure with social actions. */
+      allowed_tenure?: number;
+      /** @description Allowlist is scoped per category. */
+      category?: number;
     };
     /** @description Full serializer for story detail views */
     PatchedStoryDetailRequest: {
@@ -22590,6 +22952,88 @@ export interface components {
       max_skill_value?: number;
       /** @description Maximum specialization value in CG */
       max_specialization_value?: number;
+    };
+    /** @description Read-only serializer for social consent categories. */
+    SocialConsentCategory: {
+      readonly id: number;
+      /** @description Stable slug (e.g. 'romantic', 'hostile'). */
+      readonly key: string;
+      /** @description Player-facing label. */
+      readonly name: string;
+      /** @description What this category covers. */
+      readonly description: string;
+      /** @description Sort order in the consent UI. */
+      readonly display_order: number;
+      /** @description Return the names of action templates tagged with this category. */
+      readonly action_templates: string[];
+    };
+    /** @description Serializer for per-category consent rules. */
+    SocialConsentCategoryRule: {
+      readonly id: number;
+      preference: number;
+      category: number;
+      /**
+       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       *
+       *     * `everyone` - Everyone
+       *     * `allowlist` - Allowlist only
+       */
+      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+    };
+    /**
+     * @description * `everyone` - Everyone
+     *     * `allowlist` - Allowlist only
+     * @enum {string}
+     */
+    SocialConsentCategoryRuleModeEnum: 'everyone' | 'allowlist';
+    /** @description Serializer for per-category consent rules. */
+    SocialConsentCategoryRuleRequest: {
+      preference: number;
+      category: number;
+      /**
+       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       *
+       *     * `everyone` - Everyone
+       *     * `allowlist` - Allowlist only
+       */
+      mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
+    };
+    /** @description Serializer for per-tenure social consent preferences. */
+    SocialConsentPreference: {
+      readonly id: number;
+      /** @description One preference record per tenure. */
+      tenure: number;
+      /** @description If False, this character never appears as a valid social action target. */
+      allow_social_actions?: boolean;
+    };
+    /** @description Serializer for per-tenure social consent preferences. */
+    SocialConsentPreferenceRequest: {
+      /** @description One preference record per tenure. */
+      tenure: number;
+      /** @description If False, this character never appears as a valid social action target. */
+      allow_social_actions?: boolean;
+    };
+    /** @description Serializer for consent whitelist entries. */
+    SocialConsentWhitelist: {
+      readonly id: number;
+      /** @description Tenure that owns the preference (receives social actions). */
+      owner_tenure: number;
+      /** @description Tenure permitted to target owner_tenure with social actions. */
+      allowed_tenure: number;
+      readonly allowed_tenure_name: string;
+      /** @description Allowlist is scoped per category. */
+      category: number;
+      /** Format: date-time */
+      readonly added_at: string;
+    };
+    /** @description Serializer for consent whitelist entries. */
+    SocialConsentWhitelistRequest: {
+      /** @description Tenure that owns the preference (receives social actions). */
+      owner_tenure: number;
+      /** @description Tenure permitted to target owner_tenure with social actions. */
+      allowed_tenure: number;
+      /** @description Allowlist is scoped per category. */
+      category: number;
     };
     SocietySearch: {
       id: number;
@@ -27637,6 +28081,497 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ConditionTemplate'];
+        };
+      };
+    };
+  };
+  consent_categories_list: {
+    parameters: {
+      query?: {
+        key?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocialConsentCategoryList'];
+        };
+      };
+    };
+  };
+  consent_categories_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Category. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategory'];
+        };
+      };
+    };
+  };
+  consent_category_rules_list: {
+    parameters: {
+      query?: {
+        category?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        preference?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocialConsentCategoryRuleList'];
+        };
+      };
+    };
+  };
+  consent_category_rules_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentCategoryRuleRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategoryRule'];
+        };
+      };
+    };
+  };
+  consent_category_rules_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Category Rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategoryRule'];
+        };
+      };
+    };
+  };
+  consent_category_rules_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Category Rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentCategoryRuleRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategoryRule'];
+        };
+      };
+    };
+  };
+  consent_category_rules_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Category Rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  consent_category_rules_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Category Rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedSocialConsentCategoryRuleRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentCategoryRule'];
+        };
+      };
+    };
+  };
+  consent_preferences_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        tenure?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocialConsentPreferenceList'];
+        };
+      };
+    };
+  };
+  consent_preferences_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentPreferenceRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentPreference'];
+        };
+      };
+    };
+  };
+  consent_preferences_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Preference. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentPreference'];
+        };
+      };
+    };
+  };
+  consent_preferences_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Preference. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentPreferenceRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentPreference'];
+        };
+      };
+    };
+  };
+  consent_preferences_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Preference. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  consent_preferences_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Preference. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedSocialConsentPreferenceRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentPreference'];
+        };
+      };
+    };
+  };
+  consent_preferences_for_tenure_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenure_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentPreference'];
+        };
+      };
+    };
+  };
+  consent_whitelist_list: {
+    parameters: {
+      query?: {
+        category?: number;
+        owner_tenure?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocialConsentWhitelistList'];
+        };
+      };
+    };
+  };
+  consent_whitelist_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentWhitelistRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentWhitelist'];
+        };
+      };
+    };
+  };
+  consent_whitelist_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Whitelist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentWhitelist'];
+        };
+      };
+    };
+  };
+  consent_whitelist_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Whitelist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentWhitelistRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentWhitelist'];
+        };
+      };
+    };
+  };
+  consent_whitelist_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Whitelist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  consent_whitelist_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Whitelist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedSocialConsentWhitelistRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentWhitelist'];
         };
       };
     };

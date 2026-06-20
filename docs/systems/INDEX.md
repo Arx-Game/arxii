@@ -407,12 +407,21 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
 ### Consent
-OOC visibility groups for player-controlled content sharing.
+OOC visibility groups and per-category social consent preferences for player-controlled
+content sharing and social action targeting (#1141).
 
-- **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin`
-- **Key Methods:** `VisibilityMixin.is_visible_to()`
-- **Pattern:** RosterTenure-based (player's tenure, not character)
-- **Integrates with:** roster (RosterTenure), codex (visibility), any model using VisibilityMixin
+- **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
+  `SocialConsentCategory` (NaturalKey on `key`), `SocialConsentPreference` (OneToOne on tenure),
+  `SocialConsentCategoryRule` (preference + category + ConsentMode), `SocialConsentWhitelist`
+  (owner_tenure / allowed_tenure / category)
+- **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()`,
+  `_social_consent_exclusions()` (both in `actions/player_interface.py`)
+- **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
+  `make_default_categories()` (`world/consent/factories.py`)
+- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist
+- **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row = allow-all
+- **Integrates with:** actions (`ActionTemplate.consent_category` FK), roster (RosterTenure),
+  codex (visibility), seed loader (`arx seed dev`)
 - **Source:** `src/world/consent/`
 - **Details:** [consent.md](consent.md)
 ### Progression

@@ -137,6 +137,9 @@ const MyStoryOffersPage = lazy(() =>
 const MuteSettingsPage = lazy(() =>
   import('@/narrative/pages/MuteSettingsPage').then((m) => ({ default: m.MuteSettingsPage }))
 );
+const PrivacyPage = lazy(() =>
+  import('@/consent/pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))
+);
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded covenants pages
@@ -272,6 +275,14 @@ function App() {
           <Route path="mail" element={<MailPage />} />
           <Route path="media" element={<PlayerMediaPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route
+            path="privacy"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <PrivacyPage />
+              </Suspense>
+            }
+          />
           <Route index element={<Navigate to="mail" replace />} />
         </Route>
         <Route path="/roster" element={<RosterListPage />} />
