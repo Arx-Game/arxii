@@ -11,6 +11,7 @@ from world.covenants.constants import (
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
     CovenantType,
+    MentorBondAdjusted,
     RoleArchetype,
 )
 from world.covenants.models import (
@@ -24,6 +25,7 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleBonus,
     GearArchetypeCompatibility,
+    MentorBond,
     MentorBondConfig,
 )
 from world.items.constants import GearArchetype
@@ -209,6 +211,25 @@ class CovenantRiteRolePackageFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     min_covenant_level = 1
     condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+
+
+class MentorBondFactory(factory_django.DjangoModelFactory):
+    """Factory for MentorBond — a Mentor's Vow bond between mentor and sidekick (#1165).
+
+    No django_get_or_create — the unique constraint is partial (only enforced when
+    dissolved_at IS NULL), so get_or_create on (covenant, sidekick_sheet) would
+    silently return an existing dissolved bond. Tests that need lookup-or-create
+    semantics should query directly.
+    """
+
+    class Meta:
+        model = MentorBond
+
+    covenant = factory.SubFactory(CovenantFactory)
+    mentor_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sidekick_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    adjusted_party = MentorBondAdjusted.SIDEKICK
+    dissolved_at = None
 
 
 def wire_covenant_rite_content() -> CovenantRite:

@@ -21,6 +21,7 @@ from world.covenants.constants import (
     MENTOR_BOND_MAX_SIDEKICKS,
     BattleBinding,
     CovenantType,
+    MentorBondAdjusted,
     RoleArchetype,
 )
 from world.items.constants import GearArchetype
@@ -776,3 +777,75 @@ class MentorBondConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"MentorBondConfig(pk={self.pk})"
+
+
+# =============================================================================
+# MentorBond — per-pair bond record for Mentor's Vow (#1165)
+# =============================================================================
+
+
+class MentorBondQuerySet(models.QuerySet):
+    """Custom queryset for MentorBond."""
+
+    def active(self) -> MentorBondQuerySet:
+        """Return only bonds where dissolved_at IS NULL (i.e. currently active)."""
+        return self.filter(dissolved_at__isnull=True)
+
+
+class MentorBond(SharedMemoryModel):
+    """A single Mentor's Vow bond between a mentor and a sidekick within a covenant (#1165).
+
+    Active = dissolved_at IS NULL. Dissolving sets dissolved_at to a timestamp.
+    The partial unique constraint ``unique_active_sidekick_bond`` allows at most
+    one active bond per (covenant, sidekick_sheet) pair; historical dissolved bonds
+    are unconstrained and serve as an audit trail.
+
+    adjusted_party records which party the encounter-scaling adjustment is applied
+    to (MENTOR or SIDEKICK) for any given bond.
+    """
+
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds",
+    )
+    mentor_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds_as_mentor",
+    )
+    sidekick_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds_as_sidekick",
+    )
+    adjusted_party = models.CharField(
+        max_length=20,
+        choices=MentorBondAdjusted.choices,
+        default=MentorBondAdjusted.SIDEKICK,
+        help_text="Which party the encounter-scaling adjustment is applied to.",
+    )
+    formed_at = models.DateTimeField(auto_now_add=True)
+    dissolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the bond is dissolved; null means currently active.",
+    )
+
+    objects = MentorBondQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-formed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant", "sidekick_sheet"],
+                condition=models.Q(dissolved_at__isnull=True),
+                name="unique_active_sidekick_bond",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        state = "active" if self.dissolved_at is None else "dissolved"
+        return (
+            f"MentorBond({self.mentor_sheet} → {self.sidekick_sheet} in {self.covenant}, {state})"
+        )
