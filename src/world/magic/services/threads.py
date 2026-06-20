@@ -39,7 +39,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadXPLockedLevel,
 )
-from world.magic.types import ThreadXPLockProspect
+from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -663,6 +663,19 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     threads = character.threads._all  # noqa: SLF001 — same handler used by passive_vital_bonuses
     score = sum(max(1, t.level // 10) for t in threads)
     return _soft_cap(tuning.coefficient * score, tuning.cap, tuning.half_saturation)
+
+
+def survivability_save_baselines(character: ObjectDB) -> ThreadSurvivabilitySaves:
+    """Per-tier survivability save modifiers from thread investment (#1250).
+
+    Each is a soft-capped baseline added to the character's rollmod in the
+    matching tier of ``process_damage_consequences``. All 0 for a lone wolf.
+    """
+    return ThreadSurvivabilitySaves(
+        wound=survivability_baseline(character, VitalBonusTarget.PERMANENT_WOUND_RESIST),
+        death=survivability_baseline(character, VitalBonusTarget.DEATH_SAVE),
+        knockout=survivability_baseline(character, VitalBonusTarget.KNOCKOUT_RESIST),
+    )
 
 
 # =============================================================================

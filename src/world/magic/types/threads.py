@@ -39,3 +39,12 @@ class ThreadXPLockProspect:
     boundary_level: int
     xp_cost: int
     dev_points_to_boundary: int
+
+
+@dataclass(frozen=True)
+class ThreadSurvivabilitySaves:
+    """Per-tier survivability save baselines from thread investment (#1250)."""
+
+    wound: int
+    death: int
+    knockout: int

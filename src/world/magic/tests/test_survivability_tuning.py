@@ -16,6 +16,7 @@ from world.magic.services import (
     get_thread_survivability_tuning,
     seed_thread_survivability_tuning,
     survivability_baseline,
+    survivability_save_baselines,
     weave_thread,
 )
 from world.traits.factories import TraitFactory
@@ -185,3 +186,27 @@ class SaveTargetSeedTests(TestCase):
         seed_thread_survivability_tuning()
         lone = CharacterSheetFactory()  # no threads → lone wolf
         self.assertEqual(survivability_baseline(lone.character, VitalBonusTarget.DEATH_SAVE), 0)
+
+
+class SurvivabilitySaveBaselinesTests(TestCase):
+    """Tests for survivability_save_baselines() bundle (#1250)."""
+
+    def setUp(self) -> None:
+        seed_thread_survivability_tuning()
+        self.sheet = CharacterSheetFactory()
+        # Add a few threads so the invested character has a non-zero baseline.
+        for _i in range(3):
+            ThreadFactory(owner=self.sheet, resonance=ResonanceFactory(), level=10)
+
+    def test_save_baselines_bundle_matches_per_target(self) -> None:
+        char = self.sheet.character  # character WITH threads from setUp
+        saves = survivability_save_baselines(char)
+        self.assertEqual(saves.death, survivability_baseline(char, VitalBonusTarget.DEATH_SAVE))
+        self.assertEqual(
+            saves.knockout, survivability_baseline(char, VitalBonusTarget.KNOCKOUT_RESIST)
+        )
+        self.assertEqual(
+            saves.wound,
+            survivability_baseline(char, VitalBonusTarget.PERMANENT_WOUND_RESIST),
+        )
+        self.assertGreater(saves.death, 0)  # invested character benefits
