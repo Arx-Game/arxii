@@ -27917,6 +27917,7 @@ export interface operations {
   consent_categories_list: {
     parameters: {
       query?: {
+        key?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
       };

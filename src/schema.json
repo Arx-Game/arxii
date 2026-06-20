@@ -3945,6 +3945,10 @@ paths:
 
         Categories are authored by staff and shared across all players.
       parameters:
+      - in: query
+        name: key
+        schema:
+          type: string
       - name: page
         required: false
         in: query
