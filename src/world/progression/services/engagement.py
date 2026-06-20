@@ -50,14 +50,12 @@ def accrue(
 
         ledger.pending_points += points
 
-        # Track distinct initiator — create row if new, skip if already seen.
-        _, initiator_created = WeeklyEngagementInitiator.objects.get_or_create(
+        # Record distinct initiator — get_or_create deduplicates; count derived from child rows.
+        WeeklyEngagementInitiator.objects.get_or_create(
             ledger=ledger,
             initiator_account=initiator_account,
         )
-        if initiator_created:
-            ledger.distinct_initiators += 1
 
-        ledger.save(update_fields=["pending_points", "distinct_initiators"])
+        ledger.save(update_fields=["pending_points"])
 
     return ledger

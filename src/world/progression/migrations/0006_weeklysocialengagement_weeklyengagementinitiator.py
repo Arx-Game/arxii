@@ -37,13 +37,6 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "distinct_initiators",
-                    models.PositiveIntegerField(
-                        default=0,
-                        help_text="Count of unique accounts that accrued points toward this ledger this week.",
-                    ),
-                ),
-                (
                     "granted",
                     models.BooleanField(
                         default=False,

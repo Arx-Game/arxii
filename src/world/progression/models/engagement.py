@@ -45,10 +45,6 @@ class WeeklySocialEngagement(SharedMemoryModel):
         default=Decimal(0),
         help_text="Points accrued this week, pending grant.",
     )
-    distinct_initiators = models.PositiveIntegerField(
-        default=0,
-        help_text="Count of unique accounts that accrued points toward this ledger this week.",
-    )
     granted = models.BooleanField(
         default=False,
         help_text="Whether this week's pending points have been granted.",
@@ -57,6 +53,11 @@ class WeeklySocialEngagement(SharedMemoryModel):
     class Meta:
         verbose_name = "Weekly Social Engagement"
         verbose_name_plural = "Weekly Social Engagements"
+
+    @property
+    def distinct_initiators(self) -> int:
+        """Derive count of unique initiators from child rows (no stored counter)."""
+        return self.initiators.count()
 
     def needs_reset(self, current_week: GameWeek) -> bool:
         """Return True if the tracker belongs to a different game week."""
@@ -71,13 +72,11 @@ class WeeklySocialEngagement(SharedMemoryModel):
         """
         self.initiators.all().delete()
         self.pending_points = Decimal(0)
-        self.distinct_initiators = 0
         self.granted = False
         self.game_week = current_week
         self.save(
             update_fields=[
                 "pending_points",
-                "distinct_initiators",
                 "granted",
                 "game_week",
             ]
