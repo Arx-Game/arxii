@@ -989,7 +989,9 @@ These two axes are orthogonal — never re-merge them.
   - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
   - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
 - **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
-  `CanInviteToCovenant` (delegates to `can_invite_to_covenant`; gates induction draft),
+  `CanInviteToCovenant` (unattached seam — delegates to `can_invite_to_covenant` with
+  `account=`; NOT currently wired to any ViewSet; induction-draft authorization is
+  enforced by `assert_initiator_can_induct` via `Ritual.draft_validator_path`),
   `CanManageCovenantRanks` (rank.can_manage_ranks)
 - **Frontend:** The covenant detail page's "Induct New Member" CTA is rendered only when
   `viewer_capabilities.can_invite` is true (read from the first member row of the

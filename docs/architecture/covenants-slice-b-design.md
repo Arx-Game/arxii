@@ -336,6 +336,12 @@ who may *initiate* the ritual without coupling the magic layer to any specific d
 Callers must raise a `CovenantError` subclass to block draft creation; the view maps
 `CovenantError` → HTTP 400.
 
+**Staff-bypass asymmetry:** `CanInviteToCovenant` (the DRF permission class) grants
+`is_staff` a bypass, but the induction-draft path (`assert_initiator_can_induct` and the
+serializer's `viewer_capabilities`) is character-scoped with **no staff bypass** — a staff
+member who is not a covenant member cannot draft an induction and the CTA stays hidden for
+them (intentional; staff manage covenants via admin tools, not through player-facing rituals).
+
 `fire_session` validates: state-derived threshold met, all `ACCEPTED` participants have all
 required references (per the ritual's `participant_fields` schema), session-level required
 references present. On success: dispatches the ritual's `service_function_path`, deletes

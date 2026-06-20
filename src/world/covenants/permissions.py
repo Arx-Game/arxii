@@ -77,6 +77,12 @@ class CanInviteToCovenant(permissions.BasePermission):
 
     Object-level: ``obj`` is a Covenant instance; checks the requester's active
     membership in that covenant.
+
+    Retained permission seam delegating to ``can_invite_to_covenant``; currently NOT
+    attached to any ViewSet. Induction-draft authorization is enforced by
+    ``world.covenants.services.assert_initiator_can_induct`` (dispatched via
+    ``Ritual.draft_validator_path``). ``is_staff`` receives a bypass here but NOT in
+    the induction-draft path — see ``docs/architecture/covenants-slice-b-design.md``.
     """
 
     def has_object_permission(
