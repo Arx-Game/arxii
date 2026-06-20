@@ -8,6 +8,9 @@ Public API
 - bond_adjusted_level(sheet) -> int | None
 - effective_combat_level(sheet) -> int
 - is_bond_graduated(bond) -> bool
+- establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet) -> MentorBond
+- dissolve_mentor_bond(bond) -> None
+- assert_membership_level_allowed(*, covenant, character_sheet) -> None
 
 Adjustment rule
 ---------------
@@ -22,6 +25,9 @@ Adjustment rule
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from django.db import transaction
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -209,3 +215,123 @@ def effective_combat_level(sheet: CharacterSheet) -> int:
     if adjusted is not None:
         return adjusted
     return _raw_primary_level(sheet)
+
+
+@transaction.atomic
+def establish_mentor_bond(
+    *,
+    covenant: Covenant,
+    mentor_sheet: CharacterSheet,
+    sidekick_sheet: CharacterSheet,
+) -> MentorBond:
+    """Create an active MentorBond between mentor_sheet and sidekick_sheet in covenant.
+
+    Determines the adjusted_party by checking which of the two is outside the
+    covenant band via their raw primary level. Exactly one must be out of band
+    and the other in band; otherwise raises MentorBondError.
+
+    Enforces max_sidekicks_per_mentor when set on the config singleton: counts
+    the mentor's currently active sidekick bonds in this covenant and raises
+    MentorBondError when the cap would be exceeded.
+
+    Returns the created MentorBond.
+    """
+    from world.covenants.constants import MentorBondAdjusted  # noqa: PLC0415
+    from world.covenants.exceptions import MentorBondError  # noqa: PLC0415
+    from world.covenants.models import MentorBond  # noqa: PLC0415
+    from world.covenants.services import get_mentor_bond_config  # noqa: PLC0415
+
+    mentor_raw = _raw_primary_level(mentor_sheet)
+    sidekick_raw = _raw_primary_level(sidekick_sheet)
+
+    mentor_in = is_in_band(covenant, mentor_raw)
+    sidekick_in = is_in_band(covenant, sidekick_raw)
+
+    if mentor_in and sidekick_in:
+        msg = "Both parties are already within the covenant band — no Mentor's Vow bond needed."
+        raise MentorBondError(msg)
+    if not mentor_in and not sidekick_in:
+        msg = (
+            "Both parties are outside the covenant band — "
+            "the in-band partner required for a Mentor's Vow is absent."
+        )
+        raise MentorBondError(msg)
+
+    # Exactly one is out of band.
+    if sidekick_in:
+        # mentor is out-of-band → adjusted_party = MENTOR
+        adjusted_party = MentorBondAdjusted.MENTOR
+    else:
+        # sidekick is out-of-band → adjusted_party = SIDEKICK
+        adjusted_party = MentorBondAdjusted.SIDEKICK
+
+    # Enforce max_sidekicks_per_mentor cap (counted only for SIDEKICK-adjusted bonds,
+    # since that's what creates a "sidekick" relationship for the mentor).
+    cfg = get_mentor_bond_config()
+    if cfg.max_sidekicks_per_mentor is not None:
+        active_sidekick_count = (
+            MentorBond.objects.active()
+            .filter(
+                covenant=covenant,
+                mentor_sheet=mentor_sheet,
+            )
+            .count()
+        )
+        if active_sidekick_count >= cfg.max_sidekicks_per_mentor:
+            msg = (
+                f"This mentor already has the maximum number of sidekicks "
+                f"({cfg.max_sidekicks_per_mentor}) in this covenant."
+            )
+            raise MentorBondError(msg)
+
+    return MentorBond.objects.create(
+        covenant=covenant,
+        mentor_sheet=mentor_sheet,
+        sidekick_sheet=sidekick_sheet,
+        adjusted_party=adjusted_party,
+    )
+
+
+def dissolve_mentor_bond(bond: MentorBond) -> None:
+    """Dissolve an active MentorBond by setting dissolved_at to now."""
+    bond.dissolved_at = timezone.now()
+    bond.save(update_fields=["dissolved_at"])
+
+
+def assert_membership_level_allowed(
+    *,
+    covenant: Covenant,
+    character_sheet: CharacterSheet,
+) -> None:
+    """Raise VowGateError unless the character is level-eligible to join covenant.
+
+    A character passes the gate if ANY of:
+      - The MentorBondConfig singleton is not yet seeded (gate inactive).
+      - Their raw primary level is within the covenant band.
+      - They have an active MentorBond (as mentor or sidekick) in this covenant.
+
+    Raises VowGateError otherwise.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.covenants.exceptions import VowGateError  # noqa: PLC0415
+    from world.covenants.models import MentorBond, MentorBondConfig  # noqa: PLC0415
+
+    # Gate is inactive when the config singleton has not been seeded.
+    if not MentorBondConfig.objects.filter(pk=1).exists():
+        return
+
+    raw = _raw_primary_level(character_sheet)
+    if is_in_band(covenant, raw):
+        return
+
+    # Check for an active bond in this covenant (as mentor or sidekick).
+    has_bond = (
+        MentorBond.objects.active()
+        .filter(covenant=covenant)
+        .filter(Q(mentor_sheet=character_sheet) | Q(sidekick_sheet=character_sheet))
+        .exists()
+    )
+
+    if not has_bond:
+        raise VowGateError

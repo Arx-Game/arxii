@@ -242,7 +242,13 @@ def add_member(
     highest tier number — lowest authority). The active-uniqueness DB constraint
     enforces "at most one active role per (character, covenant)"; the
     IntegrityError on conflict is the contract.
+
+    Raises VowGateError when the character's level is outside the covenant band
+    and they hold no active Mentor's Vow bond in this covenant.
     """
+    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+    assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
     rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
