@@ -1159,6 +1159,94 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     return opp
 
 
+def _bulk_primary_levels(char_ids: list[int]) -> dict[int, int]:
+    """Return {character_id: level} for each id in *char_ids* using at most two queries.
+
+    Mirrors the fallback chain in ``get_character_path_level``:
+    primary row → highest row → 1.  Characters with no CharacterClassLevel at
+    all are omitted from the dict (callers use ``.get(cid, 1)`` for the final
+    fallback).
+    """
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+    level_map: dict[int, int] = dict(
+        CharacterClassLevel.objects.filter(
+            character_id__in=char_ids,
+            is_primary=True,
+        ).values_list("character_id", "level")
+    )
+
+    without_primary = [cid for cid in char_ids if cid not in level_map]
+    if without_primary:
+        seen: set[int] = set()
+        for char_id, lvl in (
+            CharacterClassLevel.objects.filter(character_id__in=without_primary)
+            .order_by("character_id", "-level")
+            .values_list("character_id", "level")
+        ):
+            if char_id not in seen:
+                level_map[char_id] = lvl
+                seen.add(char_id)
+    return level_map
+
+
+def _dissolve_graduated_bonds(enc: CombatEncounter) -> None:
+    """Dissolve any MentorBond that has graduated for ACTIVE participants in *enc*.
+
+    A bond is "graduated" when the adjusted party's raw primary level is now
+    within the covenant band — the bond is mechanically inactive and should be
+    persisted as dissolved so future reads skip it cleanly.
+
+    Write-safe: called only from ``begin_declaration_phase`` (encounter start).
+    No per-bond queries: bulk-fetches bonds in one query, resolves primary levels
+    for all adjusted-party characters in a second bulk query, then determines
+    graduation inline — O(1) queries regardless of graduated-bond count.
+    """
+    from world.covenants.constants import MentorBondAdjusted  # noqa: PLC0415
+    from world.covenants.mentorship import dissolve_mentor_bond, is_in_band  # noqa: PLC0415
+    from world.covenants.models import MentorBond  # noqa: PLC0415
+
+    sheet_ids = list(
+        CombatParticipant.objects.filter(
+            encounter=enc,
+            status=ParticipantStatus.ACTIVE,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    if not sheet_ids:
+        return
+
+    # One bulk query: all active bonds where any participant is either the
+    # mentor or the sidekick side. Resolve covenant + both character FKs so
+    # no per-bond queries are needed below.
+    active_bonds = list(
+        MentorBond.objects.active()
+        .filter(Q(mentor_sheet_id__in=sheet_ids) | Q(sidekick_sheet_id__in=sheet_ids))
+        .select_related(
+            "covenant",
+            "mentor_sheet__character",
+            "sidekick_sheet__character",
+        )
+    )
+    if not active_bonds:
+        return
+
+    # Collect the adjusted-party character id for each bond (one id per bond).
+    adjusted_char_ids = [
+        bond.sidekick_sheet.character_id
+        if bond.adjusted_party == MentorBondAdjusted.SIDEKICK
+        else bond.mentor_sheet.character_id
+        for bond in active_bonds
+    ]
+
+    # Two bulk queries at most: primary levels + highest-level fallback.
+    level_map = _bulk_primary_levels(adjusted_char_ids)
+
+    for bond, char_id in zip(active_bonds, adjusted_char_ids, strict=True):
+        raw = level_map.get(char_id, 1)
+        if is_in_band(bond.covenant, raw):
+            dissolve_mentor_bond(bond)
+
+
 @transaction.atomic
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
     """Advance round_number by 1 and set status to DECLARING.
@@ -1223,6 +1311,11 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     if enc.escalation_curve is not None:
         install_escalation_room_triggers(enc)
         apply_escalation_tick(enc)
+
+    # --- Mentor's Vow (#1165): persist graduated bond dissolution at round start ---
+    # Bonds that have graduated (adjusted party leveled into band) are dissolved
+    # here so future reads via effective_combat_level skip them cleanly.
+    _dissolve_graduated_bonds(enc)
 
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
@@ -4198,13 +4291,25 @@ def declare_clash_contribution(
 # decrement task can reuse the same selection.
 
 
-def _combat_target_bonus(sheet: object, target_name: str) -> int:
+def _combat_target_bonus(sheet: object, target_name: str, level_override: int | None = None) -> int:
     """get_modifier_total for a named combat ModifierTarget; 0 if the row isn't seeded.
 
     Combat never hard-depends on seed order (mirrors covenant_level_bonus's
     config-is-None → 0). The target's stat category routes the covenant-role
     equipment walk into the total.
+
+    When ``level_override`` is not supplied, computes the bond-adjusted level via
+    ``bond_adjusted_level(sheet)`` (#1165). An unbonded sheet returns None, which
+    falls through to ``sheet.current_level`` inside ``covenant_role_bonus`` — zero
+    query overhead for the common (non-bonded) case because bond_adjusted_level
+    returns None after the fast active-bond check.
+
+    When ``level_override`` is supplied explicitly (e.g. caller already computed
+    it), that value is passed directly without a redundant bond lookup.
     """
+    from typing import cast  # noqa: PLC0415
+
+    from world.covenants.mentorship import bond_adjusted_level  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
@@ -4212,7 +4317,9 @@ def _combat_target_bonus(sheet: object, target_name: str) -> int:
         target = ModifierTarget.objects.get(name=target_name)
     except ModifierTarget.DoesNotExist:
         return 0
-    return get_modifier_total(sheet, target)
+    sheet_typed = cast("CharacterSheet", sheet)
+    override = level_override if level_override is not None else bond_adjusted_level(sheet_typed)
+    return get_modifier_total(sheet, target, level_override=override)
 
 
 def _equipped_armor_soak_pieces(

@@ -337,3 +337,35 @@ class CannotTransferToDepartedMemberError(CovenantError):
             "You cannot transfer leadership to a member who has left.",
         }
     )
+
+
+class VowGateError(CovenantError):
+    """Raised when a character's level places them outside the covenant band.
+
+    A character out of the covenant's level band cannot join unless they hold
+    an active Mentor's Vow bond (as mentor or sidekick) in the same covenant.
+    """
+
+    user_message = (
+        "Your level is outside this covenant's range. A Mentor's Vow bond is required to join."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your level is outside this covenant's range. A Mentor's Vow bond is required to join.",
+        }
+    )
+
+
+class MentorBondError(CovenantError):
+    """Raised when a Mentor's Vow bond cannot be established.
+
+    Covers: neither/both parties out of band; partner not in band;
+    max_sidekicks_per_mentor cap exceeded.
+    """
+
+    user_message = "The Mentor's Vow bond cannot be established."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The Mentor's Vow bond cannot be established.",
+        }
+    )

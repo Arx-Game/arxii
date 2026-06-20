@@ -146,15 +146,32 @@ an NPC at a bar) where concrete NPC objects aren't needed.
   when `max_health` is omitted (explicit values always win); read-only
   `GET /api/combat/{id}/opponent-defaults/?tier=…` previews the computed block + a non-blocking
   stakes verdict; `AddOpponentSerializer` enforces the stakes gate on create.
-- **Deferred (follow-ups):** React GM encounter-builder page; outlier-aware scaling +
-  sidekick/mentor roles for level-mismatched parties (**#1165**); stakes→reward-severity
+- **DONE (#1165) — outlier-aware scaling + Mentor's Vow:**
+  `compute_party_profile` now calls `effective_combat_level(sheet)` per ACTIVE
+  participant. `effective_combat_level` (in `world/covenants/mentorship.py`) returns
+  the raw primary level normally, but when the sheet is party to an active, non-graduated
+  **Mentor's Vow bond** (`MentorBond`), it returns a bond-adjusted level: a low-level
+  sidekick is pulled up to just below their mentor's level; a high-level mentor is
+  pulled down to just above their sidekick's level — both clamped to the covenant
+  band `[covenant.level ± band_width]`. The party average and scaling formula are
+  computed on the adjusted values, so a mentor/sidekick pair no longer distorts the
+  encounter budget. The bond is created via a consensual BILATERAL_SERVICE ritual
+  (`MentorsVowRitualFactory`). Graduation (adjusted party's real level re-enters the
+  band) dissolves the bond at `begin_declaration_phase`. The #566 invariant —
+  difficulty keys off level and party size only, never threads/relationships/covenants/
+  facets/fashion — is preserved and test-covered. In-combat role bonuses also read the
+  bond-adjusted level (`level_override` via `bond_adjusted_level`) so a suppressed
+  mentor's bonus shrinks and an elevated sidekick's grows.
+- **Deferred (follow-ups):** React GM encounter-builder page; stakes→reward-severity
   routing; rich per-phase boss authoring beyond auto-generated default phases.
 
 ### Health Pool and Damage
 Health is separate from fatigue — fatigue degrades effectiveness, health degrades survival.
 
-**Health pool sources:** Stamina (slight contribution) + Path level (large) + covenant role
-armor bonuses + woven magical thread protection. Magical power is the dominant factor.
+**Health pool sources (current):** `max_health = base_max_health + thread_addend` — the
+thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
+(`recompute_max_health_with_threads`). Path level does not currently drive max_health.
+Path-level-driven health scaling is tracked in **#1256**.
 
 **Thread survivability engine (SHIPPED — #1175):** Thread investment contributes a universal
 passive survivability bonus to both max-health and damage reduction via

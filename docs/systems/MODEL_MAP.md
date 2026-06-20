@@ -794,6 +794,8 @@
   - mantle_clearances <- items.MantleLevelClearance
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - mentor_bonds_as_mentor <- covenants.MentorBond
+  - mentor_bonds_as_sidekick <- covenants.MentorBond
   - duels_won <- combat.CombatEncounter
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
@@ -1334,6 +1336,7 @@
   - ranks <- covenants.CovenantRank
   - memberships <- covenants.CharacterCovenantRole
   - rite_instances <- covenants.CovenantRiteInstance
+  - mentor_bonds <- covenants.MentorBond
 
 ### CovenantRole
 **Foreign Keys:**
@@ -1405,6 +1408,16 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - granted_condition -> conditions.ConditionTemplate [FK]
 
+### MentorBondConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### MentorBond
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+  - mentor_sheet -> character_sheets.CharacterSheet [FK]
+  - sidekick_sheet -> character_sheets.CharacterSheet [FK]
+
 ### Service Functions
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' — Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
@@ -1422,8 +1435,10 @@
 - `delete_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', reassign_to: 'CovenantRank') -> 'None' — Delete a rank after reassigning all active members to ``reassign_to``.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
+- `establish_mentor_bond_via_session(*, session: 'RitualSession') -> 'MentorBond' — Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
+- `get_mentor_bond_config() -> 'MentorBondConfig' — Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
 - `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' — Return True if a row exists in GearArchetypeCompatibility for this pair.`
 - `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' — Remove a member by rank authority. Soft-ends the target, then`
@@ -2600,11 +2615,11 @@
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the authored covenant-level passive bonus across engaged memberships (#762).`
 - `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' — Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).`
-- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
+- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' — Delete the character's engagement iff it matches type AND source.`
-- `equipment_walk_total(character: 'object', target: 'ModifierTarget') -> 'int' — Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
+- `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' — ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
 - `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' — Perception-relative outfit bonus vs. a society's current fashion (#513).`
 - `get_aesthetic_config() -> 'AestheticAxisConfig' — Lazy-create and return the singleton aesthetic-axis config (pk=1).`
@@ -2612,7 +2627,7 @@
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
-- `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None) -> 'int' — Get total modifier value for a target.`
+- `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' — Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`

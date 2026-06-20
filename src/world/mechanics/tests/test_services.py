@@ -869,7 +869,7 @@ class GetModifierTotalEquipmentWalkTests(TestCase):
 
         assert result == 12
         mock_pfb.assert_called_once_with(self.character, self.eq_target)
-        mock_crb.assert_called_once_with(self.character, self.eq_target)
+        mock_crb.assert_called_once_with(self.character, self.eq_target, level_override=None)
 
     def test_skips_walk_for_non_equipment_categories(self) -> None:
         """Equipment walk does NOT fire when target.category.name is not in the set."""

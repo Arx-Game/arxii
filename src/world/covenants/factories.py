@@ -6,7 +6,14 @@ import factory
 from factory import django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import (
+    MENTOR_BOND_ADJACENCY_OFFSET,
+    MENTOR_BOND_BAND_WIDTH,
+    MENTOR_BOND_MAX_SIDEKICKS,
+    CovenantType,
+    MentorBondAdjusted,
+    RoleArchetype,
+)
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -18,6 +25,8 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleBonus,
     GearArchetypeCompatibility,
+    MentorBond,
+    MentorBondConfig,
 )
 from world.items.constants import GearArchetype
 
@@ -202,6 +211,25 @@ class CovenantRiteRolePackageFactory(factory_django.DjangoModelFactory):
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     min_covenant_level = 1
     condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+
+
+class MentorBondFactory(factory_django.DjangoModelFactory):
+    """Factory for MentorBond — a Mentor's Vow bond between mentor and sidekick (#1165).
+
+    No django_get_or_create — the unique constraint is partial (only enforced when
+    dissolved_at IS NULL), so get_or_create on (covenant, sidekick_sheet) would
+    silently return an existing dissolved bond. Tests that need lookup-or-create
+    semantics should query directly.
+    """
+
+    class Meta:
+        model = MentorBond
+
+    covenant = factory.SubFactory(CovenantFactory)
+    mentor_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sidekick_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    adjusted_party = MentorBondAdjusted.SIDEKICK
+    dissolved_at = None
 
 
 def wire_covenant_rite_content() -> CovenantRite:
@@ -614,6 +642,26 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
     )
 
     return role, [cap_ember, cap_keening]
+
+
+def seed_mentor_bond_defaults() -> MentorBondConfig:
+    """Seed the MentorBondConfig pk=1 singleton with authored defaults (#1165).
+
+    Idempotent: uses update_or_create so re-running resets to the authored defaults,
+    overwriting any staff edits. This is intentional for pre-launch seeding from
+    authored constants; do not call it where staff tuning must survive.
+
+    Returns the MentorBondConfig singleton.
+    """
+    config, _ = MentorBondConfig.objects.update_or_create(
+        pk=1,
+        defaults={
+            "band_width": MENTOR_BOND_BAND_WIDTH,
+            "adjacency_offset": MENTOR_BOND_ADJACENCY_OFFSET,
+            "max_sidekicks_per_mentor": MENTOR_BOND_MAX_SIDEKICKS,
+        },
+    )
+    return config
 
 
 def make_engaged_member(
