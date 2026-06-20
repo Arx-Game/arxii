@@ -689,7 +689,8 @@ def recompute_max_health_with_threads(character_sheet: CharacterSheet) -> int:
     character = character_sheet.character
     passive = character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
     pulled = character.combat_pulls.active_pull_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
-    return recompute_max_health(character_sheet, thread_addend=passive + pulled)
+    baseline = survivability_baseline(character, VitalBonusTarget.MAX_HEALTH)
+    return recompute_max_health(character_sheet, thread_addend=passive + pulled + baseline)
 
 
 def apply_damage_reduction_from_threads(
@@ -715,4 +716,5 @@ def apply_damage_reduction_from_threads(
     pulled = character.combat_pulls.active_pull_vital_bonuses(
         VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
     )
-    return max(0, incoming_damage - (passive + pulled))
+    baseline = survivability_baseline(character, VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
+    return max(0, incoming_damage - (passive + pulled + baseline))

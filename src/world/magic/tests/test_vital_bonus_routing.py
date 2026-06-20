@@ -34,6 +34,7 @@ from world.magic.models import Thread
 from world.magic.services import (
     apply_damage_reduction_from_threads,
     recompute_max_health_with_threads,
+    seed_thread_survivability_tuning,
 )
 from world.vitals.models import CharacterVitals
 from world.vitals.services import recompute_max_health
@@ -432,3 +433,67 @@ class AnchorInScopeVacuousTests(TestCase):
             msg=f"Expected 1 query, got {len(ctx.captured_queries)}: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )
+
+
+class SurvivabilityBaselineRoutingTests(TestCase):
+    def setUp(self) -> None:
+        seed_thread_survivability_tuning()
+        self.sheet = CharacterSheetFactory()
+        self.vitals = CharacterVitals.objects.create(
+            character_sheet=self.sheet,
+            health=100,
+            max_health=100,
+            base_max_health=100,
+        )
+
+    def _add_threads(self, levels: list[int]) -> None:
+        for lvl in levels:
+            ThreadFactory(owner=self.sheet, resonance=ResonanceFactory(), level=lvl)
+
+    def test_baseline_dr_reduces_incoming_damage(self) -> None:
+        self._add_threads([10, 10, 10])  # S=3 → DR baseline 5
+        self.assertEqual(
+            apply_damage_reduction_from_threads(self.sheet.character, 30),
+            25,
+        )
+
+    def test_baseline_adds_to_authored_dr_row(self) -> None:
+        resonance = ResonanceFactory()
+        thread = ThreadFactory(owner=self.sheet, resonance=resonance, level=10)
+        ThreadPullEffectFactory(
+            target_kind=thread.target_kind,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=3,
+            vital_target=VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
+        )
+        # 1 thread @L10 → S=1 → baseline round(20*1/9)=2; authored 3 → total 5.
+        self.assertEqual(
+            apply_damage_reduction_from_threads(self.sheet.character, 30),
+            25,
+        )
+
+    def test_baseline_max_health_increases_max(self) -> None:
+        self._add_threads([10, 10, 10])  # S=3 → HP baseline 18
+        recompute_max_health_with_threads(self.sheet)
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.max_health, 118)
+
+    def test_query_count_constant_in_thread_count(self) -> None:
+        self._add_threads([10, 10, 10])
+        self.sheet.character.threads.invalidate()
+        _ = self.sheet.character.threads._all
+        with CaptureQueriesContext(connection) as ctx:
+            apply_damage_reduction_from_threads(self.sheet.character, 30)
+        n3 = len(ctx.captured_queries)
+
+        self._add_threads([20, 20, 20])
+        self.sheet.character.threads.invalidate()
+        _ = self.sheet.character.threads._all
+        with CaptureQueriesContext(connection) as ctx:
+            apply_damage_reduction_from_threads(self.sheet.character, 30)
+        n6 = len(ctx.captured_queries)
+        self.assertEqual(n3, n6)  # no N+1 — independent of thread count
