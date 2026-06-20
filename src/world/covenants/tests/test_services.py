@@ -1790,3 +1790,77 @@ class DraftSessionInductionGateTests(TestCase):
         )
         session = self._draft(initiator=initiator, covenant=cov, candidate=CharacterSheetFactory())
         self.assertIsInstance(session, RitualSession)
+
+
+class RecomputeHealthOnEngagementTests(TestCase):
+    """Engaging / disengaging a covenant role recomputes the character's max_health."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import CovenantRoleBonusFactory
+        from world.mechanics.factories import max_health_modifier_target
+        from world.vitals.factories import CharacterVitalsFactory
+
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
+        # Vitals row with base_max_health=None (derived) and max_health=0.
+        # Without engagement, derive_base_max_health returns 0 (no class, no stamina).
+        # After engaging a role with bonus_per_level=5 at level 1, it returns 5.
+        self.vitals = CharacterVitalsFactory(
+            character_sheet=self.sheet,
+            base_max_health=None,
+            max_health=0,
+            health=0,
+        )
+        # Role with a MAX_HEALTH bonus of 5 per level (effective_combat_level=1 → +5).
+        self.covenant = CovenantFactory()
+        self.role = CovenantRoleFactory(covenant_type=self.covenant.covenant_type)
+        target = max_health_modifier_target()
+        CovenantRoleBonusFactory(
+            covenant_role=self.role,
+            modifier_target=target,
+            bonus_per_level=5,
+        )
+
+    def _get_max_health(self) -> int:
+        from world.vitals.models import CharacterVitals
+
+        return CharacterVitals.objects.get(character_sheet=self.sheet).max_health
+
+    def test_set_engaged_membership_raises_max_health(self) -> None:
+        """Engaging a role with a MAX_HEALTH bonus increases max_health."""
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+        )
+        before = self._get_max_health()
+        set_engaged_membership(membership=membership)
+        after = self._get_max_health()
+        self.assertGreater(after, before)
+
+    def test_end_covenant_role_lowers_max_health(self) -> None:
+        """Ending an engaged role removes its MAX_HEALTH bonus → max_health decreases."""
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+        )
+        set_engaged_membership(membership=membership)
+        after_engage = self._get_max_health()
+        end_covenant_role(assignment=membership)
+        after_end = self._get_max_health()
+        self.assertLess(after_end, after_engage)
+
+    def test_clear_engaged_membership_lowers_max_health(self) -> None:
+        """Clearing engagement removes the MAX_HEALTH bonus → max_health decreases."""
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+        )
+        set_engaged_membership(membership=membership)
+        after_engage = self._get_max_health()
+        clear_engaged_membership(membership=membership)
+        after_clear = self._get_max_health()
+        self.assertLess(after_clear, after_engage)
