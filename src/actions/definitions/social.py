@@ -62,7 +62,7 @@ class _SocialTemplateAction(Action):
         self.dispatch_effects(actor, kwargs.get("target"), scene_data)
 
         template = ActionTemplate.objects.get(name=self.template_name)
-        resolution_ctx = ResolutionContext(action_context=context)
+        resolution_ctx = ResolutionContext(character=actor, action_context=context)
         return start_action_resolution(
             character=actor,
             template=template,
@@ -134,8 +134,13 @@ class EntranceAction(_SocialTemplateAction):
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
 
+        # Dispatch any inherent target effects first (no-op for Entrance today),
+        # mirroring the base social execute() so the pattern stays consistent.
+        scene_data = context.scene_data if context is not None else None
+        self.dispatch_effects(actor, kwargs.get("target"), scene_data)
+
         template = ActionTemplate.objects.get(name=self.template_name)
-        resolution_ctx = ResolutionContext(action_context=context)
+        resolution_ctx = ResolutionContext(character=actor, action_context=context)
         result = start_action_resolution(
             character=actor,
             template=template,
@@ -143,35 +148,31 @@ class EntranceAction(_SocialTemplateAction):
             context=resolution_ctx,
         )
 
-        if template.grants_entry_flourish:
-            resonance_id = kwargs.get("resonance_id")
-            if resonance_id is not None:
-                self._fire_entry_flourish(actor, resonance_id)
+        # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant).
+        if template.grants_entry_flourish and self._succeeded(result):
+            from world.magic.entry_flourish import (  # noqa: PLC0415
+                maybe_create_entry_flourish_offer,
+            )
+
+            loc = actor.location
+            scene = loc.active_scene if loc is not None and hasattr(loc, "active_scene") else None
+            maybe_create_entry_flourish_offer(actor, scene)
 
         return result
 
     @staticmethod
-    def _fire_entry_flourish(actor: ObjectDB, resonance_id: int) -> None:
-        """Fire the entry flourish resonance grant. Best-effort — exceptions are logged."""
-        try:
-            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-            from world.magic.models import Resonance  # noqa: PLC0415
-            from world.magic.services.gain import create_entry_flourish  # noqa: PLC0415
+    def _succeeded(result: object) -> bool:
+        """Return True if the resolution result indicates success.
 
-            sheet = CharacterSheet.objects.filter(character=actor).first()
-            if sheet is None:
-                return
-            resonance = Resonance.objects.get(pk=resonance_id)
-            create_entry_flourish(sheet, resonance, scene=None)
-        except Exception:  # noqa: BLE001
-            import logging  # noqa: PLC0415
-
-            logging.getLogger(__name__).warning(
-                "Entry flourish failed for actor %s, resonance_id %s",
-                actor.pk,
-                resonance_id,
-                exc_info=True,
-            )
+        Handles both ``ActionResult`` (has ``.success``) and ``PendingActionResolution``
+        (reads ``main_result.check_result.success_level``).
+        """
+        if hasattr(result, "success"):
+            return bool(result.success)
+        main = getattr(result, "main_result", None)  # noqa: GETATTR_LITERAL
+        if main is None:
+            return False
+        return main.check_result.success_level > 0
 
 
 @dataclass

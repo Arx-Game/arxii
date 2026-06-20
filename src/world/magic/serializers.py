@@ -3383,3 +3383,62 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             )
         except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+# =============================================================================
+# Entry flourish REST surface (#1140)
+# =============================================================================
+
+_ERR_NO_PENDING_ENTRY_FLOURISH = "No pending entry flourish offer found."
+
+
+class PendingEntryFlourishOfferSerializer(serializers.ModelSerializer):
+    """Player-facing view of a pending entry-flourish offer (#1140). Read-only."""
+
+    class Meta:
+        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
+
+        model = PendingEntryFlourishOffer
+        fields = ["id", "character_sheet_id", "scene_id", "created_at"]
+        read_only_fields = fields
+
+
+class EntryFlourishRespondSerializer(serializers.Serializer):
+    """Write serializer for the player's entry-flourish resonance pick."""
+
+    offer_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()
+
+    def validate_offer_id(self, value: int) -> object:
+        """Resolve + ownership-check via the offer's character sheet."""
+        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
+
+        try:
+            offer = PendingEntryFlourishOffer.objects.get(pk=value)
+        except PendingEntryFlourishOffer.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_NO_PENDING_ENTRY_FLOURISH) from exc
+        request = self.context.get("request")
+        _resolve_account_sheet(offer.character_sheet_id, request)
+        return offer
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to resolve_entry_flourish_offer; surface typed errors as 400."""
+        from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
+        from world.magic.exceptions import EntryFlourishOfferError  # noqa: PLC0415
+
+        offer = validated_data["offer_id"]
+        try:
+            return resolve_entry_flourish_offer(
+                offer.pk, resonance_id=validated_data["resonance_id"]
+            )
+        except EntryFlourishOfferError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class EntryFlourishResultSerializer(serializers.Serializer):
+    """Read serializer for EntryFlourishResult (entry_flourish.py dataclass)."""
+
+    resonance_id = serializers.IntegerField()
+    resonance_name = serializers.CharField()
+    granted_amount = serializers.IntegerField()
+    scene_id = serializers.IntegerField(allow_null=True)

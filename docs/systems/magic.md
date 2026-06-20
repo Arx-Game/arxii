@@ -201,6 +201,45 @@ now say "Mage Scars."
 | `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields |
 | `MagicalAlterationEvent` | Immutable provenance audit log | `pending`, `event_type`, `data`, `created_at` |
 
+### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
+
+Poll-able offer created on a successful Entrance social action; the entrant picks one
+claimed resonance to broadcast. Resolves through `create_entry_flourish` (actor self-grant
+via the `ResonanceGrant` ledger), scoped to the active scene and idempotent per scene.
+The #904 reaction-window framework was evaluated and rejected here — it is peer-only
+(`react_to_window` hard-blocks self-reaction); entry flourish (actor self-grant) and
+scene-entry endorsement (peer grant) are the two complementary halves of the entrance
+moment.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `PendingEntryFlourishOffer` | Poll-able offer awaiting resonance pick; one per character | `character_sheet` FK, `scene` FK (nullable), `created_at`. UniqueConstraint on `character_sheet`. Re-exported from `world/magic/models/__init__.py` |
+| `EntryFlourishRecord` | Immutable receipt written by `create_entry_flourish` | `character_sheet` FK, `resonance` FK, `scene` FK (nullable), `granted_amount`, `created_at`. Partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL` |
+
+**Services:**
+- `maybe_create_entry_flourish_offer(character, scene) -> PendingEntryFlourishOffer | None`
+  — called on Entrance action success; skips if already flourished this scene or no
+  claimed resonances.
+- `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult` —
+  two-phase staleness + ownership check then atomic grant + offer deletion.
+- `create_entry_flourish(sheet, resonance, *, scene, amount=None) -> EntryFlourishRecord`
+  — creates the record and fires `grant_resonance(source=ENTRY_FLOURISH)`; skips
+  gracefully on a duplicate `(sheet, scene)`.
+
+**API:**
+- `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` — account-scoped
+  read-only inbox.
+- `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`.
+
+**Frontend:** `EntryFlourishOfferGate` / `EntryFlourishOfferDialog`
+(`frontend/src/magic/components/`), mounted in `SceneDetailPage`; hooks
+`usePendingEntryFlourishOffers` / `useRespondToEntryFlourish` in `magic/queries.ts`.
+
+**Config:** `ResonanceGainConfig.entry_flourish_grant` (default 10) — per-flourish amount.
+
+**Exceptions:** `EntryFlourishOfferError`, `EntryFlourishOfferNotFoundError`,
+`EntryFlourishOfferStaleError` (all in `exceptions.py`; carry `user_message`).
+
 ### Audere & Audere Majora (models/audere.py, audere_majora.py, models/renown_config.py)
 
 **`RenownAwardConfig`** (`models/renown_config.py`) — abstract base (SharedMemoryModel)

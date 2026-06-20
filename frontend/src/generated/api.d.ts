@@ -5871,6 +5871,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/item-facets/quote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a read-only cost+quality quote for attaching a facet (no mutation). */
+    get: operations['items_item_facets_quote_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/item-styles/': {
     parameters: {
       query?: never;
@@ -5882,6 +5899,23 @@ export interface paths {
     put?: never;
     /** @description Roll the crafting check and (on success) attach the style. */
     post: operations['items_item_styles_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/item-styles/quote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a read-only cost+quality quote for attaching a style (no mutation). */
+    get: operations['items_item_styles_quote_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -6730,6 +6764,71 @@ export interface paths {
     get: operations['magic_effect_types_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/entry-flourish/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending entry-flourish offers (#1140).
+     *
+     *     GET /api/magic/entry-flourish/pending/
+     *     GET /api/magic/entry-flourish/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_entry_flourish_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/entry-flourish/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending entry-flourish offers (#1140).
+     *
+     *     GET /api/magic/entry-flourish/pending/
+     *     GET /api/magic/entry-flourish/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_entry_flourish_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/entry-flourish/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate ownership + dispatch resolve_entry_flourish_offer; return the result. */
+    post: operations['magic_entry_flourish_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -14791,6 +14890,34 @@ export interface components {
      * @enum {string}
      */
     CovenantTypeEnum: 'durance' | 'battle';
+    /** @description Read-only quote: costs, affordability, max quality tier, failure risks. */
+    CraftingQuote: {
+      costs: components['schemas']['CraftingQuoteCost'];
+      affordable: boolean;
+      max_quality_tier: components['schemas']['QualityTier'] | null;
+      failure_risk: components['schemas']['CraftingQuoteRisk'][];
+    };
+    /** @description Resource cost breakdown within a crafting quote. */
+    CraftingQuoteCost: {
+      action_points: number;
+      action_points_have: number;
+      anima: number;
+      anima_have: number;
+      materials: components['schemas']['CraftingQuoteMaterial'][];
+    };
+    /** @description One material requirement row within a crafting quote. */
+    CraftingQuoteMaterial: {
+      item_template_id: number;
+      name: string;
+      quantity_required: number;
+      have: number;
+    };
+    /** @description A single failure-risk row within a crafting quote. */
+    CraftingQuoteRisk: {
+      outcome_name: string | null;
+      cost_consumption: string;
+      label: string | null;
+    };
     /**
      * @description Input for POST /api/table-bulletin-posts/.
      *
@@ -15419,6 +15546,18 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
+    /** @description Write serializer for the player's entry-flourish resonance pick. */
+    EntryFlourishRespondRequest: {
+      offer_id: number;
+      resonance_id: number;
+    };
+    /** @description Read serializer for EntryFlourishResult (entry_flourish.py dataclass). */
+    EntryFlourishResult: {
+      resonance_id: number;
+      resonance_name: string;
+      granted_amount: number;
+      scene_id: number | null;
+    };
     /** @description Serializer for creating episodes */
     EpisodeCreate: {
       chapter: number;
@@ -15854,6 +15993,10 @@ export interface components {
       readonly success_level: number | null;
       quality_tier: components['schemas']['QualityTier'] | null;
       item_facet: components['schemas']['ItemFacetRead'] | null;
+      consumed: {
+        [key: string]: unknown;
+      } | null;
+      consequence_label: string | null;
     };
     /** @description Serializer for Facet with nested children for tree display. */
     FacetTree: {
@@ -19208,6 +19351,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingAudereOffer'][];
     };
+    PaginatedPendingEntryFlourishOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PendingEntryFlourishOffer'][];
+    };
     PaginatedPendingStageAdvanceOfferList: {
       /** @example 123 */
       count: number;
@@ -21103,6 +21261,15 @@ export interface components {
       readonly anima_pool_bonus: number;
       /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
       readonly advisory_text: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Player-facing view of a pending entry-flourish offer (#1140). Read-only. */
+    PendingEntryFlourishOffer: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet_id: number;
+      readonly scene_id: number | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -23388,6 +23555,10 @@ export interface components {
       readonly success_level: number | null;
       quality_tier: components['schemas']['QualityTier'] | null;
       item_style: components['schemas']['ItemStyleRead'] | null;
+      consumed: {
+        [key: string]: unknown;
+      } | null;
+      consequence_label: string | null;
     };
     /**
      * @description Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
@@ -32339,6 +32510,30 @@ export interface operations {
       };
     };
   };
+  items_item_facets_quote_retrieve: {
+    parameters: {
+      query: {
+        /** @description Facet pk that would be attached. */
+        facet: number;
+        /** @description ItemInstance pk to quote the crafting cost for. */
+        item_instance: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftingQuote'];
+        };
+      };
+    };
+  };
   items_item_styles_create: {
     parameters: {
       query?: never;
@@ -32358,6 +32553,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StyleCraftResult'];
+        };
+      };
+    };
+  };
+  items_item_styles_quote_retrieve: {
+    parameters: {
+      query: {
+        /** @description ItemInstance pk to quote the crafting cost for. */
+        item_instance: number;
+        /** @description Style pk that would be attached. */
+        style: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CraftingQuote'];
         };
       };
     };
@@ -33624,6 +33843,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EffectType'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingEntryFlourishOfferList'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingEntryFlourishOffer'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EntryFlourishRespondRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EntryFlourishResult'];
         };
       };
     };

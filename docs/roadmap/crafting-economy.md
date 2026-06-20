@@ -1,6 +1,6 @@
 # Crafting, Fashion & Economy
 
-**Status:** not-started
+**Status:** in-progress
 **Depends on:** Items & Equipment, Magic (resonance/facets), Societies, Areas
 
 ## Overview
@@ -20,13 +20,66 @@ A rich economic layer that encompasses crafting, fashion, player housing, busine
 - **Economic progression:** Owning and developing assets is another progression axis alongside XP and Path steps
 
 ## What Exists
-- **Nothing substantial.** Gold cost references exist (CodexTeachingOffer.gold_cost) but no economy, crafting, housing, or trade models
+
+### Generic crafting framework + enchantment/attach economy (Spec D PR2 — #1031) — DONE
+
+The enchant-and-attach flow for facets and styles is fully playable end-to-end.
+
+**What was built:**
+
+- **`CraftingRecipe` framework** (`world.items.crafting`). The old `FacetCraftingConfig`
+  singleton was replaced by data-driven per-kind `CraftingRecipe` rows carrying check config,
+  AP/anima costs, a default consumption policy, and three related sub-models:
+  `CraftingMaterialRequirement` (ingredient requirements), `CraftingSkillCap` (skill-rank →
+  quality ceiling ladder), and `CraftingRecipeConsequence` (weighted consequence pool with
+  per-row `CostConsumption` override).
+
+- **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
+  New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +
+  registering a thin handler — no schema change required.
+
+- **Transactional orchestrator** `run_crafting_recipe` (`world.items.crafting.services`).
+  Eight-step atomic pipeline: recipe resolve → pre-validate (no wasted rolls) →
+  affordability gate → check roll → graded consequence selection → cost consumption per
+  consequence policy → consequence effect application → skill-capped quality tier + attach.
+
+- **Graded cost consumption** (`CostConsumption`: NONE / PARTIAL / FULL). Each consequence
+  row in the recipe pool declares how ingredients are consumed if that consequence fires.
+  PARTIAL spends `ceil(cost × 0.5)` of AP/Anima but all materials in full.
+
+- **Skill-gated quality cap** (`CraftingSkillCap` + `resolve_capped_tier`). The crafter's
+  skill rank gates the maximum quality tier regardless of how well the check rolls.
+
+- **Multi-vector cost** (`stage_and_assert_affordable` + `consume_cost`). AP, Anima, and
+  material items are all valid cost vectors; affordability is checked atomically before the
+  roll so a failing check never silently deducts resources.
+
+- **Shared material helper** (`world.items.services.materials`). `gather_consumable_pks` /
+  `consume_pks` are reused by both the crafting cost path and the ritual path
+  (`PerformRitualAction`) — no parallel implementation.
+
+- **Domain wrappers** `craft_attach_facet` / `craft_attach_style`
+  (`world.items.services.crafting`). Thin consumers of `run_crafting_recipe` that map
+  `CraftRunResult` onto the domain-specific `FacetCraftResult` / `StyleCraftResult`.
+
+- **Read-only crafting quote** (`build_crafting_quote`). Returns a `CraftingQuote`
+  (costs, affordability, skill-capped max tier, failure risk) with no mutation;
+  exposed as `GET /api/items/item-facets/quote/` and `GET /api/items/item-styles/quote/`.
+
+- **Seeded by** `wire_enchanting_crafting()` (FactoryBoy chain doubling as integration-test
+  setUp and seed data): Enchanting skill trait + CheckType + FACET_ATTACH + STYLE_ATTACH
+  recipes + a cap ladder + a consequence pool.
+
+**Deferred to follow-up issues:**
+- Crafting-station durability and repair economy (#1234)
+- Item-creation pipeline (crafted items with stats, facets, fashion properties) — still future
+- Telnet crafting action
 
 ## What's Needed for MVP
 - Material/resource models — types, sources, quantities, storage
-- Crafting system — recipes, skill requirements, material costs, quality outcomes
 - Item creation pipeline — crafted items with stats, facets, and fashion properties
-- Fashion system — how worn item facets map to resonances, admiration mechanics
+- Fashion system — how worn item facets map to resonances, admiration mechanics (outfit
+  trickle is live; admiration mechanics remain future)
 - Player housing — room purchase/construction, decoration system, room stats from decor
 - Store/business system — player-run shops, inventory management, pricing
 - Holdings — large constructions with defensive stats, research labs, special bonuses
@@ -34,6 +87,6 @@ A rich economic layer that encompasses crafting, fashion, player housing, busine
 - Domain management — noble territory models, material generation, imports/exports
 - Trade system — player-to-player and NPC trade mechanics
 - Economy balancing — currency flow, material scarcity, price stabilization
-- Economy UI — crafting interface, shop management, domain overview, housing decoration
+- Economy UI — shop management, domain overview, housing decoration
 
 ## Notes

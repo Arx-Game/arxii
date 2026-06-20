@@ -29,9 +29,9 @@ class ItemError(Exception):
 
 
 class CraftingNotConfigured(Exception):
-    """Raised when facet crafting is attempted before a CheckType is configured."""
+    """Raised when crafting is attempted before a CheckType is configured."""
 
-    user_message = "Facet crafting is not available yet."
+    user_message = "Crafting is not available yet."
 
 
 # ---------------------------------------------------------------------------
@@ -218,3 +218,48 @@ class OutfitIncomplete(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"Some pieces of that outfit are missing."},
     )
+
+
+# ---------------------------------------------------------------------------
+# Material consumption errors (services/materials.py)
+# ---------------------------------------------------------------------------
+
+
+class CraftingCostUnaffordable(ItemError):
+    """Raised when a crafter cannot afford the AP, Anima, or material cost of a recipe.
+
+    Raised by ``stage_and_assert_affordable`` when any resource is short.
+    The ``user_message`` is surfaced directly to the player via the API layer.
+    """
+
+    user_message = "You cannot afford the cost of this crafting attempt."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You cannot afford the cost of this crafting attempt."},
+    )
+
+    def __init__(self, message: str | None = None) -> None:
+        if message is not None:
+            self.user_message = message
+        super().__init__(message or self.user_message)
+
+
+class InsufficientMaterials(ItemError):
+    """Raised when a material-consumption check finds an unsatisfied requirement.
+
+    Carries structured data so callers can compose context-appropriate messages.
+
+    Attributes:
+        requirement: The duck-typed requirement object that failed
+            (e.g. RitualComponentRequirement, CraftingMaterialRequirement).
+        provided_qty: Total quantity of matching instances found (may be 0).
+    """
+
+    user_message = "You do not have the required materials."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You do not have the required materials."},
+    )
+
+    def __init__(self, *, requirement: object, provided_qty: int) -> None:
+        self.requirement = requirement
+        self.provided_qty = provided_qty
+        super().__init__(self.user_message)

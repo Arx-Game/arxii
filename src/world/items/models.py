@@ -1213,37 +1213,6 @@ class ItemCheckModifier(SharedMemoryModel):
         return f"{self.template.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
-class FacetCraftingConfig(SharedMemoryModel):
-    """Singleton (pk=1) tuning the facet-crafting check.
-
-    ``check_type`` is nullable so the row can be lazily created before content
-    authors wire a CheckType; the crafting service raises CraftingNotConfigured
-    until it is set. Difficulty/score knobs are real columns (no JSON).
-    """
-
-    check_type = models.ForeignKey(
-        CHECK_TYPE_MODEL,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="The check rolled when attaching a facet. Unset = crafting disabled.",
-    )
-    base_difficulty = models.PositiveIntegerField(
-        default=0, help_text="target_difficulty (points) passed to perform_check."
-    )
-    success_level_step = models.PositiveIntegerField(
-        default=10,
-        help_text="Quality-score points added per success_level above min_success_level.",
-    )
-    min_success_level = models.IntegerField(
-        default=1, help_text="Outcome success_level below this = craft fails, no facet."
-    )
-
-    def __str__(self) -> str:
-        return "FacetCraftingConfig"  # noqa: STRING_LITERAL - display literal, not an identifier
-
-
 class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
     """An admin-authored 'what's in vogue' definition (Outfits Phase B, #513).
 
@@ -1484,3 +1453,14 @@ class Trendsetter(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Trendsetter({self.persona_id} for society {self.society_id})"
+
+
+# ---------------------------------------------------------------------------
+# Crafting submodule — import last so all models above are registered first
+# ---------------------------------------------------------------------------
+from world.items.crafting.models import (  # noqa: E402,F401
+    CraftingMaterialRequirement,
+    CraftingRecipe,
+    CraftingRecipeConsequence,
+    CraftingSkillCap,
+)

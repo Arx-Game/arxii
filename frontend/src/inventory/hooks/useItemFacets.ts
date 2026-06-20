@@ -7,12 +7,20 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { craftAttachFacet, getQualityTiers, listItemFacets, removeItemFacet } from '../api';
+import {
+  craftAttachFacet,
+  getCraftingQuote,
+  getQualityTiers,
+  listItemFacets,
+  removeItemFacet,
+} from '../api';
 
 export const itemFacetKeys = {
   all: ['item-facets'] as const,
   list: (itemInstanceId: number) => ['item-facets', itemInstanceId] as const,
   qualityTiers: ['quality-tiers'] as const,
+  quote: (itemInstanceId: number, facetId: number) =>
+    ['crafting-quote', itemInstanceId, facetId] as const,
 };
 
 export function useItemFacets(itemInstanceId: number | undefined) {
@@ -34,6 +42,14 @@ export function useCraftAttachFacet(itemInstanceId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: itemFacetKeys.list(itemInstanceId) }).catch(() => {});
     },
+  });
+}
+
+export function useCraftingQuote(itemInstanceId: number | undefined, facetId: number | undefined) {
+  return useQuery({
+    queryKey: itemFacetKeys.quote(itemInstanceId ?? -1, facetId ?? -1),
+    queryFn: () => getCraftingQuote(itemInstanceId as number, facetId as number),
+    enabled: itemInstanceId != null && facetId != null,
   });
 }
 

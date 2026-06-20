@@ -29,11 +29,14 @@ import type {
   CrossXPLockRequest,
   CrossXPLockResponse,
   DissolveRequest,
+  EntryFlourishRespondRequest,
+  EntryFlourishResult,
   ImbueRequest,
   ImbueResponse,
   PaginatedPendingAlterationList,
   PaginatedPendingAudereOfferList,
   PaginatedPendingAudereMajoraOfferList,
+  PaginatedPendingEntryFlourishOfferList,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
   PaginatedTeachingOfferList,
@@ -104,6 +107,7 @@ const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
 const AUDERE_URL = '/api/magic/audere';
 const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
+const ENTRY_FLOURISH_URL = '/api/magic/entry-flourish';
 const PATH_INTENT_URL = '/api/progression/path-intent/';
 const PATH_OPTIONS_URL = '/api/progression/path-options/';
 
@@ -811,6 +815,43 @@ export async function respondToAudereMajora(
   }
 
   return res.json() as Promise<AudereMajoraCrossingResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Entry-flourish offers, #1140
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/entry-flourish/pending/
+ *
+ * Account-scoped inbox: pending entry-flourish offers for the caller's characters.
+ */
+export async function getPendingEntryFlourishOffers(): Promise<PaginatedPendingEntryFlourishOfferList> {
+  const res = await apiFetch(`${ENTRY_FLOURISH_URL}/pending/`);
+  if (!res.ok) throw new Error('Failed to load pending entry-flourish offers');
+  return res.json() as Promise<PaginatedPendingEntryFlourishOfferList>;
+}
+
+/**
+ * POST /api/magic/entry-flourish/respond/
+ *
+ * Pick a resonance to broadcast for a pending entry-flourish offer.
+ * Returns EntryFlourishResult with the resonance granted and amount.
+ */
+export async function respondToEntryFlourish(
+  body: EntryFlourishRespondRequest
+): Promise<EntryFlourishResult> {
+  const res = await apiFetch(`${ENTRY_FLOURISH_URL}/respond/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to respond to entry-flourish offer');
+  }
+
+  return res.json() as Promise<EntryFlourishResult>;
 }
 
 // ---------------------------------------------------------------------------

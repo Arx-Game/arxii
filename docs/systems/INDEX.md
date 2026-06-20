@@ -40,6 +40,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `DramaticMomentTag` (per-event tag — `moment_type`, `character_sheet`,
     `scene`, `tagged_by` AccountDB, `interaction` pose anchor with
     `db_constraint=False` + `interaction_timestamp` denormalized, `tagged_at`)
+  - **Entry-flourish declaration (#1140):** `PendingEntryFlourishOffer`
+    (`entry_flourish.py`; one per character, nullable `scene` FK),
+    `EntryFlourishRecord` (`models/endorsement.py`; actor self-grant receipt with
+    partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL`).
+    `ResonanceGainConfig.entry_flourish_grant` (default 10). The #904
+    reaction-window framework is peer-only and was rejected for this use.
   - **Audere Majora + legend-deed minting (#953):**
     `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
     `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
@@ -148,6 +154,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
   - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
   - `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`/`scene`
+- **API endpoints (entry-flourish declaration — #1140):**
+  - `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` — account-scoped
+    pending entry-flourish offer inbox (#1140)
+  - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
+    offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
@@ -758,13 +769,22 @@ Unified modifier system — categories, types, sources, and per-character modifi
 
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
-services, and equipment-modifier integration.
+services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
+crafting framework and check-driven facet/style attachment.
 
 - **Models:**
   - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
     `attachment_quality_tier`; unique per (item_instance, facet)
+  - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
+    `attachment_quality_tier`; unique per (item_instance, style)
+  - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
+    `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
+    default consumption policy), `CraftingMaterialRequirement` (ingredient rows),
+    `CraftingSkillCap` (skill-rank → quality ceiling ladder), `CraftingRecipeConsequence`
+    (weighted consequence pool entry with per-row `cost_consumption` override). Replaces
+    the old `FacetCraftingConfig` singleton.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
@@ -773,7 +793,8 @@ services, and equipment-modifier integration.
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
-  provenance used by the lore-critical predicate)
+  provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
+  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL)
 - **Handlers:**
   - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
     `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
@@ -793,6 +814,29 @@ services, and equipment-modifier integration.
   - `purge_expired_soft_deleted_items(*, grace=None) -> int` (`world/items/services/cleanup.py`)
     — hard-deletes soft-deleted, non-lore-critical items past the grace period; called
     by the `items.soft_delete_cleanup` daily cron task (#1025)
+  - **Crafting orchestration** (`world.items.crafting.services`):
+    - `run_crafting_recipe(*, kind, crafter_account, crafter_character, item_instance, target)
+      -> CraftRunResult` — atomic 8-step pipeline (pre-validate → afford → roll →
+      consequence → consume → attach); raises `CraftingNotConfigured` / `CraftingCostUnaffordable`
+    - `build_crafting_quote(*, kind, crafter_character, crafter_character_sheet, target)
+      -> CraftingQuote` — read-only cost+quality snapshot; no mutation
+    - `stage_and_assert_affordable(*, recipe, crafter_character, crafter_character_sheet)
+      -> StagedCost` (`world.items.crafting.cost`)
+    - `consume_cost(*, crafter_character, staged, consumption) -> dict`
+      (`world.items.crafting.cost`)
+    - `resolve_capped_tier(*, recipe, crafter_character, check_result) -> QualityTier`
+      (`world.items.crafting.quality`)
+  - **Domain wrappers** (`world.items.services.crafting`):
+    - `craft_attach_facet(*, crafter_account, crafter_character, item_instance, facet)
+      -> FacetCraftResult`
+    - `craft_attach_style(*, crafter_account, crafter_character, item_instance, style)
+      -> StyleCraftResult`
+    - `compute_quality_score(check_result, *, step, min_success_level) -> int`
+  - **Shared material helper** (`world.items.services.materials`):
+    - `gather_consumable_pks(*, available, requirements) -> list[int]` — validates inventory,
+      returns PKs to delete; also used by the ritual path
+    - `consume_pks(pks) -> None`
+    - `meets_quality_tier(inst, requirement) -> bool`
 - **Predicates on `ItemInstance`:**
   - `differs_from_template` — True if instance has any per-instance data (custom name/desc,
     lore_value, quality_tier, facets, or non-CREATED provenance); gates soft- vs. hard-delete
@@ -811,13 +855,20 @@ services, and equipment-modifier integration.
   instance), optional `target` (validated by `OnUseTargetPrerequisite` against
   `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
   Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
-- **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
-  `SlotIncompatible`, `ItemNotUsable`, `NoChargesRemaining` — all in `world.items.exceptions`
+- **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `StyleAlreadyAttached`,
+  `StyleCapacityExceeded`, `SlotConflict`, `SlotIncompatible`, `ItemNotUsable`,
+  `NoChargesRemaining`, `CraftingNotConfigured`, `CraftingCostUnaffordable` — all in
+  `world.items.exceptions`
 - **API Endpoints:**
   - `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/`
     (read-only catalog)
-  - `GET/POST /api/items/item-facets/` — list/attach (owner-or-staff perm);
+  - `GET/POST /api/items/item-facets/` — list/attach via `craft_attach_facet`
+    (owner-or-staff perm); returns `FacetCraftResult` (201 on attach, 200 on failed roll);
     `DELETE /api/items/item-facets/{id}/` — remove
+  - `GET /api/items/item-facets/quote/` — `?item_instance=<pk>&facet=<pk>` — read-only
+    crafting quote; returns `CraftingQuoteSerializer`
+  - `GET/POST /api/items/item-styles/` — list/attach via `craft_attach_style`; returns
+    `StyleCraftResult`; `GET /api/items/item-styles/quote/` — read-only quote
   - `GET /api/items/equipped-items/` — list/retrieve (read-only); equip and
     unequip route through the action layer via the WebSocket `execute_action`
     inputfunc (`{action: "equip" | "unequip", kwargs: {target_id: N, ...}}`)
@@ -827,16 +878,19 @@ services, and equipment-modifier integration.
     `UseItemResult` (`charges_remaining`, `consumed`, `result_text`); `ItemError` → HTTP 400
 - **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
   region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
-  per item; worn facets feed the mechanics modifier walk (see Mechanics §EQUIPMENT_RELEVANT).
-  Usability (`is_usable`) is derived entirely from the template's `on_use_pool` FK — no
-  separate flag or type split.
+  per item via the crafting framework; worn facets feed the mechanics modifier walk (see
+  Mechanics §EQUIPMENT_RELEVANT). Crafting is data-driven: new kinds register a handler +
+  author a `CraftingRecipe` row — no schema change.
 - **Frontend:** `WardrobePage` (outfits, equipped items, inventory grid, item detail drawer);
   `ItemDetailPanel` shows a **Use** button when `item.is_usable` is true (disabled for
   depleted consumables), calls `POST /api/items/inventory/<pk>/use/`, and renders an inline
   result block (charges remaining / consumed / text); errors toast the backend `user_message`.
+  `AttachFacetDialog` (facet-only picker surfacing rolled outcome/tier) launched from
+  `ItemDetailPanel`'s action row.
 - **Integrates with:** mechanics (equipment modifier walk via `passive_facet_bonuses` +
-  `covenant_role_bonus`), magic (outfit trickle, `outfit_item_facet` ResonanceGrant FK),
-  covenants (gear archetype compatibility), crafting (future: crafting recipes)
+  `covenant_role_bonus`), magic (outfit trickle, `outfit_item_facet` ResonanceGrant FK,
+  ritual material consumption via shared `gather_consumable_pks`), covenants (gear archetype
+  compatibility), checks (`perform_check` + consequence pool)
 - **Source:** `src/world/items/`
 - **Details:** [items.md](items.md)
 

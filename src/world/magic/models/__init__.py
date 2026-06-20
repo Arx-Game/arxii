@@ -41,6 +41,9 @@ from world.magic.audere_majora import (
     AudereMajoraThreshold,
     PendingAudereMajoraOffer,
 )
+
+# entry-flourish offer (#1140, re-exported so Django's model registry sees it)
+from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.models.affinity import (
     Affinity,
     AffinityManager,
@@ -238,6 +241,8 @@ __all__ = [
     "PendingAudereMajoraOffer",
     # audere offer surface (#873, re-exported from world.magic.audere)
     "PendingAudereOffer",
+    # entry-flourish offer (#1140, re-exported from world.magic.entry_flourish)
+    "PendingEntryFlourishOffer",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
     # endorsement (Spec C §2.2)

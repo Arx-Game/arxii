@@ -178,14 +178,7 @@ class BaseState:
             if pk is not None:
                 looker_state = self.context.get_state_by_pk(pk)
 
-        base = self.name
-        if self.fake_name:
-            if looker_state is None:
-                base = self.fake_name
-            else:
-                pk = looker_state.obj.pk
-                if pk != self.obj.pk and pk not in self.real_name_viewers:
-                    base = self.fake_name
+        base = self._base_display_name(looker_state)
 
         prefix = self.name_prefix
         suffix = self.name_suffix
@@ -196,6 +189,23 @@ class BaseState:
             suffix = self.name_suffix_map.get(pk, suffix)
 
         return f"{prefix}{base}{suffix}"
+
+    def _base_display_name(self, looker_state: "BaseState | None") -> str:
+        """The bare name ``looker_state`` sees, before prefix/suffix.
+
+        Subclasses override to resolve identity (e.g. ``CharacterState`` renders the presented
+        persona — real name / discovery reveal / anonymous sdesc — per viewer).
+        """
+        base = self.name
+        if self.fake_name and (
+            looker_state is None
+            or (
+                looker_state.obj.pk != self.obj.pk
+                and looker_state.obj.pk not in self.real_name_viewers
+            )
+        ):
+            base = self.fake_name
+        return base
 
     def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:
         return ""
