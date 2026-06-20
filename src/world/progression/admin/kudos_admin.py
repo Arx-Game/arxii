@@ -8,6 +8,7 @@ from django.utils.html import format_html
 
 from world.progression.models import (
     KudosClaimCategory,
+    KudosDifficultyWeight,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
@@ -85,3 +86,11 @@ class KudosTransactionAdmin(admin.ModelAdmin):
     search_fields = ["account__username", "description", "awarded_by__username"]
     readonly_fields = ["transaction_date"]
     raw_id_fields = ["account", "awarded_by", "character"]
+
+
+@admin.register(KudosDifficultyWeight)
+class KudosDifficultyWeightAdmin(admin.ModelAdmin):
+    """Admin interface for KudosDifficultyWeight — staff-tunable band multipliers."""
+
+    list_display = ["difficulty_choice", "multiplier"]
+    ordering = ["difficulty_choice"]

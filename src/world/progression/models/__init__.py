@@ -17,6 +17,7 @@ from world.progression.models.character_xp import (
 )
 from world.progression.models.kudos import (
     KudosClaimCategory,
+    KudosDifficultyWeight,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
@@ -74,6 +75,7 @@ __all__ = [
     "DevelopmentTransaction",
     "ExperiencePointsData",
     "KudosClaimCategory",
+    "KudosDifficultyWeight",
     "KudosPointsData",
     "KudosSourceCategory",
     "KudosTransaction",

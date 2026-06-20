@@ -2,6 +2,7 @@
 Factory classes for progression models.
 """
 
+from decimal import Decimal
 import random
 
 import factory
@@ -16,6 +17,7 @@ from world.progression.models import (
     DevelopmentTransaction,
     ExperiencePointsData,
     KudosClaimCategory,
+    KudosDifficultyWeight,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
@@ -205,3 +207,38 @@ class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
     points_earned = 0
     check_count = 0
     processed = False
+
+
+class KudosDifficultyWeightFactory(factory_django.DjangoModelFactory):
+    """Factory for KudosDifficultyWeight."""
+
+    class Meta:
+        model = KudosDifficultyWeight
+
+    difficulty_choice = factory.Iterator(["trivial", "easy", "normal", "hard", "daunting"])
+    multiplier = Decimal("1.00")
+
+
+# Default seed weights: lower difficulty = higher multiplier (easier to trigger
+# affectable actions → more generous reward); harder = lower multiplier.
+_DEFAULT_BAND_WEIGHTS: dict[str, Decimal] = {
+    "trivial": Decimal("2.00"),
+    "easy": Decimal("1.50"),
+    "normal": Decimal("1.00"),
+    "hard": Decimal("0.50"),
+    "daunting": Decimal("0.25"),
+}
+
+
+def seed_kudos_difficulty_weights() -> None:
+    """
+    Create the default KudosDifficultyWeight rows via get_or_create.
+
+    Idempotent: safe to call multiple times; existing rows are not modified.
+    Doubles as integration-test setUp data and new-game seed data.
+    """
+    for band, weight in _DEFAULT_BAND_WEIGHTS.items():
+        KudosDifficultyWeight.objects.get_or_create(
+            difficulty_choice=band,
+            defaults={"multiplier": weight},
+        )
