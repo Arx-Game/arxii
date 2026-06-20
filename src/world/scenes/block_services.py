@@ -4,10 +4,11 @@ The coded enforcement primitive the rest of the system will call: "is there an a
 between these two (player, persona) sides?" Block is mutual — it hides each side from the other —
 and keyed on PlayerData (account), so it follows the *person* across re-rosters.
 
-Slice 1 added resolution + lifecycle; slice 2 wires the **profile gate**
-(``sheet_blocked_for_viewer`` → the character-sheet view 404s for a blocked viewer). Scene
-visibility / the target picker, the Mute sibling, the awareness/flag + generic "Character Has You
-Blocked" surface, and the cron job remain follow-up slices.
+Slice 1 added resolution + lifecycle; slice 2 wired the **profile gate**
+(``sheet_blocked_for_viewer`` → the character-sheet view 404s for a blocked viewer); slice 3 wired
+the **scene target picker** (``actions.player_interface._block_excluded_persona_ids`` removes a
+blocked persona from the actor's targets). Interaction/thread visibility, the Mute sibling, the
+awareness/flag + generic "Character Has You Blocked" surface, and the cron job remain follow-ups.
 """
 
 from __future__ import annotations
