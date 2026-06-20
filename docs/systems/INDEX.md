@@ -917,11 +917,13 @@ These two axes are orthogonal — never re-merge them.
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
     `LastManagerRankError` if an op would leave zero active managers.
-- **Combat seams (#985):** `apply_equipped_armor_soak` adds
-  `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top of raw
-  soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
-  WEAPON_DAMAGE_TARGET_NAME)` to technique budget. Both route through
-  `get_modifier_total` → `covenant_role_bonus` equipment walk.
+- **Combat seams (#985, #1174):** `apply_equipped_armor_soak` splits worn armor into
+  role-compatible vs incompatible buckets; final soak = `compat_physical +
+  max(incompat_physical, resonant_pool)` where the resonant pool =
+  `equipment_walk_total_unblended` (facet + mantle + motif-style +
+  `covenant_role_base_total`). `_weapon_augmented_budget` adds
+  `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget
+  via `get_modifier_total` → `covenant_role_bonus`.
 - **Exceptions:** `world.covenants.exceptions` —
   `CovenantRoleNeverHeldError` (Thread weave gate);
   `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,

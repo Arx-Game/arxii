@@ -1,21 +1,22 @@
-"""Integration + regression tests: covenant-role bonus consumed by combat seams (#985, Task 5).
+"""Integration + regression tests: covenant-role armor-soak gate in combat seams (#985, #1174).
 
 Four test classes:
   (a) Full-chain modifier-total: get_modifier_total(sheet, weapon_damage_target) equals the
       covenant-role marginal bonus (character_level * bonus_per_level) for a compatible weapon.
-  (b) Soak seam: apply_equipped_armor_soak reduces damage by armor_soak + covenant_soak_bonus.
-  (c) Non-covenant regression guard: no engaged role → covenant_role_bonus 0, soak = armor only.
-  (d) Unseeded-target guard: _combat_target_bonus returns 0 when ModifierTarget row is absent.
+  (b) Soak seam: apply_equipped_armor_soak computes
+      compat_physical + max(incompat_physical, resonant).
+  (c) Non-covenant regression guard: no engaged role → resonant pool = 0, soak = armor only.
+  (d) Unseeded-target guard: _combat_target_bonus returns 0 when ModifierTarget row absent.
 
-Design notes on the blend:
-  - effective_soak_from_armor (raw) reads ItemInstance.effective_armor_soak directly.
-  - _covenant_armor_soak_bonus calls get_modifier_total(sheet, armor_soak_target), which
-    includes equipment_walk_total → covenant_role_bonus for an engaged role. No gear-stat
-    double-count: covenant_role_bonus for compatible gear returns role_bonus only (the gear
-    stat is already counted in the raw armor soak side); for incompatible gear it returns
-    max(0, role_bonus - gear_stat) — the marginal surplus.
-  - For a non-covenant character, equipment_walk_total = 0 for armor_soak_target (no facet
-    threads, no role), so _covenant_armor_soak_bonus = 0.
+Design notes on the blend (#1174):
+  - apply_equipped_armor_soak splits worn armor into compatible vs incompatible buckets via
+    _split_armor_soak_by_compatibility (one bucket per GearArchetypeCompatibility existence check).
+  - The resonant pool (_resonant_armor_soak) = eager CharacterModifier total +
+    equipment_walk_total_unblended(sheet, armor_soak_target); the latter sums facet + mantle +
+    motif-style + covenant_role_base_total (role base × level, un-blended, once per character).
+  - Final soak = compat_physical + max(incompat_physical, resonant).
+  - For a non-covenant character, equipment_walk_total_unblended = 0 for armor_soak_target (no
+    facet threads, no role), so the resonant pool = 0 and soak reduces to armor-only.
 """
 
 from django.test import TestCase
@@ -124,11 +125,12 @@ class CovenantArmorSoakSeamTests(TestCase):
 
     def test_covenant_soak_bonus_reduces_damage_beyond_armor(self) -> None:
         """With armor_soak=3 + compatible role at level 2 + bonus_per_level=2:
-        effective soak = 3 (armor) + 4 (covenant role bonus) = 7; damage = 20 - 7 = 13.
+        effective soak = 3 (compat_physical) + max(0, resonant=4) = 7; damage = 20 - 7 = 13.
 
-        _covenant_armor_soak_bonus = get_modifier_total(sheet, armor_soak_target)
-        = equipment_walk_total = covenant_role_bonus = role_bonus (compatible gear, one item)
-        = level * bonus_per_level = 2 * 2 = 4.
+        resonant = equipment_walk_total_unblended(sheet, armor_soak_target)
+        = covenant_role_base_total = role_base × level = 2 * 2 = 4.
+        compat_physical = 3 (armor is compatible); incompat_physical = 0.
+        soak = 3 + max(0, 4) = 7.
         """
         char = CharacterFactory(db_key="CovenantSoakChar")
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
@@ -160,9 +162,9 @@ class CovenantArmorSoakSeamTests(TestCase):
         raw_damage = 20
         result = apply_equipped_armor_soak(char, raw_damage)
 
-        # effective_soak_from_armor = 3.
-        # _covenant_armor_soak_bonus = get_modifier_total = 4 (role_bonus, no eager).
-        # Total soak = 3 + 4 = 7. Post-soak damage = max(0, 20 - 7) = 13.
+        # compat_physical = 3 (LIGHT_ARMOR is compatible), incompat_physical = 0.
+        # resonant = equipment_walk_total_unblended = covenant_role_base_total = 4 (level=2, bpl=2).
+        # soak = 3 + max(0, 4) = 7. Post-soak damage = max(0, 20 - 7) = 13.
         self.assertEqual(result, 13)
 
     def test_covenant_soak_takes_less_damage_than_non_covenant(self) -> None:
@@ -174,8 +176,8 @@ class CovenantArmorSoakSeamTests(TestCase):
         sheet_nc = CharacterSheetFactory(character=char_nc, primary_persona=False)  # noqa: F841
         self._equip_armor(char_nc, base_soak=3, name="NoCovArmor")
         no_cov_result = apply_equipped_armor_soak(char_nc, 20)
-        # No role → covenant_role_bonus = 0; _covenant_armor_soak_bonus = 0.
-        # soak = 3 + 0 = 3; damage = max(0, 20 - 3) = 17.
+        # No role → resonant pool = 0; incompat_physical = 3 (no engaged role, armor is
+        # incompatible); compat_physical = 0. soak = 0 + max(3, 0) = 3; damage = 17.
         self.assertEqual(no_cov_result, 17)
 
         # Covenant character with same armor and an engaged role.
@@ -220,9 +222,9 @@ class NonCovenantRegressionGuardTests(TestCase):
     def test_no_engaged_role_soak_reduces_by_armor_only(self) -> None:
         """With no engaged covenant role, apply_equipped_armor_soak uses armor soak only.
 
-        Non-covenant: covenant_role_bonus = 0 (no engaged_roles early-exit).
-        _covenant_armor_soak_bonus = get_modifier_total = 0.
-        apply_equipped_armor_soak = effective_soak_from_armor + 0 = armor_soak only.
+        Non-covenant: resonant pool = 0 (equipment_walk_total_unblended = 0; no role/facets).
+        All armor falls in the incompatible bucket (no engaged role → no compatibility match).
+        soak = compat_physical(0) + max(incompat_physical, resonant=0) = armor only.
         """
         char = CharacterFactory(db_key="NoRoleSoakChar")
         sheet_nc = CharacterSheetFactory(character=char, primary_persona=False)  # noqa: F841
@@ -245,9 +247,8 @@ class NonCovenantRegressionGuardTests(TestCase):
         char.equipped_items.invalidate()
 
         result = apply_equipped_armor_soak(char, 20)
-        # No covenant role → covenant_role_bonus = 0 → equipment_walk_total = 0.
-        # _covenant_armor_soak_bonus = get_modifier_total = 0.
-        # effective_soak_from_armor = 4. Total soak = 4. Damage = max(0, 20 - 4) = 16.
+        # No covenant role → resonant pool = 0; armor falls in incompat bucket.
+        # soak = 0 + max(incompat_physical=4, resonant=0) = 4. Damage = max(0, 20 - 4) = 16.
         self.assertEqual(result, 16)
 
 

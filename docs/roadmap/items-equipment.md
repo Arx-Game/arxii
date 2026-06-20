@@ -89,10 +89,10 @@ What shipped:
 - **Marginal §5.6 blend** — compatible slot: adds `role_bonus` (stacks on top of the
   gear combat already reads); incompatible slot: adds `max(0, role_bonus - gear_stat)`
   (role surplus only). Equivalent outcome to the original spec; avoids double-counting.
-- **Combat seams:** `apply_equipped_armor_soak` adds `_covenant_armor_soak_bonus`
-  (routes through `get_modifier_total` for the `armor_soak` target); `_weapon_augmented_budget`
-  adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget.
-  Non-covenant characters and base damage/soak are unchanged.
+- **Combat seams:** `apply_equipped_armor_soak` uses a role-gated
+  compatible/incompatible split with a resonant pool (see #1174 below);
+  `_weapon_augmented_budget` adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)`
+  to technique budget. Non-covenant characters and base damage/soak are unchanged.
 - **Tests** — `test_covenant_combat_blend.py` (integration: weapon + soak seams +
   non-covenant regression + unseeded-target guard); `test_covenant_role_bonus_gating.py`
   (unit); `test_modifier_total_no_query.py::CovenantRoleAnchorCapQueryBudgetTests`
@@ -168,8 +168,32 @@ never used the modifier seam at all. #750 closes that consumer-side gap:
   so durability-from-investment now spans threads (damage reduction) +
   fashion/covenant (defensive check bonus).
 
-Follow-ups filed: covenant-role gating whether a character benefits from armor
-soak; thread defensive-magnitude tuning.
+Follow-up filed: thread defensive-magnitude tuning.
+
+## Covenant-role armor-soak gate (DONE, #1174)
+
+Covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174.
+
+Worn armor is now split into role-compatible and role-incompatible buckets by
+`_split_armor_soak_by_compatibility` (per `GearArchetypeCompatibility` row existence for
+each engaged role × gear archetype pair). The *resonant soak pool* is computed by
+`_resonant_armor_soak` = eager `CharacterModifier` total + `equipment_walk_total_unblended`,
+where the latter sums facet + mantle + motif-style + `covenant_role_base_total` (role base
+× character level, pooled once per character). Final formula in `apply_equipped_armor_soak`:
+
+    soak = compat_physical + max(incompat_physical, resonant)
+
+Because `resonant` scales on character level and physical armor stats do not, a character
+incompatible with heavy plate sees the resonant pool overtake the armor past low levels
+("battle-lingerie beats platemail at high level"). Durability wears only on armor whose
+physical soak contributed (all compatible pieces; incompatible pieces only when
+`incompat_physical >= resonant`).
+
+Two new service functions in `world.mechanics.services`:
+- `covenant_role_base_total(sheet, target)` — sums role-base × level across all engaged
+  roles, without per-slot blending.
+- `equipment_walk_total_unblended(sheet, target)` — mirrors `equipment_walk_total` but
+  swaps per-slot-blended `covenant_role_bonus` for `covenant_role_base_total`.
 
 ## Item Interaction Service Functions — Use / Consume Charges (DONE, #509)
 

@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -137,19 +137,26 @@ sets. Specific role names are authored content (`CovenantRole` rows).
   default to `~rank 15`.
 - See `docs/roadmap/combat.md` for the full combat resolution pipeline.
 
-### Gear × Role Compatibility (Spec D §4.4)
+### Gear × Role Compatibility (Spec D §4.4, #985, #1174)
 
-Covenant role bonuses are always granted in full — they are *never* reduced.
-Per equipped slot:
+Gear compatibility governs two distinct seams:
 
-- **Compatible gear** (a `GearArchetypeCompatibility` row exists for the
-  role × archetype pair): role bonus + gear stat (additive).
-- **Incompatible gear** (no row): `max(role_bonus, gear_stat)`.
+**Weapon damage** (`_weapon_augmented_budget`, #985): per-slot marginal blend.
+Compatible slot adds `role_bonus`; incompatible slot adds `max(0, role_bonus - gear_stat)`.
+Routes through `get_modifier_total` → `covenant_role_bonus`.
 
-At low levels gear stats dominate either way; at higher levels role bonuses
-dominate, and compatible gear adds a small mundane-stat increment on top.
-Compatibility is staff-authored existence-only data — no boolean column,
-just row-presence.
+**Armor soak** (`apply_equipped_armor_soak`, #1174): whole-character pool blend.
+Worn armor is split into compatible vs incompatible buckets. The *resonant soak pool* =
+facet + mantle + motif-style + `covenant_role_base_total` (role base × character level,
+summed once per character, not per slot). Final soak:
+
+    soak = compat_physical + max(incompat_physical, resonant)
+
+Compatible armor stacks additively on the resonant pool. Incompatible armor competes
+with the resonant pool via `max` — at low levels physical armor wins; at higher levels
+the resonant pool overtakes it. Durability wears only on armor whose physical soak
+contributed. Compatibility is staff-authored existence-only data (`GearArchetypeCompatibility`)
+— no boolean column, just row-presence.
 
 ### Magic Integration: COVENANT_ROLE Thread Anchors
 

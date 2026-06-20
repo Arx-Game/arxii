@@ -4232,7 +4232,7 @@ def _resonant_armor_soak(character: Character) -> int:
 
 def _split_armor_soak_by_compatibility(
     character: Character,
-) -> tuple[int, int, list, list]:
+) -> tuple[int, int, list[ItemInstance], list[ItemInstance]]:
     """Split worn armor's effective soak into role-compatible vs incompatible buckets (#1174).
 
     A piece is compatible when ANY engaged covenant role is gear-compatible with its
