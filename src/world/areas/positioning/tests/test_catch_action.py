@@ -62,8 +62,17 @@ class CatchActionTests(TestCase):
             ConditionCapabilityEffectFactory,
             ConditionTemplateFactory,
         )
+        from world.traits.factories import CheckSystemSetupFactory
+        from world.traits.models import ResultChart
 
         ensure_fall_content()
+
+        # Seed the check-resolution pipeline (ResultCharts + success outcomes for
+        # rank diffs -2..2). Without it, ``_get_difficulty_indicator_for_check`` finds
+        # no chart for the catch's Reflexes roll → IMPOSSIBLE, and the catch approach
+        # is dropped from ``get_available_actions`` (the gate that surfaces it).
+        CheckSystemSetupFactory.create()
+        ResultChart.clear_cache()
 
         self.room = create_object("typeclasses.rooms.Room", key="CatchRoom", nohome=True)
 

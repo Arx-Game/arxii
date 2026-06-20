@@ -129,12 +129,28 @@ def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> None:  
     null pools on the fall type fall back to the configured default). Removes the
     Plummeting condition and clears the catch challenge afterwards.
     """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
     from world.conditions.models import DamageType  # noqa: PLC0415
     from world.vitals.services import process_damage_consequences  # noqa: PLC0415
 
     sheet = getattr(target, "sheet_data", None)  # noqa: GETATTR_LITERAL
     damage = instance.severity * settings.FALL_IMPACT_PER_LEVEL
     fall_type = DamageType.objects.filter(name=FALL_DAMAGE_TYPE_NAME).first()
+
+    # Write the health change BEFORE running the survivability pipeline — the
+    # same order as _apply_round_tick_damage / combat's _apply_damage:
+    # process_damage_consequences resolves wound/death/knockout tiers but does
+    # NOT itself debit health. No-op for targets without vitals.
+    if sheet is not None and damage > 0:
+        try:
+            vitals = sheet.vitals
+        except (AttributeError, ObjectDoesNotExist):
+            vitals = None
+        if vitals is not None:
+            vitals.health -= damage
+            vitals.save(update_fields=["health"])
+
     process_damage_consequences(sheet, damage, fall_type)
     end_plummet(target, caught=False)
 

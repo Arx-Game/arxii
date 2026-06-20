@@ -302,9 +302,12 @@ the Plummeting condition it walks one `elevation_anchor` level down via `force_m
 and accumulates depth on the `Plummeting` `ConditionInstance.severity` (one per round — the
 standard severity→consequence scaling). The round the target lands on solid ground (the new
 position's `elevation_anchor is None`) `_apply_fall_impact` fires: `damage = severity *
-settings.FALL_IMPACT_PER_LEVEL` (env-backed config, default 5) routed through
+settings.FALL_IMPACT_PER_LEVEL` (env-backed config, default 5). It **debits the faller's
+`CharacterVitals.health` by that damage first** (the same order as `_apply_round_tick_damage`
+/ combat's `_apply_damage` — `process_damage_consequences` resolves wound/death/knockout
+tiers but does not itself debit health), then routes the same magnitude through
 `process_damage_consequences` with the `Fall` `DamageType` (null pools → config-default
-survivability). `end_plummet(faller, *, caught=False)` then removes the Plummeting condition
+survivability). Both steps no-op gracefully for a faller without a `CharacterVitals` row. `end_plummet(faller, *, caught=False)` then removes the Plummeting condition
 and deactivates the bound catch `ChallengeInstance`. `caught` is **not inert** — it selects
 the terminal room narration via `_narrate_plummet_end` (relieved safe-landing line when
 `caught=True`, grim impact line when `caught=False`), so the catch path (no impact) reads

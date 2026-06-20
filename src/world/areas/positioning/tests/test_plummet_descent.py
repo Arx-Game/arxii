@@ -44,11 +44,15 @@ class PlummetDescentTests(TestCase):
         from evennia import create_object
 
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.vitals.factories import CharacterVitalsFactory
 
         ensure_fall_content()
 
         self.room = create_object("typeclasses.rooms.Room", key="DescentRoom", nohome=True)
         sheet = CharacterSheetFactory()
+        # The impact path reads/writes the faller's CharacterVitals; CharacterSheetFactory
+        # does not create one, so seed it explicitly (OneToOne to the sheet).
+        CharacterVitalsFactory(character_sheet=sheet)
         self.faller = sheet.character
         self.faller.db_location = self.room
         self.faller.save(update_fields=["db_location"])
