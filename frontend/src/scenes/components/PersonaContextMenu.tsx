@@ -11,9 +11,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Zap } from 'lucide-react';
+import { Swords, Zap } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
 import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
@@ -63,6 +64,28 @@ export function PersonaContextMenu({
     [scene, personaId]
   );
 
+  // #1181: outgoing duel-challenge affordance. Resolve the target persona to know
+  // whether it's the viewer's own character (hide for self) and whether it has
+  // opted out of social targeting (mirror the backend consent gate).
+  const targetPersona = useMemo(
+    () => (scene?.personas ?? []).find((p) => p.id === personaId) ?? null,
+    [scene, personaId]
+  );
+  const isSelfTarget = characterId !== null && targetPersona?.character_sheet === characterId;
+  // Require the target persona to be resolved from scene data: without it we know
+  // neither its character (self check) nor its opt-out state, so don't offer the duel.
+  const canChallenge =
+    characterId !== null &&
+    targetPersona !== null &&
+    !isSelfTarget &&
+    targetPersona.allow_social_actions !== false;
+
+  // Challenge dispatches via the registry path (the action carries no ActionTemplate,
+  // so it's absent from the available-actions list) with the target persona id.
+  const { mutateAsync: dispatchChallenge, isPending: isChallengePending } = useDispatchPlayerAction(
+    characterId ?? 0
+  );
+
   const [pendingWhisper, setPendingWhisper] = useState<PendingWhisper | null>(null);
 
   const performAction = useMutation({
@@ -82,8 +105,18 @@ export function PersonaContextMenu({
   // Show all prerequisite-met actions as potential targeted actions.
   const targetedActions: PlayerAction[] = (data?.results ?? []).filter((a) => a.prerequisite_met);
 
-  if (targetedActions.length === 0) {
+  // The menu is worth showing if there are targeted actions OR a challenge affordance.
+  if (targetedActions.length === 0 && !canChallenge) {
     return <>{children}</>;
+  }
+
+  function handleChallenge() {
+    dispatchChallenge({
+      ref: { backend: 'registry', registry_key: 'challenge' },
+      kwargs: { target: personaId },
+    })
+      .then(() => queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }))
+      .catch(() => {});
   }
 
   return (
@@ -95,6 +128,19 @@ export function PersonaContextMenu({
         <DropdownMenuContent>
           <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {canChallenge && (
+            <>
+              <DropdownMenuItem
+                disabled={isChallengePending}
+                data-testid="challenge-to-duel-item"
+                onClick={handleChallenge}
+              >
+                <Swords className="mr-2 h-4 w-4" />
+                Challenge to a duel
+              </DropdownMenuItem>
+              {targetedActions.length > 0 && <DropdownMenuSeparator />}
+            </>
+          )}
           {/* Direct execute: fires the action immediately via REST, independent of
             any pose in the composer. This is a "quick action" path. The submenu
             picks the audience (#903); the plain "Default" entry sends NO delivery

@@ -88,6 +88,32 @@ class ChallengeActionConsentingTargetTests(django.test.TestCase):
         self.assertTrue(result.success, msg=result.message)
         self.assertIn("challenge_id", result.data)
 
+    def test_challenge_resolves_persona_id_target(self) -> None:
+        """The web dispatch path passes a Persona pk; the action resolves it to the
+        target's character and creates the challenge (#1181)."""
+        from actions.registry import get_action
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory(character_sheet=self.target_sheet)
+
+        result = get_action("challenge").run(self.actor, target=persona.pk)
+
+        self.assertTrue(result.success, msg=result.message)
+        challenge = DuelChallenge.objects.filter(
+            challenger_sheet=self.actor_sheet,
+            challenged_sheet=self.target_sheet,
+            status=DuelChallengeStatus.PENDING,
+        ).first()
+        self.assertIsNotNone(challenge, "Expected the persona-id target to resolve to a challenge")
+
+    def test_challenge_unresolvable_persona_id_target_fails(self) -> None:
+        """A Persona pk that doesn't exist resolves to no target → 'Challenge whom?'."""
+        from actions.registry import get_action
+
+        result = get_action("challenge").run(self.actor, target=999_999)
+
+        self.assertFalse(result.success)
+
 
 class ChallengeActionConsentBlockedTests(django.test.TestCase):
     """challenge at a target who has opted out of social actions → blocked."""

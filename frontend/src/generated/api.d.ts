@@ -21431,6 +21431,17 @@ export interface components {
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;
+      /**
+       * @description Whether this persona's character may be targeted by social actions.
+       *
+       *     Mirrors the challenge consent gate (``_tenure_blocks_actor`` with
+       *     ``category=None``): blocked only when the active tenure's
+       *     ``SocialConsentPreference`` has ``allow_social_actions=False``. Lets the
+       *     scene UI hide/disable the duel-challenge affordance for opted-out
+       *     characters (#1181); the backend still enforces the full gate at dispatch.
+       *     Defaults to True when there is no tenure or preference row.
+       */
+      readonly allow_social_actions: boolean;
     };
     /** @description A scene persona and the Position it currently occupies (or null). */
     PersonaPosition: {

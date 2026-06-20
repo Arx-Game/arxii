@@ -39,6 +39,14 @@ export interface ScenePersona {
   id: number;
   name: string;
   persona_type?: string;
+  /** The persona's character (CharacterSheet pk == character ObjectDB pk). */
+  character_sheet?: number;
+  /**
+   * Whether this persona's character may be socially targeted. Mirrors the
+   * challenge consent gate; the scene UI hides the duel-challenge affordance when
+   * false (#1181). Defaults to true server-side.
+   */
+  allow_social_actions?: boolean;
 }
 
 /** Compact public representation of a room position (id + name). */

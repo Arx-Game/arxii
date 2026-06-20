@@ -35,6 +35,25 @@ def _sheet(actor: ObjectDB) -> CharacterSheet | None:
         return None
 
 
+def _resolve_challenge_target(target: object) -> ObjectDB | None:
+    """Resolve the ``target`` challenge kwarg to a character ObjectDB.
+
+    Telnet/test callers pass an ObjectDB directly. The web dispatch path passes a
+    Persona pk (the scene UI works in persona ids, consistent with social actions);
+    resolve it to that persona's character ObjectDB. Returns None when unresolvable.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    if target is None or isinstance(target, ObjectDB):
+        return target
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    persona = Persona.objects.filter(pk=target).select_related("character_sheet__character").first()
+    if persona is None:
+        return None
+    return persona.character_sheet.character
+
+
 def _active_tenure(sheet: CharacterSheet) -> object | None:
     """Return the current (active) RosterTenure for *sheet*, or None."""
     try:
@@ -109,7 +128,8 @@ class ChallengeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target: ObjectDB | None = kwargs.get("target")
+        # Resolve the target: ObjectDB (telnet/test) or a Persona pk (web dispatch).
+        target: ObjectDB | None = _resolve_challenge_target(kwargs.get("target"))
 
         # --- resolve actor sheet ---
         actor_sheet = _sheet(actor)
