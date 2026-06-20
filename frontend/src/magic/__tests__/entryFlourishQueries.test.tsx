@@ -160,7 +160,7 @@ describe('useRespondToEntryFlourish', () => {
   it('passes the payload through to api.respondToEntryFlourish', async () => {
     vi.mocked(api.respondToEntryFlourish).mockResolvedValue(RESULT_FIXTURE);
 
-    const { result } = renderHook(() => useRespondToEntryFlourish(), {
+    const { result } = renderHook(() => useRespondToEntryFlourish(4), {
       wrapper: createWrapper(),
     });
 
@@ -182,7 +182,7 @@ describe('useRespondToEntryFlourish', () => {
     // gcTime: 0 evicts unobserved cache entries; assert the call instead.
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
 
-    const { result } = renderHook(() => useRespondToEntryFlourish(), { wrapper });
+    const { result } = renderHook(() => useRespondToEntryFlourish(4), { wrapper });
 
     await act(async () => {
       await result.current.mutateAsync({ offer_id: 9, resonance_id: 7 });
@@ -191,6 +191,25 @@ describe('useRespondToEntryFlourish', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: ['magic', 'entry-flourish', 'pending'],
+      });
+    });
+  });
+
+  it('invalidates the character-resonances query key on success', async () => {
+    vi.mocked(api.respondToEntryFlourish).mockResolvedValue(RESULT_FIXTURE);
+
+    const { wrapper, client } = createWrapperWithClient();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+
+    const { result } = renderHook(() => useRespondToEntryFlourish(4), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ offer_id: 9, resonance_id: 7 });
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['character-resonances', 4],
       });
     });
   });

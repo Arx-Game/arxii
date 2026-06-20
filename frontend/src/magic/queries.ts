@@ -701,14 +701,25 @@ export function usePendingEntryFlourishOffers(enabled: boolean = true) {
 
 /**
  * Pick a resonance to broadcast for a pending entry-flourish offer.
- * On success invalidates the entry-flourish inbox so the offer clears.
+ *
+ * Takes the responding character's sheet id so the character-resonances cache
+ * can be invalidated on success — the respond endpoint runs grant_resonance,
+ * which changes CharacterResonance balance/lifetime_earned.
+ *
+ * On success invalidates:
+ * - the entry-flourish pending inbox (offer clears)
+ * - the character-resonances key used by ResonancePickerField
+ *   (flat key ['character-resonances', characterSheetId], NOT under magicKeys)
  */
-export function useRespondToEntryFlourish() {
+export function useRespondToEntryFlourish(characterSheetId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: EntryFlourishRespondRequest) => api.respondToEntryFlourish(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: magicKeys.entryFlourishPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-resonances', characterSheetId] }).catch(
+        () => {}
+      );
     },
   });
 }
