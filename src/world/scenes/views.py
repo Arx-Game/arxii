@@ -1,7 +1,7 @@
 from datetime import timedelta
 from http import HTTPMethod
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Count, Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -21,6 +21,7 @@ from world.scenes.filters import (
     SceneFilter,
     SceneSummaryRevisionFilter,
 )
+from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
     Persona,
@@ -40,6 +41,7 @@ from world.scenes.permissions import (
 )
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
+    HighlightReelSerializer,
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
@@ -207,9 +209,11 @@ class SceneViewSet(viewsets.ModelViewSet):
         elif self.action in ["update", "partial_update", "destroy"]:
             # Only scene owners or staff can modify/delete scenes
             permission_classes = [IsSceneOwnerOrStaff]
-        elif self.action in ["retrieve", "activity"]:
-            # Retrieving a scene or reading its activity band must respect
-            # private/ephemeral-scene access (participants/staff only).
+        elif self.action in ["retrieve", "activity", "highlight_reel"]:
+            # Retrieving a scene, its activity band, or its highlight reel must respect
+            # private/ephemeral-scene access (participants/staff only). The reel ALSO
+            # filters interactions through Interaction.visible_to, so individual poses
+            # are gated even where scene-level access is granted.
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight
@@ -280,6 +284,59 @@ class SceneViewSet(viewsets.ModelViewSet):
         scene = self.get_object()
         band = room_activity_band(scene.location)
         return Response(SceneActivitySerializer({"band": band.label}).data)
+
+    @extend_schema(responses=HighlightReelSerializer, tags=["scenes"])
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="highlight-reel",
+        url_name="highlight-reel",
+    )
+    def highlight_reel(self, request: Request, pk: int | None = None) -> Response:
+        """#1241 — the scene's highlight reel: a sealed featured moment + a ranked index.
+
+        Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
+        zero reactions, because storyteller curation has primacy. When the scene has no
+        tags, this falls back to the single most-reacted pose. The index is the remaining
+        poses with at least one reaction, ranked by reaction count (ties -> most recent)
+        and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
+        reel can never surface a pose the viewer cannot already see — not even as a sealed
+        slot. The payload carries only interaction ids (the featured card is fully sealed);
+        the frontend reveals a pose by fetching it through the existing interaction-detail
+        endpoint, which re-checks visibility.
+        """
+        scene = self.get_object()
+        user = request.user
+        persona_ids = get_account_personas(request) if user.is_authenticated else []
+        since = request.query_params.get("since")  # noqa: USE_FILTERSET
+        visible = Interaction.objects.visible_to(user, persona_ids=persona_ids, since=since).filter(
+            scene_id=scene.pk
+        )
+        ranked = list(
+            visible.annotate(reaction_count=Count("reactions")).order_by(
+                "-reaction_count", "-timestamp"
+            )
+        )
+        tagged_ids = set(
+            visible.filter(dramatic_moment_tags__isnull=False).values_list("pk", flat=True)
+        )
+
+        featured = None
+        if tagged_ids:
+            # ranked is reaction-desc, timestamp-desc, so the first tagged pose is the
+            # highest-reacted tagged one (ties -> most recent). Headlines even at 0 reactions.
+            featured = next((itx for itx in ranked if itx.pk in tagged_ids), None)
+        elif ranked and ranked[0].reaction_count >= 1:
+            featured = ranked[0]
+
+        featured_pk = featured.pk if featured else None
+        index = [itx for itx in ranked if itx.reaction_count >= 1 and itx.pk != featured_pk][:10]
+
+        payload = {
+            "featured": {"interaction_id": featured.pk} if featured else None,
+            "index": [{"interaction_id": itx.pk, "rank": i + 1} for i, itx in enumerate(index)],
+        }
+        return Response(HighlightReelSerializer(payload).data)
 
 
 class PersonaViewSet(
