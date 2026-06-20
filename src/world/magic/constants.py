@@ -118,6 +118,9 @@ class EffectKind(models.TextChoices):
 class VitalBonusTarget(models.TextChoices):
     MAX_HEALTH = "MAX_HEALTH", "Max Health"
     DAMAGE_TAKEN_REDUCTION = "DAMAGE_TAKEN_REDUCTION", "Damage Taken Reduction"
+    DEATH_SAVE = "DEATH_SAVE", "Death Save"
+    KNOCKOUT_RESIST = "KNOCKOUT_RESIST", "Knockout Resist"
+    PERMANENT_WOUND_RESIST = "PERMANENT_WOUND_RESIST", "Permanent Wound Resist"
 
 
 class RitualExecutionKind(models.TextChoices):

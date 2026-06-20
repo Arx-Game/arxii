@@ -619,6 +619,9 @@ THREAD_SURVIVABILITY_DEFAULTS: dict[str, tuple[int, int, int]] = {
     # vital_target: (coefficient, cap, half_saturation)
     VitalBonusTarget.DAMAGE_TAKEN_REDUCTION: (1, 20, 8),
     VitalBonusTarget.MAX_HEALTH: (1, 80, 10),
+    VitalBonusTarget.DEATH_SAVE: (1, 15, 8),
+    VitalBonusTarget.KNOCKOUT_RESIST: (1, 15, 8),
+    VitalBonusTarget.PERMANENT_WOUND_RESIST: (1, 15, 8),
 }
 
 

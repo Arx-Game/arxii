@@ -56,11 +56,18 @@ class ThreadSurvivabilityTuningSeedTests(TestCase):
     def test_seed_creates_dr_and_health_rows_idempotently(self) -> None:
         seed_thread_survivability_tuning()
         seed_thread_survivability_tuning()  # second call must be a no-op
-        self.assertEqual(ThreadSurvivabilityTuning.objects.count(), 2)
+        self.assertEqual(ThreadSurvivabilityTuning.objects.count(), 5)
         dr = get_thread_survivability_tuning(VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
         self.assertEqual((dr.coefficient, dr.cap, dr.half_saturation), (1, 20, 8))
         hp = get_thread_survivability_tuning(VitalBonusTarget.MAX_HEALTH)
         self.assertEqual((hp.coefficient, hp.cap, hp.half_saturation), (1, 80, 10))
+        for target in (
+            VitalBonusTarget.DEATH_SAVE,
+            VitalBonusTarget.KNOCKOUT_RESIST,
+            VitalBonusTarget.PERMANENT_WOUND_RESIST,
+        ):
+            row = get_thread_survivability_tuning(target)
+            self.assertEqual((row.coefficient, row.cap, row.half_saturation), (1, 15, 8))
 
 
 class SurvivabilityBaselineTests(TestCase):
@@ -157,3 +164,24 @@ class RecomputeOnThreadChangeTests(TestCase):
         # After weave S goes from 0 to 1 (level-0 thread counts as max(1,0//10)=1).
         # baseline = round(80 * 1 / (1 + 10)) ≈ 7 → max_health should exceed 100.
         self.assertGreater(vitals.max_health, 100)
+
+
+# =============================================================================
+# Save targets: DEATH_SAVE, KNOCKOUT_RESIST, PERMANENT_WOUND_RESIST (#1250)
+# =============================================================================
+
+
+class SaveTargetSeedTests(TestCase):
+    def test_seed_creates_save_target_rows(self) -> None:
+        seed_thread_survivability_tuning()
+        for target in (
+            VitalBonusTarget.DEATH_SAVE,
+            VitalBonusTarget.KNOCKOUT_RESIST,
+            VitalBonusTarget.PERMANENT_WOUND_RESIST,
+        ):
+            self.assertIsNotNone(get_thread_survivability_tuning(target))
+
+    def test_save_baseline_zero_for_lone_wolf(self) -> None:
+        seed_thread_survivability_tuning()
+        lone = CharacterSheetFactory()  # no threads → lone wolf
+        self.assertEqual(survivability_baseline(lone.character, VitalBonusTarget.DEATH_SAVE), 0)
