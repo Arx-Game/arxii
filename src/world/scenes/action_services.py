@@ -517,9 +517,14 @@ def respond_to_action_target(
                 update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
             )
             _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
-            # Resolver invocation is intentionally omitted here: no multi-target resolvers
-            # exist yet (#572). When they do, wire get_resolver(action_key)(action_request, result)
-            # in this block analogous to respond_to_action_request.
+            # Per-target resolver invocation (#1178): fire the registered resolver for
+            # THIS target's result, symmetric with respond_to_action_request (:340).
+            # Runs once per accepted target; resolvers registered for multi-target
+            # actions must keep cast-level side-effects idempotent. result is None only
+            # for hostile consent-accepts (empty action_key → no resolver).
+            resolver = get_resolver(action_request.action_key)
+            if resolver is not None and result is not None:
+                resolver(action_request, result)
         return result
     return None
 

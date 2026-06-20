@@ -198,6 +198,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-targets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only listing of a persona's pending additional-target consent rows (#1177). */
+    get: operations['action_targets_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-targets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only listing of a persona's pending additional-target consent rows (#1177). */
+    get: operations['action_targets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -19673,6 +19707,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SceneActionRequest'][];
     };
+    PaginatedSceneActionTargetList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SceneActionTarget'][];
+    };
     PaginatedSceneListList: {
       /** @example 123 */
       count: number;
@@ -22612,7 +22661,7 @@ export interface components {
        *     * `mutter` - Mutter (partial echo)
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
-      readonly status: components['schemas']['SceneActionStatusEnum'];
+      readonly status: components['schemas']['Status307Enum'];
       /**
        * @description Difficulty level chosen or determined for this action
        *
@@ -22676,15 +22725,25 @@ export interface components {
       /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
       strain_commitment?: number;
     };
-    /**
-     * @description * `pending` - Pending
-     *     * `accepted` - Accepted
-     *     * `denied` - Denied
-     *     * `resolved` - Resolved
-     *     * `expired` - Expired
-     * @enum {string}
-     */
-    SceneActionStatusEnum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
+    /** @description Flat read payload for a pending additional-target consent row (#1177). */
+    SceneActionTarget: {
+      readonly action_target_id: number;
+      readonly action_request_id: number;
+      readonly target_persona_id: number;
+      status?: components['schemas']['Status307Enum'];
+      readonly initiator_persona: number;
+      readonly initiator_name: string;
+      readonly scene: number;
+      readonly action_key: string;
+      readonly action_template: number | null;
+      readonly technique: number | null;
+      /** @description Human label for the enhancing technique (mirrors the request serializer). */
+      readonly technique_name: string | null;
+      readonly pose_text: string;
+      readonly strain_commitment: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description A scene room's current activity band (shown before a teller commits). */
     SceneActivity: {
       readonly band: string;
@@ -23381,6 +23440,15 @@ export interface components {
       | 'approved'
       | 'denied'
       | 'withdrawn';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `denied` - Denied
+     *     * `resolved` - Resolved
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    Status307Enum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
     /**
      * @description * `declaring` - Declaring
      *     * `resolving` - Resolving
@@ -24945,6 +25013,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_targets_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        scene?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSceneActionTargetList'];
+        };
+      };
+    };
+  };
+  action_targets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene action target. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionTarget'];
         };
       };
     };
