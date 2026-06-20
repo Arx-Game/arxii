@@ -11,6 +11,7 @@ import { RoomPositionsPanel } from '../components/RoomPositionsPanel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
+import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import type { ActionAttachmentInfo } from '../actionTypes';
@@ -32,9 +33,15 @@ export function SceneDetailPage() {
   const activeCharacter = useAppSelector((state) => state.game.active);
 
   // Resolve the active character's primary persona id for submit_pose REST calls.
+  // Also derives characterSheetId: CharacterSheet uses OneToOneField(primary_key=True)
+  // to ObjectDB, so character_id === character_sheet pk.
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const personaId = useMemo(
     () => myRosterEntries.find((e) => e.name === activeCharacter)?.primary_persona_id ?? null,
+    [myRosterEntries, activeCharacter]
+  );
+  const characterSheetId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacter)?.character_id ?? 0,
     [myRosterEntries, activeCharacter]
   );
 
@@ -115,6 +122,7 @@ export function SceneDetailPage() {
         {isActive && <ConsentPrompt sceneId={id} />}
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
+        {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         <PlaceBar sceneId={id} />
         <RoomPositionsPanel sceneId={id} />
       </div>
