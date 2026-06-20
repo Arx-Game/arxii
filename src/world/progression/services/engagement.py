@@ -50,7 +50,9 @@ def grant_social_engagement_kudos() -> int:
     try:
         social_category = KudosSourceCategory.objects.get(name="social_engagement")
     except KudosSourceCategory.DoesNotExist:
-        logger.exception(
+        # Expected pre-launch state (category is DB-seeded separately) — warn, don't
+        # log a traceback as if it were an error.
+        logger.warning(
             "grant_social_engagement_kudos: KudosSourceCategory 'social_engagement' not found; "
             "skipping weekly grant."
         )
@@ -102,9 +104,9 @@ def accrue(
       the ``_get_or_reset_weekly_tracker`` pattern in journals/services.py).
     - Adds *points* to ``pending_points``.
     - If this is the first accrual from *initiator_account* this week,
-      creates a ``WeeklyEngagementInitiator`` row and increments
-      ``distinct_initiators``.  A second accrual from the same initiator
-      adds points but does NOT double-count.
+      creates a ``WeeklyEngagementInitiator`` row (``distinct_initiators``
+      is derived from those rows).  A second accrual from the same initiator
+      adds points but creates no duplicate row, so it does NOT double-count.
 
     Args:
         account: The account receiving the engagement credit.
