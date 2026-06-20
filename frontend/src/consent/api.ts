@@ -1,7 +1,6 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
 import type {
-  SocialConsentCategory,
   SocialConsentPreference,
   SocialConsentPreferenceRequest,
   SocialConsentCategoryRule,
