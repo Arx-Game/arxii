@@ -66,6 +66,10 @@ class CastPullTier(models.IntegerChoices):
 
 CAST_ACTION_KEY = "cast"  # sentinel marking a standalone cast request
 
+# Base social-fatigue cost charged to a defender who actively resists a social action.
+# The actual cost is scaled by the resist_effort multiplier in apply_fatigue — tunable.
+RESIST_FATIGUE_BASE = 1
+
 # Authored difficulty bands keyed by technique intensity ceiling. Single source
 # of truth (no inline magic numbers in logic). On the same 0-75 scale as
 # DIFFICULTY_VALUES so consequence resolution thresholds line up.

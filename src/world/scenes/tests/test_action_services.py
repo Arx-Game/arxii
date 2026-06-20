@@ -1135,3 +1135,227 @@ class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
 
         row.refresh_from_db()
         self.assertEqual(row.resist_effort_level, "low")
+
+
+class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
+    """Task 8 (C3): when a defender spends resist-effort, difficulty rises by the
+    Composure increment AND the defender is charged social fatigue.
+
+    Covers both the primary path (respond_to_action_request) and the additional-
+    target path (respond_to_action_target).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.checks.factories import create_resistance_check_types
+        from world.traits.models import (
+            CharacterTraitValue,
+            PointConversionRange,
+            Trait,
+            TraitCategory,
+            TraitType,
+        )
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.primary_target = PersonaFactory()
+        cls.additional_target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+        # PointConversionRange needed so _calculate_trait_points converts correctly.
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+
+        # Seed Composure CheckType + willpower trait weight.
+        create_resistance_check_types()
+
+        willpower_trait, _ = Trait.objects.get_or_create(
+            name="willpower",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.GENERAL,
+            },
+        )
+
+        # Give both defenders a willpower value so compute_resist_increment > 0.
+        primary_character = cls.primary_target.character_sheet.character
+        additional_character = cls.additional_target.character_sheet.character
+        CharacterTraitValue.objects.create(
+            character=primary_character, trait=willpower_trait, value=20
+        )
+        CharacterTraitValue.objects.create(
+            character=additional_character, trait=willpower_trait, value=20
+        )
+
+    def setUp(self) -> None:
+        from world.checks.models import CheckType
+        from world.traits.models import CharacterTraitValue
+
+        CharacterTraitValue.flush_instance_cache()
+        CheckType.flush_instance_cache()
+
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request(self):
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.primary_target,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_resist_raises_difficulty_and_charges_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Primary target with resist_effort='high' → difficulty = base + increment;
+        defender's social_current > 0 (fatigue charged)."""
+        from world.checks.services import compute_resist_increment
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        defender_character = self.primary_target.character_sheet.character
+        expected_increment = compute_resist_increment(defender_character, "high")
+        assert expected_increment > 0, "Test precondition: increment must be > 0"
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, base + expected_increment)
+
+        pool = get_or_create_fatigue_pool(self.primary_target.character_sheet)
+        self.assertGreater(pool.social_current, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_no_resist_uses_base_difficulty_no_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Primary target with no resist_effort → resolved_difficulty == base,
+        defender social fatigue unchanged."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        # Ensure pool exists with 0 to have a clean baseline.
+        pool_before = get_or_create_fatigue_pool(self.primary_target.character_sheet)
+        social_before = pool_before.social_current
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, base)
+
+        pool_before.refresh_from_db()
+        self.assertEqual(pool_before.social_current, social_before)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_target_resist_raises_difficulty_and_charges_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Additional target with resist_effort='high' → difficulty = base + increment;
+        defender's social_current > 0 (fatigue charged)."""
+        from world.checks.services import compute_resist_increment
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        # Also accept the primary to not block the test object state.
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        row.refresh_from_db()
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        defender_character = self.additional_target.character_sheet.character
+        expected_increment = compute_resist_increment(defender_character, "high")
+        assert expected_increment > 0, "Test precondition: increment must be > 0"
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, base + expected_increment)
+
+        pool = get_or_create_fatigue_pool(self.additional_target.character_sheet)
+        self.assertGreater(pool.social_current, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_target_no_resist_uses_base_difficulty_no_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Additional target with no resist_effort → resolved_difficulty == base,
+        defender social fatigue unchanged."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        # Accept primary first.
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        row.refresh_from_db()
+
+        pool_before = get_or_create_fatigue_pool(self.additional_target.character_sheet)
+        social_before = pool_before.social_current
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, base)
+
+        pool_before.refresh_from_db()
+        self.assertEqual(pool_before.social_current, social_before)

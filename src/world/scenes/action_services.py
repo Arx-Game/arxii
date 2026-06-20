@@ -13,6 +13,7 @@ from world.progression.models import KudosSourceCategory
 from world.progression.services.kudos import award_kudos
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
+    RESIST_FATIGUE_BASE,
     ActionDelivery,
     ActionRequestStatus,
     ConsentDecision,
@@ -347,7 +348,32 @@ def respond_to_action_request(
 
                 result = resolve_accepted_cast(action_request)
             else:
-                result = _resolve_standard_action(action_request)
+                # Compute resistance increment and charge defender fatigue when
+                # resist_effort is declared and there is a primary target.
+                difficulty_override: int | None = None
+                if action_request.target_persona is not None:
+                    from actions.constants import ActionCategory  # noqa: PLC0415
+                    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+                    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+                    base = DIFFICULTY_VALUES[action_request.difficulty_choice]
+                    if resist_effort:
+                        increment = compute_resist_increment(
+                            action_request.target_persona.character_sheet.character,
+                            resist_effort,
+                        )
+                        apply_fatigue(
+                            action_request.target_persona.character_sheet,
+                            ActionCategory.SOCIAL,
+                            RESIST_FATIGUE_BASE,
+                            resist_effort,
+                        )
+                    else:
+                        increment = 0
+                    difficulty_override = base + increment
+                result = _resolve_standard_action(
+                    action_request, difficulty_override=difficulty_override
+                )
 
             _award_acceptance_kudos(action_request)
 
@@ -464,11 +490,13 @@ def _resolve_action_against_persona(
 
 def _resolve_standard_action(
     action_request: SceneActionRequest,
+    *,
+    difficulty_override: int | None = None,
 ) -> EnhancedSceneActionResult:
     """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
         result, result_interaction, difficulty = _resolve_action_against_persona(
-            action_request, action_request.target_persona
+            action_request, action_request.target_persona, difficulty_override=difficulty_override
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -562,7 +590,25 @@ def respond_to_action_target(
             if difficulty is not None:
                 action_target.difficulty_choice = difficulty
             action_target.resist_effort_level = resist_effort
-            difficulty_override = DIFFICULTY_VALUES[action_target.difficulty_choice]
+            base = DIFFICULTY_VALUES[action_target.difficulty_choice]
+            if resist_effort:
+                from actions.constants import ActionCategory  # noqa: PLC0415
+                from world.checks.services import compute_resist_increment  # noqa: PLC0415
+                from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+                increment = compute_resist_increment(
+                    action_target.target_persona.character_sheet.character,
+                    resist_effort,
+                )
+                apply_fatigue(
+                    action_target.target_persona.character_sheet,
+                    ActionCategory.SOCIAL,
+                    RESIST_FATIGUE_BASE,
+                    resist_effort,
+                )
+            else:
+                increment = 0
+            difficulty_override = base + increment
             result, result_interaction, resolved_difficulty = _resolve_action_against_persona(
                 action_request,
                 action_target.target_persona,
