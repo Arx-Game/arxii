@@ -147,12 +147,12 @@ Routes through `get_modifier_total` → `covenant_role_bonus`.
 
 **Armor soak** (`apply_equipped_armor_soak`, #1174): whole-character pool blend.
 Worn armor is split into compatible vs incompatible buckets. The *resonant soak pool* =
-facet + mantle + motif-style + `covenant_role_base_total` (role base × character level,
-summed once per character, not per slot). Final soak:
+facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) + mantle +
+motif-style (role base × character level, summed once per character, not per slot). Final soak:
 
     soak = compat_physical + max(incompat_physical, resonant)
 
-Compatible armor stacks additively on the resonant pool. Incompatible armor competes
+Compatible armor's physical soak adds directly to the final total; incompatible armor competes
 with the resonant pool via `max` — at low levels physical armor wins; at higher levels
 the resonant pool overtakes it. Durability wears only on armor whose physical soak
 contributed. Compatibility is staff-authored existence-only data (`GearArchetypeCompatibility`)

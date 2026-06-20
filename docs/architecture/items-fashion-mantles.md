@@ -955,8 +955,8 @@ engaged-roles early-out keeps the query budget flat for non-covenant characters)
   role-compatible vs incompatible buckets via `_split_armor_soak_by_compatibility`.
   The *resonant soak pool* (`_resonant_armor_soak`) = eager `CharacterModifier` total +
   `equipment_walk_total_unblended(sheet, armor_soak_target)`, where the latter sums
-  facet + mantle + motif-style + `covenant_role_base_total` (role base × level, pooled
-  once per character). Final soak: `compat_physical + max(incompat_physical, resonant)`.
+  facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) + mantle +
+  motif-style (role base × level, pooled once per character). Final soak: `compat_physical + max(incompat_physical, resonant)`.
   Durability wears only on armor whose physical soak contributed.
 - `_weapon_augmented_budget(profile, budget, weapon, sheet)` (#985) — for
   `uses_equipped_weapon` profiles, adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)`

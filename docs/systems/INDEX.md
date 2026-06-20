@@ -920,8 +920,8 @@ These two axes are orthogonal — never re-merge them.
 - **Combat seams (#985, #1174):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
-  `equipment_walk_total_unblended` (facet + mantle + motif-style +
-  `covenant_role_base_total`). `_weapon_augmented_budget` adds
+  `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
+  covenant-level + mantle + motif-style). `_weapon_augmented_budget` adds
   `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget
   via `get_modifier_total` → `covenant_role_bonus`.
 - **Exceptions:** `world.covenants.exceptions` —

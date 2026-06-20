@@ -178,8 +178,8 @@ Worn armor is now split into role-compatible and role-incompatible buckets by
 `_split_armor_soak_by_compatibility` (per `GearArchetypeCompatibility` row existence for
 each engaged role × gear archetype pair). The *resonant soak pool* is computed by
 `_resonant_armor_soak` = eager `CharacterModifier` total + `equipment_walk_total_unblended`,
-where the latter sums facet + mantle + motif-style + `covenant_role_base_total` (role base
-× character level, pooled once per character). Final formula in `apply_equipped_armor_soak`:
+where the latter sums facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) +
+mantle + motif-style (role base × character level, pooled once per character). Final formula in `apply_equipped_armor_soak`:
 
     soak = compat_physical + max(incompat_physical, resonant)
 
