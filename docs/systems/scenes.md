@@ -148,12 +148,35 @@ owns the full lifecycle (dispatch → consent → resolution → result recordin
 **Source:** `src/world/scenes/action_models.py`, `action_services.py`,
 `action_views.py`, `action_serializers.py`, `action_filters.py`
 
+### Effort / Difficulty split
+
+- **Initiator declares effort** at dispatch via `effort_level` (`EffortLevel` TextChoices,
+  default `"medium"`). This is forwarded from `create_action_request` → stored on
+  `SceneActionRequest.effort_level`. At resolution `_resolve_action_against_persona`
+  reads `EFFORT_CHECK_MODIFIER[effort_level]` and adds it to the check pool, then
+  charges the initiator social fatigue via `apply_fatigue`.
+- **Defender authors difficulty** via a plausibility band (`DifficultyChoice`) at consent
+  time — not the initiator. The defender's choice is stored as `difficulty_choice` on
+  the per-target row (`DefenderConsentFields.difficulty_choice`, default `NORMAL`).
+  Three frontend labels map to bands: "It works" → `EASY`, "Hard but possible" → `HARD`,
+  "No way" → `DAUNTING` (accept-but-daunting, distinct from deny).
+- **Active resistance (optional).** When the defender selects "Dig in (costs stamina)",
+  `resist_effort_level` (`EffortLevel`) is also stored at consent. On resolution,
+  `compute_resist_increment(defender, resist_effort)` in `world.checks.services` resolves
+  the `Composure` CheckType (willpower-weighted) and combines it with the effort modifier.
+  The increment is added to the base `DIFFICULTY_VALUES[difficulty_choice]` to form
+  `difficulty_override`, and the defender is charged `RESIST_FATIGUE_BASE` units of social
+  fatigue.
+- **NPC/area fallback.** When there is no consenting player, `difficulty_choice` defaults
+  to its authored value (never an initiator pick); area actions use their own field.
+
 ### Models
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SceneActionRequest` | Primary targeted (or area) social action request | `scene`, `initiator_persona`, `target_persona` (nullable), `action_key`, `action_template`, `technique`, `status` (ActionRequestStatus), `difficulty_choice`, `resolved_difficulty`, `result_interaction`, `action_interaction`, `delivery`, `pose_text`, `effort_level`, `created_at`, `resolved_at` |
-| `SceneActionTarget` | One additional non-primary target in a multi-target request | `action_request` (FK → SceneActionRequest), `target_persona`, `status`, `result_interaction`, `resolved_difficulty`, `resolved_at` |
+| `DefenderConsentFields` | Abstract base — per-defender consent fields shared by primary and additional targets | `difficulty_choice` (DifficultyChoice), `resolved_difficulty`, `resist_effort_level` (EffortLevel), `engagement_credited` |
+| `SceneActionRequest` | Primary targeted (or area) social action request | `scene`, `initiator_persona`, `target_persona` (nullable), `action_key`, `action_template`, `technique`, `status` (ActionRequestStatus), `effort_level` (EffortLevel), `delivery`, `pose_text`, `created_at`, `resolved_at` — plus all `DefenderConsentFields` columns |
+| `SceneActionTarget` | One additional non-primary target in a multi-target request | `action_request` (FK → SceneActionRequest), `target_persona`, `status`, `result_interaction`, `resolved_at` — plus all `DefenderConsentFields` columns |
 | `SceneCastPullDeclaration` | Paid thread-pull declared alongside a benign standalone cast | `request` (OneToOne), `resonance`, `tier`, `threads` (M2M) |
 
 `SceneActionTarget` has a `UniqueConstraint` on `(action_request, target_persona)` —
@@ -185,20 +208,52 @@ from world.scenes.action_services import (
 
 # Create a request (primary + additional targets).
 # NPC additional targets are auto-resolved immediately.
+# effort_level is the initiator's declared EffortLevel value (default "medium").
 request = create_action_request(
     scene=scene,
     initiator_persona=persona,
     target_persona=primary_target,      # None for area actions
     action_key="intimidate",
     additional_target_personas=[p2, p3],
+    effort_level="high",                # optional; controls check modifier + initiator fatigue
 )
 
-# Primary-target consent (returns EnhancedSceneActionResult | None)
-result = respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+# Primary-target consent.
+# difficulty: DifficultyChoice value authored by the defender (plausibility band).
+# resist_effort: optional EffortLevel for active resistance (costs defender fatigue).
+result = respond_to_action_request(
+    action_request=request,
+    decision=ConsentDecision.ACCEPT,
+    difficulty="hard",            # defender's plausibility band
+    resist_effort="high",         # optional active resistance
+)
 
-# Additional-target consent — never touches siblings or the primary status
-result = respond_to_action_target(action_target=target_row, decision=ConsentDecision.ACCEPT)
+# Additional-target consent — same signature, never touches siblings or the primary status.
+result = respond_to_action_target(
+    action_target=target_row,
+    decision=ConsentDecision.ACCEPT,
+    difficulty="normal",
+    resist_effort="",
+)
 ```
+
+`ConsentResponseSerializer` accepts `difficulty` (DifficultyChoice choice string) and
+`resist_effort` (EffortLevel choice string) in the POST body of
+`POST /api/action-requests/{id}/respond/`.
+
+`_resolve_action_against_persona(action_request, target, difficulty_override=None)` is
+the single check-and-fatigue resolution point; `difficulty_override` is the numeric value
+produced by combining the defender's plausibility base with any active-resistance increment.
+
+### Good-Sport Kudos Accrual
+
+When a defender accepts an action request, `_accrue_engagement_for_primary` (primary target)
+and `_accrue_engagement_for_persona` (additional targets) record a social-engagement credit.
+The credit amount is `KudosDifficultyWeight.weight_for(band) × KudosSourceCategory.default_amount`
+and is added to the defender's `WeeklySocialEngagement` pending ledger via
+`progression.services.engagement.accrue()`. Anti-farm guards: NPC defenders/initiators and
+self-targeting are skipped. At weekly rollover (`grant_social_engagement_kudos()`), ledgers
+with `distinct_initiators >= MIN_ENGAGEMENT_BAR` (currently 2) are granted Kudos and marked.
 
 ---
 
