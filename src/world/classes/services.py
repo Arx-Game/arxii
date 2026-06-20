@@ -19,3 +19,37 @@ def stage_for_level(level: int) -> int:
         if level >= min_level:
             return stage
     return PathStage.PROSPECT
+
+
+def set_primary_class_level(  # noqa: OBJECTDB_PARAM
+    character: object,
+    character_class: object,
+    level: int,
+) -> object:
+    """Set the character's primary class level and recompute level-derived health.
+
+    Upserts a CharacterClassLevel row (keyed on character + character_class) with
+    is_primary=True and the given level, then triggers a full max_health recompute
+    so the character's vitals reflect the new level immediately.
+
+    This is the documented hook for all level changes — callers should never mutate
+    CharacterClassLevel rows directly.
+
+    Args:
+        character: The character whose class level is being set (ObjectDB instance).
+        character_class: The CharacterClass to assign.
+        level: The new level value (1–30).
+
+    Returns:
+        The upserted CharacterClassLevel instance.
+    """
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    ccl, _ = CharacterClassLevel.objects.update_or_create(
+        character=character,
+        character_class=character_class,
+        defaults={"level": level, "is_primary": True},
+    )
+    recompute_max_health_with_threads(character.sheet_data)
+    return ccl
