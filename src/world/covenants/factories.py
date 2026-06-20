@@ -32,6 +32,7 @@ from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
     from world.conditions.models import CapabilityType
+    from world.magic.models import Resonance
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -54,11 +55,21 @@ class SubroleCovenantRoleFactory(CovenantRoleFactory):
 
     Generates a valid sub-role: parent_role and resonance are both set,
     and covenant_type/archetype are inherited from the parent.
+
+    Optional keyword arguments:
+        discovery_achievement: Achievement instance (or None).
+        codex_entry: CodexEntry instance (or None).
+
+    When these are omitted the fields remain NULL on the created row
+    (both fields are nullable on the model). Pass an explicit instance —
+    e.g. from AchievementFactory() / CodexEntryFactory() — to wire them up.
     """
 
     parent_role = factory.SubFactory(CovenantRoleFactory)
     resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
     unlock_thread_level = 3
+    discovery_achievement = None
+    codex_entry = None
 
     @factory.lazy_attribute
     def covenant_type(self) -> str:
@@ -230,6 +241,98 @@ class MentorBondFactory(factory_django.DjangoModelFactory):
     sidekick_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     adjusted_party = MentorBondAdjusted.SIDEKICK
     dissolved_at = None
+
+
+def seed_resonance_subrole_slice(
+    parent_role: CovenantRole | None = None,
+) -> list[CovenantRole]:
+    """Seed ONE base role's resonance sub-role variants as a proof slice.
+
+    Creates a small set of sub-roles (one per authored resonance) beneath
+    *parent_role*, each with:
+
+    - A distinct ``resonance`` (unique constraint on parent+resonance+level
+      is satisfied by giving each sub-role a freshly sequenced resonance).
+    - A ``discovery_achievement`` (AchievementFactory row).
+    - A ``codex_entry`` (CodexEntryFactory row).
+    - At least one ``CovenantRoleBonus`` row (mechanically real specialization).
+
+    Uses ``get_or_create`` semantics via the factory ``django_get_or_create``
+    keys where available so the helper is idempotent: calling it twice with the
+    same parent produces the same rows (no duplicate-constraint violations).
+
+    Safe as both integration-test setUp **and** staff/new-player seed data (per
+    the factories-as-seed-data convention in MEMORY.md).
+
+    Args:
+        parent_role: The primary CovenantRole to attach sub-roles to.
+            If None a new CovenantRoleFactory() is created automatically.
+
+    Returns:
+        List of CovenantRole sub-role instances (at least 2).
+    """
+    from world.achievements.factories import AchievementFactory
+    from world.codex.factories import CodexEntryFactory
+    from world.magic.factories import ResonanceFactory
+    from world.mechanics.factories import ModifierTargetFactory
+
+    if parent_role is None:
+        parent_role = CovenantRoleFactory()
+
+    # Two authored resonances — names are stable so get_or_create on the
+    # ResonanceFactory's django_get_or_create ("name") makes this idempotent.
+    resonance_names = [
+        f"Ember Wrath ({parent_role.slug})",
+        f"Keening Edge ({parent_role.slug})",
+    ]
+
+    subroles: list[CovenantRole] = []
+    for idx, res_name in enumerate(resonance_names):
+        resonance: Resonance = ResonanceFactory(name=res_name)
+        achievement = AchievementFactory(
+            slug=f"subrole-discovery-{parent_role.slug}-{idx}",
+            name=f"Subrole Discovery: {res_name}",
+        )
+        entry = CodexEntryFactory(
+            name=f"Subrole Lore: {res_name}",
+        )
+
+        subrole, _ = CovenantRole.objects.get_or_create(
+            parent_role=parent_role,
+            resonance=resonance,
+            unlock_thread_level=3,
+            defaults={
+                "name": f"{parent_role.name} ({res_name})",
+                "slug": f"{parent_role.slug}-res-{idx}",
+                "covenant_type": parent_role.covenant_type,
+                "archetype": parent_role.archetype,
+                "speed_rank": parent_role.speed_rank,
+                "description": f"Resonance sub-role for {res_name}.",
+                "discovery_achievement": achievement,
+                "codex_entry": entry,
+            },
+        )
+
+        # Ensure discovery_achievement + codex_entry are populated even when
+        # the row pre-existed (idempotent back-fill via update_fields).
+        needs_update = []
+        if subrole.discovery_achievement_id is None:
+            subrole.discovery_achievement = achievement
+            needs_update.append("discovery_achievement")
+        if subrole.codex_entry_id is None:
+            subrole.codex_entry = entry
+            needs_update.append("codex_entry")
+        if needs_update:
+            subrole.save(update_fields=needs_update)
+
+        # At least one CovenantRoleBonus row per sub-role (idempotent via
+        # django_get_or_create on (covenant_role, modifier_target)).
+        modifier_target = ModifierTargetFactory()
+        CovenantRoleBonusFactory(covenant_role=subrole, modifier_target=modifier_target)
+
+        subroles.append(subrole)
+
+    return subroles
 
 
 def wire_covenant_rite_content() -> CovenantRite:
