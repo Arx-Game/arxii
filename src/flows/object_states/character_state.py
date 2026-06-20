@@ -27,6 +27,62 @@ class CharacterState(BaseState):
         return {}
 
     # ------------------------------------------------------------------
+    # Identity rendering (#1109) — the look / room-contents / examine name
+    # ------------------------------------------------------------------
+
+    def _base_display_name(self, looker_state: "BaseState | None") -> str:
+        """Render this character's presented persona, resolved per viewer (#1109).
+
+        The active face renders by real name to its owner and for any named-public face; a viewer
+        who has discovered an anonymous face sees the reveal ("Real (as Mask)"); otherwise an
+        anonymous face renders as a composed sdesc ("a man wearing a stag mask"). Falls back to the
+        default name when there is no sheet/persona (NPCs, objects mid-setup).
+        """
+        resolved = self._presented_persona_name(looker_state)
+        if resolved is not None:
+            return resolved
+        return super()._base_display_name(looker_state)
+
+    def _presented_persona_name(self, looker_state: "BaseState | None") -> str | None:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        sheet = getattr(self.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return None
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            return None
+        viewer_persona_ids, viewer_sheet_ids = (
+            looker_state._viewer_persona_context()  # noqa: SLF001 — same-class look context
+            if isinstance(looker_state, CharacterState)
+            else (set(), set())
+        )
+        name, _is_discovered = resolve_display_for_viewer(
+            persona,
+            viewer_persona_ids=viewer_persona_ids,
+            viewer_sheet_ids=viewer_sheet_ids,
+        )
+        return name
+
+    def _viewer_persona_context(self) -> tuple[set[int], set[int]]:
+        """This looker's account's ``(owned_persona_ids, owned_sheet_ids)``, cached for the look.
+
+        Cached on the state so listing a room's occupants resolves the looker's context once, not
+        once per occupant.
+        """
+        if getattr(self, "_viewer_persona_ctx", None) is None:  # noqa: GETATTR_LITERAL
+            from world.scenes.persona_display import viewer_context_for_account  # noqa: PLC0415
+
+            account = self.obj.db_account
+            self._viewer_persona_ctx = (
+                viewer_context_for_account(account) if account is not None else (set(), set())
+            )
+        return self._viewer_persona_ctx
+
+    # ------------------------------------------------------------------
     # Permission helpers
     # ------------------------------------------------------------------
 
