@@ -1696,3 +1696,54 @@ class AssertInitiatorCanInductTests(TestCase):
         )
         with self.assertRaises(SessionTargetMissingError):
             assert_initiator_can_induct(session=session)
+
+
+class DraftSessionInductionGateTests(TestCase):
+    def _draft(self, *, initiator, covenant, candidate):
+        from datetime import UTC, datetime, timedelta
+
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import CovenantInductionRitualFactory
+        from world.magic.services.sessions import draft_session
+        from world.magic.types.sessions import RitualSessionReferenceSpec
+
+        ritual = CovenantInductionRitualFactory()
+        return draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="",
+            session_kwargs={},
+            invitee_sheets=[candidate],
+            session_references=[
+                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
+            ],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+    def test_non_can_invite_initiator_blocked(self):
+        from world.covenants.exceptions import NotAuthorizedToInviteError
+
+        cov = CovenantFactory()
+        initiator = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator,
+            covenant=cov,
+            rank=CovenantRankFactory(covenant=cov),
+        )
+        with self.assertRaises(NotAuthorizedToInviteError):
+            self._draft(initiator=initiator, covenant=cov, candidate=CharacterSheetFactory())
+
+    def test_can_invite_initiator_allowed(self):
+        from world.magic.models.sessions import RitualSession
+
+        cov = CovenantFactory()
+        initiator = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator,
+            covenant=cov,
+            rank=CovenantManagerRankFactory(covenant=cov),
+        )
+        session = self._draft(initiator=initiator, covenant=cov, candidate=CharacterSheetFactory())
+        self.assertIsInstance(session, RitualSession)
