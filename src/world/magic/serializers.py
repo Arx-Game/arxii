@@ -2743,26 +2743,7 @@ class ThreadHubSummarySerializer(serializers.Serializer):
     weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
     weavable_traits = _WeavableTraitSerializer(many=True)
     weavable_techniques = _WeavableTechniqueSerializer(many=True)
-    room_property_ids = serializers.ListField(child=serializers.IntegerField())
     weavable_relationship_track_ids = serializers.ListField(child=serializers.IntegerField())
-
-
-# =============================================================================
-# Rooms-by-property (GET /api/magic/rooms-by-property/)
-# =============================================================================
-
-
-class RoomsByPropertyQuerySerializer(serializers.Serializer):
-    """Validates query params for RoomsByPropertyView.
-
-    Repeated ``?property_id=N`` params are gathered by the view and fed
-    into this serializer as a list, keeping validation declarative.
-    """
-
-    property_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        allow_empty=False,
-    )
 
 
 # =============================================================================
@@ -2790,16 +2771,6 @@ class AcceptTeachingOfferResponseSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     unlock_id = serializers.IntegerField()
     xp_spent = serializers.IntegerField()
-
-
-class RoomBriefSerializer(serializers.Serializer):
-    """One room entry returned by RoomsByPropertyView.
-
-    Response shape: ``{id, name}``.
-    """
-
-    id = serializers.IntegerField()
-    name = serializers.CharField()
 
 
 # =============================================================================

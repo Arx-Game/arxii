@@ -11826,23 +11826,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/RitualSessionList'
           description: ''
-  /api/magic/rooms-by-property/:
-    get:
-      operationId: magic_rooms_by_property_list
-      description: Return rooms that have at least one matching ObjectProperty.
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoomBrief'
-          description: ''
   /api/magic/sanctums/:
     get:
       operationId: magic_sanctums_list
@@ -40733,20 +40716,6 @@ components:
       - character_sheet_id
       - responded_at
       - state
-    RoomBrief:
-      type: object
-      description: |-
-        One room entry returned by RoomsByPropertyView.
-
-        Response shape: ``{id, name}``.
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-      required:
-      - id
-      - name
     RosterApplication:
       type: object
       description: Validate a roster application message.
@@ -44123,10 +44092,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/_WeavableTechnique'
-        room_property_ids:
-          type: array
-          items:
-            type: integer
         weavable_relationship_track_ids:
           type: array
           items:
@@ -44136,7 +44101,6 @@ components:
       - blocked_thread_ids
       - near_xp_lock_thread_ids
       - ready_thread_ids
-      - room_property_ids
       - weavable_relationship_track_ids
       - weavable_techniques
       - weavable_traits

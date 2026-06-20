@@ -488,7 +488,6 @@ const mockThreadHubSummary = {
   weaving_eligibility: {
     TRAIT: true,
     TECHNIQUE: true,
-    ROOM: true,
     RELATIONSHIP_TRACK: true,
     RELATIONSHIP_CAPSTONE: true,
     FACET: true,
@@ -496,7 +495,6 @@ const mockThreadHubSummary = {
   },
   weavable_traits: [],
   weavable_techniques: [],
-  room_property_ids: [],
   weavable_relationship_track_ids: [],
 };
 
