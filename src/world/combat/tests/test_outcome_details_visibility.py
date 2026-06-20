@@ -76,13 +76,6 @@ class CanViewEncounterEffectsHelperTest(TestCase):
 
         self.assertFalse(can_view_encounter_effects(_Anon(), self.encounter))
 
-    def test_no_scene_gm_check_still_works(self) -> None:
-        """With scene=None the helper skips the GM check without crashing."""
-        from world.combat.permissions import can_view_encounter_effects
-
-        encounter_no_scene = CombatEncounterFactory(scene=None)
-        self.assertFalse(can_view_encounter_effects(self.gm_account, encounter_no_scene))
-
 
 class OutcomeEndpointNonViewerDegradationTest(APITestCase):
     """Endpoint degrades to empty effects (status 200) for non-viewers."""

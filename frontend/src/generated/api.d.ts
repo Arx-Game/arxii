@@ -15551,7 +15551,7 @@ export interface components {
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetail: {
       readonly id: number;
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
@@ -15629,7 +15629,7 @@ export interface components {
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -15649,7 +15649,7 @@ export interface components {
     /** @description Lightweight listing serializer for combat encounters. */
     EncounterList: {
       readonly id: number;
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
@@ -20472,7 +20472,7 @@ export interface components {
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
-      scene?: number | null;
+      scene?: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -27534,7 +27534,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27582,7 +27582,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27655,7 +27655,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27681,7 +27681,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27729,7 +27729,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27755,7 +27755,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27781,7 +27781,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27807,7 +27807,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27833,7 +27833,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27859,7 +27859,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27931,7 +27931,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27957,7 +27957,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27983,7 +27983,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28009,7 +28009,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28035,7 +28035,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28061,7 +28061,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };

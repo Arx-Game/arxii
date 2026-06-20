@@ -261,20 +261,17 @@ class CombatEncounterViewSet(ModelViewSet):
         return qs
 
     def _filter_readable(self, qs: QuerySet[CombatEncounter]) -> QuerySet[CombatEncounter]:
-        """Restrict reads to encounters whose scene the caller may view, plus
-        encounters the caller is fighting in (combat never creates a
-        SceneParticipation row, so participants need an explicit union or they
-        would 404 on their own fight). Applied to list/retrieve only — action
-        routes resolve via the unfiltered base queryset and keep their own
-        permission gates."""
+        """Restrict list/retrieve to encounters whose scene the caller may view.
+
+        Every encounter carries a scene (#1236) and combat participation creates
+        a SceneParticipation, so scene-visibility alone covers fighters — no
+        participant union is needed. Action routes use the unfiltered base
+        queryset and keep their own permission gates.
+        """
         user = self.request.user
         if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
             return qs
-        cond = Q(scene__in=Scene.objects.viewable_by(user))
-        played_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
-        if played_ids:
-            cond |= Q(participants__character_sheet__character_id__in=played_ids)
-        return qs.filter(cond).distinct()
+        return qs.filter(scene__in=Scene.objects.viewable_by(user)).distinct()
 
     # --- GM Lifecycle Actions ---
 

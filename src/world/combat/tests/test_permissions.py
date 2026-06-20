@@ -63,18 +63,6 @@ class IsEncounterGMOrStaffTest(TestCase):
             self.permission.has_object_permission(request, None, self.encounter),
         )
 
-    def test_no_scene_denied(self) -> None:
-        encounter_no_scene = CombatEncounterFactory(scene=None)
-        account = AccountFactory()
-        request = _make_request(account)
-        self.assertFalse(
-            self.permission.has_object_permission(
-                request,
-                None,
-                encounter_no_scene,
-            ),
-        )
-
 
 class IsEncounterParticipantTest(TestCase):
     """Tests for IsEncounterParticipant permission."""
@@ -203,18 +191,6 @@ class IsInEncounterRoomTest(TestCase):
         request = _make_request(account)
         self.assertFalse(
             self.permission.has_object_permission(request, None, self.encounter),
-        )
-
-    def test_no_scene_denied(self) -> None:
-        encounter_no_scene = CombatEncounterFactory(scene=None)
-        account = AccountFactory()
-        request = _make_request(account)
-        self.assertFalse(
-            self.permission.has_object_permission(
-                request,
-                None,
-                encounter_no_scene,
-            ),
         )
 
     def test_staff_allowed(self) -> None:

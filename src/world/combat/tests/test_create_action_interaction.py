@@ -42,17 +42,17 @@ class CreateActionInteractionTests(TestCase):
         self.assertEqual(interaction.scene_id, self.scene.pk)
         self.assertEqual(interaction.persona, self.participant.character_sheet.primary_persona)
 
-    def test_no_scene_works(self) -> None:
-        """Encounter without a scene still produces an Interaction (scene FK is nullable)."""
-        encounter_no_scene = CombatEncounterFactory(scene=None)
-        participant = CombatParticipantFactory(encounter=encounter_no_scene)
+    def test_action_interaction_created(self) -> None:
+        """Encounter with a scene produces an Interaction linked to that scene."""
+        encounter = CombatEncounterFactory()
+        participant = CombatParticipantFactory(encounter=encounter)
 
         interaction = create_action_interaction(
             participant=participant,
             round_number=1,
             summary_label="Cast",
         )
-        self.assertIsNone(interaction.scene_id)
+        self.assertIsNotNone(interaction.scene_id)
 
 
 class RenderActionDeclarationLabelTests(TestCase):

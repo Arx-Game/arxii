@@ -16,7 +16,6 @@ from world.combat.constants import (
 from world.combat.factories import CombatParticipantFactory
 from world.combat.models import (
     BossPhase,
-    CombatEncounter,
     CombatOpponent,
     ThreatPool,
     ThreatPoolEntry,
@@ -28,21 +27,27 @@ class CombatEncounterTests(TestCase):
     """Tests for CombatEncounter model."""
 
     def test_create_with_defaults(self) -> None:
-        encounter = CombatEncounter.objects.create()
+        from world.combat.factories import CombatEncounterFactory
+
+        encounter = CombatEncounterFactory()
         self.assertEqual(encounter.encounter_type, EncounterType.PARTY_COMBAT)
         self.assertEqual(encounter.round_number, 0)
         self.assertEqual(encounter.status, EncounterStatus.BETWEEN_ROUNDS)
         self.assertEqual(encounter.risk_level, RiskLevel.MODERATE)
         self.assertEqual(encounter.stakes_level, StakesLevel.LOCAL)
-        self.assertIsNone(encounter.scene)
+        self.assertIsNotNone(encounter.scene)
 
     def test_str(self) -> None:
-        encounter = CombatEncounter.objects.create(round_number=3)
+        from world.combat.factories import CombatEncounterFactory
+
+        encounter = CombatEncounterFactory(round_number=3)
         expected = "Party Combat (Round 3, Between Rounds)"
         self.assertEqual(str(encounter), expected)
 
     def test_str_custom_type(self) -> None:
-        encounter = CombatEncounter.objects.create(
+        from world.combat.factories import CombatEncounterFactory
+
+        encounter = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
             status=EncounterStatus.RESOLVING,
             round_number=1,
@@ -50,13 +55,23 @@ class CombatEncounterTests(TestCase):
         expected = "Open Encounter (Round 1, Resolving)"
         self.assertEqual(str(encounter), expected)
 
+    def test_scene_protected_from_delete(self) -> None:
+        from django.db.models import ProtectedError
+
+        from world.combat.factories import CombatEncounterFactory
+
+        enc = CombatEncounterFactory()
+        with self.assertRaises(ProtectedError):
+            enc.scene.delete()
+
 
 class CombatOpponentTests(TestCase):
     """Tests for CombatOpponent model."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounter.objects.create()
+    def setUp(self) -> None:
+        from world.combat.factories import CombatEncounterFactory
+
+        self.encounter = CombatEncounterFactory()
 
     def test_create(self) -> None:
         opponent = CombatOpponent.objects.create(
@@ -164,11 +179,12 @@ class ThreatPoolTests(TestCase):
 class BossPhaseTests(TestCase):
     """Tests for BossPhase model."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounter.objects.create()
-        cls.opponent = CombatOpponent.objects.create(
-            encounter=cls.encounter,
+    def setUp(self) -> None:
+        from world.combat.factories import CombatEncounterFactory
+
+        self.encounter = CombatEncounterFactory()
+        self.opponent = CombatOpponent.objects.create(
+            encounter=self.encounter,
             tier=OpponentTier.BOSS,
             name="Dragon",
             health=500,

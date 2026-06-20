@@ -43,6 +43,7 @@ function makeClash(overrides: Partial<ClashState> = {}): ClashState {
 function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
   return {
     id: 1,
+    scene: 1,
     round_number: 1,
     is_participant: true,
     is_gm: false,

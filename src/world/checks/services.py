@@ -451,12 +451,23 @@ def collect_check_modifiers(
             )
         )
 
+    # Guard for SCENE, EQUIPMENT, CHARACTER, and EQUIPMENT-WALK blocks: only run DB
+    # queries when check_type is a real persisted model instance.  Callers that mock
+    # the check pipeline (e.g. combat resolver tests that pass MagicMock() as
+    # offense_check_type) must not trigger live queries.  MagicMock has __iter__ and
+    # satisfies hasattr(…, "as_sql"), causing Django to treat it as a SQL
+    # subexpression and eventually call list(mock) → [] which raises "Field 'id'
+    # expected a number but got []".  isinstance(check_type, Model) is False for
+    # MagicMock — not a Django Model subclass — so this reliably skips queries for
+    # mocks while remaining transparent for every real-code caller.
+    from django.db.models import Model as _DjangoModel  # noqa: PLC0415
+
     # --- SCENE contributions ---
     # Lazy import: world.scenes.models imports from world.scenes.constants,
     # world.societies, etc. — no cycle risk, but we keep the lazy pattern
     # consistent with condition_contributions for uniformity and to avoid
     # loading the scenes app module at import time of checks.services.
-    if scene is not None:
+    if scene is not None and isinstance(check_type, _DjangoModel):
         from world.scenes.models import SceneCheckModifier  # noqa: PLC0415
 
         scene_mods = SceneCheckModifier.objects.filter(
@@ -473,16 +484,6 @@ def collect_check_modifiers(
         )
 
     # --- EQUIPMENT contributions ---
-    # Guard: only run the DB query when check_type is a real persisted model
-    # instance.  Callers that mock the check pipeline (e.g. combat resolver tests
-    # that pass MagicMock() as offense_check_type) must not trigger a live query;
-    # without the guard, filter(check_type=<MagicMock>) raises TypeError because
-    # Django cannot coerce the mock's pk to an integer.
-    # ``isinstance(check_type, Model)`` is False for MagicMock — it is not a
-    # Django Model subclass — so this reliably skips the query for mocks while
-    # remaining transparent for every real-code caller.
-    from django.db.models import Model as _DjangoModel  # noqa: PLC0415
-
     from world.items.models import ItemCheckModifier  # noqa: PLC0415
 
     character = character_sheet.character

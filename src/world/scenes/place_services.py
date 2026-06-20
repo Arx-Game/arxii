@@ -18,15 +18,18 @@ def ensure_scene_for_location(
     room: ObjectDB,
     *,
     name: str | None = None,
+    privacy_mode: ScenePrivacyMode | None = None,
 ) -> Scene:
     """Get or create an active scene for the given room.
 
-    If an active scene already exists for the room, returns it.
-    Otherwise creates a new public scene.
+    If an active scene already exists for the room, returns it (its existing
+    privacy is preserved; ``privacy_mode`` is ignored). Otherwise creates a new
+    scene with ``privacy_mode`` (defaulting to PUBLIC when not supplied).
 
     Args:
         room: The room to ensure a scene for.
         name: Optional name for a new scene. Defaults to room name.
+        privacy_mode: Privacy for a newly-created scene. Defaults to PUBLIC.
 
     Returns:
         The active Scene for this room.
@@ -39,7 +42,7 @@ def ensure_scene_for_location(
     scene = Scene.objects.create(
         name=scene_name,
         location=room,
-        privacy_mode=ScenePrivacyMode.PUBLIC,
+        privacy_mode=privacy_mode or ScenePrivacyMode.PUBLIC,
     )
 
     # Auto-engage Durance covenant for room occupants when a new scene starts (Slice B §4.10)

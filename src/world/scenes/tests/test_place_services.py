@@ -38,6 +38,32 @@ class TestEnsureSceneForLocation(TestCase):
         scene = ensure_scene_for_location(room, name="A Dramatic Evening")
         assert scene.name == "A Dramatic Evening"
 
+    def test_privacy_mode_applied_on_create(self) -> None:
+        room = ObjectDBFactory(
+            db_key="PrivTest",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
+
+    def test_privacy_mode_default_public(self) -> None:
+        room = ObjectDBFactory(
+            db_key="PubTest",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = ensure_scene_for_location(room)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PUBLIC)
+
+    def test_privacy_mode_ignored_on_reuse(self) -> None:
+        room = ObjectDBFactory(
+            db_key="ReuseTest",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        first = ensure_scene_for_location(room)  # PUBLIC
+        second = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(second.privacy_mode, ScenePrivacyMode.PUBLIC)
+
 
 class TestJoinPlace(TestCase):
     def test_join_creates_presence(self) -> None:

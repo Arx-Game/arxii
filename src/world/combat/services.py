@@ -776,6 +776,33 @@ def _ensure_combat_engagement(participant: CombatParticipant) -> None:
     )
 
 
+def _create_participant(
+    encounter: CombatEncounter,
+    character_sheet: CharacterSheet,
+    *,
+    covenant_role: CovenantRole | None = None,
+    status: str = ParticipantStatus.ACTIVE,
+) -> CombatParticipant:
+    """Create a CombatParticipant + its engagement, and record the fighter as a
+    scene participant (combat participation implies SceneParticipation, #1236)."""
+    if covenant_role is None:
+        from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
+
+        covenant_role = precedence_role_for_combat(character_sheet)
+    participant = CombatParticipant.objects.create(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        covenant_role=covenant_role,
+        status=status,
+    )
+    _ensure_combat_engagement(participant)
+    if encounter.scene_id:
+        from world.scenes.interaction_services import ensure_scene_participation  # noqa: PLC0415
+
+        ensure_scene_participation(encounter.scene, character_sheet.character)
+    return participant
+
+
 def add_participant(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
@@ -787,17 +814,7 @@ def add_participant(
     When no role is supplied, default to the character's combat-precedence role
     (Battle wins over Durance — Slice E).
     """
-    if covenant_role is None:
-        from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
-
-        covenant_role = precedence_role_for_combat(character_sheet)
-    participant = CombatParticipant.objects.create(
-        encounter=encounter,
-        character_sheet=character_sheet,
-        covenant_role=covenant_role,
-    )
-    _ensure_combat_engagement(participant)
-    return participant
+    return _create_participant(encounter, character_sheet, covenant_role=covenant_role)
 
 
 def remove_participant(participant: CombatParticipant) -> None:
@@ -857,17 +874,9 @@ def join_encounter(
         msg = "Already participating in this encounter."
         raise ValueError(msg)
 
-    if covenant_role is None:
-        from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
-
-        covenant_role = precedence_role_for_combat(character_sheet)
-    participant = CombatParticipant.objects.create(
-        encounter=encounter,
-        character_sheet=character_sheet,
-        covenant_role=covenant_role,
-        status=ParticipantStatus.ACTIVE,
+    participant = _create_participant(
+        encounter, character_sheet, covenant_role=covenant_role, status=ParticipantStatus.ACTIVE
     )
-    _ensure_combat_engagement(participant)
     acknowledge_encounter_risk(encounter, character_sheet)
     return participant
 

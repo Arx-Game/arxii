@@ -67,9 +67,7 @@ class CombatEncounter(SharedMemoryModel):
     )
     scene = models.ForeignKey(
         "scenes.Scene",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="combat_encounters",
     )
     room = models.ForeignKey(

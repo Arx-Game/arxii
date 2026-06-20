@@ -830,3 +830,34 @@ class ResolveFleeTest(TestCase):
 
         npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
         assert all(not o.damage_results for o in npc_outcomes)
+
+
+class SceneParticipationOnCombatEntryTest(TestCase):
+    """Tests that add_participant creates SceneParticipation when encounter has a scene."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        self.room = ObjectDBFactory(
+            db_key="CombatRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character_sheet = CharacterSheetFactory()
+        entry = RosterEntryFactory(character_sheet=self.character_sheet)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        self.account = tenure.player_data.account
+
+    def test_add_participant_creates_scene_participation(self) -> None:
+        from world.scenes.factories import SceneFactory
+        from world.scenes.interaction_services import _get_account_for_character
+        from world.scenes.models import SceneParticipation
+
+        scene = SceneFactory(location=self.room)
+        enc = CombatEncounterFactory(scene=scene, room=self.room)
+        add_participant(enc, self.character_sheet)
+
+        account_id = _get_account_for_character(self.character_sheet.character.pk)
+        self.assertTrue(
+            SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
+        )

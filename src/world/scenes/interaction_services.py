@@ -508,25 +508,19 @@ def _get_account_for_character(character_id: int) -> int | None:
         return None
 
 
-def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
-    """Auto-add a character's account as a SceneParticipation if not already present.
+def ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
+    """Add a character's account as a SceneParticipation if not already present.
 
-    Caches the set of known participant account IDs on the Scene object to
-    avoid a get_or_create query per interaction.
+    Membership only — no covenant side-effects. No-op when the character has no
+    account. Caches known participant account IDs on the Scene to avoid a
+    get_or_create per call.
     """
     from world.scenes.models import SceneParticipation  # noqa: PLC0415
 
     account_id = _get_account_for_character(character.pk)
     if account_id is None:
-        # Character has no account yet — still evaluate covenant engagement (Slice B §4.10)
-        sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
-        if sheet is not None and scene.location is not None:
-            from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
-
-            evaluate_scene_engagement(character_sheet=sheet, room=scene.location)
         return
 
-    # Check in-memory cache first
     try:
         known_ids = scene._participant_account_ids  # noqa: SLF001
     except AttributeError:
@@ -538,13 +532,20 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
     if account_id in known_ids:
         return
 
-    SceneParticipation.objects.get_or_create(
-        scene=scene,
-        account_id=account_id,
-    )
+    SceneParticipation.objects.get_or_create(scene=scene, account_id=account_id)
     known_ids.add(account_id)
 
-    # Auto-engage on scene participation (Slice B §4.10)
+
+def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
+    """Membership (see ensure_scene_participation) plus covenant engagement.
+
+    Used by the interaction-recording path; combat uses the membership-only
+    public function to avoid double-firing scene engagement.
+    """
+    ensure_scene_participation(scene, character)
+
+    # Auto-engage covenant for the participant (Slice B §4.10). Fires even when
+    # the character has no account yet, matching prior behavior.
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is not None and scene.location is not None:
         from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
