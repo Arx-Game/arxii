@@ -1159,6 +1159,37 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     return opp
 
 
+def _bulk_primary_levels(char_ids: list[int]) -> dict[int, int]:
+    """Return {character_id: level} for each id in *char_ids* using at most two queries.
+
+    Mirrors the fallback chain in ``get_character_path_level``:
+    primary row → highest row → 1.  Characters with no CharacterClassLevel at
+    all are omitted from the dict (callers use ``.get(cid, 1)`` for the final
+    fallback).
+    """
+    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+    level_map: dict[int, int] = dict(
+        CharacterClassLevel.objects.filter(
+            character_id__in=char_ids,
+            is_primary=True,
+        ).values_list("character_id", "level")
+    )
+
+    without_primary = [cid for cid in char_ids if cid not in level_map]
+    if without_primary:
+        seen: set[int] = set()
+        for char_id, lvl in (
+            CharacterClassLevel.objects.filter(character_id__in=without_primary)
+            .order_by("character_id", "-level")
+            .values_list("character_id", "level")
+        ):
+            if char_id not in seen:
+                level_map[char_id] = lvl
+                seen.add(char_id)
+    return level_map
+
+
 def _dissolve_graduated_bonds(enc: CombatEncounter) -> None:
     """Dissolve any MentorBond that has graduated for ACTIVE participants in *enc*.
 
@@ -1167,12 +1198,12 @@ def _dissolve_graduated_bonds(enc: CombatEncounter) -> None:
     persisted as dissolved so future reads skip it cleanly.
 
     Write-safe: called only from ``begin_declaration_phase`` (encounter start).
-    Bulk-fetches bonds for all active participant sheets in one query, then
-    dissolves the graduated ones — no per-participant query loop.
+    No per-bond queries: bulk-fetches bonds in one query, resolves primary levels
+    for all adjusted-party characters in a second bulk query, then determines
+    graduation inline — O(1) queries regardless of graduated-bond count.
     """
-    from django.db.models import Q  # noqa: PLC0415
-
-    from world.covenants.mentorship import dissolve_mentor_bond, is_bond_graduated  # noqa: PLC0415
+    from world.covenants.constants import MentorBondAdjusted  # noqa: PLC0415
+    from world.covenants.mentorship import dissolve_mentor_bond, is_in_band  # noqa: PLC0415
     from world.covenants.models import MentorBond  # noqa: PLC0415
 
     sheet_ids = list(
@@ -1185,15 +1216,34 @@ def _dissolve_graduated_bonds(enc: CombatEncounter) -> None:
         return
 
     # One bulk query: all active bonds where any participant is either the
-    # mentor or the sidekick side.
+    # mentor or the sidekick side. Resolve covenant + both character FKs so
+    # no per-bond queries are needed below.
     active_bonds = list(
         MentorBond.objects.active()
         .filter(Q(mentor_sheet_id__in=sheet_ids) | Q(sidekick_sheet_id__in=sheet_ids))
-        .select_related("covenant", "mentor_sheet", "sidekick_sheet")
+        .select_related(
+            "covenant",
+            "mentor_sheet__character",
+            "sidekick_sheet__character",
+        )
     )
+    if not active_bonds:
+        return
 
-    for bond in active_bonds:
-        if is_bond_graduated(bond):
+    # Collect the adjusted-party character id for each bond (one id per bond).
+    adjusted_char_ids = [
+        bond.sidekick_sheet.character_id
+        if bond.adjusted_party == MentorBondAdjusted.SIDEKICK
+        else bond.mentor_sheet.character_id
+        for bond in active_bonds
+    ]
+
+    # Two bulk queries at most: primary levels + highest-level fallback.
+    level_map = _bulk_primary_levels(adjusted_char_ids)
+
+    for bond, char_id in zip(active_bonds, adjusted_char_ids, strict=True):
+        raw = level_map.get(char_id, 1)
+        if is_in_band(bond.covenant, raw):
             dissolve_mentor_bond(bond)
 
 
