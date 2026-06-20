@@ -223,6 +223,28 @@ class MaritalStatus(models.TextChoices):
     DIVORCED = "divorced", "Divorced"
 
 
+class SheetVisibility(models.TextChoices):
+    """Player-controlled visibility tier for a character-sheet section (#1271).
+
+    Ordered openness: SELF (owner + staff only) → FRIENDS (also the owner's allow list) →
+    PUBLIC (anyone). A viewer sees a section when their access level meets its tier.
+    """
+
+    SELF = "self", "Self & staff only"
+    FRIENDS = "friends", "Friends / allow list"
+    PUBLIC = "public", "Public"
+
+
+# Openness rank for SheetVisibility — higher = more open. A viewer with access >= the
+# section's required rank may see it. Kept here so the model default and the serializer
+# resolver agree (#1271).
+SHEET_VISIBILITY_RANK: dict[str, int] = {
+    SheetVisibility.SELF: 2,
+    SheetVisibility.FRIENDS: 1,
+    SheetVisibility.PUBLIC: 0,
+}
+
+
 class Gender(models.TextChoices):
     """Gender choices for characters."""
 
