@@ -258,3 +258,21 @@ export interface CastResponse {
    */
   action_interaction?: number | null;
 }
+
+// Mirrors SceneActionTargetSerializer (#1177). Kept in sync with the backend.
+export interface PendingActionTarget {
+  action_target_id: number;
+  action_request_id: number;
+  target_persona_id: number;
+  status: string;
+  initiator_persona: number;
+  initiator_name: string;
+  scene: number;
+  action_key: string;
+  action_template: number | null;
+  technique: number | null;
+  technique_name: string | null;
+  pose_text: string;
+  strain_commitment: number;
+  created_at: string;
+}
