@@ -226,3 +226,83 @@ class SocialConsentExclusionsIntegrationTest(django.test.TestCase):
             excluded & target_persona_ids,
             "category=None should not exclude anyone when master switch is on",
         )
+
+
+class SocialConsentExclusionsQueryBudgetTest(django.test.TestCase):
+    """Pin the batched query budget for the exclusion sweep (#1248).
+
+    The sweep must batch its preference / category-rule / whitelist lookups so the
+    query count is **constant in the number of scene participants** — not the
+    per-tenure fan-out it replaced. The scaling assertion is the real guard: adding
+    non-blocking participants must not add queries.
+    """
+
+    def _build_scene(self, num_targets: int, category: object):
+        """Build a fresh scene: one actor + *num_targets* non-blocking targets.
+
+        Every target opts into an EVERYONE rule for *category* (master on), so the
+        sweep resolves them as allowed and never walks the persona-id path — keeping
+        the measured budget purely the batched loads, independent of target count.
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.consent.constants import ConsentMode
+        from world.consent.factories import (
+            SocialConsentCategoryRuleFactory,
+            SocialConsentPreferenceFactory,
+        )
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+
+        room = ObjectDB.objects.create(db_key=f"BudgetRoom{num_targets}")
+
+        actor_sheet = CharacterSheetFactory()
+        actor_char = actor_sheet.character
+        ObjectDB.objects.filter(pk=actor_char.pk).update(db_location=room)
+        actor_char.db_location = room
+        actor_entry = RosterEntryFactory(character_sheet=actor_sheet)
+        actor_tenure = RosterTenureFactory(roster_entry=actor_entry, end_date=None)
+
+        scene = SceneFactory(location=room, is_active=True)
+        SceneParticipationFactory(scene=scene, account=actor_tenure.player_data.account)
+
+        for _ in range(num_targets):
+            target_sheet = CharacterSheetFactory()
+            target_entry = RosterEntryFactory(character_sheet=target_sheet)
+            target_tenure = RosterTenureFactory(roster_entry=target_entry, end_date=None)
+            SceneParticipationFactory(scene=scene, account=target_tenure.player_data.account)
+            pref = SocialConsentPreferenceFactory(tenure=target_tenure, allow_social_actions=True)
+            SocialConsentCategoryRuleFactory(
+                preference=pref, category=category, mode=ConsentMode.EVERYONE
+            )
+
+        return actor_char
+
+    def _sweep_query_count(self, actor_char, category) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from actions.player_interface import _social_consent_exclusions
+
+        with CaptureQueriesContext(connection) as ctx:
+            _social_consent_exclusions(actor_char, category)
+        return len(ctx.captured_queries)
+
+    def test_query_count_is_constant_in_participant_count(self) -> None:
+        """Adding non-blocking participants must not add queries (no per-tenure fan-out)."""
+        from world.consent.factories import SocialConsentCategoryFactory
+
+        category = SocialConsentCategoryFactory()
+
+        # Warm process-global caches (content types, etc.) so neither measured run pays
+        # a one-off cost the other doesn't.
+        self._sweep_query_count(self._build_scene(1, category), category)
+
+        small = self._sweep_query_count(self._build_scene(2, category), category)
+        large = self._sweep_query_count(self._build_scene(8, category), category)
+
+        self.assertEqual(
+            small,
+            large,
+            f"Sweep query count must not scale with participants "
+            f"(2 targets: {small}, 8 targets: {large}) — per-tenure fan-out regressed.",
+        )
