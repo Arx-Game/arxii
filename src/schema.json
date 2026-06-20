@@ -3937,6 +3937,588 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConditionTemplate'
           description: ''
+  /api/consent/categories/:
+    get:
+      operationId: consent_categories_list
+      description: |-
+        Read-only viewset for social consent categories.
+
+        Categories are authored by staff and shared across all players.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocialConsentCategoryList'
+          description: ''
+  /api/consent/categories/{id}/:
+    get:
+      operationId: consent_categories_retrieve
+      description: |-
+        Read-only viewset for social consent categories.
+
+        Categories are authored by staff and shared across all players.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Category.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategory'
+          description: ''
+  /api/consent/category-rules/:
+    get:
+      operationId: consent_category_rules_list
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: preference
+        schema:
+          type: integer
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocialConsentCategoryRuleList'
+          description: ''
+    post:
+      operationId: consent_category_rules_create
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentCategoryRuleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategoryRule'
+          description: ''
+  /api/consent/category-rules/{id}/:
+    get:
+      operationId: consent_category_rules_retrieve
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Category
+          Rule.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategoryRule'
+          description: ''
+    put:
+      operationId: consent_category_rules_update
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Category
+          Rule.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentCategoryRuleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategoryRule'
+          description: ''
+    patch:
+      operationId: consent_category_rules_partial_update
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Category
+          Rule.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSocialConsentCategoryRuleRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentCategoryRule'
+          description: ''
+    delete:
+      operationId: consent_category_rules_destroy
+      description: |-
+        ViewSet for per-category consent rules.
+
+        Rules are owned by the player through their SocialConsentPreference.
+        Results are scoped to the requesting player's own tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Category
+          Rule.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/consent/preferences/:
+    get:
+      operationId: consent_preferences_list
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: tenure
+        schema:
+          type: integer
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocialConsentPreferenceList'
+          description: ''
+    post:
+      operationId: consent_preferences_create
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentPreferenceRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentPreference'
+          description: ''
+  /api/consent/preferences/{id}/:
+    get:
+      operationId: consent_preferences_retrieve
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Preference.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentPreference'
+          description: ''
+    put:
+      operationId: consent_preferences_update
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Preference.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentPreferenceRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentPreference'
+          description: ''
+    patch:
+      operationId: consent_preferences_partial_update
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Preference.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSocialConsentPreferenceRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentPreference'
+          description: ''
+    delete:
+      operationId: consent_preferences_destroy
+      description: |-
+        ViewSet for per-tenure social consent preferences.
+
+        Each tenure has at most one preference row. Results are scoped to
+        the requesting player's own tenures — other players' rows return 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Preference.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/consent/preferences/for-tenure/{tenure_id}/:
+    get:
+      operationId: consent_preferences_for_tenure_retrieve
+      description: |-
+        Return the preference for a specific tenure, or a default if absent.
+
+        The synthesized default is not persisted — the UI uses it to display
+        initial state before the player has saved any settings.
+      parameters:
+      - in: path
+        name: tenure_id
+        schema:
+          type: string
+          pattern: ^[0-9]+$
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentPreference'
+          description: ''
+  /api/consent/whitelist/:
+    get:
+      operationId: consent_whitelist_list
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - in: query
+        name: owner_tenure
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocialConsentWhitelistList'
+          description: ''
+    post:
+      operationId: consent_whitelist_create
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentWhitelistRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentWhitelist'
+          description: ''
+  /api/consent/whitelist/{id}/:
+    get:
+      operationId: consent_whitelist_retrieve
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Whitelist
+          Entry.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentWhitelist'
+          description: ''
+    put:
+      operationId: consent_whitelist_update
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Whitelist
+          Entry.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentWhitelistRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentWhitelist'
+          description: ''
+    patch:
+      operationId: consent_whitelist_partial_update
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Whitelist
+          Entry.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSocialConsentWhitelistRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentWhitelist'
+          description: ''
+    delete:
+      operationId: consent_whitelist_destroy
+      description: |-
+        ViewSet for consent whitelist entries.
+
+        Whitelist entries allow specific tenures to target the owner with social
+        actions when the owner's category rule is ALLOWLIST mode.
+        Results are scoped to the requesting player's own owner tenures.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Whitelist
+          Entry.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/covenants/character-roles/:
     get:
       operationId: covenants_character_roles_list
@@ -34522,6 +35104,98 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SituationTemplateList'
+    PaginatedSocialConsentCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialConsentCategory'
+    PaginatedSocialConsentCategoryRuleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialConsentCategoryRule'
+    PaginatedSocialConsentPreferenceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialConsentPreference'
+    PaginatedSocialConsentWhitelistList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialConsentWhitelist'
     PaginatedSocietySearchList:
       type: object
       required:
@@ -36400,6 +37074,43 @@ components:
             * `public` - Public
             * `private` - Private
             * `ephemeral` - Ephemeral
+    PatchedSocialConsentCategoryRuleRequest:
+      type: object
+      description: Serializer for per-category consent rules.
+      properties:
+        preference:
+          type: integer
+        category:
+          type: integer
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          description: |-
+            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+
+            * `everyone` - Everyone
+            * `allowlist` - Allowlist only
+    PatchedSocialConsentPreferenceRequest:
+      type: object
+      description: Serializer for per-tenure social consent preferences.
+      properties:
+        allow_social_actions:
+          type: boolean
+          description: If False, this character never appears as a valid social action
+            target.
+    PatchedSocialConsentWhitelistRequest:
+      type: object
+      description: Serializer for consent whitelist entries.
+      properties:
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (receives social actions).
+        allowed_tenure:
+          type: integer
+          description: Tenure permitted to target owner_tenure with social actions.
+        category:
+          type: integer
+          description: Allowlist is scoped per category.
     PatchedStoryDetailRequest:
       type: object
       description: Full serializer for story detail views
@@ -40653,6 +41364,162 @@ components:
       required:
       - id
       - total_points
+    SocialConsentCategory:
+      type: object
+      description: Read-only serializer for social consent categories.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+          description: Stable slug (e.g. 'romantic', 'hostile').
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          readOnly: true
+          description: Player-facing label.
+        description:
+          type: string
+          readOnly: true
+          description: What this category covers.
+        display_order:
+          type: integer
+          readOnly: true
+          description: Sort order in the consent UI.
+        action_templates:
+          type: array
+          items:
+            type: string
+          description: Return the names of action templates tagged with this category.
+          readOnly: true
+      required:
+      - action_templates
+      - description
+      - display_order
+      - id
+      - key
+      - name
+    SocialConsentCategoryRule:
+      type: object
+      description: Serializer for per-category consent rules.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        preference:
+          type: integer
+        category:
+          type: integer
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          description: |-
+            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+
+            * `everyone` - Everyone
+            * `allowlist` - Allowlist only
+      required:
+      - category
+      - id
+      - preference
+    SocialConsentCategoryRuleModeEnum:
+      enum:
+      - everyone
+      - allowlist
+      type: string
+      description: |-
+        * `everyone` - Everyone
+        * `allowlist` - Allowlist only
+    SocialConsentCategoryRuleRequest:
+      type: object
+      description: Serializer for per-category consent rules.
+      properties:
+        preference:
+          type: integer
+        category:
+          type: integer
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
+          description: |-
+            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+
+            * `everyone` - Everyone
+            * `allowlist` - Allowlist only
+      required:
+      - category
+      - preference
+    SocialConsentPreference:
+      type: object
+      description: Serializer for per-tenure social consent preferences.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        tenure:
+          type: integer
+          readOnly: true
+          description: One preference record per tenure.
+        allow_social_actions:
+          type: boolean
+          description: If False, this character never appears as a valid social action
+            target.
+      required:
+      - id
+      - tenure
+    SocialConsentPreferenceRequest:
+      type: object
+      description: Serializer for per-tenure social consent preferences.
+      properties:
+        allow_social_actions:
+          type: boolean
+          description: If False, this character never appears as a valid social action
+            target.
+    SocialConsentWhitelist:
+      type: object
+      description: Serializer for consent whitelist entries.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (receives social actions).
+        allowed_tenure:
+          type: integer
+          description: Tenure permitted to target owner_tenure with social actions.
+        category:
+          type: integer
+          description: Allowlist is scoped per category.
+        added_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - added_at
+      - allowed_tenure
+      - category
+      - id
+      - owner_tenure
+    SocialConsentWhitelistRequest:
+      type: object
+      description: Serializer for consent whitelist entries.
+      properties:
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (receives social actions).
+        allowed_tenure:
+          type: integer
+          description: Tenure permitted to target owner_tenure with social actions.
+        category:
+          type: integer
+          description: Allowlist is scoped per category.
+      required:
+      - allowed_tenure
+      - category
+      - owner_tenure
     SocietySearch:
       type: object
       properties:
