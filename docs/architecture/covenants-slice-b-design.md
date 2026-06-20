@@ -328,7 +328,20 @@ def cancel_session(*, session: RitualSession) -> None: ...
 
 All state-changing services wrap in `transaction.atomic()` + `select_for_update()` on the session (or participant for `accept`/`decline`) to serialize concurrent writers. Each `select_for_update().get()` is followed by `refresh_from_db()` to ensure the SharedMemoryModel-cached instance reflects the just-locked row's values. Inline comments in each service explain the specific race the lock prevents.
 
-`fire_session` validates: state-derived threshold met, all `ACCEPTED` participants have all required references (per the ritual's `participant_fields` schema), session-level required references present. On success: dispatches the ritual's `service_function_path`, deletes the session in the same transaction, returns the dispatched service's return value (`Covenant` for formation, `CharacterCovenantRole` for induction). On failure: typed exception, transaction rolls back, session stays alive for the initiator to retry or cancel.
+`draft_session` resolves and calls `ritual.draft_validator_path` (a CharField on `Ritual`,
+blank by default) inside the atomic block before creating the session row. This is the
+draft-time sibling of `service_function_path`: where `service_function_path` is dispatched
+at fire time, `draft_validator_path` is dispatched at draft time so domain code can gate
+who may *initiate* the ritual without coupling the magic layer to any specific domain.
+Callers must raise a `CovenantError` subclass to block draft creation; the view maps
+`CovenantError` → HTTP 400.
+
+`fire_session` validates: state-derived threshold met, all `ACCEPTED` participants have all
+required references (per the ritual's `participant_fields` schema), session-level required
+references present. On success: dispatches the ritual's `service_function_path`, deletes
+the session in the same transaction, returns the dispatched service's return value
+(`Covenant` for formation, `CharacterCovenantRole` for induction). On failure: typed
+exception, transaction rolls back, session stays alive for the initiator to retry or cancel.
 
 The HTTP `POST /api/rituals/sessions/{id}/fire/` view returns `200 OK` with a small JSON envelope so the frontend can navigate to the result:
 
@@ -359,7 +372,12 @@ Recommend (b) for predictability, but the call is left for the implementation pl
 The project never uses Django data migrations to seed game content. All `Ritual` rows are constructed by FactoryBoy factories used by integration tests today and surfaced through an authoring UI eventually. Slice B adds two factories in `src/world/magic/tests/factories.py` (or co-located in `src/world/covenants/tests/factories.py` if they're tied to covenant scenarios):
 
 - **`CovenantFormationRitualFactory`**: `participation_rule=FORMATION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.create_covenant_via_session"`, `input_schema` with session-level fields (`name`, `covenant_type`, `sworn_objective`, `invitees`) + `participant_fields` (`chosen_covenant_role`).
-- **`CovenantInductionRitualFactory`**: `participation_rule=INDUCTION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.induct_member_via_session"`, `input_schema` with session-level fields (`target_covenant`, `candidate`) + `participant_fields` (`chosen_covenant_role`, `applies_to: "candidate_only"`).
+- **`CovenantInductionRitualFactory`**: `participation_rule=INDUCTION`, `execution_kind=SERVICE`,
+  `service_function_path="world.covenants.services.induct_member_via_session"`,
+  `draft_validator_path="world.covenants.services.assert_initiator_can_induct"` (gates
+  draft creation on `CovenantRank.can_invite`; raises `NotAuthorizedToInviteError` otherwise),
+  `input_schema` with session-level fields (`target_covenant`, `candidate`) +
+  `participant_fields` (`chosen_covenant_role`, `applies_to: "candidate_only"`).
 
 Both use `django_get_or_create=("name",)` so the factory is idempotent across `setUpTestData` calls.
 
