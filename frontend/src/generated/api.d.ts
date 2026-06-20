@@ -14760,6 +14760,13 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    ConsentResponseRequest: {
+      decision: components['schemas']['DecisionEnum'];
+      target_persona_id?: number;
+      difficulty?: components['schemas']['DifficultyEnum'];
+      /** @default  */
+      resist_effort: components['schemas']['ResistEffortEnum'] | components['schemas']['BlankEnum'];
+    };
     /**
      * @description Read serializer for ConsequenceOutcome.
      *
@@ -15148,6 +15155,12 @@ export interface components {
       diverting: boolean;
       in_default: boolean;
     };
+    /**
+     * @description * `accept` - Accept
+     *     * `deny` - Deny
+     * @enum {string}
+     */
+    DecisionEnum: 'accept' | 'deny';
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
       readonly id: number;
@@ -15191,6 +15204,15 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
+    /**
+     * @description * `trivial` - Trivial
+     *     * `easy` - Easy
+     *     * `normal` - Normal
+     *     * `hard` - Hard
+     *     * `daunting` - Daunting
+     * @enum {string}
+     */
+    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -22268,6 +22290,15 @@ export interface components {
       readonly audit_row_id: number;
     };
     /**
+     * @description * `very_low` - Very Low Effort
+     *     * `low` - Low Effort
+     *     * `medium` - Medium Effort
+     *     * `high` - High Effort
+     *     * `extreme` - Extreme Effort
+     * @enum {string}
+     */
+    ResistEffortEnum: 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
+    /**
      * @description * `destroy` - Destroy (removed for everyone)
      *     * `personal` - Personal (resolved for this character only)
      *     * `temporary` - Temporary (suppressed for N rounds)
@@ -25041,7 +25072,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneActionRequestRequest'];
+        'application/json': components['schemas']['ConsentResponseRequest'];
       };
     };
     responses: {

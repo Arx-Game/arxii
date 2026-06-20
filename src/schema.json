@@ -213,7 +213,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneActionRequestRequest'
+              $ref: '#/components/schemas/ConsentResponseRequest'
         required: true
       security:
       - cookieAuth: []
@@ -25818,6 +25818,22 @@ components:
       description: |-
         * `therefore` - Therefore
         * `but` - But
+    ConsentResponseRequest:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        target_persona_id:
+          type: integer
+        difficulty:
+          $ref: '#/components/schemas/DifficultyEnum'
+        resist_effort:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/ResistEffortEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - decision
     ConsequenceOutcome:
       type: object
       description: |-
@@ -26605,6 +26621,14 @@ components:
       - in_default
       - interest_bps_monthly
       - principal
+    DecisionEnum:
+      enum:
+      - accept
+      - deny
+      type: string
+      description: |-
+        * `accept` - Accept
+        * `deny` - Deny
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -26677,6 +26701,20 @@ components:
       - captivity_id
       - captor
     DifficultyChoiceEnum:
+      enum:
+      - trivial
+      - easy
+      - normal
+      - hard
+      - daunting
+      type: string
+      description: |-
+        * `trivial` - Trivial
+        * `easy` - Easy
+        * `normal` - Normal
+        * `hard` - Hard
+        * `daunting` - Daunting
+    DifficultyEnum:
       enum:
       - trivial
       - easy
@@ -40089,6 +40127,20 @@ components:
       - sineater_strain_taken
       - sinner_stage_at_end
       - sinner_stage_at_start
+    ResistEffortEnum:
+      enum:
+      - very_low
+      - low
+      - medium
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `very_low` - Very Low Effort
+        * `low` - Low Effort
+        * `medium` - Medium Effort
+        * `high` - High Effort
+        * `extreme` - Extreme Effort
     ResolutionTypeEnum:
       enum:
       - destroy

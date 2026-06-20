@@ -192,6 +192,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(request=ConsentResponseSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
     def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
         """Respond to a pending action request (accept/deny).

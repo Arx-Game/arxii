@@ -331,7 +331,7 @@ def respond_to_action_request(
         with transaction.atomic():
             # Persist the defender's plausibility band before resolving so that
             # _resolve_standard_action picks it up via action_request.difficulty_choice.
-            if difficulty:
+            if difficulty is not None:
                 action_request.difficulty_choice = difficulty
             action_request.resist_effort_level = resist_effort
             action_request.save(update_fields=["difficulty_choice", "resist_effort_level"])
@@ -559,7 +559,7 @@ def respond_to_action_target(
             # Persist defender's plausibility band on the target row, then pass it
             # as difficulty_override so the per-target band is used for resolution
             # (the target's band lives on SceneActionTarget, not the request).
-            if difficulty:
+            if difficulty is not None:
                 action_target.difficulty_choice = difficulty
             action_target.resist_effort_level = resist_effort
             difficulty_override = DIFFICULTY_VALUES[action_target.difficulty_choice]
