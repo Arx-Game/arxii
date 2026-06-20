@@ -494,6 +494,7 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
         source="action_request.technique_id", read_only=True, allow_null=True
     )
     technique_name = serializers.SerializerMethodField()
+    combat_risk_level = serializers.SerializerMethodField()
     pose_text = serializers.CharField(source="action_request.pose_text", read_only=True)
     strain_commitment = serializers.IntegerField(
         source="action_request.strain_commitment", read_only=True
@@ -504,6 +505,23 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
         """Human label for the enhancing technique (mirrors the request serializer)."""
         technique = obj.action_request.technique
         return technique.name if technique is not None else None
+
+    def get_combat_risk_level(self, obj: SceneActionTarget) -> str | None:
+        """Risk level of the encounter this additional target would be pulled into (#1259).
+
+        Mirrors SceneActionRequestSerializer.get_combat_risk_level, re-keyed on the
+        row's own target_persona so each additional target of a hostile AOE cast gets
+        its own informed-consent warning.
+        """
+        request = obj.action_request
+        if obj.status != ActionRequestStatus.PENDING or not request.is_standalone_cast:
+            return None
+        if request.technique is None or not is_technique_hostile(request.technique):
+            return None
+        encounter = encounter_requiring_risk_acknowledgement(
+            request.scene, obj.target_persona.character_sheet
+        )
+        return encounter.risk_level if encounter is not None else None
 
     class Meta:
         model = SceneActionTarget
@@ -519,6 +537,24 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
             "action_template",
             "technique",
             "technique_name",
+            "combat_risk_level",
+            "pose_text",
+            "strain_commitment",
+            "created_at",
+        ]
+        read_only_fields = [
+            "action_target_id",
+            "action_request_id",
+            "target_persona_id",
+            "status",
+            "initiator_persona",
+            "initiator_name",
+            "scene",
+            "action_key",
+            "action_template",
+            "technique",
+            "technique_name",
+            "combat_risk_level",
             "pose_text",
             "strain_commitment",
             "created_at",

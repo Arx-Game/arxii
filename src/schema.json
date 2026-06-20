@@ -41190,7 +41190,9 @@ components:
           type: integer
           readOnly: true
         status:
-          $ref: '#/components/schemas/Status307Enum'
+          allOf:
+          - $ref: '#/components/schemas/Status307Enum'
+          readOnly: true
         initiator_persona:
           type: integer
           readOnly: true
@@ -41217,6 +41219,16 @@ components:
           description: Human label for the enhancing technique (mirrors the request
             serializer).
           readOnly: true
+        combat_risk_level:
+          type: string
+          nullable: true
+          description: |-
+            Risk level of the encounter this additional target would be pulled into (#1259).
+
+            Mirrors SceneActionRequestSerializer.get_combat_risk_level, re-keyed on the
+            row's own target_persona so each additional target of a hostile AOE cast gets
+            its own informed-consent warning.
+          readOnly: true
         pose_text:
           type: string
           readOnly: true
@@ -41232,11 +41244,13 @@ components:
       - action_request_id
       - action_target_id
       - action_template
+      - combat_risk_level
       - created_at
       - initiator_name
       - initiator_persona
       - pose_text
       - scene
+      - status
       - strain_commitment
       - target_persona_id
       - technique

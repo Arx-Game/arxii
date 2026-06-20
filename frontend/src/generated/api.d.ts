@@ -22785,7 +22785,7 @@ export interface components {
       readonly action_target_id: number;
       readonly action_request_id: number;
       readonly target_persona_id: number;
-      status?: components['schemas']['Status307Enum'];
+      readonly status: components['schemas']['Status307Enum'];
       readonly initiator_persona: number;
       readonly initiator_name: string;
       readonly scene: number;
@@ -22794,6 +22794,14 @@ export interface components {
       readonly technique: number | null;
       /** @description Human label for the enhancing technique (mirrors the request serializer). */
       readonly technique_name: string | null;
+      /**
+       * @description Risk level of the encounter this additional target would be pulled into (#1259).
+       *
+       *     Mirrors SceneActionRequestSerializer.get_combat_risk_level, re-keyed on the
+       *     row's own target_persona so each additional target of a hostile AOE cast gets
+       *     its own informed-consent warning.
+       */
+      readonly combat_risk_level: string | null;
       readonly pose_text: string;
       readonly strain_commitment: number;
       /** Format: date-time */
