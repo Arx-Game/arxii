@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
@@ -566,6 +567,37 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(character_sheet)
+
+
+def resolve_effective_role(*, character: Character, role: CovenantRole) -> CovenantRole:
+    """Return the resonance-specialized sub-role for ``role`` if the character's
+    anchored COVENANT_ROLE thread has crossed a sub-role's unlock_thread_level,
+    else ``role`` unchanged. Derive-on-read; reads cached handlers only."""
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if role.parent_role_id is not None:
+        return role  # already a sub-role; never re-promote (single-depth)
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.COVENANT_ROLE
+            and t.target_covenant_role_id == role.pk
+            and t.retired_at is None
+        ),
+        None,
+    )
+    if thread is None:
+        return role
+    best = None
+    for sub in role.sub_roles.all():
+        if (
+            sub.resonance_id == thread.resonance_id
+            and sub.unlock_thread_level <= thread.level
+            and (best is None or sub.unlock_thread_level > best.unlock_thread_level)
+        ):
+            best = sub
+    return best or role
 
 
 def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
