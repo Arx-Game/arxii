@@ -165,8 +165,9 @@ def commit_to_clash(  # noqa: PLR0913
         character_sheet: The PC performing the contribution (CharacterSheet).
             The underlying ObjectDB is resolved internally via
             ``character_sheet.character`` for the magic pipeline calls.
-        clash: The active Clash instance this contribution belongs to (reserved for
-            future round-aggregation context; not used in v1).
+        clash: The active Clash instance this contribution belongs to. Its
+            ``encounter`` supplies the lethal flag threaded into ``use_technique``
+            so the non-lethal cap holds on the clash path (#1182).
         strain_commitment: Extra anima committed on top of the effective cost floor.
         action_slot: ``ClashActionSlot`` value (``"FOCUSED"`` or ``"PASSIVE"``);
             echoed into the returned ``ClashContributionResult`` for audit use by
@@ -272,6 +273,9 @@ def commit_to_clash(  # noqa: PLR0913
     #    reactive events, corruption, resonance environment).
     #    power_intensity_bonus folds the strain intensity into power derivation only —
     #    anima cost is unaffected by this parameter.
+    #    ``lethal`` is threaded from the encounter's risk level (consistent with
+    #    ``resolve_combat_technique``) so a non-lethal encounter caps soulfray the
+    #    same way through the clash path as through the standard technique path (#1182).
     technique_use_result = use_technique(
         character=objectdb,
         technique=technique,
@@ -280,6 +284,7 @@ def commit_to_clash(  # noqa: PLR0913
         targets=targets,
         confirm_soulfray_risk=True,
         power_intensity_bonus=power_intensity_bonus,
+        lethal=clash.encounter.is_lethal,
     )
 
     # 5. Guard against unconfirmed result (confirm_soulfray_risk=True should

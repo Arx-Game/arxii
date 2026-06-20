@@ -29,6 +29,7 @@ from world.combat.constants import (
     ActionCategory,
     EncounterOutcome,
     EncounterStatus,
+    EncounterType,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -375,6 +376,36 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
         lost_def = StatDefinition.objects.get(key=STAT_KEY_ENCOUNTERS_LOST)
         self.assertEqual(active.character_sheet.stats.get(lost_def), 1)
         self.assertFalse(StatDefinition.objects.filter(key=STAT_KEY_ENCOUNTERS_WON).exists())
+
+    def test_duel_credits_only_winner_with_win_and_loser_with_loss(self) -> None:
+        """On a DUEL VICTORY both PCs are ACTIVE; only ``duel_winner`` is credited
+        a win and the other duelist a loss — not both a win (#1182)."""
+        encounter = self._make_encounter(encounter_type=EncounterType.DUEL)
+        winner = self._add_pc(encounter)
+        loser = self._add_pc(encounter)
+        encounter.duel_winner = winner.character_sheet
+        encounter.save(update_fields=["duel_winner"])
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        won_def = StatDefinition.objects.get(key=STAT_KEY_ENCOUNTERS_WON)
+        lost_def = StatDefinition.objects.get(key=STAT_KEY_ENCOUNTERS_LOST)
+        self.assertEqual(winner.character_sheet.stats.get(won_def), 1)
+        self.assertEqual(loser.character_sheet.stats.get(won_def), 0)
+        self.assertEqual(loser.character_sheet.stats.get(lost_def), 1)
+        self.assertEqual(winner.character_sheet.stats.get(lost_def), 0)
+
+    def test_duel_without_winner_credits_neither(self) -> None:
+        """An abandoned/mutual-stop duel (no ``duel_winner``) credits no win or
+        loss even if a VICTORY outcome is recorded (#1182)."""
+        encounter = self._make_encounter(encounter_type=EncounterType.DUEL)
+        self._add_pc(encounter)
+        self._add_pc(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        self.assertFalse(StatDefinition.objects.filter(key=STAT_KEY_ENCOUNTERS_WON).exists())
+        self.assertFalse(StatDefinition.objects.filter(key=STAT_KEY_ENCOUNTERS_LOST).exists())
 
     def test_emits_encounter_completed(self) -> None:
         encounter = self._make_encounter()

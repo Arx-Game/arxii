@@ -84,6 +84,7 @@ describe('DuelChallengeControls — pending challenge prompt', () => {
       characterId: 10,
       hasPendingIncomingChallenge: true,
       challengerName: 'Rival Knight',
+      challengeId: 42,
       ...overrides,
     };
   }
@@ -107,10 +108,52 @@ describe('DuelChallengeControls — pending challenge prompt', () => {
     expect(screen.getByTestId('duel-challenge-prompt')).toHaveTextContent('Baron Vex');
   });
 
-  it('dispatches accept action when Accept is clicked', async () => {
+  it('dispatches accept action with the threaded challenge_id and calls onResolved', async () => {
+    setupMocks();
+    const onResolved = vi.fn();
+
+    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('duel-accept-btn'));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: {
+        backend: 'registry',
+        registry_key: 'accept',
+      },
+      kwargs: { challenge_id: 42 },
+    });
+    await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
+  });
+
+  it('dispatches decline action with the threaded challenge_id and calls onResolved', async () => {
+    setupMocks();
+    const onResolved = vi.fn();
+
+    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('duel-decline-btn'));
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: {
+        backend: 'registry',
+        registry_key: 'decline',
+      },
+      kwargs: { challenge_id: 42 },
+    });
+    await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
+  });
+
+  it('omits challenge_id from kwargs when no challengeId is provided (back-compat)', async () => {
     setupMocks();
 
-    render(<DuelChallengeControls {...defaultChallengeProps()} />, { wrapper: createWrapper() });
+    render(<DuelChallengeControls {...defaultChallengeProps({ challengeId: null })} />, {
+      wrapper: createWrapper(),
+    });
 
     await userEvent.click(screen.getByTestId('duel-accept-btn'));
 
@@ -123,20 +166,19 @@ describe('DuelChallengeControls — pending challenge prompt', () => {
     });
   });
 
-  it('dispatches decline action when Decline is clicked', async () => {
+  it('does not call onResolved when the dispatch fails', async () => {
     setupMocks();
+    mockMutateAsync.mockRejectedValueOnce(new Error('Challenge already expired'));
+    const onResolved = vi.fn();
 
-    render(<DuelChallengeControls {...defaultChallengeProps()} />, { wrapper: createWrapper() });
-
-    await userEvent.click(screen.getByTestId('duel-decline-btn'));
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      ref: {
-        backend: 'registry',
-        registry_key: 'decline',
-      },
-      kwargs: {},
+    render(<DuelChallengeControls {...defaultChallengeProps({ onResolved })} />, {
+      wrapper: createWrapper(),
     });
+
+    await userEvent.click(screen.getByTestId('duel-accept-btn'));
+
+    await screen.findByRole('alert');
+    expect(onResolved).not.toHaveBeenCalled();
   });
 
   it('does not render the challenge prompt when there is no pending challenge', () => {
