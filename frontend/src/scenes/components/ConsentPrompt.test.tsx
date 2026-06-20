@@ -123,7 +123,7 @@ describe('ConsentPrompt', () => {
     });
   });
 
-  it('clicking Standard accept calls respondToRequest with accept: true and standard difficulty', async () => {
+  it('clicking Accept (neutral) calls respondToRequest with difficulty: normal', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -131,20 +131,21 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Standard')).toBeInTheDocument();
+      expect(screen.getAllByText('Accept').length).toBeGreaterThan(0);
     });
 
-    await user.click(screen.getByText('Standard'));
+    // The first Accept button in the primary card is the neutral one.
+    await user.click(screen.getAllByText('Accept')[0]);
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
         accept: true,
-        difficulty: 'standard',
+        difficulty: 'normal',
       });
     });
   });
 
-  it('clicking Easy accept calls respondToRequest with easy difficulty', async () => {
+  it('clicking "It works" band calls respondToRequest with difficulty: easy', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -152,10 +153,10 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Easy')).toBeInTheDocument();
+      expect(screen.getByText('It works')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Easy'));
+    await user.click(screen.getByText('It works'));
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
@@ -165,7 +166,7 @@ describe('ConsentPrompt', () => {
     });
   });
 
-  it('clicking Hard accept calls respondToRequest with hard difficulty', async () => {
+  it('clicking "Hard but possible" band calls respondToRequest with difficulty: hard', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -173,15 +174,36 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Hard')).toBeInTheDocument();
+      expect(screen.getByText('Hard but possible')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Hard'));
+    await user.click(screen.getByText('Hard but possible'));
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
         accept: true,
         difficulty: 'hard',
+      });
+    });
+  });
+
+  it('clicking "No way" band calls respondToRequest with difficulty: daunting', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('No way')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('No way'));
+
+    await waitFor(() => {
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: true,
+        difficulty: 'daunting',
       });
     });
   });
@@ -276,7 +298,7 @@ describe('ConsentPrompt', () => {
     expect(screen.getByText('Hex')).toBeInTheDocument();
   });
 
-  it('accepting a target calls respondToRequest with target_persona_id and no difficulty', async () => {
+  it('accepting a target (neutral Accept) calls respondToRequest with target_persona_id and difficulty: normal', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
     vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
@@ -289,6 +311,7 @@ describe('ConsentPrompt', () => {
     await waitFor(() =>
       expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
         accept: true,
+        difficulty: 'normal',
         target_persona_id: 99,
       })
     );

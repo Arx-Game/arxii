@@ -45,6 +45,11 @@ export async function createActionRequest(
     delivery?: string;
     /** Explicit WHISPER audience as persona ids (#907); empty/omitted = target alone. */
     delivery_receiver_ids?: number[];
+    /**
+     * Initiator effort level (EffortLevel).  Omit to use the MEDIUM default.
+     * Values: very_low | low | medium | high | extreme.
+     */
+    effort_level?: string;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -76,6 +81,9 @@ export async function createActionRequest(
   if (body.delivery_receiver_ids !== undefined && body.delivery_receiver_ids.length > 0) {
     requestBody.delivery_receiver_ids = body.delivery_receiver_ids;
   }
+  if (body.effort_level !== undefined) {
+    requestBody.effort_level = body.effort_level;
+  }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),
@@ -105,6 +113,11 @@ export async function respondToRequest(
     accept: boolean;
     difficulty?: string;
     /**
+     * Active resist effort (EffortLevel).  Plumbed now; resist UI in a later
+     * task.
+     */
+    resist_effort?: string;
+    /**
      * Per-target consent (#572): when responding to a multi-target action
      * request on behalf of a specific additional target, include that target's
      * persona id so the backend can record per-target acceptance.
@@ -113,11 +126,17 @@ export async function respondToRequest(
   }
 ): Promise<ActionRequestResponse> {
   // Backend ConsentResponseSerializer expects: { decision: "accept" | "deny" }
-  // Map the frontend { accept, difficulty } shape to the backend shape.
+  // Map the frontend { accept, difficulty, resist_effort } shape to the backend shape.
   const decision = body.accept ? 'accept' : 'deny';
   const requestBody: Record<string, unknown> = { decision };
   if (body.target_persona_id !== undefined) {
     requestBody.target_persona_id = body.target_persona_id;
+  }
+  if (body.difficulty) {
+    requestBody.difficulty = body.difficulty;
+  }
+  if (body.resist_effort) {
+    requestBody.resist_effort = body.resist_effort;
   }
   const res = await apiFetch(`/api/action-requests/${requestId}/respond/`, {
     method: 'POST',

@@ -3,6 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Swords, Zap, AlertTriangle, ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import {
@@ -38,6 +45,16 @@ interface PendingWarning {
   techniqueId: number;
 }
 
+const EFFORT_OPTIONS = [
+  { label: 'Very Low', value: 'very_low' },
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+  { label: 'Extreme', value: 'extreme' },
+] as const;
+
+const DEFAULT_EFFORT = 'medium';
+
 /**
  * Bottom-right floating action panel.  Reads the unified availability endpoint
  * and renders each PlayerAction with optional enhancement list, strain slider,
@@ -50,6 +67,8 @@ export function ActionPanel({ sceneId }: Props) {
   const [targetingAction, setTargetingAction] = useState<PlayerAction | null>(null);
   // Per-action strain commitment — keyed by the action's stable display key.
   const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
+  // Initiator effort level for social actions (#1275).
+  const [effortLevel, setEffortLevel] = useState<string>(DEFAULT_EFFORT);
 
   // Cast section state
   const [castOpen, setCastOpen] = useState(false);
@@ -134,6 +153,7 @@ export function ActionPanel({ sceneId }: Props) {
       target_persona_ids?: number[];
       technique_id?: number;
       strain_commitment?: number;
+      effort_level?: string;
     }) => createActionRequest(sceneId, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
@@ -186,6 +206,7 @@ export function ActionPanel({ sceneId }: Props) {
         ? { target_persona_ids: extras.target_persona_ids }
         : {}),
       strain_commitment: strain && strain > 0 ? strain : undefined,
+      effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
     });
   }
 
@@ -215,6 +236,7 @@ export function ActionPanel({ sceneId }: Props) {
     performAction.mutate({
       action_key: pendingWarning.actionKey,
       technique_id: pendingWarning.techniqueId,
+      effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
     });
     setPendingWarning(null);
   }
@@ -310,6 +332,23 @@ export function ActionPanel({ sceneId }: Props) {
         <PopoverContent side="top" align="end" className="w-80">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Actions</h3>
+
+            {/* Effort level picker — controls how hard the initiator pushes (#1275) */}
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs text-muted-foreground">Effort:</span>
+              <Select value={effortLevel} onValueChange={setEffortLevel}>
+                <SelectTrigger className="h-7 text-xs" aria-label="Effort level">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EFFORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
 

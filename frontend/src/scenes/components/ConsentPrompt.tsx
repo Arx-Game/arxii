@@ -8,10 +8,15 @@ interface Props {
   sceneId: string;
 }
 
-const DIFFICULTY_OPTIONS = [
-  { label: 'Easy', value: 'easy' },
-  { label: 'Standard', value: 'standard' },
-  { label: 'Hard', value: 'hard' },
+/**
+ * Plausibility bands — the defender declares how plausible the effect is on
+ * their character.  Maps to valid DifficultyChoice values on the backend.
+ * A neutral "Accept" (normal) is rendered separately as a plain button.
+ */
+const PLAUSIBILITY_BANDS = [
+  { label: 'It works', value: 'easy' },
+  { label: 'Hard but possible', value: 'hard' },
+  { label: 'No way', value: 'daunting' },
 ] as const;
 
 export function ConsentPrompt({ sceneId }: Props) {
@@ -50,11 +55,18 @@ export function ConsentPrompt({ sceneId }: Props) {
       requestId,
       targetPersonaId,
       accept,
+      difficulty,
     }: {
       requestId: number;
       targetPersonaId: number;
       accept: boolean;
-    }) => respondToRequest(sceneId, requestId, { accept, target_persona_id: targetPersonaId }),
+      difficulty?: string;
+    }) =>
+      respondToRequest(sceneId, requestId, {
+        accept,
+        difficulty,
+        target_persona_id: targetPersonaId,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
@@ -105,7 +117,18 @@ export function ConsentPrompt({ sceneId }: Props) {
               <X className="mr-1 h-3.5 w-3.5" />
               Deny
             </Button>
-            {DIFFICULTY_OPTIONS.map((opt) => (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                respond.mutate({ requestId: req.id, accept: true, difficulty: 'normal' })
+              }
+              disabled={respond.isPending}
+            >
+              <Check className="mr-1 h-3.5 w-3.5" />
+              Accept
+            </Button>
+            {PLAUSIBILITY_BANDS.map((opt) => (
               <Button
                 key={opt.value}
                 size="sm"
@@ -177,6 +200,7 @@ export function ConsentPrompt({ sceneId }: Props) {
                   requestId: t.action_request_id,
                   targetPersonaId: t.target_persona_id,
                   accept: true,
+                  difficulty: 'normal',
                 })
               }
               disabled={respondTarget.isPending}
@@ -184,6 +208,25 @@ export function ConsentPrompt({ sceneId }: Props) {
               <Check className="mr-1 h-3.5 w-3.5" />
               Accept
             </Button>
+            {PLAUSIBILITY_BANDS.map((opt) => (
+              <Button
+                key={opt.value}
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  respondTarget.mutate({
+                    requestId: t.action_request_id,
+                    targetPersonaId: t.target_persona_id,
+                    accept: true,
+                    difficulty: opt.value,
+                  })
+                }
+                disabled={respondTarget.isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                {opt.label}
+              </Button>
+            ))}
           </div>
         </div>
       ))}
