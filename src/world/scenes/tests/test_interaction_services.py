@@ -21,6 +21,7 @@ from world.scenes.factories import (
     SceneFactory,
 )
 from world.scenes.interaction_services import (
+    _get_account_for_character,
     _get_active_scene,
     can_view_interaction,
     create_interaction,
@@ -1112,4 +1113,28 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
                 account=account,
             ).count()
             == 1
+        )
+
+
+class TestEnsureSceneParticipation(TestCase):
+    """Tests for the public ensure_scene_participation service function."""
+
+    def test_ensure_scene_participation_creates_membership(self) -> None:
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.scenes.interaction_services import ensure_scene_participation
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterSheetFactory(character=char_a)
+        entry = RosterEntryFactory(character_sheet__character=char_a)
+        RosterTenureFactory(roster_entry=entry, end_date=None)
+
+        scene = SceneFactory(location=room)
+        ensure_scene_participation(scene, char_a)
+        account_id = _get_account_for_character(char_a.pk)
+        self.assertTrue(
+            SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
         )
