@@ -33,8 +33,18 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
+// Mock the combat dispatch hook (challenge affordance, #1181)
+vi.mock('@/combat/queries', () => ({
+  useDispatchPlayerAction: vi.fn(() => ({
+    mutateAsync: vi.fn(() => Promise.resolve()),
+    isPending: false,
+  })),
+  combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
+}));
+
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { createActionRequest } from '../actionQueries';
+import { useDispatchPlayerAction } from '@/combat/queries';
 
 function makeAction(
   overrides: Partial<PlayerActionsResponse['results'][0]> = {}
@@ -100,6 +110,28 @@ function createWrapper(prePopulate = true) {
   if (prePopulate) {
     queryClient.setQueryData(['available-actions', 42], MOCK_ACTIONS);
   }
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
+}
+
+interface ScenePersonaStub {
+  id: number;
+  name: string;
+  character_sheet?: number;
+  allow_social_actions?: boolean;
+}
+
+// Wrapper that also seeds the scene cache (['scene', sceneId]) so the challenge
+// affordance can resolve the target persona's character + opt-out state (#1181).
+function createWrapperWithScene(personas: ScenePersonaStub[], prePopulateActions = true) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  if (prePopulateActions) {
+    queryClient.setQueryData(['available-actions', 42], MOCK_ACTIONS);
+  }
+  queryClient.setQueryData(['scene', '1'], { id: 1, personas });
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
@@ -242,6 +274,71 @@ describe('PersonaContextMenu', () => {
         expect.objectContaining({ action_key: 'intimidate', delivery: undefined })
       );
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Challenge to a duel affordance (#1181)
+  // ---------------------------------------------------------------------------
+
+  it('dispatches the challenge action with the target persona id when clicked', async () => {
+    const user = userEvent.setup();
+    const mockMutateAsync = vi.fn(() => Promise.resolve());
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      // Target persona belongs to character 99 (≠ viewer 42), social actions allowed.
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'Alice', character_sheet: 99 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    const challengeItem = await screen.findByTestId('challenge-to-duel-item');
+    await user.click(challengeItem);
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'challenge' },
+      kwargs: { target: 10 },
+    });
+  });
+
+  it('hides the challenge item when the target has opted out of social targeting', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      {
+        wrapper: createWrapperWithScene([
+          { id: 10, name: 'Alice', character_sheet: 99, allow_social_actions: false },
+        ]),
+      }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate'); // menu is open (other actions present)
+    expect(screen.queryByTestId('challenge-to-duel-item')).not.toBeInTheDocument();
+  });
+
+  it('hides the challenge item for the viewer’s own persona (no self-duel)', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="TestChar" sceneId="1">
+        <span>TestChar</span>
+      </PersonaContextMenu>,
+      // character_sheet 42 == the viewer's character_id from the roster mock.
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'TestChar', character_sheet: 42 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    expect(screen.queryByTestId('challenge-to-duel-item')).not.toBeInTheDocument();
   });
 
   it('does not show "Attach to Pose" section when onAttachAction is not provided', async () => {

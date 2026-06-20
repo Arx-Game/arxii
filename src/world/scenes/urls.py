@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from world.scenes.action_views import SceneActionRequestViewSet
+from world.scenes.action_views import SceneActionRequestViewSet, SceneActionTargetViewSet
 from world.scenes.interaction_views import (
     InteractionFavoriteViewSet,
     InteractionReactionViewSet,
@@ -39,6 +39,11 @@ router.register(
     r"action-requests",
     SceneActionRequestViewSet,
     basename="sceneactionrequest",
+)
+router.register(
+    r"action-targets",
+    SceneActionTargetViewSet,
+    basename="sceneactiontarget",
 )
 router.register(
     r"reaction-windows",

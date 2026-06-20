@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
+from world.combat import clash as clash_module
 from world.combat.clash import commit_to_clash, outcome_to_delta
+from world.combat.constants import RiskLevel
 from world.combat.factories import ClashConfigFactory, ClashFactory, StrainConfigFactory
 from world.combat.types import ClashContributionResult
 from world.conditions.factories import ConditionTemplateFactory
@@ -266,13 +269,20 @@ class CommitToClashTests(TestCase):
     # -------------------------------------------------------------------------
 
     def test_overburn_when_strain_exceeds_pool(self) -> None:
-        """Committing more strain than the anima pool → was_overburn=True and soulfray fires."""
+        """Committing more strain than the anima pool → was_overburn=True and soulfray fires.
+
+        Overburn/soulfray is a lethal-encounter behavior: a non-lethal encounter
+        clamps the effective cost to available anima so it can never deficit. The
+        clash must therefore run in a LETHAL encounter for the overburn path to
+        fire (#1182 threads lethal=clash.encounter.is_lethal into use_technique).
+        """
         # SoulfrayConfig and ConditionTemplate needed for the soulfray accumulation path.
         SoulfrayConfigFactory(
             soulfray_threshold_ratio=Decimal("0.10"), severity_scale=5, deficit_scale=5
         )
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
 
+        lethal_clash = ClashFactory(encounter__risk_level=RiskLevel.LETHAL)
         # Give the character very little anima
         character_sheet, _anima = self._make_character_with_anima(current=2, maximum=10)
         # Technique with minimal base cost so only the strain causes overburn
@@ -282,7 +292,7 @@ class CommitToClashTests(TestCase):
             result = commit_to_clash(
                 character_sheet=character_sheet,
                 technique=technique,
-                clash=self.clash,
+                clash=lethal_clash,
                 strain_commitment=20,  # far exceeds current=2
                 action_slot="FOCUSED",
                 config_clash=self.config_clash,
@@ -404,3 +414,54 @@ class CommitToClashTests(TestCase):
             )
 
         self.assertIsNone(result.clash_interaction)
+
+
+class CommitToClashLethalFlagTests(TestCase):
+    """commit_to_clash threads lethal=clash.encounter.is_lethal into use_technique (#1182).
+
+    Latent today (PvP mirror surfaces never form a clash), but the cap must hold
+    if a non-lethal clash path is ever enabled. A spy wraps the real
+    use_technique so the rest of the pipeline runs unchanged.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.config_strain = StrainConfigFactory()
+        cls.config_clash = ClashConfigFactory()
+        cls.check_type = ActionTemplateFactory().check_type
+        cls.success_outcome = CheckOutcomeFactory(name="lethal_flag_success", success_level=1)
+
+    def _make_character_with_anima(self) -> CharacterSheetFactory:
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        return sheet
+
+    def _make_technique(self) -> object:
+        template = ActionTemplateFactory(check_type=self.check_type)
+        return TechniqueFactory(intensity=5, control=10, anima_cost=3, action_template=template)
+
+    def _captured_lethal(self, *, risk_level: str) -> bool:
+        sheet = self._make_character_with_anima()
+        technique = self._make_technique()
+        clash = ClashFactory(encounter__risk_level=risk_level)
+        with force_check_outcome(self.success_outcome):
+            with patch.object(
+                clash_module, "use_technique", wraps=clash_module.use_technique
+            ) as spy:
+                commit_to_clash(
+                    character_sheet=sheet,
+                    technique=technique,
+                    clash=clash,
+                    strain_commitment=0,
+                    action_slot="FOCUSED",
+                    config_clash=self.config_clash,
+                    config_strain=self.config_strain,
+                )
+        return spy.call_args.kwargs["lethal"]
+
+    def test_non_lethal_encounter_threads_lethal_false(self) -> None:
+        self.assertIs(self._captured_lethal(risk_level=RiskLevel.MODERATE), False)
+
+    def test_lethal_encounter_threads_lethal_true(self) -> None:
+        self.assertIs(self._captured_lethal(risk_level=RiskLevel.LETHAL), True)

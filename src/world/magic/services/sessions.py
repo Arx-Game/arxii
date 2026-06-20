@@ -100,6 +100,10 @@ def draft_session(  # noqa: PLR0913
                 participant=initiator_p,
                 spec=spec,
             )
+        if ritual.draft_validator_path:
+            module_path, _, attr = ritual.draft_validator_path.rpartition(".")
+            validator = getattr(importlib.import_module(module_path), attr)  # noqa: GETATTR_LITERAL
+            validator(session=session)
         return session
 
 

@@ -561,11 +561,31 @@ clamps soulfray below any death-risk stage, and never fires a `character_loss` c
 `withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
 (+ yield / acknowledge controls), reusing the existing combat round UI + dispatch.
 
+### Duels — Phase 2 (SHIPPED — 2026-06-20)
+
+**Status: SHIPPED**
+**Issues:** #1180 (inbox + prompt), #1181 (outgoing affordance), #1182 (crediting/threading fixes).
+
+- **Incoming-challenge inbox (#1180):** `GET /api/combat/duel-challenges/` —
+  `DuelChallengeViewSet` (read-only, filters/pagination/permissions) returns the caller's
+  PENDING challenges (`?role=incoming|outgoing`), scoped to played characters via
+  `played_character_sheet_ids`, reusing `DuelChallengeSerializer`. The frontend
+  `useDuelChallengeInbox` hook feeds `CombatScenePage`, replacing the
+  `hasPendingIncomingChallenge={false}` stub. Accept/decline/withdraw now accept an optional
+  `challenge_id` kwarg so the UI targets a specific challenge when a PC has several pending.
+- **Outgoing affordance (#1181):** a "Challenge to a duel" item on `PersonaContextMenu`,
+  dispatching the `challenge` registry action with the target persona id. `ChallengeAction`
+  resolves a Persona pk → character ObjectDB (web path; telnet/tests still pass ObjectDB).
+  `PersonaSerializer.allow_social_actions` mirrors the consent gate (`_tenure_blocks_actor`
+  with `category=None`) so the affordance hides for opted-out targets and for self; the
+  backend still enforces the full gate at dispatch.
+- **Crediting / threading fixes (#1182):** `_increment_completion_counters` credits a DUEL
+  win only to `encounter.duel_winner` (loss to the other duelist; abandoned duel credits
+  neither) instead of every ACTIVE participant; `commit_to_clash` threads
+  `lethal=clash.encounter.is_lethal` into `use_technique` so the non-lethal cap holds on the
+  clash path (latent today — PvP mirror surfaces never form a clash).
+
 **Still open (tracked):**
-- `GET /api/combat/duel-challenges/` inbox endpoint — the incoming-challenge accept/decline
-  prompt is wired but stubbed off until it (or a WebSocket push) ships.
-- Outgoing "challenge a co-located character" scene-UI affordance (the `challenge` action is
-  wired; only the convenience UI entry point is deferred).
 - Sheet-driven symmetric NPC duellist (the lethal variant reuses the threat-pool opponent).
 
 ### Unified Combat UI (SHIPPED — 2026-05-24)

@@ -198,6 +198,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-targets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only listing of a persona's pending additional-target consent rows (#1177). */
+    get: operations['action_targets_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-targets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only listing of a persona's pending additional-target consent rows (#1177). */
+    get: operations['action_targets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/actions/characters/{character_id}/available/': {
     parameters: {
       query?: never;
@@ -2550,6 +2584,56 @@ export interface paths {
      *     CombatOpponent.status / CharacterVitals.life_state. No new audit tables.
      */
     get: operations['combat_action_outcome_details_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/duel-challenges/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's PENDING duel challenges (#1180).
+     *
+     *     Lists every PENDING ``DuelChallenge`` where the caller plays either the
+     *     challenger or the challenged character, so the web UI can render the
+     *     incoming-challenge prompt (and surface a player's outgoing challenges).
+     *     ``?role=incoming|outgoing`` narrows to one side. Scoped to the caller's
+     *     played characters, so it never leaks other players' challenges.
+     */
+    get: operations['combat_duel_challenges_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/duel-challenges/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's PENDING duel challenges (#1180).
+     *
+     *     Lists every PENDING ``DuelChallenge`` where the caller plays either the
+     *     challenger or the challenged character, so the web UI can render the
+     *     incoming-challenge prompt (and surface a player's outgoing challenges).
+     *     ``?role=incoming|outgoing`` narrows to one side. Scoped to the caller's
+     *     played characters, so it never leaks other players' challenges.
+     */
+    get: operations['combat_duel_challenges_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -15389,6 +15473,38 @@ export interface components {
      */
     DrawModeEnum: 'menu' | 'pool';
     /**
+     * @description Read serializer for the DuelChallenge pending-challenge inbox.
+     *
+     *     Exposes challenger/challenged identities (id + name), status, timestamps,
+     *     and the resulting_encounter FK PK. Intended for a player's incoming or
+     *     outgoing challenge list.
+     *
+     *     N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
+     *     "challenged_sheet__character")``.
+     */
+    DuelChallenge: {
+      readonly id: number;
+      readonly challenger: components['schemas']['_DuelParticipantIdentity'];
+      readonly challenged: components['schemas']['_DuelParticipantIdentity'];
+      /** @default pending */
+      readonly status: components['schemas']['DuelChallengeStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+      /** @description The CombatEncounter opened when the challenge was accepted. */
+      readonly resulting_encounter: number | null;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `withdrawn` - Withdrawn
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    DuelChallengeStatusEnum: 'pending' | 'accepted' | 'declined' | 'withdrawn' | 'expired';
+    /**
      * @description Lightweight identity for a duel winner (CharacterSheet id + character name).
      *
      *     Exposes only what the UI needs to label the victor — the CharacterSheet PK
@@ -18760,6 +18876,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DramaticMomentTag'][];
     };
+    PaginatedDuelChallengeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DuelChallenge'][];
+    };
     PaginatedEncounterListList: {
       /** @example 123 */
       count: number;
@@ -19630,6 +19761,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['SceneActionRequest'][];
+    };
+    PaginatedSceneActionTargetList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SceneActionTarget'][];
     };
     PaginatedSceneListList: {
       /** @example 123 */
@@ -21389,6 +21535,17 @@ export interface components {
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;
+      /**
+       * @description Whether this persona's character may be targeted by social actions.
+       *
+       *     Mirrors the challenge consent gate (``_tenure_blocks_actor`` with
+       *     ``category=None``): blocked only when the active tenure's
+       *     ``SocialConsentPreference`` has ``allow_social_actions=False``. Lets the
+       *     scene UI hide/disable the duel-challenge affordance for opted-out
+       *     characters (#1181); the backend still enforces the full gate at dispatch.
+       *     Defaults to True when there is no tenure or preference row.
+       */
+      readonly allow_social_actions: boolean;
     };
     /** @description A scene persona and the Position it currently occupies (or null). */
     PersonaPosition: {
@@ -22559,7 +22716,7 @@ export interface components {
        *     * `mutter` - Mutter (partial echo)
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
-      readonly status: components['schemas']['SceneActionStatusEnum'];
+      readonly status: components['schemas']['Status307Enum'];
       /**
        * @description Difficulty level chosen or determined for this action
        *
@@ -22623,15 +22780,25 @@ export interface components {
       /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
       strain_commitment?: number;
     };
-    /**
-     * @description * `pending` - Pending
-     *     * `accepted` - Accepted
-     *     * `denied` - Denied
-     *     * `resolved` - Resolved
-     *     * `expired` - Expired
-     * @enum {string}
-     */
-    SceneActionStatusEnum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
+    /** @description Flat read payload for a pending additional-target consent row (#1177). */
+    SceneActionTarget: {
+      readonly action_target_id: number;
+      readonly action_request_id: number;
+      readonly target_persona_id: number;
+      status?: components['schemas']['Status307Enum'];
+      readonly initiator_persona: number;
+      readonly initiator_name: string;
+      readonly scene: number;
+      readonly action_key: string;
+      readonly action_template: number | null;
+      readonly technique: number | null;
+      /** @description Human label for the enhancing technique (mirrors the request serializer). */
+      readonly technique_name: string | null;
+      readonly pose_text: string;
+      readonly strain_commitment: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description A scene room's current activity band (shown before a teller commits). */
     SceneActivity: {
       readonly band: string;
@@ -23328,6 +23495,15 @@ export interface components {
       | 'approved'
       | 'denied'
       | 'withdrawn';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `denied` - Denied
+     *     * `resolved` - Resolved
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    Status307Enum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
     /**
      * @description * `declaring` - Declaring
      *     * `resolving` - Resolving
@@ -24563,6 +24739,17 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /**
+     * @description Compact identity for one side of a DuelChallenge (CharacterSheet id + name).
+     *
+     *     Note: CharacterSheet's primary key is the ``character`` OneToOneField, so
+     *     there is no ``.id`` attribute — ``source="pk"`` reads ``.pk`` explicitly.
+     */
+    _DuelParticipantIdentity: {
+      readonly id: number;
+      /** @description Return the character's display name from CharacterSheet.character.db_key. */
+      readonly name: string;
+    };
     /** @description Persona's fame state for the renown tab header. */
     _Fame: {
       points: number;
@@ -24881,6 +25068,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_targets_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        scene?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSceneActionTargetList'];
+        };
+      };
+    };
+  };
+  action_targets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene action target. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionTarget'];
         };
       };
     };
@@ -27878,6 +28111,59 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OutcomeDetail'][];
+        };
+      };
+    };
+  };
+  combat_duel_challenges_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description Challenge direction relative to the requesting player.
+         *
+         *     * `incoming` - Incoming
+         *     * `outgoing` - Outgoing
+         */
+        role?: 'incoming' | 'outgoing';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDuelChallengeList'];
+        };
+      };
+    };
+  };
+  combat_duel_challenges_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this duel challenge. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuelChallenge'];
         };
       };
     };

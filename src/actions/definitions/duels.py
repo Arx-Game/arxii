@@ -35,6 +35,25 @@ def _sheet(actor: ObjectDB) -> CharacterSheet | None:
         return None
 
 
+def _resolve_challenge_target(target: object) -> ObjectDB | None:
+    """Resolve the ``target`` challenge kwarg to a character ObjectDB.
+
+    Telnet/test callers pass an ObjectDB directly. The web dispatch path passes a
+    Persona pk (the scene UI works in persona ids, consistent with social actions);
+    resolve it to that persona's character ObjectDB. Returns None when unresolvable.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    if target is None or isinstance(target, ObjectDB):
+        return target
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    persona = Persona.objects.filter(pk=target).select_related("character_sheet__character").first()
+    if persona is None:
+        return None
+    return persona.character_sheet.character
+
+
 def _active_tenure(sheet: CharacterSheet) -> object | None:
     """Return the current (active) RosterTenure for *sheet*, or None."""
     try:
@@ -109,7 +128,8 @@ class ChallengeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target: ObjectDB | None = kwargs.get("target")
+        # Resolve the target: ObjectDB (telnet/test) or a Persona pk (web dispatch).
+        target: ObjectDB | None = _resolve_challenge_target(kwargs.get("target"))
 
         # --- resolve actor sheet ---
         actor_sheet = _sheet(actor)
@@ -167,32 +187,53 @@ class ChallengeAction(Action):
 challenge = ChallengeAction()
 
 
-def _pending_challenge_for_challenged(actor: ObjectDB) -> DuelChallenge | None:
-    """Return the PENDING DuelChallenge where *actor* is the challenged PC, or None."""
+def _pending_challenge_for_challenged(
+    actor: ObjectDB, challenge_id: int | str | None = None
+) -> DuelChallenge | None:
+    """Return the PENDING DuelChallenge where *actor* is the challenged PC, or None.
+
+    When *challenge_id* is given (threaded from the inbox UI), scope to that
+    specific challenge — but still require it to be PENDING and directed at the
+    actor, so a stale or foreign id resolves to None rather than the wrong row.
+    Without an id, fall back to the actor's single pending incoming challenge (#1180).
+    """
     from world.combat.constants import DuelChallengeStatus  # noqa: PLC0415
     from world.combat.models import DuelChallenge  # noqa: PLC0415
 
     actor_sheet = _sheet(actor)
     if actor_sheet is None:
         return None
-    return DuelChallenge.objects.filter(
+    qs = DuelChallenge.objects.filter(
         challenged_sheet=actor_sheet,
         status=DuelChallengeStatus.PENDING,
-    ).first()
+    )
+    if challenge_id is not None:
+        qs = qs.filter(pk=challenge_id)
+    return qs.first()
 
 
-def _pending_challenge_for_challenger(actor: ObjectDB) -> DuelChallenge | None:
-    """Return the PENDING DuelChallenge where *actor* is the challenger PC, or None."""
+def _pending_challenge_for_challenger(
+    actor: ObjectDB, challenge_id: int | str | None = None
+) -> DuelChallenge | None:
+    """Return the PENDING DuelChallenge where *actor* is the challenger PC, or None.
+
+    When *challenge_id* is given, scope to that specific challenge (still requiring
+    PENDING + issued by the actor); otherwise fall back to the actor's single
+    pending outgoing challenge (#1180).
+    """
     from world.combat.constants import DuelChallengeStatus  # noqa: PLC0415
     from world.combat.models import DuelChallenge  # noqa: PLC0415
 
     actor_sheet = _sheet(actor)
     if actor_sheet is None:
         return None
-    return DuelChallenge.objects.filter(
+    qs = DuelChallenge.objects.filter(
         challenger_sheet=actor_sheet,
         status=DuelChallengeStatus.PENDING,
-    ).first()
+    )
+    if challenge_id is not None:
+        qs = qs.filter(pk=challenge_id)
+    return qs.first()
 
 
 @dataclass
@@ -223,7 +264,7 @@ class AcceptChallengeAction(Action):
                 message="You must be a real character to accept a duel challenge.",
             )
 
-        challenge = _pending_challenge_for_challenged(actor)
+        challenge = _pending_challenge_for_challenged(actor, kwargs.get("challenge_id"))
         if challenge is None:
             return ActionResult(
                 success=False,
@@ -271,7 +312,7 @@ class DeclineChallengeAction(Action):
                 message="You must be a real character to decline a duel challenge.",
             )
 
-        challenge = _pending_challenge_for_challenged(actor)
+        challenge = _pending_challenge_for_challenged(actor, kwargs.get("challenge_id"))
         if challenge is None:
             return ActionResult(
                 success=False,
@@ -319,7 +360,7 @@ class WithdrawChallengeAction(Action):
                 message="You must be a real character to withdraw a duel challenge.",
             )
 
-        challenge = _pending_challenge_for_challenger(actor)
+        challenge = _pending_challenge_for_challenger(actor, kwargs.get("challenge_id"))
         if challenge is None:
             return ActionResult(
                 success=False,
