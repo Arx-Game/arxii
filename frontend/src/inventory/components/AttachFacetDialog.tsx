@@ -22,7 +22,84 @@ import {
 import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
 import { useFacets } from '@/character-creation/queries';
-import { useCraftAttachFacet, useItemFacets, useRemoveItemFacet } from '../hooks/useItemFacets';
+import {
+  useCraftAttachFacet,
+  useCraftingQuote,
+  useItemFacets,
+  useRemoveItemFacet,
+} from '../hooks/useItemFacets';
+import type { CraftingQuote } from '../api';
+
+// ---------------------------------------------------------------------------
+// Failure-risk consumption labels
+// ---------------------------------------------------------------------------
+
+const CONSUMPTION_LABELS: Record<string, string> = {
+  none: 'nothing lost',
+  partial: 'some materials/effort lost',
+  full: 'all materials & effort lost',
+};
+
+// ---------------------------------------------------------------------------
+// CraftingQuotePanel — cost / cap / risk summary for a facet selection
+// ---------------------------------------------------------------------------
+
+interface CraftingQuotePanelProps {
+  isLoading: boolean;
+  quote: CraftingQuote | undefined;
+}
+
+function CraftingQuotePanel({ isLoading, quote }: CraftingQuotePanelProps) {
+  if (isLoading) {
+    return <p className="text-xs text-muted-foreground">Loading cost estimate…</p>;
+  }
+  if (!quote) return null;
+
+  const { costs, affordable, max_quality_tier, failure_risk } = quote;
+
+  // Build a cost summary line, omitting zero-cost vectors.
+  const costParts: string[] = [];
+  if (costs.action_points > 0) {
+    costParts.push(`${costs.action_points_have}/${costs.action_points} AP`);
+  }
+  if (costs.anima > 0) {
+    costParts.push(`${costs.anima_have}/${costs.anima} Anima`);
+  }
+  for (const mat of costs.materials) {
+    costParts.push(`${mat.have}/${mat.quantity_required} ${mat.name}`);
+  }
+
+  return (
+    <div
+      className="space-y-1 rounded-md border bg-muted/40 px-3 py-2 text-sm"
+      data-testid="crafting-quote-panel"
+    >
+      {costParts.length > 0 && (
+        <p>
+          <span className="font-medium">Costs:</span>{' '}
+          <span className={affordable ? '' : 'text-destructive'}>{costParts.join(' · ')}</span>
+        </p>
+      )}
+
+      {max_quality_tier != null ? (
+        <p>
+          <span className="font-medium">Skill cap:</span> {max_quality_tier.name}
+        </p>
+      ) : (
+        <p className="text-muted-foreground">No skill cap</p>
+      )}
+
+      {failure_risk.length > 0 && (
+        <p>
+          <span className="font-medium">On failure:</span>{' '}
+          {failure_risk
+            .map((r) => r.label ?? CONSUMPTION_LABELS[r.cost_consumption] ?? r.cost_consumption)
+            .join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
 
 interface AttachFacetDialogProps {
   open: boolean;
@@ -37,6 +114,9 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
   const itemFacetsQuery = useItemFacets(itemInstanceId);
   const craftMutation = useCraftAttachFacet(itemInstanceId);
   const removeMutation = useRemoveItemFacet(itemInstanceId);
+
+  const selectedFacetIdNum = selectedFacetId ? Number(selectedFacetId) : undefined;
+  const quoteQuery = useCraftingQuote(itemInstanceId, selectedFacetIdNum);
 
   // Reset selection when the dialog opens.
   useEffect(() => {
@@ -73,12 +153,16 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
       {
         onSuccess: (result) => {
           if (result.attached) {
-            toast.success(
-              `${result.outcome_name} → ${result.quality_tier?.name ?? 'unknown'} quality`
-            );
+            const parts = [
+              `${result.outcome_name} → ${result.quality_tier?.name ?? 'unknown'} quality`,
+            ];
+            if (result.consequence_label) parts.push(result.consequence_label);
+            toast.success(parts.join(' · '));
             setSelectedFacetId('');
           } else {
-            toast.error('Your attempt failed — no facet attached.');
+            const failParts = ['Your attempt failed — no facet attached.'];
+            if (result.consequence_label) failParts.push(result.consequence_label);
+            toast.error(failParts.join(' · '));
           }
         },
         onError: (err) => {
@@ -137,6 +221,10 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
               disabled={facetsQuery.isLoading || craftMutation.isPending}
             />
           </div>
+
+          {selectedFacetId && (
+            <CraftingQuotePanel isLoading={quoteQuery.isLoading} quote={quoteQuery.data} />
+          )}
         </div>
 
         <DialogFooter className="mt-2">
@@ -151,11 +239,17 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={!selectedFacetId || craftMutation.isPending}
+            disabled={
+              !selectedFacetId ||
+              craftMutation.isPending ||
+              (quoteQuery.data != null && !quoteQuery.data.affordable)
+            }
           >
             {craftMutation.isPending
               ? 'Attaching…'
-              : 'Attach (quality set by your Enchanting skill)'}
+              : quoteQuery.data != null && !quoteQuery.data.affordable
+                ? "Can't afford"
+                : 'Attach (quality set by your Enchanting skill)'}
           </Button>
         </DialogFooter>
       </DialogContent>

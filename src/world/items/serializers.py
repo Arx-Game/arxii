@@ -28,7 +28,6 @@ from world.items.models import (
     TemplateInteraction,
     TemplateSlot,
 )
-from world.items.types import FacetCraftResult, StyleCraftResult
 from world.magic.models.endorsement import PresentationEndorsement
 
 
@@ -149,11 +148,13 @@ class FacetCraftResultSerializer(serializers.Serializer):
     success_level = serializers.SerializerMethodField()
     quality_tier = QualityTierSerializer(allow_null=True)
     item_facet = ItemFacetReadSerializer(allow_null=True)
+    consumed = serializers.DictField(allow_null=True)
+    consequence_label = serializers.CharField(allow_null=True)
 
-    def get_outcome_name(self, obj: FacetCraftResult) -> str | None:
+    def get_outcome_name(self, obj) -> str | None:
         return obj.outcome.name if obj.outcome else None
 
-    def get_success_level(self, obj: FacetCraftResult) -> int | None:
+    def get_success_level(self, obj) -> int | None:
         return obj.outcome.success_level if obj.outcome else None
 
 
@@ -198,12 +199,50 @@ class StyleCraftResultSerializer(serializers.Serializer):
     success_level = serializers.SerializerMethodField()
     quality_tier = QualityTierSerializer(allow_null=True)
     item_style = ItemStyleReadSerializer(allow_null=True)
+    consumed = serializers.DictField(allow_null=True)
+    consequence_label = serializers.CharField(allow_null=True)
 
-    def get_outcome_name(self, obj: StyleCraftResult) -> str | None:
+    def get_outcome_name(self, obj) -> str | None:
         return obj.outcome.name if obj.outcome else None
 
-    def get_success_level(self, obj: StyleCraftResult) -> int | None:
+    def get_success_level(self, obj) -> int | None:
         return obj.outcome.success_level if obj.outcome else None
+
+
+class CraftingQuoteMaterialSerializer(serializers.Serializer):
+    """One material requirement row within a crafting quote."""
+
+    item_template_id = serializers.IntegerField()
+    name = serializers.CharField()
+    quantity_required = serializers.IntegerField()
+    have = serializers.IntegerField()
+
+
+class CraftingQuoteCostSerializer(serializers.Serializer):
+    """Resource cost breakdown within a crafting quote."""
+
+    action_points = serializers.IntegerField()
+    action_points_have = serializers.IntegerField()
+    anima = serializers.IntegerField()
+    anima_have = serializers.IntegerField()
+    materials = CraftingQuoteMaterialSerializer(many=True)
+
+
+class CraftingQuoteRiskSerializer(serializers.Serializer):
+    """A single failure-risk row within a crafting quote."""
+
+    outcome_name = serializers.CharField(allow_null=True)
+    cost_consumption = serializers.CharField()
+    label = serializers.CharField(allow_null=True)
+
+
+class CraftingQuoteSerializer(serializers.Serializer):
+    """Read-only quote: costs, affordability, max quality tier, failure risks."""
+
+    costs = CraftingQuoteCostSerializer()
+    affordable = serializers.BooleanField()
+    max_quality_tier = QualityTierSerializer(allow_null=True)
+    failure_risk = CraftingQuoteRiskSerializer(many=True)
 
 
 class EquippedItemReadSerializer(serializers.ModelSerializer):

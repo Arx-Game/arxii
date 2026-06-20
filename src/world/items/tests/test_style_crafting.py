@@ -23,8 +23,8 @@ class CraftAttachStyleTests(TestCase):
         from world.items.factories import StyleFactory, wire_enchanting_crafting
         from world.traits.models import Trait
 
-        self.config = wire_enchanting_crafting(base_difficulty=0)
-        QualityTierFactory(name="Common", numeric_min=0, numeric_max=9999, sort_order=0)
+        # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder.
+        wire_enchanting_crafting(base_difficulty=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(
@@ -33,7 +33,7 @@ class CraftAttachStyleTests(TestCase):
             value=50,
         )
         template = ItemTemplateFactory(style_capacity=2)
-        self.item = ItemInstanceFactory(template=template)
+        self.item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
         self.style = StyleFactory(name="TestStyle")
 
     def test_success_attaches_with_resolved_tier(self) -> None:
@@ -113,11 +113,14 @@ class CraftAttachStyleTests(TestCase):
         self.assertIsNone(capture.check_type)  # perform_check never reached
 
     def test_unconfigured_check_type_raises(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftingRecipe
         from world.items.exceptions import CraftingNotConfigured
         from world.items.services.crafting import craft_attach_style
 
-        self.config.check_type = None
-        self.config.save()
+        style_recipe = CraftingRecipe.objects.get(kind=CraftingRecipeKind.STYLE_ATTACH)
+        style_recipe.check_type = None
+        style_recipe.save()
         with self.assertRaises(CraftingNotConfigured):
             craft_attach_style(
                 crafter_account=self.account,
