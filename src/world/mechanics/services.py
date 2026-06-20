@@ -571,6 +571,44 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     return total
 
 
+def covenant_role_base_total(sheet: object, target: ModifierTarget) -> int:
+    """Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).
+
+    Σ over engaged roles of ``current_level * bonus_per_level``. Unlike
+    ``covenant_role_bonus`` (which subtracts the equipped gear stat per slot), this is
+    the role's intrinsic resonant contribution, used by the armor-soak seam to pool all
+    resonant soak before its compatible-additive / incompatible-max blend.
+    """
+    char = sheet.character
+    if not hasattr(char, "covenant_roles"):
+        return 0
+    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0
+    return sum(
+        role_base_bonus_for_target(role, target, sheet.current_level) for role in engaged_roles
+    )
+
+
+def equipment_walk_total_unblended(sheet: object, target: ModifierTarget) -> int:
+    """``equipment_walk_total`` with the covenant-role component as its raw base (#1174).
+
+    Mirrors ``equipment_walk_total`` source-for-source EXCEPT it swaps the per-slot-blended
+    ``covenant_role_bonus`` for ``covenant_role_base_total``. The armor-soak seam needs the
+    un-blended resonant pool so it can run its own compatible-additive / incompatible-max
+    blend over the whole pool. Keep the source list in sync with ``equipment_walk_total``.
+    """
+    if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
+        return 0
+    return (
+        passive_facet_bonuses(sheet, target)
+        + covenant_role_base_total(sheet, target)
+        + covenant_level_bonus(sheet, target)
+        + passive_mantle_bonuses(sheet, target)
+        + passive_motif_style_bonuses(sheet, target)
+    )
+
+
 def covenant_level_bonus(sheet: object, target: ModifierTarget) -> int:
     """Sum the authored covenant-level passive bonus across engaged memberships (#762).
 
