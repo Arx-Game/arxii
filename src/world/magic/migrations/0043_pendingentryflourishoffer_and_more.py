@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0007_remove_characteristicvalue_characteristic_and_more"),
-        ("magic", "0041_soultetherconfig"),
+        ("magic", "0042_dramaticmomenttag_interaction_and_more"),
         ("scenes", "0026_interaction_writer_account_and_more"),
     ]
 
