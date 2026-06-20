@@ -7498,23 +7498,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/magic/rooms-by-property/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return rooms that have at least one matching ObjectProperty. */
-    get: operations['magic_rooms_by_property_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/magic/sanctums/': {
     parameters: {
       query?: never;
@@ -15590,7 +15573,7 @@ export interface components {
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetail: {
       readonly id: number;
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
@@ -15668,7 +15651,7 @@ export interface components {
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -15688,7 +15671,7 @@ export interface components {
     /** @description Lightweight listing serializer for combat encounters. */
     EncounterList: {
       readonly id: number;
-      scene?: number | null;
+      scene: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
@@ -20511,7 +20494,7 @@ export interface components {
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
-      scene?: number | null;
+      scene?: number;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -22604,15 +22587,6 @@ export interface components {
       /** Format: date-time */
       responded_at: string | null;
     };
-    /**
-     * @description One room entry returned by RoomsByPropertyView.
-     *
-     *     Response shape: ``{id, name}``.
-     */
-    RoomBrief: {
-      id: number;
-      name: string;
-    };
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
@@ -24239,7 +24213,6 @@ export interface components {
       };
       weavable_traits: components['schemas']['_WeavableTrait'][];
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
-      room_property_ids: number[];
       weavable_relationship_track_ids: number[];
     };
     /**
@@ -27609,7 +27582,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27657,7 +27630,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27730,7 +27703,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27756,7 +27729,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27804,7 +27777,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27830,7 +27803,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27856,7 +27829,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27882,7 +27855,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27908,7 +27881,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -27934,7 +27907,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28006,7 +27979,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28032,7 +28005,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28058,7 +28031,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28084,7 +28057,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28110,7 +28083,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -28136,7 +28109,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
       };
@@ -35030,25 +35003,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RitualSessionList'];
-        };
-      };
-    };
-  };
-  magic_rooms_by_property_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RoomBrief'][];
         };
       };
     };

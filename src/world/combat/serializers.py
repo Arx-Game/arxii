@@ -898,7 +898,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         from participations_cached — no extra queries.
         """
         request = self.context.get("request")
-        if not request or not request.user.is_authenticated or not obj.scene:
+        if not request or not request.user.is_authenticated:
             return False
         return obj.scene.is_gm(request.user)
 

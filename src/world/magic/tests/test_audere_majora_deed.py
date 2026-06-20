@@ -21,16 +21,8 @@ from world.magic.tests.majora_fixtures import build_crossing_world
 from world.scenes.constants import PersonaType
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Persona
-from world.societies.constants import DeedKnowledgeSource, RenownMagnitude, RenownReach, RenownRisk
+from world.societies.constants import DeedKnowledgeSource
 from world.societies.models import PersonaDeedKnowledge
-
-
-def _set_deed_risk(threshold) -> None:
-    """Stamp non-NONE renown fields on a threshold so a crossing mints a legend deed."""
-    threshold.risk = RenownRisk.HIGH
-    threshold.magnitude = RenownMagnitude.HIGH
-    threshold.reach = RenownReach.REGIONAL
-    threshold.save(update_fields=["risk", "magnitude", "reach"])
 
 
 class MintCrossingDeedWithWitnessesTests(TestCase):
@@ -48,8 +40,6 @@ class MintCrossingDeedWithWitnessesTests(TestCase):
             cls.puissant_path,
             cls.offer,
         ) = build_crossing_world(boundary_level=30, suffix="_deed_mint")
-        _set_deed_risk(cls.threshold)
-
         # Active scene at the crosser's location.
         cls.scene = SceneFactory(location=cls.character.location, is_active=True)
 
@@ -99,8 +89,6 @@ class MintCrossingDeedWitnessesRecordedTests(TestCase):
             cls.puissant_path,
             cls.offer,
         ) = build_crossing_world(boundary_level=31, suffix="_deed_wit")
-        _set_deed_risk(cls.threshold)
-
         # Scene at the crosser's location.
         cls.scene = SceneFactory(location=cls.character.location, is_active=True)
 
@@ -168,8 +156,6 @@ class MintCrossingDeedNoPrimaryPersonaTests(TestCase):
             cls.puissant_path,
             cls.offer,
         ) = build_crossing_world(boundary_level=32, suffix="_deed_nopersona")
-        _set_deed_risk(cls.threshold)
-
         # Remove the PRIMARY persona so _mint_crossing_deed hits the no-op branch.
         Persona.objects.filter(character_sheet=cls.sheet, persona_type=PersonaType.PRIMARY).delete()
         # Bust the cached_property.
@@ -203,7 +189,6 @@ class MintCrossingDeedNoSceneTests(TestCase):
             cls.puissant_path,
             cls.offer,
         ) = build_crossing_world(boundary_level=33, suffix="_deed_noscene")
-        _set_deed_risk(cls.threshold)
         # Deliberately no active scene at cls.character.location.
 
     def test_deed_minted_with_zero_witnesses(self):
@@ -237,7 +222,6 @@ class ResolveOfferAcceptMintsDeedE2ETests(TestCase):
             cls.chosen_path,
             cls.offer,
         ) = build_crossing_world(boundary_level=34, suffix="_deed_e2e")
-        _set_deed_risk(cls.threshold)
 
     def test_resolve_accept_mints_deed_end_to_end(self):
         result = resolve_audere_majora_offer(

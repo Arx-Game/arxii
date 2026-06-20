@@ -36,6 +36,7 @@ from world.character_sheets.types import (
     ActivityState,
     LifecycleState,
     MaritalStatus,
+    SheetVisibility,
 )
 
 
@@ -82,6 +83,62 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class Profile(SharedMemoryModel):
+    """The bio/narrative surface a persona presents (#1270).
+
+    Sliced out of ``CharacterSheet`` so a cover identity can carry its *own* fabricated
+    bio instead of an empty one — the absence of a bio would otherwise immediately out a
+    cover. A sheet owns one ``true_profile`` (its real bio, presented by the PRIMARY
+    persona); established/cover personas may each own their own ``Profile``.
+
+    Slice 1 (#1270) extracts the narrative *text* fields only. Lineage FKs (family,
+    heritage, tarot, origin) and the cover-bio *display* + authoring flow are follow-ups —
+    today every persona's profile is its sheet's ``true_profile``, so behaviour is
+    unchanged; this only moves where the data lives.
+    """
+
+    concept = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Public character concept/archetype",
+    )
+    real_concept = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Hidden/secret character concept (staff field)",
+    )
+    quote = models.TextField(blank=True, help_text="Character quote/motto")
+    personality = models.TextField(
+        blank=True,
+        help_text="Character personality description",
+    )
+    background = models.TextField(blank=True, help_text="Character background story")
+    obituary = models.TextField(
+        blank=True,
+        help_text="Death notice if character is deceased",
+    )
+
+    class Meta:
+        verbose_name = "Profile"
+        verbose_name_plural = "Profiles"
+
+    def __str__(self) -> str:
+        return self.concept or f"Profile #{self.pk}"
+
+
+# The narrative bio fields that live on ``Profile`` and are exposed on ``CharacterSheet``
+# as read-only forwarding properties (→ ``true_profile``). Writers set them on the profile
+# directly; readers keep using ``sheet.<field>`` unchanged (#1270).
+_PROFILE_BIO_FIELDS: tuple[str, ...] = (
+    "concept",
+    "real_concept",
+    "quote",
+    "personality",
+    "background",
+    "obituary",
+)
 
 
 class CharacterSheet(SharedMemoryModel):
@@ -212,15 +269,16 @@ class CharacterSheet(SharedMemoryModel):
     )
 
     # Social & Identity
-    concept = models.CharField(
-        max_length=255,
+    # #1270 — the real bio surface, sliced out of the sheet into Profile. The PRIMARY
+    # persona presents this; the narrative text fields (concept, quote, background, …) are
+    # read back through forwarding properties below so existing reads stay unchanged.
+    true_profile = models.OneToOneField(
+        "character_sheets.Profile",
+        null=True,
         blank=True,
-        help_text="Public character concept/archetype",
-    )
-    real_concept = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Hidden/secret character concept (staff field)",
+        on_delete=models.SET_NULL,
+        related_name="owning_sheet",
+        help_text="This character's real bio (presented by the PRIMARY persona).",
     )
     marital_status = models.CharField(
         max_length=20,
@@ -260,6 +318,35 @@ class CharacterSheet(SharedMemoryModel):
     )
     rollmod = models.SmallIntegerField(default=0)
 
+    # Privacy tiers (#1271) — player-controlled visibility for the mechanical sheet
+    # sections. Default SELF preserves the #1269 "private by default" behaviour; a player
+    # can open a section to FRIENDS (their allow list) or PUBLIC. Bio/story tiers are a
+    # follow-up (they interact with the presented-identity gating).
+    stats_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's stats.",
+    )
+    skills_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's skills.",
+    )
+    magic_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's magic.",
+    )
+    goals_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's goals.",
+    )
+
     # #981 — the persona (face) this character is currently presenting as. NULL
     # means "on their PRIMARY persona" (the resolver defaults to it), so a fresh
     # sheet writes no row. Mutated ONLY via ``scenes.services.set_active_persona``
@@ -287,16 +374,9 @@ class CharacterSheet(SharedMemoryModel):
     )
 
     # Descriptive Text Fields
-    quote = models.TextField(blank=True, help_text="Character quote/motto")
-    personality = models.TextField(
-        blank=True,
-        help_text="Character personality description",
-    )
-    background = models.TextField(blank=True, help_text="Character background story")
-    obituary = models.TextField(
-        blank=True,
-        help_text="Death notice if character is deceased",
-    )
+    # NOTE: quote / personality / background / obituary moved to Profile (#1270) and are
+    # exposed via forwarding properties below. additional_desc stays — it is appearance
+    # text (read by _build_appearance), distinct from the narrative bio.
     additional_desc = models.TextField(
         blank=True,
         help_text="Additional character description",
@@ -369,6 +449,73 @@ class CharacterSheet(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Sheet for {self.character.key}"
+
+    # --- Bio forwarding (#1270) ------------------------------------------
+    # The narrative bio lives on Profile now; these properties forward to the real bio
+    # (``true_profile``) so every existing ``sheet.<field>`` read — item_data handler,
+    # roster serializers, telnet — and write keeps working transparently against the true
+    # profile. Reads on a sheet without a true_profile return empty; writes lazily create
+    # one (persisted by the save() cascade below).
+
+    def _ensure_true_profile(self) -> Profile:
+        if self.true_profile is None:
+            self.true_profile = Profile()
+        return self.true_profile
+
+    @property
+    def concept(self) -> str:
+        return self.true_profile.concept if self.true_profile is not None else ""
+
+    @concept.setter
+    def concept(self, value: str) -> None:
+        self._ensure_true_profile().concept = value
+
+    @property
+    def real_concept(self) -> str:
+        return self.true_profile.real_concept if self.true_profile is not None else ""
+
+    @real_concept.setter
+    def real_concept(self, value: str) -> None:
+        self._ensure_true_profile().real_concept = value
+
+    @property
+    def quote(self) -> str:
+        return self.true_profile.quote if self.true_profile is not None else ""
+
+    @quote.setter
+    def quote(self, value: str) -> None:
+        self._ensure_true_profile().quote = value
+
+    @property
+    def personality(self) -> str:
+        return self.true_profile.personality if self.true_profile is not None else ""
+
+    @personality.setter
+    def personality(self, value: str) -> None:
+        self._ensure_true_profile().personality = value
+
+    @property
+    def background(self) -> str:
+        return self.true_profile.background if self.true_profile is not None else ""
+
+    @background.setter
+    def background(self, value: str) -> None:
+        self._ensure_true_profile().background = value
+
+    @property
+    def obituary(self) -> str:
+        return self.true_profile.obituary if self.true_profile is not None else ""
+
+    @obituary.setter
+    def obituary(self, value: str) -> None:
+        self._ensure_true_profile().obituary = value
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        # Persist an attached true_profile first so a bio set via the forwarding setters
+        # (and any lazily-created profile) is saved and has a pk for the FK (#1270).
+        if self.true_profile is not None:
+            self.true_profile.save()
+        super().save(*args, **kwargs)
 
     # --- Activity / Lifecycle helpers (#671) -----------------------------
 

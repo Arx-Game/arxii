@@ -94,6 +94,11 @@ class PositionEdge(PositionEdgeBase):
         blank=True,
         related_name="gated_position_edges",
     )
+    blocks_flight = models.BooleanField(
+        default=False,
+        help_text="When true, the aerial mirror does NOT make this edge freely passable "
+        "(anti-air ward): flight may not bypass it.",
+    )
 
     class Meta:
         app_label = "areas"

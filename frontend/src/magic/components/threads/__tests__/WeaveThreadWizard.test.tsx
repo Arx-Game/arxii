@@ -78,7 +78,6 @@ function makeSummary(overrides: Partial<ThreadHubSummary> = {}): ThreadHubSummar
     weaving_eligibility: {},
     weavable_traits: [],
     weavable_techniques: [],
-    room_property_ids: [],
     weavable_relationship_track_ids: [],
     ...overrides,
   };

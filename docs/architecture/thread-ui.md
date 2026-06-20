@@ -99,7 +99,7 @@ This is the first full management surface for a major Spec A model family. It se
 
 - **Combat panel UI.** No `frontend/src/combat/` exists today. Mounting `ThreadPullDialog` in a combat panel is a future spec — this work designs the dialog to accept combat context but does not ship a combat-side host.
 - **Teacher-side offer creation UI.** Teachers create `ThreadWeavingTeachingOffer` rows via service/admin paths today; a player-facing teacher-side authoring UI is a separate concern (mirrors codex teaching offers, which also lacks a frontend authoring UI).
-- **Per-pull anchor-in-action involvement editor.** Ephemeral pulls require `involved_traits/techniques/objects` tuples for the anchor-in-action gate. v1 ephemeral pulls only allow threads of `RELATIONSHIP_TRACK`, `RELATIONSHIP_CAPSTONE`, `FACET`, and `COVENANT_ROLE` kinds (the always-in-action set per `_ALWAYS_IN_ACTION_KINDS` in `services/resonance.py`); TRAIT/TECHNIQUE/ROOM threads can only pull from a combat context where the action substrate provides the involvement tuples. (When the combat panel ships, it'll have the action declaration data to pre-populate these.) The dialog must clearly disable / explain TRAIT/TECHNIQUE/ROOM threads in ephemeral mode.
+- **Per-pull anchor-in-action involvement editor.** Ephemeral pulls require `involved_traits/techniques` tuples for the anchor-in-action gate. v1 ephemeral pulls only allow threads of `RELATIONSHIP_TRACK`, `RELATIONSHIP_CAPSTONE`, `FACET`, and `COVENANT_ROLE` kinds (the always-in-action set per `_ALWAYS_IN_ACTION_KINDS` in `services/resonance.py`); TRAIT/TECHNIQUE threads can only pull from a combat context where the action substrate provides the involvement tuples. (When the combat panel ships, it'll have the action declaration data to pre-populate these.) The dialog must clearly disable / explain TRAIT/TECHNIQUE threads in ephemeral mode.
 - **Rituals-page Imbuing path.** Adding a `ThreadPickerField` to the generic ritual form to make imbuing work via `/rituals` is unnecessary churn — the dedicated thread-detail hosting is the correct UX. Imbuing rituals are simply hidden from `/rituals` (via the new `client_hosted` flag).
 - **Pull-effect aggregator across rounds.** No rolling history of past pull commits. The current-action preview is enough.
 - **Bulk operations.** No multi-select retire, no batch imbue. One thread at a time.
@@ -262,7 +262,7 @@ To drive this, the wizard reads a new `eligibility` payload from the hub-data en
 
 - `TRAIT` → list traits the character has (from `CharacterTraitValue.value > 0`); display as searchable select; show only traits matched by the character's `unlock_trait` rows.
 - `TECHNIQUE` → list techniques the character knows (via `CharacterTechnique`); show only those whose gift is in the unlock's `unlock_gift` set.
-- `ROOM` → list rooms that have at least one Property in the character's unlock's `unlock_room_property` set. **No room-search-by-property endpoint exists today** — this work adds `GET /api/magic/rooms-by-property/?property_id=<int>[&property_id=<int>...]` returning rooms (`ObjectDB`) bearing any of the specified properties. View: `RoomsByPropertyView(APIView)`. The frontend resolves the unlock's `unlock_room_property` set client-side from the unlock data, then issues a single query with all property IDs.
+- ~~`ROOM`~~ → **removed (#879 / #1199).** The bare ROOM anchor and its `RoomsByPropertyView` discovery endpoint (`GET /api/magic/rooms-by-property/`) have been removed. Room-anchored threads now go through the dedicated SANCTUM slot-based weaving flow, not this generic wizard.
 - `RELATIONSHIP_TRACK` → list `RelationshipTrackProgress` for the character whose `track` is in the unlock's `unlock_track` set.
 - `RELATIONSHIP_CAPSTONE` → list `RelationshipCapstone` rows for the character on tracks the character has unlocks for.
 - `FACET` → list facets that match any of the character's worn-item facets (or, more permissively, all facets the player can browse).
@@ -296,7 +296,7 @@ interface ThreadPullDialogProps {
 
 In ephemeral mode (no `combat` prop), the dialog filters the character's threads to the always-in-action kinds (`RELATIONSHIP_TRACK`, `RELATIONSHIP_CAPSTONE`, `FACET`, `COVENANT_ROLE`). Other kinds show with a disabled-eligibility chip — "requires combat context" — so the player understands why they're greyed.
 
-In combat mode, all kinds are eligible; the dialog uses `combat.involved*` tuples to mark TRAIT/TECHNIQUE/ROOM threads as eligible only when their anchor is in the involved set.
+In combat mode, all kinds are eligible; the dialog uses `combat.involved*` tuples to mark TRAIT/TECHNIQUE threads as eligible only when their anchor is in the involved set.
 
 **Dialog layout:**
 
@@ -388,7 +388,7 @@ Single aggregate endpoint to back the Thread Hub. Returns:
   "near_xp_lock_thread_ids": [{"thread_id": 12, "boundary_level": 20, "xp_cost": 5, "dev_points_to_boundary": 80}],
   "blocked_thread_ids": [33],
   "weaving_eligibility": {
-      "TRAIT": true, "TECHNIQUE": false, "ROOM": false,
+      "TRAIT": true, "TECHNIQUE": false,
       "RELATIONSHIP_TRACK": true, "RELATIONSHIP_CAPSTONE": true,
       "FACET": false, "COVENANT_ROLE": true
   }
@@ -562,7 +562,6 @@ Frontend dialogs surface errors inline (a red banner in the dialog body) rather 
 
 - `ThreadHubSummaryView` — GET, returns the summary payload.
 - `ThreadPullCommitView` — POST, commits pulls.
-- `RoomsByPropertyView` — GET, search rooms (ObjectDB) by `RoomProperty` ids; backs the ROOM-anchor wizard step.
 - `cross_xp_lock` action on `ThreadViewSet` — pays XP for a level boundary (decided as `@action`, not a separate APIView; see §10.2).
 - `accept` action on `ThreadWeavingTeachingOfferViewSet` — accepts an offer.
 
@@ -581,7 +580,6 @@ Frontend dialogs surface errors inline (a red banner in the dialog body) rather 
 ```python
 path("thread-hub-summary/", ThreadHubSummaryView.as_view(), name="thread-hub-summary"),
 path("thread-pull-commit/", ThreadPullCommitView.as_view(), name="thread-pull-commit"),
-path("rooms-by-property/", RoomsByPropertyView.as_view(), name="rooms-by-property"),
 ```
 
 The viewset actions (`cross_xp_lock` on threads, `accept` on teaching-offers) register automatically via the router.
@@ -714,7 +712,7 @@ Add a "Threads" link to the magic submenu of the main navigation, alongside "Rit
 
 - Combat panel UI (mounts `ThreadPullDialog`) — separate spec.
 - Teacher-side: authoring `ThreadWeavingTeachingOffer` — separate spec, will mirror codex teaching offer authoring when that ships.
-- TRAIT/TECHNIQUE/ROOM ephemeral pulls — needs an "involvement editor" UI; deferred until concrete RP demand.
+- TRAIT/TECHNIQUE ephemeral pulls — needs an "involvement editor" UI; deferred until concrete RP demand.
 - Bulk operations on threads (multi-select retire, batch imbue).
 - Pull history / audit display (CombatPull rows from past combat encounters).
 - Weaving acquisition without a teacher — currently only via offer-accept; self-acquisition (e.g., from a path grant) is a separate pattern that may need its own surface later.

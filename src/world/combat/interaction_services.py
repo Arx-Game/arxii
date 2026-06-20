@@ -70,7 +70,7 @@ def create_action_interaction(
         return None
 
     encounter = participant.encounter
-    scene = encounter.scene  # nullable on Interaction; pass through as-is
+    scene = encounter.scene  # always set since #1236; passed through to Interaction.scene
 
     # The round_number parameter is currently informational — it's encoded in
     # the action row that calls this, and Interaction.timestamp gives temporal
@@ -101,8 +101,8 @@ def create_npc_action_interaction(
     drives a PC toward knockout/death/wound, so those outcomes link back to a
     real pose-log row.
 
-    The encounter's scene is passed through (nullable) so the interaction
-    appears in the scene log on re-read.
+    The encounter's scene is always set since #1236; it is passed through to
+    Interaction.scene (which remains nullable for non-combat interactions).
     """
     from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
 

@@ -7,7 +7,8 @@ from world.vitals.constants import (
     WOUND_DESCRIPTIONS,
     CharacterLifeState,
 )
-from world.vitals.models import CharacterVitals
+from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.models import CharacterVitals, VitalsConsequenceConfig
 
 
 class CharacterVitalsTests(TestCase):
@@ -103,3 +104,20 @@ class CharacterVitalsHealthTests(TestCase):
     def test_wound_description_zero_health(self) -> None:
         vitals = CharacterVitals(health=0, max_health=100)
         assert vitals.wound_description == "incapacitated"
+
+
+class CharacterVitalsNullableBaseHealthTests(TestCase):
+    """Tests for the nullable base_max_health override field."""
+
+    def test_base_max_health_nullable(self) -> None:
+        vitals = CharacterVitalsFactory(base_max_health=None)
+        vitals.refresh_from_db()
+        self.assertIsNone(vitals.base_max_health)
+
+
+class VitalsConsequenceConfigFieldTests(TestCase):
+    """Tests for VitalsConsequenceConfig config fields."""
+
+    def test_config_has_stamina_weight(self) -> None:
+        cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+        self.assertIsInstance(cfg.stamina_to_health_weight, int)

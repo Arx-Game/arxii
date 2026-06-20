@@ -168,10 +168,36 @@ an NPC at a bar) where concrete NPC objects aren't needed.
 ### Health Pool and Damage
 Health is separate from fatigue — fatigue degrades effectiveness, health degrades survival.
 
-**Health pool sources (current):** `max_health = base_max_health + thread_addend` — the
-thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
-(`recompute_max_health_with_threads`). Path level does not currently drive max_health.
-Path-level-driven health scaling is tracked in **#1256**.
+**Health pool sources (SHIPPED — #1256):** `max_health = base_max_health + thread_addend`.
+The thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
+(`recompute_max_health_with_threads`). `base_max_health` on `CharacterVitals` is NULLABLE:
+`None` → derived on read via `derive_base_max_health`; a set value → authored fixed-base
+override that **bypasses derivation entirely** (class/stamina/covenant terms do NOT apply
+when an override is set).
+
+**`derive_base_max_health(character_sheet) -> int`** computes three terms, all reading
+`effective_combat_level(sheet)` so a bonded sidekick's elevation or mentor's cap flows in:
+
+- **class_term:** sum of `ClassStageHealthRate.health_per_level` for each level 1 through
+  `effective_combat_level`, where the stage per level is resolved via
+  `stage_for_level(level)` (breakpoints: L1 → PROSPECT, L3 → POTENTIAL, L6 → PUISSANT,
+  L11 → TRUE, L16 → GRAND, L21 → TRANSCENDENT). `ClassStageHealthRate` rows are authored
+  per `(CharacterClass, PathStage)`. Zero when no primary class is assigned.
+- **stamina_term:** `stamina trait value × VitalsConsequenceConfig.stamina_to_health_weight`
+  (default 3 HP per Stamina point; staff-tunable in admin).
+- **covenant_term:** `covenant_role_health(character, level)` — sums
+  `level × CovenantRoleBonus.bonus_per_level` over all ENGAGED covenant roles whose
+  `CovenantRoleBonus` rows target the `max_health` `ModifierTarget`. One DB query; no
+  query-in-loop. Forward-compat: armor keys on the ENGAGED role, so the future
+  per-resonance role variants (#1277) swap which role's bonus applies without touching
+  this formula — the thread level selects the variant, never feeds a health number
+  directly (no double-count with the thread addend path).
+
+**Recompute triggers:** character-creation finalize (full health at creation),
+`set_primary_class_level`, mentor-bond establish/dissolve, covenant role
+engagement/membership change (engage/disengage/end/change role).
+
+**Follow-up:** #1277 — per-resonance role variants; no health architecture change needed.
 
 **Thread survivability engine (SHIPPED — #1175, #1250, #1251, #1252):** Thread investment
 contributes a universal passive survivability bonus across every vector likely to kill a
@@ -225,7 +251,12 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **Fatigue integration:** Combat actions drain fatigue pools by category, creating attrition pressure that builds toward collapse/Audere moments
 
 ## What Exists
-- **Combat models:** CombatEncounter (scene + risk/stakes), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant (lightweight join table: encounter + character_sheet + covenant_role), EncounterRiskAcknowledgement (one row per character per encounter — voluntary-entry consent record, #777), BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning
+- **Combat models:** CombatEncounter (`scene` FK — **required, NOT NULL, PROTECT**; every encounter
+  carries a scene, #1236), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant
+  (lightweight join table: encounter + character_sheet + covenant_role), EncounterRiskAcknowledgement
+  (one row per character per encounter — voluntary-entry consent record, #777), BossPhase,
+  ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot,
+  ComboLearning
 - **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage writing directly to CharacterVitals, resolution order by covenant role speed_rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
 - **Vitals system (world.vitals):** CharacterVitals is the single source of truth for character health (health, max_health) and the binary mortality marker `life_state` (ALIVE/DEAD). `CharacterStatus` (ALIVE/UNCONSCIOUS/DYING/DEAD) and `dying_final_round` / `unconscious_at` are removed — incapacitation and dying are now conditions (see below). `is_dead` / `is_alive` / `can_act` service functions replace the old field reads. `derive_character_status` recomputes a coarse read-only label at wire time
 - **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order — speed is never denormalized onto participants. **Covenant-role armor-soak gate (#1174):** `apply_equipped_armor_soak` splits worn armor into compatible/incompatible buckets; soak = `compat_physical + max(incompat_physical, resonant_pool)`, where the resonant pool scales on character level — incompatible armor competes against the resonant pool rather than stacking additively.
@@ -242,7 +273,17 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
   model lineup.
 - **Survivability pipeline (world.vitals.services):** `process_damage_consequences()` is the system-agnostic entry point for damage consequences. Uses `perform_check` with scaled difficulty for knockout (below 20% health), death (at or below 0%), and permanent wound (hit > 50% max health) checks. Callable by combat, missions, traps, or any damage source
 - **DEAL_DAMAGE effect handler:** Connected — `ConsequenceEffect` with `EffectType.DEAL_DAMAGE` applies damage to CharacterVitals and triggers the survivability pipeline. Works for combat, missions, traps, and challenges
-- **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready, combo upgrade/revert, my_action, available_combos), and participation (join, flee). Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff, IsEncounterParticipant, IsInEncounterRoom. **Encounter list/retrieve read gate (#1041):** `CombatEncounterViewSet._filter_readable()` restricts list and retrieve to encounters whose scene is viewable by the caller (`Scene.objects.viewable_by(user)`) OR encounters the caller is actively fighting in (participant union via `participants__character_sheet__character_id`). Non-viewable encounters return 404. Staff bypass full queryset. Null-scene encounters are staff-only (deny-by-default). Effect/power-ledger details are separately gated by `combat.permissions.can_view_encounter_effects` (staff, scene GM, or encounter participant — stricter than scene visibility by design).
+- **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round,
+  resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready,
+  combo upgrade/revert, my_action, available_combos), and participation (join, flee).
+  Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff,
+  IsEncounterParticipant, IsInEncounterRoom. **Encounter list/retrieve read gate (#1041, simplified
+  in #1236):** `CombatEncounterViewSet._filter_readable()` restricts list and retrieve to encounters
+  whose scene is viewable by the caller (`Scene.objects.viewable_by(user)`). Staff bypass full
+  queryset. The participant union and null-scene staff-only branch are gone — every encounter
+  carries a required scene, so scene visibility subsumes participant membership. Effect/power-ledger
+  details are separately gated by `combat.permissions.can_view_encounter_effects` (staff, scene
+  GM, or encounter participant — stricter than scene visibility by design).
 - **Round pacing:** Timed mode (default, configurable minutes with auto-resolve), Ready mode (all players mark ready), Manual mode (GM triggers). Timer task runs every 30 seconds via game clock scheduler
 - **Participation:** PCs in the room can self-join active encounters. Flee resolves as a graded check at round resolution with authored tier difficulty, ally cover bonuses, and pool-routed failure consequences (#878)
 - **Tests:** 599 tests across combat, vitals, conditions, mechanics, checks, and covenants
@@ -619,6 +660,36 @@ clamps soulfray below any death-risk stage, and never fires a `character_loss` c
 **Still open (tracked):**
 - Sheet-driven symmetric NPC duellist (the lethal variant reuses the threat-pool opponent).
 
+### Every Combat Encounter Carries a Scene (SHIPPED — 2026-06-20, #1236)
+
+**Status: SHIPPED**
+**Issue:** #1236
+
+Every `CombatEncounter` is now guaranteed to have an associated `Scene`. The `scene` FK is
+`NOT NULL` with `on_delete=PROTECT` — an encounter cannot exist without a scene, and a scene
+with an active encounter cannot be deleted.
+
+**What was built:**
+
+- **Scene invariant at DB level:** `CombatEncounter.scene` flipped from nullable SET_NULL to
+  required NOT NULL PROTECT. Factory default updated; null-scene tests retired.
+- **Find-or-create at encounter start (duels):** `create_pvp_duel` / `create_lethal_duel` call
+  `ensure_scene_for_location(room, privacy_mode=...)` from `scenes.place_services`. Privacy is
+  room-derived: `PUBLIC` if `room.room_profile.is_public`, else `PRIVATE`. An existing active
+  scene in the room is inherited (its privacy_mode is preserved).
+- **Participation convergence:** `_create_participant` calls
+  `ensure_scene_participation(encounter.scene, character_sheet.character)` from
+  `scenes.interaction_services` so every fighter is a first-class recorded `SceneParticipation`.
+  Called from `add_participant` and `join_encounter`.
+- **Read-gate simplification:** `CombatEncounterViewSet._filter_readable()` is now
+  `scene__in=Scene.objects.viewable_by(user)` (staff bypass + scene-visibility only). The
+  participant union and the null-scene staff-only branch are eliminated.
+
+**Deviation from original spec:** privacy derivation lives at the combat call site (explicit
+`privacy_mode` passed to the helper) rather than as the helper's default — the conservative
+side of the spec's flagged place-behavior change. A global `Scene.clean()` privacy↔room
+invariant remains out of scope (follow-up).
+
 ### Unified Combat UI (SHIPPED — 2026-05-24)
 
 **Status: SHIPPED**
@@ -989,13 +1060,25 @@ gated-edge crossing. Builds on the Phase-1 and Blueprint (#1017) positioning bas
   `GATING_FAR_SIDE` consequence on the approach pool executes `force_move_to_position` to
   the far side; gated edges surface as locked entries in the player's move list
 
-**Deferred to follow-up (#520 + reactive-layer):**
+**Built (#1228 — reactive catch + AFK-safe plummet):**
 
-- Reactive fall consumer: `EventName.FELL` seam is open; the capability-based catch
-  (fly/teleport/acrobatics interrupt) and AFK-safe multi-round plummet down the
-  `elevation_anchor` chain with impact consequences await the round/turn framework (#520)
-- Anti-air "blocks-flight" gate flag: a future `PositionEdge` flag preventing flight over
-  certain edges
+- **Reactive fall consumer** — `EventName.FELL` is consumed by a room-owned Evennia trigger
+  (`install_fall_triggers` / `wire_fall_triggers`) that calls `begin_plummet`. Capability-gated
+  catch: any character with a catch capability (`fly`, `teleport`, `telekinesis`, `acrobatics`,
+  or any future authored `CatchCapability` row) gets a `Catch the Faller` challenge; passing ends
+  the plummet immediately. The catch roster is pure data — no code change needed to add a new
+  catch-capable skill. Seed functions `ensure_fall_content()` (in `plummet_content.py`) and
+  `wire_fall_triggers()` (in `factories.py`) are idempotent get-or-create; they double as test
+  setup and staff seed content, mirroring the `ensure_poison_content` pattern.
+- **AFK-safe multi-round plummet** — `begin_plummet` / `advance_plummet` / `end_plummet` in
+  `src/world/areas/positioning/plummet.py`. Each round tick calls `advance_plummet` via the
+  scene-round orchestrator; the plummeting character descends one level down the
+  `elevation_anchor` chain. When `anchor is None` (ground reached), `end_plummet` fires
+  `process_damage_consequences` through the existing survivability pools (graded fall impact,
+  not binary). Tempo is action-driven — no wall-clock advancement.
+- **`PositionEdge.blocks_flight`** flag — `BooleanField(default=False)` on `PositionEdge`;
+  `connect_positions(..., blocks_flight=True)` sets it. Aerial-layer traversal skips edges
+  where the flag is set, enabling anti-air terrain design without capability checks in code.
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management

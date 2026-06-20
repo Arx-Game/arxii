@@ -129,6 +129,7 @@ const mockedUseCombatEncounter = combatQueries.useCombatEncounter as ReturnType<
 function mockEncounter(overrides?: Partial<EncounterDetail>) {
   const encounter: EncounterDetail = {
     id: 1,
+    scene: 1,
     round_number: 1,
     is_participant: true,
     is_gm: false,

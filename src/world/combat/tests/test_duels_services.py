@@ -329,9 +329,9 @@ class ResolveDuelEndTests(TestCase):
 
     def test_non_duel_encounter_returns_none(self):
         """resolve_duel_end only acts on DUEL encounters."""
-        from world.combat.models import CombatEncounter
+        from world.combat.factories import CombatEncounterFactory
 
-        enc = CombatEncounter.objects.create(
+        enc = CombatEncounterFactory(
             encounter_type=EncounterType.PARTY_COMBAT,
             room=self.room,
             status=EncounterStatus.BETWEEN_ROUNDS,

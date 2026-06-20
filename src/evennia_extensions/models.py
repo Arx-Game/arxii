@@ -336,37 +336,10 @@ class PlayerAllowList(SharedMemoryModel):
         verbose_name_plural = "Player Allow List Entries"
 
 
-class PlayerBlockList(SharedMemoryModel):
-    """
-    Players this account blocks from contacting them.
-    """
-
-    owner = models.ForeignKey(
-        PlayerData,
-        on_delete=models.CASCADE,
-        related_name="block_list",
-    )
-    blocked_player = models.ForeignKey(
-        PlayerData,
-        on_delete=models.CASCADE,
-        related_name="blocked_by",
-    )
-    blocked_date = models.DateTimeField(auto_now_add=True)
-    reason = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text="Optional reason for blocking",
-    )
-
-    def __str__(self):
-        owner_name = self.owner.account.username
-        blocked_name = self.blocked_player.account.username
-        return f"{owner_name} blocks {blocked_name}"
-
-    class Meta:
-        unique_together = ["owner", "blocked_player"]
-        verbose_name = "Player Block List Entry"
-        verbose_name_plural = "Player Block List Entries"
+# NOTE: the old account-level ``PlayerBlockList`` was removed (#1278) — it was unwired and is
+# superseded by the persona-aware ``world.scenes.Block`` (block resolution lives there with the
+# Persona FKs it needs). ``PlayerAllowList`` (above) stays — it's the allow/friends list, now wired
+# by the #1271 privacy tiers.
 
 
 class RoomProfile(SharedMemoryModel):

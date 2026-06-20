@@ -28,6 +28,7 @@ from world.magic.factories import IntensityTierFactory
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.progression.models import CharacterPathHistory
+from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 
 
 def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by design
@@ -116,6 +117,12 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
         requires_active_audere=True,
         vision_text=vision_text,
         manifestation_text=manifestation_text,
+        # Renown-bearing default so a crossing mints a deed, converging with
+        # ``ensure_audere_majora_threshold`` (#1205). ``fire_renown_award`` only
+        # mints a LegendEntry when risk != NONE.
+        magnitude=RenownMagnitude.HIGH,
+        risk=RenownRisk.HIGH,
+        reach=RenownReach.REGIONAL,
     )
 
     prospect_path = PathFactory(name=f"Prospect_{boundary_level}{suffix}", stage=PathStage.PROSPECT)

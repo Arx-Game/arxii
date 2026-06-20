@@ -98,8 +98,9 @@ Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
 - `ReadOnlyOrSceneParticipant.has_object_permission()` calls `scene.is_viewable_by()`
   to gate read access on the scene detail / retrieve (`src/world/scenes/permissions.py`).
 - `CombatEncounterViewSet._filter_readable()` calls `Scene.objects.viewable_by(user)`
-  as the base of the encounter read-gate, unioned with encounter-participant membership
-  (`src/world/combat/views.py`).
+  as the sole encounter read-gate: staff bypass OR `scene__in=Scene.objects.viewable_by(user)`.
+  The participant union is gone — every encounter carries a required scene, so scene
+  visibility subsumes participant membership (`src/world/combat/views.py`).
 - `InteractionViewSet.get_queryset()` calls `Interaction.objects.visible_to(...)`
   (`src/world/scenes/interaction_views.py`).
 - `SceneViewSet.highlight_reel()` calls `Interaction.objects.visible_to(...)` so the reel
@@ -134,6 +135,27 @@ from world.scenes.services import broadcast_scene_message
 broadcast_scene_message(scene, "start")   # Sets location.active_scene = scene
 broadcast_scene_message(scene, "update")  # Sends update payload
 broadcast_scene_message(scene, "end")     # Sets location.active_scene = None
+```
+
+```python
+from world.scenes.place_services import ensure_scene_for_location
+
+# Find or create the active scene for a room.  If an active scene already
+# exists the caller's privacy_mode is ignored and the existing scene is
+# returned unchanged.  When a new scene is created, privacy_mode is applied
+# (defaults to PUBLIC when omitted).  Used by combat encounter-start to
+# guarantee every encounter carries a scene.
+scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
+```
+
+```python
+from world.scenes.interaction_services import ensure_scene_participation
+
+# Create a SceneParticipation for the character's account in the scene if one
+# does not already exist.  Public API — callable by any system that must record
+# a character as a first-class scene participant.  Combat calls this from
+# _create_participant so every fighter is a recorded scene participant.
+ensure_scene_participation(scene, character)
 ```
 
 ---

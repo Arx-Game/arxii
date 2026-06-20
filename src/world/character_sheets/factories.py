@@ -12,11 +12,25 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
+    _PROFILE_BIO_FIELDS,
     CharacterSheet,
     Gender,
+    Profile,
     Pronouns,
 )
 from world.character_sheets.types import MaritalStatus
+
+
+class ProfileFactory(factory_django.DjangoModelFactory):
+    """Factory for the narrative bio Profile (#1270)."""
+
+    class Meta:
+        model = Profile
+
+    concept = factory.Faker("sentence", nb_words=3)
+    quote = factory.Faker("sentence")
+    personality = factory.Faker("paragraph")
+    background = factory.Faker("paragraph")
 
 
 class GenderFactory(factory_django.DjangoModelFactory):
@@ -56,15 +70,27 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
     character = factory.SubFactory(CharacterFactory)
     age = factory.Faker("random_int", min=18, max=50)
     # gender and pronouns are now FKs - leave null for basic factory
-    concept = factory.Faker("sentence", nb_words=3)
     marital_status = MaritalStatus.SINGLE
     family = None  # FK to roster.Family
     vocation = factory.Faker("job")
     social_rank = factory.Faker("random_int", min=1, max=20)
     birthday = factory.Faker("date")
-    quote = factory.Faker("sentence")
-    personality = factory.Faker("paragraph")
-    background = factory.Faker("paragraph")
+    # Bio fields (concept/quote/personality/background) live on Profile now (#1270); they
+    # are accepted as factory kwargs and routed to true_profile in _create below.
+
+    @classmethod
+    def _create(cls, model_class: type, *args: object, **kwargs: object) -> CharacterSheet:
+        """Route narrative bio kwargs to the sheet's ``true_profile`` (#1270).
+
+        Bio (concept/quote/personality/background/…) moved to Profile, so it can't be a
+        CharacterSheet column anymore; pop those kwargs, build the Profile, and link it.
+        """
+        bio_kwargs = {k: kwargs.pop(k) for k in _PROFILE_BIO_FIELDS if k in kwargs}
+        sheet: CharacterSheet = super()._create(model_class, *args, **kwargs)
+        if sheet.true_profile_id is None:
+            sheet.true_profile = ProfileFactory(**bio_kwargs)
+            sheet.save()
+        return sheet
 
     @factory.post_generation
     def primary_persona(
@@ -73,10 +99,10 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         extracted: object,
         **kwargs: object,
     ) -> None:
-        """Ensure every sheet has a PRIMARY persona (the invariant).
+        """Ensure every sheet has a PRIMARY persona (the invariant), linked to true_profile.
 
-        Idempotent: if a PRIMARY persona already exists for this character,
-        link it to the sheet. Otherwise create a new PRIMARY persona for it.
+        Idempotent: if a PRIMARY persona already exists for this character, link its profile.
+        Otherwise create a new PRIMARY persona pointing at the sheet's true_profile (#1270).
 
         Pass ``primary_persona=False`` to opt out.
         """
@@ -94,12 +120,16 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         ).first()
 
         if existing_primary is not None:
+            if existing_primary.profile_id is None and self.true_profile_id is not None:
+                existing_primary.profile = self.true_profile
+                existing_primary.save()
             return
 
         Persona.objects.create(
             character_sheet=self,
             name=self.character.db_key,
             persona_type=PersonaType.PRIMARY,
+            profile=self.true_profile,
         )
 
     @factory.post_generation

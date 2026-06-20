@@ -3,12 +3,12 @@
 Covers:
 - Outsider cannot list or retrieve a private-scene encounter (404, not 403).
 - Scene member (SceneParticipation) can read.
-- Combat participant WITHOUT a SceneParticipation row can read (regression guard —
-  combat never creates SceneParticipation rows).
+- Combat participant (joined via the combat service, which creates a SceneParticipation)
+  can read.
 - Staff bypass: staff see all.
 - Public scene encounter is visible to any authenticated user.
 - Action routes (e.g. my_action) are NOT filtered — a participant in a private
-  scene who has no SceneParticipation still resolves the encounter on action routes.
+  scene who joined via the service still resolves the encounter on action routes.
 """
 
 from django.test import TestCase
@@ -16,8 +16,8 @@ from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ParticipantStatus
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.factories import CombatEncounterFactory
+from world.combat.services import add_participant
 from world.combat.views import CombatEncounterViewSet
 from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
@@ -36,7 +36,7 @@ class EncounterReadVisibilityTests(TestCase):
         cls.member_account = AccountFactory(username="vis_member")
         SceneParticipationFactory(scene=cls.scene, account=cls.member_account)
 
-        # fighter: IS a combat participant but has NO SceneParticipation row
+        # fighter: IS a combat participant; add_participant creates a SceneParticipation
         cls.fighter_account = AccountFactory(username="vis_fighter")
         cls.fighter_character = CharacterFactory(db_key="VisFighterChar")
         cls.fighter_sheet = CharacterSheetFactory(character=cls.fighter_character)
@@ -55,12 +55,8 @@ class EncounterReadVisibilityTests(TestCase):
         # Encounter on the private scene
         cls.encounter = CombatEncounterFactory(scene=cls.scene)
 
-        # Wire the fighter as a CombatParticipant (no SceneParticipation)
-        cls.fighter_participant = CombatParticipantFactory(
-            encounter=cls.encounter,
-            character_sheet=cls.fighter_sheet,
-            status=ParticipantStatus.ACTIVE,
-        )
+        # Register the fighter via the combat service so a SceneParticipation is created
+        cls.fighter_participant = add_participant(cls.encounter, cls.fighter_sheet)
 
         # --- Public scene with a separate encounter (for the public-scene test) ---
         cls.public_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
@@ -86,8 +82,8 @@ class EncounterReadVisibilityTests(TestCase):
         ids = {e["id"] for e in response.data["results"]}
         self.assertIn(self.encounter.id, ids)
 
-    def test_fighter_without_scene_participation_can_list(self) -> None:
-        """Regression guard: combat participant visible in list even with no SceneParticipation."""
+    def test_fighter_can_list(self) -> None:
+        """Regression guard: fighter joined via service (SceneParticipation exists) is visible."""
         client = APIClient()
         client.force_authenticate(user=self.fighter_account)
         response = client.get("/api/combat/")
@@ -112,8 +108,8 @@ class EncounterReadVisibilityTests(TestCase):
         response = client.get(f"/api/combat/{self.encounter.id}/")
         self.assertEqual(response.status_code, 200)
 
-    def test_fighter_without_scene_participation_can_retrieve(self) -> None:
-        """Regression guard: combat never creates SceneParticipation rows."""
+    def test_fighter_can_retrieve(self) -> None:
+        """Regression guard: fighter joined via service (SceneParticipation exists) can retrieve."""
         client = APIClient()
         client.force_authenticate(user=self.fighter_account)
         response = client.get(f"/api/combat/{self.encounter.id}/")
@@ -138,10 +134,9 @@ class EncounterReadVisibilityTests(TestCase):
     def test_action_route_resolves_for_fighter_in_private_scene(self) -> None:
         """Action routes must NOT be filtered by scene visibility.
 
-        A combat participant in a private scene with no SceneParticipation row
-        must still be able to hit action routes (my_action, etc.). If the read
-        filter were also applied to action routes, fighters would be locked out
-        of their own encounter.
+        A combat participant in a private scene who joined via the combat service
+        (and therefore has a SceneParticipation) must still be able to hit action
+        routes (my_action, etc.) via the unfiltered base queryset path.
         """
         client = APIClient()
         client.force_authenticate(user=self.fighter_account)

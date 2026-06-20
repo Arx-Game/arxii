@@ -1,1 +1,1 @@
-0004_vitalsconsequenceconfig_death_base_difficulty_and_more
+0005_vitalsconsequenceconfig_stamina_to_health_weight_and_more

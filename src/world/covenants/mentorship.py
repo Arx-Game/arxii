@@ -148,10 +148,7 @@ def _adjusted_level_for_mentor(bond: MentorBond) -> int:
         .values_list("sidekick_sheet__character_id", flat=True)
     )
 
-    if not sidekick_bonds:
-        # Fallback: no sidekick bonds found; can't compute top. Return band low.
-        lo, _ = covenant_band(bond.covenant)
-        return lo
+    assert sidekick_bonds, "unreachable: caller active_bond_adjusting guarantees >=1 bond"  # noqa: S101
 
     # Bulk fetch: one query — primary class level per sidekick character.
     # We need the primary level (is_primary=True) or highest level per character.
@@ -284,18 +281,27 @@ def establish_mentor_bond(
             )
             raise MentorBondError(msg)
 
-    return MentorBond.objects.create(
+    bond = MentorBond.objects.create(
         covenant=covenant,
         mentor_sheet=mentor_sheet,
         sidekick_sheet=sidekick_sheet,
         adjusted_party=adjusted_party,
     )
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(mentor_sheet)
+    recompute_max_health_with_threads(sidekick_sheet)
+    return bond
 
 
 def dissolve_mentor_bond(bond: MentorBond) -> None:
     """Dissolve an active MentorBond by setting dissolved_at to now."""
     bond.dissolved_at = timezone.now()
     bond.save(update_fields=["dissolved_at"])
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(bond.mentor_sheet)
+    recompute_max_health_with_threads(bond.sidekick_sheet)
 
 
 def assert_membership_level_allowed(

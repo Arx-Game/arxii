@@ -19,7 +19,7 @@ def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool
         return False
     if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
         return True
-    if encounter.scene is not None and encounter.scene.is_gm(user):
+    if encounter.scene.is_gm(user):
         return True
     character_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
     return any(
@@ -61,8 +61,6 @@ class IsEncounterGMOrStaff(BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        if not obj.scene:
-            return False
         return obj.scene.is_gm(request.user)
 
 
@@ -110,7 +108,5 @@ class IsInEncounterRoom(BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        if not obj.scene:
-            return False
         character_ids = _viewer_character_ids(request, view)
         return obj.scene.has_character_present(character_ids)

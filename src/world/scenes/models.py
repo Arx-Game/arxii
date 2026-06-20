@@ -222,6 +222,18 @@ class Persona(SharedMemoryModel):
         help_text="Name with color formatting codes",
     )
     description = models.TextField(blank=True, help_text="Physical description text")
+    # #1270 — the bio this face presents. The PRIMARY persona points at the sheet's
+    # true_profile (the real bio); an established/cover persona may own its own Profile (a
+    # fabricated bio) so it does not out itself with an empty one. Null falls back to the
+    # sheet's true_profile.
+    profile = models.ForeignKey(
+        "character_sheets.Profile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="personas",
+        help_text="The bio this persona presents (#1270); null ⇒ the sheet's true_profile.",
+    )
     thumbnail_url = models.URLField(blank=True, max_length=500)
     thumbnail = models.ForeignKey(
         "evennia_extensions.PlayerMedia",
@@ -463,6 +475,87 @@ class PersonaDiscovery(SharedMemoryModel):
         ):
             self.persona_id, self.linked_to_id = self.linked_to_id, self.persona_id
         super().save(*args, **kwargs)
+
+
+class Block(SharedMemoryModel):
+    """One player blocking another, persona-scoped by default (#1278).
+
+    The blocker (``owner``) blocks ``blocked_player``. By default the coded block is the exact
+    ``blocker_persona`` ↔ ``blocked_persona`` pair; ``account_level=True`` is the blocker's
+    conscious opt-in to have *all* of their characters block the target. Keyed on PlayerData
+    (account), so the block follows the *person*: a character re-rostered to a different player
+    no longer matches, and the original player returning re-activates it.
+
+    **Anti-derivation (#1278):** coded enforcement is for the exact blocked pair (or account-level
+    blocker side) only. The blocked player's *other* identities get a separate awareness + staff
+    flag layer — never coded effects the blocker could observe and use to derive their alts.
+
+    **Cron-delayed clear:** lifting a block sets ``pending_removal_at`` to a future cron tick; the
+    block stays active until then (kills the lift → snipe → re-block pattern), and a cron finalizes
+    removal. Slice 1 is the model + resolution; the visibility/interaction wiring, the Mute sibling,
+    the awareness/flag layer, and the cron job are follow-up slices.
+
+    Supersedes the unwired account-level ``evennia_extensions.PlayerBlockList`` (removed).
+    """
+
+    owner = models.ForeignKey(
+        "evennia_extensions.PlayerData",
+        on_delete=models.CASCADE,
+        related_name="blocks_made",
+        help_text="The player who created the block (the blocker).",
+    )
+    blocked_player = models.ForeignKey(
+        "evennia_extensions.PlayerData",
+        on_delete=models.CASCADE,
+        related_name="blocks_received",
+        help_text="The player being blocked.",
+    )
+    blocker_persona = models.ForeignKey(
+        Persona,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="blocks_from",
+        help_text="The face the blocker blocked from; null when account_level (all their faces).",
+    )
+    blocked_persona = models.ForeignKey(
+        Persona,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="blocks_against",
+        help_text="The face that was blocked (shown on the blocker's block list).",
+    )
+    account_level = models.BooleanField(
+        default=False,
+        help_text="Opt-in: all of the blocker's characters block the target.",
+    )
+    pending_removal_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a lifted block finalizes (cron). The block stays active until then; "
+            "null means it has not been lifted."
+        ),
+    )
+    reason = models.CharField(max_length=200, blank=True, help_text="Optional reason.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "blocked_player", "blocker_persona", "blocked_persona"],
+                name="unique_block_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.owner} blocks {self.blocked_player}"
+
+    @property
+    def is_active(self) -> bool:
+        """Active unless a lift grace period has already elapsed."""
+        return self.pending_removal_at is None or self.pending_removal_at > timezone.now()
 
 
 class Interaction(SharedMemoryModel):

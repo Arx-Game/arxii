@@ -51,12 +51,9 @@ class CharacterVitals(SharedMemoryModel):
         ),
     )
     base_max_health = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            "Baseline max health before thread-derived VITAL_BONUS addends. "
-            "Set by the character-creation / stat pipeline; recompute_max_health "
-            "derives max_health = base_max_health + thread_addend."
-        ),
+        null=True,
+        blank=True,
+        help_text="Authored fixed base override; null = derive from level/stamina/role (see services).",  # noqa: E501
     )
     life_state = models.CharField(
         max_length=10,
@@ -156,6 +153,11 @@ class VitalsConsequenceConfig(SharedMemoryModel):
         help_text=(
             "Additional difficulty added per percentage point damage exceeds the 50% threshold."
         ),
+    )
+
+    stamina_to_health_weight = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Health per point of Stamina contributed to base_max_health.",
     )
 
     updated_at = models.DateTimeField(auto_now=True)

@@ -71,6 +71,7 @@ def connect_positions(
     *,
     is_passable: bool = True,
     gating_challenge: ChallengeInstance | None = None,
+    blocks_flight: bool = False,
 ) -> PositionEdge:
     """Create a traversable edge between two positions, ordered canonically.
 
@@ -84,6 +85,7 @@ def connect_positions(
         position_b=b,
         is_passable=is_passable,
         gating_challenge=gating_challenge,
+        blocks_flight=blocks_flight,
     )
     edge.full_clean()
     edge.save()
@@ -535,9 +537,12 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
         twin[g.pk] = above
         connect_positions(g, above)  # vertical
     # Horizontal: mirror every ground edge (ignore passability/gating).
+    # Edges with blocks_flight=True are NOT mirrored — no aerial passage exists.
     for edge in PositionEdge.objects.filter(position_a__room=room).exclude(
         position_a__kind=PositionKind.AERIAL
     ):
+        if edge.blocks_flight:
+            continue
         a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
         if a is not None and b is not None:
             connect_positions(a, b)
@@ -553,12 +558,20 @@ def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
 
     Materializes the aerial layer if not yet present (idempotent).
     Sets the 'aerial' ObjectProperty on the object.
+
+    Raises PositionError if the actor is unplaced (no ObjectPosition).
+    Returns the existing ObjectPosition without moving if actor is already aerial.
     """
     from world.mechanics.models import ObjectProperty
 
+    ground = position_of(objectdb)
+    if ground is None:
+        msg = "Cannot take flight: actor is not placed."
+        raise PositionError(msg)
+    if ground.kind == PositionKind.AERIAL:
+        return objectdb.object_position
     room = objectdb.location
     materialize_aerial_layer(room)
-    ground = position_of(objectdb)
     above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
     ObjectProperty.objects.update_or_create(
         object=objectdb,
@@ -573,12 +586,20 @@ def leave_aerial(objectdb: ObjectDB) -> ObjectPosition:
 
     Tears down the aerial layer once no AERIAL position in the room has occupants.
     Falls to the room's PRIMARY position if elevation_anchor is None.
+
+    Raises PositionError if the actor is unplaced or is not in an aerial position.
     """
     from world.mechanics.models import ObjectProperty
 
     room = objectdb.location
     current = position_of(objectdb)
-    landing: Position | None = current.elevation_anchor if current is not None else None
+    if current is None:
+        msg = "Cannot land: actor is not placed."
+        raise PositionError(msg)
+    if current.kind != PositionKind.AERIAL:
+        msg = "Actor is not aerial."
+        raise PositionError(msg)
+    landing: Position | None = current.elevation_anchor
     if landing is None:
         landing = Position.objects.filter(room=room, kind=PositionKind.PRIMARY).first()
     if landing is None:
@@ -597,15 +618,22 @@ def leave_aerial(objectdb: ObjectDB) -> ObjectPosition:
 def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
     """Emit FELL if *position* is a CHASM. Returns whether an event was emitted.
 
-    The reactive catch/plummet consumer is deferred to the #1018 follow-up; this
-    only opens the seam.
+    Idempotently installs the room-owned FELL → plummet trigger
+    (``install_fall_triggers``) before emitting, so the reactive plummet consumer
+    (``world.areas.positioning.plummet.begin_plummet``) is always present at the
+    fall choke point (#1228).
     """
     if position.kind != PositionKind.CHASM:
         return False
     from flows.constants import EventName
     from flows.emit import emit_event
     from flows.events.payloads import FallEvent
+    from world.areas.positioning.plummet import install_fall_triggers
 
+    # The fall choke point guarantees the consumer exists: idempotently install
+    # the room-owned FELL → plummet trigger right before emitting. No-ops when
+    # the seeded TriggerDefinition is absent (content not wired here).
+    install_fall_triggers(objectdb.location)
     emit_event(
         EventName.FELL,
         FallEvent(faller=objectdb, position=position),

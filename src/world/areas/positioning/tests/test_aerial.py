@@ -9,12 +9,15 @@ from __future__ import annotations
 from django.test import TestCase
 
 from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
+    connect_positions,
     edge_between,
     enter_aerial,
     force_move_to_position,
     leave_aerial,
+    materialize_aerial_layer,
     move_to_position,
     place_in_position,
     position_of,
@@ -107,3 +110,53 @@ class AerialLifecycleTests(TestCase):
 
         leave_aerial(self.char)
         self.assertEqual(position_of(self.char).kind, PositionKind.PRIMARY)
+
+    def make_unplaced_actor(self):
+        """Return a character that is IN the room but has no ObjectPosition."""
+        from evennia_extensions.factories import CharacterFactory
+
+        return CharacterFactory(location=self.room)
+
+    # ------------------------------------------------------------------
+    # Guard tests (Task 2)
+    # ------------------------------------------------------------------
+
+    def test_enter_aerial_unplaced_actor_raises(self) -> None:
+        """enter_aerial raises PositionError when the actor has no ObjectPosition."""
+        actor = self.make_unplaced_actor()
+        with self.assertRaises(PositionError):
+            enter_aerial(actor)
+
+    def test_enter_aerial_already_aerial_is_idempotent(self) -> None:
+        """A second call to enter_aerial does not crash or double-move the actor."""
+        enter_aerial(self.char)
+        result = enter_aerial(self.char)  # idempotent — should NOT raise
+        self.assertEqual(position_of(self.char).kind, PositionKind.AERIAL)
+        self.assertEqual(result.position.kind, PositionKind.AERIAL)
+
+    def test_leave_aerial_when_not_aerial_raises(self) -> None:
+        """leave_aerial raises PositionError when the actor is on the ground (not aerial)."""
+        # self.char is placed at courtyard (ground) — never entered aerial
+        with self.assertRaises(PositionError):
+            leave_aerial(self.char)
+
+    def test_blocks_flight_edge_is_not_bypassed_by_aerial_layer(self) -> None:
+        """A ground edge with blocks_flight=True must NOT get a freely passable aerial twin."""
+        # setUp already connected courtyard<->balcony; create a fresh pair with anti-air ward.
+        from world.areas.positioning.services import create_position
+
+        warded_a = create_position(self.room, "warded_a", kind=PositionKind.PRIMARY)
+        warded_b = create_position(self.room, "warded_b", kind=PositionKind.PRIMARY)
+        connect_positions(warded_a, warded_b, blocks_flight=True)
+        materialize_aerial_layer(self.room)
+        twin_a = Position.objects.get(
+            room=self.room, kind=PositionKind.AERIAL, elevation_anchor=warded_a
+        )
+        twin_b = Position.objects.get(
+            room=self.room, kind=PositionKind.AERIAL, elevation_anchor=warded_b
+        )
+        aerial_edge = edge_between(twin_a, twin_b)
+        # The aerial twin edge must NOT exist (anti-air ward suppresses it).
+        self.assertIsNone(
+            aerial_edge, "blocks_flight ground edge must NOT produce an aerial twin edge"
+        )

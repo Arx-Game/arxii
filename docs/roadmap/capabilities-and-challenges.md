@@ -479,8 +479,11 @@ resolves its target position:
 **`FELL` event seam:** `maybe_emit_fall(objectdb, position)` is called by `_create_position`
 and `_move_to_position` whenever the resulting position is a `CHASM`.  It emits
 `EventName.FELL` (`FallEvent(faller, position)`) via the reactive layer.  The reactive
-consumer — capability-based catch (fly/acrobatics interrupt) and AFK-safe multi-round
-plummet — is deferred to the round/turn framework follow-up (#520).
+consumer is **built (#1228)**: `begin_plummet` starts an AFK-safe DANGER round + applies
+`Plummeting` + binds the catch challenge; `advance_plummet` descends/impacts per round; and
+`dispatch_catch` → `resolve_catch` lets a capability-gated bystander catch the faller (clean
+catch ends the plummet with no impact and places the faller safely). See
+`docs/systems/areas.md` for the full pipeline.
 
 ## Open Design Questions
 

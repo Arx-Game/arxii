@@ -1495,3 +1495,34 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
             roster_entry=roster_entry,
             ritual=granted_ritual,
         ).exists(), "Expected CharacterRitualKnowledge for the beginnings-granted ritual"
+
+
+class FinalizeVitalsTests(FinalizationTestMixin, TestCase):
+    """Tests that finalize_character initialises CharacterVitals at full health."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls._setup_finalization_base(cls, prefix="Vitals Test", height_min=3300, height_max=3400)
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"vitalstest_{id(self)}")
+
+    def _create_complete_draft(self) -> CharacterDraft:
+        return self._create_base_draft(first_name="VitalsTest")
+
+    def test_finalize_initializes_vitals_at_full_health(self):
+        """finalize_character must create CharacterVitals with health == max_health > 0."""
+        from world.vitals.models import CharacterVitals
+
+        draft = self._create_complete_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        sheet = character.sheet_data
+        vitals = CharacterVitals.objects.get(character_sheet=sheet)
+        self.assertGreater(vitals.max_health, 0, "max_health must be > 0 after finalization")
+        self.assertEqual(
+            vitals.health,
+            vitals.max_health,
+            "health must equal max_health (full health) at character creation",
+        )

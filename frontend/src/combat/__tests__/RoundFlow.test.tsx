@@ -62,6 +62,7 @@ function makeEncounter(
   const currentRoundActions = actedParticipantIds.map((pid) => ({ participant: pid }));
   return {
     id: 1,
+    scene: 1,
     round_number: roundNumber,
     is_participant: true,
     is_gm: false,

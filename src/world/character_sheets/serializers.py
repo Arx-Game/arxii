@@ -20,6 +20,7 @@ from rest_framework.request import Request
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
+    SHEET_VISIBILITY_RANK,
     AnimaRitualSection,
     AppearanceSection,
     AuraData,
@@ -37,6 +38,7 @@ from world.character_sheets.types import (
     PathHistoryEntry,
     PersonaEntry,
     PronounsData,
+    SheetVisibility,
     SkillEntry,
     SkillRef,
     SpecializationEntry,
@@ -113,6 +115,7 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "family",
     "tarot_card",
     "origin_realm",
+    "true_profile",  # #1270 — concept/quote now read through the profile
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -225,6 +228,43 @@ def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
         return False
     current = roster_entry.current_tenure
     return current is not None and current.player_data.account_id == user.pk
+
+
+def _viewer_access_level(sheet: CharacterSheet, user: Any, privileged: bool) -> int:
+    """The viewer's section-visibility openness (#1271): 2=SELF, 1=FRIENDS, 0=PUBLIC.
+
+    Privileged (owner/staff) see everything. The FRIENDS check (is the viewer's account on
+    the sheet owner's ``PlayerAllowList``) runs at most once, and only when a section is
+    actually gated to FRIENDS — so the common all-default (SELF) case adds no query.
+    """
+    if privileged:
+        return 2
+    if user is None or not user.is_authenticated:
+        return 0
+    gated = (
+        sheet.stats_visibility,
+        sheet.skills_visibility,
+        sheet.magic_visibility,
+        sheet.goals_visibility,
+    )
+    if SheetVisibility.FRIENDS not in gated:
+        return 0  # nothing is FRIENDS-gated → no need to resolve the allow list
+    roster_entry = sheet.roster_entry
+    current = roster_entry.current_tenure if roster_entry is not None else None
+    if current is None:
+        return 0
+
+    from evennia_extensions.models import PlayerAllowList  # noqa: PLC0415
+
+    is_friend = PlayerAllowList.objects.filter(
+        owner=current.player_data, allowed_player__account_id=user.pk
+    ).exists()
+    return 1 if is_friend else 0
+
+
+def _section_visible(access: int, visibility: str) -> bool:
+    """Whether a viewer at ``access`` openness may see a section with this tier (#1271)."""
+    return access >= SHEET_VISIBILITY_RANK[visibility]
 
 
 def _resolve_presented_identity(
@@ -600,7 +640,7 @@ def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
     )
 
 
-_STORY_SELECT_RELATED: tuple[str, ...] = ()
+_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background/personality
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
@@ -821,6 +861,15 @@ class CharacterSheetSerializer(serializers.Serializer):
         privileged = _viewer_is_privileged(sheet, user)
         active = _resolve_active_persona(sheet)
         display_name, reveal_identity = _resolve_presented_identity(sheet, active, user, privileged)
+        # #1271: player-controlled visibility tier per mechanical section. ``access`` is the
+        # viewer's openness level (SELF=2 privileged, FRIENDS=1 allow-list, PUBLIC=0); a
+        # section shows when access meets its tier. Defaults are SELF, so this preserves the
+        # #1109 "private by default" behaviour until a player opens a section up.
+        access = _viewer_access_level(sheet, user, privileged)
+        show_stats = _section_visible(access, sheet.stats_visibility)
+        show_skills = _section_visible(access, sheet.skills_visibility)
+        show_magic = _section_visible(access, sheet.magic_visibility)
+        show_goals = _section_visible(access, sheet.goals_visibility)
 
         return {
             "id": sheet.pk,
@@ -829,15 +878,11 @@ class CharacterSheetSerializer(serializers.Serializer):
                 sheet, display_name=display_name, reveal_identity=reveal_identity
             ),
             "appearance": _build_appearance(sheet),
-            # #1109: mechanical sheet data defaults to private (owner/staff only) — a
-            # masked stranger's stat block must not be browsable, and it would otherwise
-            # fingerprint an anonymous figure. Player-controlled sharing tiers are a
-            # follow-up; for now the safe default is private.
-            "stats": _build_stats(sheet) if privileged else {},
-            "skills": _build_skills(sheet) if privileged else [],
+            "stats": _build_stats(sheet) if show_stats else {},
+            "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
-            "magic": _build_magic(sheet) if privileged else None,
+            "magic": _build_magic(sheet) if show_magic else None,
             # Story is public by default, but withheld from a non-revealed (anonymous /
             # hidden-link) figure — a cover identity's fake story is a future Guise Sheet.
             "story": (
@@ -845,7 +890,7 @@ class CharacterSheetSerializer(serializers.Serializer):
                 if reveal_identity
                 else StorySection(background="", personality="")
             ),
-            "goals": _build_goals(sheet) if privileged else [],
+            "goals": _build_goals(sheet) if show_goals else [],
             "personas": _build_personas(
                 sheet,
                 privileged=privileged,

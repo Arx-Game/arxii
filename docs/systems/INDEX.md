@@ -105,7 +105,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
     Strain stage for the active resonance; used in sineating offer payloads)
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
-    `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+    `apply_damage_reduction_from_threads(character, damage_amount) -> int`.
+    `recompute_max_health_with_threads` calls `world.vitals.services.recompute_max_health`,
+    which derives the base from `derive_base_max_health` when `base_max_health IS NULL`.
+  - **Level-derived health (#1256, `world.vitals.services`):**
+    - `derive_base_max_health(character_sheet) -> int` — base = class_term + stamina_term +
+      covenant_term. Reads `effective_combat_level`; class_term sums
+      `ClassStageHealthRate.health_per_level` per level via `stage_for_level`; stamina_term =
+      `stamina × VitalsConsequenceConfig.stamina_to_health_weight`; covenant_term via
+      `covenant_role_health`. Used when `CharacterVitals.base_max_health IS NULL`.
+    - `covenant_role_health(character, level) -> int` — sum of
+      `level × CovenantRoleBonus.bonus_per_level` over ENGAGED roles targeting the
+      `max_health` ModifierTarget; one DB query, no query-in-loop.
   - Thread survivability baseline (#1175): `survivability_baseline(character, vital_target) -> int`
     (soft-capped formula `round(cap × S / (S + half_saturation))` keyed by
     `ThreadSurvivabilityTuning`; injected into DR and MAX_HEALTH paths above),
@@ -266,12 +277,25 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
 - **Status:** design (slices); depends on #1044
 - **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
-Character paths with evolution hierarchy through stages of power.
+Character paths with evolution hierarchy through stages of power; also owns the
+per-class, per-stage health rate authoring and the primary-class level service.
 
-- **Models:** `Path`, `CharacterClass`
-- **Enums:** `PathStage` (Prospect, Potential, Puissant, True, Grand, Transcendent)
+- **Models:** `Path`, `CharacterClass`, `CharacterClassLevel`,
+  `ClassStageHealthRate` (authored per `(CharacterClass, PathStage)`;
+  `health_per_level` SmallInt — the HP gained per level while in that stage band;
+  unique `(character_class, stage)`)
+- **Enums:** `PathStage` (Prospect L1, Potential L3, Puissant L6, True L11,
+  Grand L16, Transcendent L21)
+- **Key Services (`world.classes.services`):**
+  - `stage_for_level(level) -> PathStage` — maps a class level to its PathStage band
+    (breakpoints L1/3/6/11/16/21; clamps <1 to PROSPECT).
+  - `set_primary_class_level(character, character_class, level) -> CharacterClassLevel`
+    — upserts the primary class level and triggers a full `recompute_max_health_with_threads`
+    so vitals reflect the new level immediately. **Always use this, never mutate
+    `CharacterClassLevel` rows directly.**
 - **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
-- **Integrates with:** progression (level requirements), character_creation (Prospect selection)
+- **Integrates with:** progression (level requirements), character_creation (Prospect
+  selection), vitals (`derive_base_max_health` reads `ClassStageHealthRate` + `stage_for_level`)
 - **Source:** `src/world/classes/`
 - **Details:** [classes.md](classes.md)
 ### Areas
@@ -324,8 +348,10 @@ effects for graph mutation and flight).
   `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service);
-  reactive fall consumer (catch/plummet tied to #520)
+- **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
+  `dispatch_catch` → `resolve_catch` (`plummet.py`) — DANGER round + `Plummeting` + per-round
+  descent/impact + capability-gated bystander catch
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
@@ -506,6 +532,12 @@ Roleplay session recording with participant tracking, interaction logging, perso
   - `respond_to_action_request(action_request, decision, difficulty=None, resist_effort="")` — primary-target consent + resolution; defender supplies plausibility band + optional active resistance.
   - `respond_to_action_target(action_target, decision, difficulty=None, resist_effort="")` — per-additional-target consent + resolution (never touches siblings).
   - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
+  - `ensure_scene_for_location(room, privacy_mode=None)` (`place_services.py`) — find-or-create the
+    active scene for a room. Returns the existing active scene unchanged (caller's `privacy_mode`
+    ignored on reuse); creates a new scene with `privacy_mode` (defaults to PUBLIC) otherwise.
+  - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
+    `SceneParticipation` for the character's account in the scene if one does not already exist.
+    Public API consumed by combat to record fighters as first-class scene participants.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -528,7 +560,8 @@ Roleplay session recording with participant tracking, interaction logging, perso
   and `GET /api/action-targets/?scene={id}&status=pending` every 5 s and renders amber consent cards for
   each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
-  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`),
+  flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
+  `Scene.objects.viewable_by` / `ensure_scene_participation`),
   actions (resolver registry via `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
@@ -1049,7 +1082,10 @@ These two axes are orthogonal — never re-merge them.
   `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate),
   mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`),
   items (`gear_archetype` on `ItemTemplate`),
-  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`)
+  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`),
+  vitals (`covenant_role_health` in `world.vitals.services` reads `CovenantRoleBonus` rows
+  targeting the `max_health` ModifierTarget to compute the covenant-role health armor term
+  in `derive_base_max_health`; recompute triggers fire on role engagement/membership change)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 

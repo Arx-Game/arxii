@@ -1,7 +1,6 @@
 from django.test import TestCase
 
-from world.combat.factories import EscalationCurveFactory
-from world.combat.models import CombatEncounter
+from world.combat.factories import CombatEncounterFactory, EscalationCurveFactory
 
 
 class EscalationCurveModelTests(TestCase):
@@ -12,13 +11,13 @@ class EscalationCurveModelTests(TestCase):
         self.assertEqual(curve.max_escalation_level, 0)  # 0 = uncapped
 
     def test_encounter_escalation_curve_default_null(self):
-        encounter = CombatEncounter.objects.create()
+        encounter = CombatEncounterFactory()
         self.assertIsNone(encounter.escalation_curve)
 
     def test_curve_protected_while_referenced(self):
         from django.db.models import ProtectedError
 
         curve = EscalationCurveFactory()
-        CombatEncounter.objects.create(escalation_curve=curve)
+        CombatEncounterFactory(escalation_curve=curve)
         with self.assertRaises(ProtectedError):
             curve.delete()

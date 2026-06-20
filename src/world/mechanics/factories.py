@@ -415,6 +415,26 @@ class ContextConsequencePoolFactory(DjangoModelFactory):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Modifier target helpers (get-or-create for seed/test use)
+# ---------------------------------------------------------------------------
+
+
+def max_health_modifier_target() -> ModifierTarget:
+    """Get-or-create the MAX_HEALTH ModifierTarget used by covenant-role health armor.
+
+    Idempotent: repeated calls return the same row. Creates a 'vitals' category
+    via ModifierCategoryFactory if one does not yet exist.
+    """
+    from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET
+
+    target, _ = ModifierTarget.objects.get_or_create(
+        name=MAX_HEALTH_MODIFIER_TARGET,
+        defaults={"category": ModifierCategoryFactory(name="vitals")},
+    )
+    return target
+
+
 class CharacterEngagementFactory(DjangoModelFactory):
     """Factory for creating CharacterEngagement instances."""
 
