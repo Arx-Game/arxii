@@ -9,6 +9,7 @@ Captures and manages roleplay sessions with participant tracking, interaction re
 - **`SceneParticipation`**: Account participation tracking in scenes
 - **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY). FK to CharacterSheet (source of truth); partial unique constraint ensures one PRIMARY per sheet
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person
+- **`Block`** (#1278): one player blocking another, persona-scoped by default (`blocker_persona` ↔ `blocked_persona`) with an `account_level` opt-in; keyed on `PlayerData` so it follows the person across re-rosters. Resolution + lifecycle in `block_services.py` (`coded_block_active`, `lift_block`, `finalize_expired_blocks`). Supersedes the removed account-level `evennia_extensions.PlayerBlockList`. Slice 1 = model + resolution; visibility/interaction wiring, the Mute sibling, the awareness/flag layer, and the cron job are follow-ups.
 - **`Interaction`**: Atomic IC interaction record (pose, say, whisper, etc.) with privacy controls
 - **`InteractionFavorite`**: Private bookmarks for cherished RP moments
 - **`InteractionReaction`**: Emoji reactions on interactions
