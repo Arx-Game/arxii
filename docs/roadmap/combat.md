@@ -168,10 +168,36 @@ an NPC at a bar) where concrete NPC objects aren't needed.
 ### Health Pool and Damage
 Health is separate from fatigue — fatigue degrades effectiveness, health degrades survival.
 
-**Health pool sources (current):** `max_health = base_max_health + thread_addend` — the
-thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
-(`recompute_max_health_with_threads`). Path level does not currently drive max_health.
-Path-level-driven health scaling is tracked in **#1256**.
+**Health pool sources (SHIPPED — #1256):** `max_health = base_max_health + thread_addend`.
+The thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
+(`recompute_max_health_with_threads`). `base_max_health` on `CharacterVitals` is NULLABLE:
+`None` → derived on read via `derive_base_max_health`; a set value → authored fixed-base
+override that **bypasses derivation entirely** (class/stamina/covenant terms do NOT apply
+when an override is set).
+
+**`derive_base_max_health(character_sheet) -> int`** computes three terms, all reading
+`effective_combat_level(sheet)` so a bonded sidekick's elevation or mentor's cap flows in:
+
+- **class_term:** sum of `ClassStageHealthRate.health_per_level` for each level 1 through
+  `effective_combat_level`, where the stage per level is resolved via
+  `stage_for_level(level)` (breakpoints: L1 → PROSPECT, L3 → POTENTIAL, L6 → PUISSANT,
+  L11 → TRUE, L16 → GRAND, L21 → TRANSCENDENT). `ClassStageHealthRate` rows are authored
+  per `(CharacterClass, PathStage)`. Zero when no primary class is assigned.
+- **stamina_term:** `stamina trait value × VitalsConsequenceConfig.stamina_to_health_weight`
+  (default 3 HP per Stamina point; staff-tunable in admin).
+- **covenant_term:** `covenant_role_health(character, level)` — sums
+  `level × CovenantRoleBonus.bonus_per_level` over all ENGAGED covenant roles whose
+  `CovenantRoleBonus` rows target the `max_health` `ModifierTarget`. One DB query; no
+  query-in-loop. Forward-compat: armor keys on the ENGAGED role, so the future
+  per-resonance role variants (#1277) swap which role's bonus applies without touching
+  this formula — the thread level selects the variant, never feeds a health number
+  directly (no double-count with the thread addend path).
+
+**Recompute triggers:** character-creation finalize (full health at creation),
+`set_primary_class_level`, mentor-bond establish/dissolve, covenant role
+engagement/membership change (engage/disengage/end/change role).
+
+**Follow-up:** #1277 — per-resonance role variants; no health architecture change needed.
 
 **Thread survivability engine (SHIPPED — #1175, #1250, #1251, #1252):** Thread investment
 contributes a universal passive survivability bonus across every vector likely to kill a
