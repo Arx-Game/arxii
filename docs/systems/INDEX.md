@@ -499,6 +499,12 @@ Roleplay session recording with participant tracking, interaction logging, perso
   - `respond_to_action_request(action_request, decision)` — primary-target consent + resolution.
   - `respond_to_action_target(action_target, decision)` — per-additional-target consent + resolution (never touches siblings).
   - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
+  - `ensure_scene_for_location(room, privacy_mode=None)` (`place_services.py`) — find-or-create the
+    active scene for a room. Returns the existing active scene unchanged (caller's `privacy_mode`
+    ignored on reuse); creates a new scene with `privacy_mode` (defaults to PUBLIC) otherwise.
+  - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
+    `SceneParticipation` for the character's account in the scene if one does not already exist.
+    Public API consumed by combat to record fighters as first-class scene participants.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -521,7 +527,8 @@ Roleplay session recording with participant tracking, interaction logging, perso
   and `GET /api/action-targets/?scene={id}&status=pending` every 5 s and renders amber consent cards for
   each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
-  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`),
+  flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
+  `Scene.objects.viewable_by` / `ensure_scene_participation`),
   actions (resolver registry via `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
