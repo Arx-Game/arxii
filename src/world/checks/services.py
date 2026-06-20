@@ -262,6 +262,32 @@ def get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
+def compute_resist_increment(defender_character: "ObjectDB", resist_effort_level: str) -> int:
+    """Compute how much a defender's active resistance raises difficulty.
+
+    Resolves the Composure CheckType by name (category-agnostic) and sums the
+    defender's weighted Composure trait points with the effort-level modifier.
+    Result is clamped to ≥ 0 — resistance never lowers the attacker's difficulty.
+
+    Args:
+        defender_character: The character resisting the social action.
+        resist_effort_level: An EffortLevel string value (e.g. ``"high"``).
+
+    Returns:
+        Non-negative integer representing the difficulty increment from resistance.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    composure_check_type = CheckType.objects.filter(name="Composure", is_active=True).first()
+    if composure_check_type is None:
+        return 0
+
+    handler: TraitHandler = defender_character.traits  # type: ignore[attr-defined]
+    points = _calculate_trait_points(handler, composure_check_type)
+    modifier = EFFORT_CHECK_MODIFIER.get(resist_effort_level, 0)
+    return max(0, points + modifier)
+
+
 def preview_check_difficulty(
     character: "ObjectDB",
     check_type: "CheckType",
