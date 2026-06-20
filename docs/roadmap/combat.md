@@ -156,13 +156,27 @@ Health is separate from fatigue — fatigue degrades effectiveness, health degra
 **Health pool sources:** Stamina (slight contribution) + Path level (large) + covenant role
 armor bonuses + woven magical thread protection. Magical power is the dominant factor.
 
-**Thread survivability engine (SHIPPED — #1175):** Thread investment contributes a universal
-passive survivability bonus to both max-health and damage reduction via
-`survivability_baseline(character, vital_target)`. Formula: `round(cap × S / (S + half))` where
-`S = coefficient × Σ max(1, thread.level // 10)` (breadth × depth, soft-capped). Parameters are
-authored per `VitalBonusTarget` in `ThreadSurvivabilityTuning` (staff-tunable; defaults: DR cap=20
-half=8; HP cap=80 half=10). Thread-rich parties are simply stronger — encounter difficulty scales on
-**party size + average level ONLY** (invariant from #566; unaffected by this engine).
+**Thread survivability engine (SHIPPED — #1175, #1250, #1251, #1252):** Thread investment
+contributes a universal passive survivability bonus across every vector likely to kill a
+character, via `survivability_baseline(character, vital_target)`. Formula:
+`round(cap × S / (S + half))` where `S = coefficient × Σ depth(t) × coherence_factor(t)`
+(breadth × depth, soft-capped). Parameters are authored per `VitalBonusTarget` in
+`ThreadSurvivabilityTuning` (staff-tunable; defaults: DR cap=20 half=8; HP cap=80 half=10;
+DEATH_SAVE/KNOCKOUT_RESIST/PERMANENT_WOUND_RESIST cap=15 half=8). Wired vectors:
+- **DR + max-health (#1175):** baseline subtracts from incoming damage / adds to max health.
+- **Threshold saves (#1250):** the death / knockout / permanent-wound baselines feed each tier's
+  roll `extra_modifiers` in `process_damage_consequences`, improving the odds of avoiding the
+  bad outcome.
+- **Universal damage reduction (#1251):** thread DR now also reduces non-combat damage —
+  condition DoT (`_apply_round_tick_damage`) and traps/effect consequences (`_deal_damage`) —
+  not just combat. (Since all damage routes its threshold rolls through
+  `process_damage_consequences`, hazard/DoT *saves* come from #1250 automatically.)
+- **Fashion/motif coherence amplifier (#1252):** each thread's contribution is multiplied by the
+  fashion coherence of *its own* resonance (`motif_coherence_bonus`), capped at
+  `coherence_max_multiplier`; an uncoordinated wardrobe is inert (no penalty).
+
+Thread-rich parties are simply stronger — encounter difficulty scales on **party size + average
+level ONLY** (invariant from #566; unaffected by this engine).
 
 **Wound ladder** (descriptive, added to character description):
 - 90%+ health: "Perfectly healthy"
