@@ -283,11 +283,11 @@
   - reviewed_applications <- roster.RosterApplication
   - tenures <- roster.RosterTenure
   - approved_tenures <- roster.RosterTenure
+  - blocks_made <- scenes.Block
+  - blocks_received <- scenes.Block
   - media <- evennia_extensions.PlayerMedia
   - allow_list <- evennia_extensions.PlayerAllowList
   - allowed_by <- evennia_extensions.PlayerAllowList
-  - block_list <- evennia_extensions.PlayerBlockList
-  - blocked_by <- evennia_extensions.PlayerBlockList
 
 ### Artist
 **Foreign Keys:**
@@ -317,11 +317,6 @@
 **Foreign Keys:**
   - owner -> evennia_extensions.PlayerData [FK]
   - allowed_player -> evennia_extensions.PlayerData [FK]
-
-### PlayerBlockList
-**Foreign Keys:**
-  - owner -> evennia_extensions.PlayerData [FK]
-  - blocked_player -> evennia_extensions.PlayerData [FK]
 
 ### RoomProfile
 **Foreign Keys:**
@@ -3404,6 +3399,8 @@
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - discoveries_as_subject <- scenes.PersonaDiscovery
   - discoveries_as_linked <- scenes.PersonaDiscovery
+  - blocks_from <- scenes.Block
+  - blocks_against <- scenes.Block
   - interactions_written <- scenes.Interaction
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
@@ -3458,6 +3455,13 @@
   - persona -> scenes.Persona [FK]
   - linked_to -> scenes.Persona [FK]
   - discovered_by -> character_sheets.CharacterSheet [FK]
+
+### Block
+**Foreign Keys:**
+  - owner -> evennia_extensions.PlayerData [FK]
+  - blocked_player -> evennia_extensions.PlayerData [FK]
+  - blocker_persona -> scenes.Persona [FK] (nullable)
+  - blocked_persona -> scenes.Persona [FK] (nullable)
 
 ### Interaction
 **Foreign Keys:**

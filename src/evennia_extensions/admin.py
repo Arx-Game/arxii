@@ -13,7 +13,6 @@ from evennia_extensions.models import (
     Artist,
     ObjectDisplayData,
     PlayerAllowList,
-    PlayerBlockList,
     PlayerData,
     PlayerMedia,
     RoomProfile,
@@ -67,22 +66,6 @@ class PlayerAllowListAdmin(admin.ModelAdmin):
         "allowed_player__account__username",
     ]
     readonly_fields: ClassVar[list[str]] = ["added_date"]
-
-
-@admin.register(PlayerBlockList)
-class PlayerBlockListAdmin(admin.ModelAdmin):
-    list_display: ClassVar[list[str]] = [
-        "owner",
-        "blocked_player",
-        "blocked_date",
-        "reason",
-    ]
-    list_filter: ClassVar[list[str]] = ["blocked_date"]
-    search_fields: ClassVar[list[str]] = [
-        "owner__account__username",
-        "blocked_player__account__username",
-    ]
-    readonly_fields: ClassVar[list[str]] = ["blocked_date"]
 
 
 @admin.register(PlayerMedia)
