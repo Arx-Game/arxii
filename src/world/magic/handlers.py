@@ -228,7 +228,7 @@ class CharacterThreadHandler:
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
         if combat_pulls_handler is not None:
-            combat_pulls_handler.__dict__.pop("_active", None)
+            combat_pulls_handler.invalidate()
 
 
 class CharacterResonanceHandler:

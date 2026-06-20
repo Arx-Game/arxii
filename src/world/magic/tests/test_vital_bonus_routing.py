@@ -436,6 +436,8 @@ class AnchorInScopeVacuousTests(TestCase):
 
 
 class SurvivabilityBaselineRoutingTests(TestCase):
+    """Baseline survivability tuning wires passive DR + HP bonuses from thread count."""
+
     def setUp(self) -> None:
         seed_thread_survivability_tuning()
         self.sheet = CharacterSheetFactory()
@@ -483,6 +485,9 @@ class SurvivabilityBaselineRoutingTests(TestCase):
         self.assertEqual(self.vitals.max_health, 118)
 
     def test_query_count_constant_in_thread_count(self) -> None:
+        # threads.invalidate() also clears combat_pulls._active (via
+        # CharacterCombatPullHandler.invalidate()), so both windows start
+        # with a warm thread cache and a cold pull cache — identical query budgets.
         self._add_threads([10, 10, 10])
         self.sheet.character.threads.invalidate()
         _ = self.sheet.character.threads._all
