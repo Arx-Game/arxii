@@ -488,8 +488,20 @@ class SurvivabilityBaselineRoutingTests(TestCase):
         # threads.invalidate() also clears combat_pulls._active (via
         # CharacterCombatPullHandler.invalidate()), so both windows start
         # with a warm thread cache and a cold pull cache — identical query budgets.
+        #
+        # Since #1252 (coherence amplifier), survivability_baseline also looks up
+        # sheet.motif (a reverse OneToOne). Django caches that result on the sheet
+        # instance, so the first window pays +1 query and later windows (with the
+        # same sheet instance) do not. We clear it between windows to give each
+        # window an identical budget.
         self._add_threads([10, 10, 10])
         self.sheet.character.threads.invalidate()
+        # Since #1252 (coherence amplifier), survivability_baseline also looks up
+        # sheet.motif (a reverse OneToOne). Django caches that result in
+        # instance._state.fields_cache["motif"], so the first window pays +1 query and
+        # later windows (with the same sheet instance) do not. We clear it between
+        # windows to give each window an identical query budget.
+        self.sheet._state.fields_cache.pop("motif", None)
         _ = self.sheet.character.threads._all
         with CaptureQueriesContext(connection) as ctx:
             apply_damage_reduction_from_threads(self.sheet.character, 30)
@@ -497,6 +509,7 @@ class SurvivabilityBaselineRoutingTests(TestCase):
 
         self._add_threads([20, 20, 20])
         self.sheet.character.threads.invalidate()
+        self.sheet._state.fields_cache.pop("motif", None)
         _ = self.sheet.character.threads._all
         with CaptureQueriesContext(connection) as ctx:
             apply_damage_reduction_from_threads(self.sheet.character, 30)
