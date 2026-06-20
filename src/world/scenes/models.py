@@ -558,6 +558,40 @@ class Block(SharedMemoryModel):
         return self.pending_removal_at is None or self.pending_removal_at > timezone.now()
 
 
+class Mute(SharedMemoryModel):
+    """One player filtering a persona out of their own view (#1278) — the lighter sibling of Block.
+
+    Unlike Block, Mute is **one-way, persona-scoped, and purely cosmetic**: it only changes what the
+    muter sees, the muted player is never aware, and there is no interaction ban or sheet lockout.
+    The muter chooses whether it hides the persona's IC content, OOC content, or both. Fully
+    reversible. No anti-derivation concern — nothing about it is observable to the muted party.
+    """
+
+    owner = models.ForeignKey(
+        "evennia_extensions.PlayerData",
+        on_delete=models.CASCADE,
+        related_name="mutes_made",
+        help_text="The player who muted (the muter).",
+    )
+    muted_persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="muted_by",
+        help_text="The face the muter no longer wants to see.",
+    )
+    mute_ic = models.BooleanField(default=True, help_text="Hide this persona's IC content.")
+    mute_ooc = models.BooleanField(default=True, help_text="Hide this persona's OOC content.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "muted_persona"], name="unique_mute"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.owner} mutes {self.muted_persona.name}"
+
+
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 

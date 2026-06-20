@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
+from world.scenes.block_services import hidden_persona_ids_for_viewer
 from world.scenes.constants import (
     InteractionMode,
     PersonaType,
@@ -54,6 +55,7 @@ from world.scenes.models import (
     Persona,
     Scene,
 )
+from world.scenes.mute_services import muted_persona_ids_for_viewer
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
@@ -207,7 +209,15 @@ class InteractionViewSet(
         user = self.request.user
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
         since = self.request.query_params.get("since")  # noqa: USE_FILTERSET
-        return base_qs.visible_to(user, persona_ids=persona_ids, since=since)
+        qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
+        # #1278 — hide personas the viewer can't (Block, enforced, staff bypass) or won't (Mute,
+        # the viewer's own cosmetic choice, applies to everyone) see.
+        exclude_persona_ids: set[int] = muted_persona_ids_for_viewer(viewer_account=user)
+        if not user.is_staff:
+            exclude_persona_ids |= hidden_persona_ids_for_viewer(viewer_account=user)
+        if exclude_persona_ids:
+            qs = qs.exclude(persona_id__in=exclude_persona_ids)
+        return qs
 
     def get_serializer_class(
         self,

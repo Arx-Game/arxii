@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0028_block"),
+        ("scenes", "0029_mute"),
     ]
 
     operations = [
