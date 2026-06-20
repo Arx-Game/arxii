@@ -274,5 +274,6 @@ export interface PendingActionTarget {
   technique_name: string | null;
   pose_text: string;
   strain_commitment: number;
+  combat_risk_level?: string | null;
   created_at: string;
 }

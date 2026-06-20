@@ -311,4 +311,33 @@ describe('ConsentPrompt', () => {
       })
     );
   });
+
+  it('shows the combat-risk warning on an additional target pulled into a fight', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({
+      results: [
+        {
+          action_target_id: 1,
+          action_request_id: 10,
+          target_persona_id: 5,
+          status: 'pending',
+          initiator_persona: 2,
+          initiator_name: 'Caster',
+          scene: 1,
+          action_key: '',
+          action_template: null,
+          technique: 7,
+          technique_name: 'Firestorm',
+          pose_text: '',
+          strain_commitment: 0,
+          combat_risk_level: 'lethal',
+          created_at: '2026-06-20T00:00:00Z',
+        },
+      ],
+    });
+
+    render(<ConsentPrompt sceneId="1" />, { wrapper: createWrapper() });
+
+    expect(await screen.findByText(/LETHAL risk/i)).toBeInTheDocument();
+  });
 });

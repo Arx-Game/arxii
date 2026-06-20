@@ -146,6 +146,12 @@ export function ConsentPrompt({ sceneId }: Props) {
                 {t.initiator_name} is committing {t.strain_commitment} strain.
               </p>
             )}
+            {t.combat_risk_level && (
+              <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                The fight before you is {t.combat_risk_level.toUpperCase()} risk — accepting wades
+                your character into the combat encounter.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <Button
