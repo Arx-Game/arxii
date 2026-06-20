@@ -6,7 +6,9 @@ How a persona's name renders to a given viewer:
   **named public faces** render by their real name. You are never restricted from your own
   identities (the owning player always sees the truth).
 - **Anonymous faces** (`is_fake_name`) you have **discovered** (via any of your characters)
-  render as ``"<real> (as <mask>)"``.
+  render as ``"<mask> (<real>)"`` — the presented face, with the real identity you've pierced
+  in parens. The parens are load-bearing: presenting under a mask is easy to lose track of, and
+  a GM running a scene needs to know who they're actually looking at.
 - **Anonymous faces** you have not discovered render as a composed **sdesc**.
 
 ``build_persona_display_map`` resolves a whole page of personas in O(1) discovery queries, so
@@ -79,7 +81,7 @@ def build_persona_display_map(
         if persona.pk in viewer_persona_ids or not persona.is_fake_name:
             display[persona.pk] = (persona.name, False)
         elif persona.pk in revealed:
-            display[persona.pk] = (f"{revealed[persona.pk].name} (as {persona.name})", True)
+            display[persona.pk] = (f"{persona.name} ({revealed[persona.pk].name})", True)
         else:
             display[persona.pk] = (compose_sdesc(persona), False)
     return display
@@ -113,7 +115,7 @@ def resolve_display_for_viewer(
             linked = (
                 discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
             )
-            return f"{linked.name} (as {persona.name})", True
+            return f"{persona.name} ({linked.name})", True
     return compose_sdesc(persona), False
 
 

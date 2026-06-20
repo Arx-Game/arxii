@@ -111,6 +111,10 @@ class DistinctionEntry(TypedDict):
     name: str
     rank: int
     notes: str
+    # Effective profile visibility ("public" / "private") — the per-character override, else
+    # the distinction kind's default. Non-owners only ever receive public entries; the field
+    # is surfaced so the owner's privacy gate can show the current setting.
+    visibility: str
 
 
 class TechniqueEntry(TypedDict):

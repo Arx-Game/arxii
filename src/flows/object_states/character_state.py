@@ -34,7 +34,7 @@ class CharacterState(BaseState):
         """Render this character's presented persona, resolved per viewer (#1109).
 
         The active face renders by real name to its owner and for any named-public face; a viewer
-        who has discovered an anonymous face sees the reveal ("Real (as Mask)"); otherwise an
+        who has discovered an anonymous face sees the reveal ("Mask (Real)"); otherwise an
         anonymous face renders as a composed sdesc ("a man wearing a stag mask"). Falls back to the
         default name when there is no sheet/persona (NPCs, objects mid-setup).
         """

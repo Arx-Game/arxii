@@ -13,9 +13,10 @@ Part of CG Stage 6 (Traits).
 
 ```python
 from world.distinctions.types import (
-    EffectType,         # STAT_MODIFIER, AFFINITY_MODIFIER, RESONANCE_MODIFIER, ROLL_MODIFIER, CODE_HANDLED
-    DistinctionOrigin,  # CHARACTER_CREATION, GAMEPLAY
-    OtherStatus,        # PENDING_REVIEW, APPROVED, MAPPED
+    EffectType,            # STAT_MODIFIER, AFFINITY_MODIFIER, RESONANCE_MODIFIER, ROLL_MODIFIER, CODE_HANDLED
+    DistinctionOrigin,     # CHARACTER_CREATION, GAMEPLAY
+    DistinctionVisibility, # PUBLIC, PRIVATE (profile visibility; default on kind, player-overridable)
+    OtherStatus,           # PENDING_REVIEW, APPROVED, MAPPED
 )
 
 # Typed data structures
@@ -35,7 +36,7 @@ from world.distinctions.types import (
 |-------|---------|------------|
 | `DistinctionCategory` | Categories like Physical, Mental, Social | `name`, `slug`, `description`, `display_order` |
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
-| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other` |
+| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `default_visibility` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `effect_type`, `target`, `value_per_rank`, `scaling_values` |
 | `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
 | `DistinctionMutualExclusion` | Incompatible pairs | `distinction_a`, `distinction_b` |
@@ -44,8 +45,27 @@ from world.distinctions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes` |
+| `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `visibility_override` |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character`, `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
+
+---
+
+## Profile Visibility (#1109)
+
+Whether a distinction shows on a character's profile to *other* players is two-layered:
+
+- **Kind default** — `Distinction.default_visibility` (`DistinctionVisibility`, default `PUBLIC`).
+  Most distinctions are public; criminal / scandalous kinds are authored `PRIVATE` so they
+  don't out a player by default. (Which kinds are private is a content/author pass.)
+- **Per-character gate** — `CharacterDistinction.visibility_override` (nullable). When set, the
+  player's choice wins over the kind default; `null` inherits it.
+
+`CharacterDistinction.effective_visibility` resolves the two (override else default), and
+`is_publicly_visible` is the boolean the profile serializer filters on: a non-owner (not staff,
+not the playing account) receives only effective-`PUBLIC` distinctions; the owner and staff see
+all. The character-sheet `DistinctionEntry` payload carries the effective `visibility` so the
+owner's privacy-gate UI can show the current setting. The player-facing toggle endpoint is a
+follow-up.
 
 ---
 

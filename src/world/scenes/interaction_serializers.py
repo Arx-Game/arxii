@@ -133,7 +133,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
         # Per-viewer name resolution (#1109): own faces and named-public faces render real;
-        # discovered anonymous faces reveal "<real> (as <mask>)"; undiscovered anonymous faces
+        # discovered anonymous faces reveal "<mask> (<real>)"; undiscovered anonymous faces
         # render a composed sdesc. Resolved once for the whole page (see _persona_display_map).
         name, _is_discovered = self._persona_display_map().get(
             obj.persona_id, (obj.persona.name, False)

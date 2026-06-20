@@ -240,6 +240,15 @@ def _resolve_presented_identity(
     if active is None:
         return sheet.character.db_key, True
     if privileged:
+        # The owner / staff always know who this is; when they're looking at a non-primary
+        # face, append the real (primary) identity in parens so it's never ambiguous which
+        # character a presented alt or mask belongs to — the same reason a GM needs it.
+        if active.persona_type != PersonaType.PRIMARY:
+            primary = next(
+                (p for p in sheet.cached_personas if p.persona_type == PersonaType.PRIMARY), None
+            )
+            if primary is not None and primary.pk != active.pk:
+                return f"{active.name} ({primary.name})", True
         return active.name, True
     if not active.is_fake_name:
         # Named face: render its own name; reveal the character bio only for the PRIMARY (the
@@ -402,11 +411,13 @@ _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_distinctions(sheet: CharacterSheet) -> list[DistinctionEntry]:
+def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[DistinctionEntry]:
     """Build the distinctions section: a list of character distinction entries.
 
-    Expects ``character.distinctions`` to be prefetched with
-    ``select_related("distinction")``.
+    Most distinctions are public, but criminal / scandalous kinds default to private and a
+    player can gate any of their own per character (#1109). A non-privileged viewer sees only
+    the effective-public ones; the owner / staff see all. Expects ``character.distinctions``
+    prefetched with ``select_related("distinction")`` so visibility resolves query-free.
     """
     character = sheet.character
     return [
@@ -415,8 +426,10 @@ def _build_distinctions(sheet: CharacterSheet) -> list[DistinctionEntry]:
             name=cd.distinction.name,
             rank=cd.rank,
             notes=cd.notes,
+            visibility=cd.effective_visibility,
         )
         for cd in character.cached_distinctions
+        if privileged or cd.is_publicly_visible
     ]
 
 
@@ -816,13 +829,23 @@ class CharacterSheetSerializer(serializers.Serializer):
                 sheet, display_name=display_name, reveal_identity=reveal_identity
             ),
             "appearance": _build_appearance(sheet),
-            "stats": _build_stats(sheet),
-            "skills": _build_skills(sheet),
+            # #1109: mechanical sheet data defaults to private (owner/staff only) — a
+            # masked stranger's stat block must not be browsable, and it would otherwise
+            # fingerprint an anonymous figure. Player-controlled sharing tiers are a
+            # follow-up; for now the safe default is private.
+            "stats": _build_stats(sheet) if privileged else {},
+            "skills": _build_skills(sheet) if privileged else [],
             "path": _build_path_detail(sheet),
-            "distinctions": _build_distinctions(sheet),
-            "magic": _build_magic(sheet),
-            "story": _build_story(sheet),
-            "goals": _build_goals(sheet),
+            "distinctions": _build_distinctions(sheet, privileged=privileged),
+            "magic": _build_magic(sheet) if privileged else None,
+            # Story is public by default, but withheld from a non-revealed (anonymous /
+            # hidden-link) figure — a cover identity's fake story is a future Guise Sheet.
+            "story": (
+                _build_story(sheet)
+                if reveal_identity
+                else StorySection(background="", personality="")
+            ),
+            "goals": _build_goals(sheet) if privileged else [],
             "personas": _build_personas(
                 sheet,
                 privileged=privileged,

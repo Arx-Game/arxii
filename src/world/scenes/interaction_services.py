@@ -6,7 +6,6 @@ import itertools
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import models as db_models
 from django.utils import timezone
 
 from world.scenes.constants import (
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
-    from world.character_sheets.models import CharacterSheet
     from world.magic.models import FuryTier
     from world.scenes.models import SceneRound
 
@@ -744,40 +742,6 @@ def record_whisper_interaction(
         receiver_characters=[target_persona.character_sheet.character],
     )
     return interaction
-
-
-def resolve_persona_display(
-    *,
-    persona: Persona,
-    viewer_character_sheet: CharacterSheet,
-) -> tuple[str, bool]:
-    """Resolve what name to display for a persona to a specific viewer.
-
-    Returns (display_name, is_discovered) tuple.
-    - If the persona is not fake (is_fake_name=False), returns the persona name.
-    - If the persona is fake and the viewer has discovered a link, returns
-      the linked persona's name with annotation.
-    - If the persona is fake and not discovered, returns the persona name as-is.
-    """
-    if not persona.is_fake_name:
-        return persona.name, False
-
-    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
-
-    discovery = (
-        PersonaDiscovery.objects.filter(
-            db_models.Q(persona=persona) | db_models.Q(linked_to=persona),
-            discovered_by=viewer_character_sheet,
-        )
-        .select_related("persona", "linked_to")
-        .first()
-    )
-
-    if discovery is None:
-        return persona.name, False
-
-    linked = discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
-    return f"{linked.name} (as {persona.name})", True
 
 
 def mutter_fragment(text: str) -> str:
