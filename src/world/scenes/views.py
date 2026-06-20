@@ -24,6 +24,7 @@ from world.scenes.filters import (
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
+    InteractionReaction,
     Persona,
     Scene,
     SceneParticipation,
@@ -305,36 +306,63 @@ class SceneViewSet(viewsets.ModelViewSet):
         the frontend reveals a pose by fetching it through the existing interaction-detail
         endpoint, which re-checks visibility.
         """
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
+
         scene = self.get_object()
         user = request.user
         persona_ids = get_account_personas(request) if user.is_authenticated else []
         since = request.query_params.get("since")  # noqa: USE_FILTERSET
+
+        # Visible poses' ids + timestamps. We deliberately do NOT annotate a reaction Count
+        # onto this queryset: Interaction is a partitioned table (composite PK), so a per-row
+        # aggregate forces a GROUP BY that Postgres rejects. Instead we aggregate on the
+        # reaction table (grouped by a plain column) and rank in Python.
         visible = Interaction.objects.visible_to(user, persona_ids=persona_ids, since=since).filter(
             scene_id=scene.pk
         )
-        ranked = list(
-            visible.annotate(reaction_count=Count("reactions")).order_by(
-                "-reaction_count", "-timestamp"
-            )
+        pose_timestamps = dict(visible.values_list("pk", "timestamp"))
+        if not pose_timestamps:
+            return Response(HighlightReelSerializer({"featured": None, "index": []}).data)
+        pose_ids = list(pose_timestamps)
+
+        reaction_counts = dict(
+            InteractionReaction.objects.filter(interaction_id__in=pose_ids)
+            .values("interaction_id")
+            .annotate(count=Count("account"))
+            .values_list("interaction_id", "count")
         )
         tagged_ids = set(
-            visible.filter(dramatic_moment_tags__isnull=False).values_list("pk", flat=True)
+            DramaticMomentTag.objects.filter(interaction_id__in=pose_ids).values_list(
+                "interaction_id", flat=True
+            )
         )
 
-        featured = None
-        if tagged_ids:
-            # ranked is reaction-desc, timestamp-desc, so the first tagged pose is the
-            # highest-reacted tagged one (ties -> most recent). Headlines even at 0 reactions.
-            featured = next((itx for itx in ranked if itx.pk in tagged_ids), None)
-        elif ranked and ranked[0].reaction_count >= 1:
-            featured = ranked[0]
+        def reactions_for(pose_id: int) -> int:
+            return reaction_counts.get(pose_id, 0)
 
-        featured_pk = featured.pk if featured else None
-        index = [itx for itx in ranked if itx.reaction_count >= 1 and itx.pk != featured_pk][:10]
+        # Reaction count desc, then most-recent first.
+        ranked = sorted(
+            pose_ids,
+            key=lambda pose_id: (reactions_for(pose_id), pose_timestamps[pose_id]),
+            reverse=True,
+        )
+
+        featured_pk = None
+        if tagged_ids:
+            # Highest-reacted tagged pose (ranked is already sorted); headlines even at 0.
+            featured_pk = next((pose_id for pose_id in ranked if pose_id in tagged_ids), None)
+        elif ranked and reactions_for(ranked[0]) >= 1:
+            featured_pk = ranked[0]
+
+        index = [
+            pose_id for pose_id in ranked if reactions_for(pose_id) >= 1 and pose_id != featured_pk
+        ][:10]
 
         payload = {
-            "featured": {"interaction_id": featured.pk} if featured else None,
-            "index": [{"interaction_id": itx.pk, "rank": i + 1} for i, itx in enumerate(index)],
+            "featured": {"interaction_id": featured_pk} if featured_pk else None,
+            "index": [
+                {"interaction_id": pose_id, "rank": i + 1} for i, pose_id in enumerate(index)
+            ],
         }
         return Response(HighlightReelSerializer(payload).data)
 
