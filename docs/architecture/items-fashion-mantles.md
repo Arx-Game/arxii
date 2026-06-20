@@ -882,13 +882,13 @@ Mutations are explicit and rare; reads are frequent and never query.
 
 ### 5.6 Covenant role × gear archetype compatibility
 
-**Status: WIRED AND COMBAT-CONSUMING (#985, PR3).** `role_base_bonus_for_target` now
+**Status: WIRED AND COMBAT-CONSUMING (#985, #1174).** `role_base_bonus_for_target` now
 reads `CovenantRoleBonus` authored config rows; `item_mundane_stat_for_target` reads
 `effective_weapon_damage` / `effective_armor_soak` from `ItemInstance`. Combat
-consumes the covenant-role bonus at two seams: `apply_equipped_armor_soak` adds the
-armor-soak bonus on top of the raw soak, and `_weapon_augmented_budget` adds the
-weapon-damage bonus to the technique budget. Default authoring is empty → no live
-numeric change until staff author `CovenantRoleBonus` rows.
+consumes the covenant-role bonus at two seams: `apply_equipped_armor_soak` uses a
+role-gated compatible/incompatible split with a resonant pool (#1174), and
+`_weapon_augmented_budget` adds the weapon-damage bonus to the technique budget (#985).
+Default authoring is empty → no live numeric change until staff author `CovenantRoleBonus` rows.
 
 **Marginal semantics** (as shipped): the gear's mundane combat stat is counted
 directly by combat (`effective_weapon_damage` / `effective_armor_soak`). The
@@ -949,20 +949,21 @@ equipped items — a character in two covenants stacks both roles' contributions
 additively. A character with no engaged roles returns 0 immediately (the
 engaged-roles early-out keeps the query budget flat for non-covenant characters).
 
-**Combat seams that consume the bonus (as of #985):**
+**Combat seams that consume the bonus:**
 
-- `apply_equipped_armor_soak(character, damage)` — adds
-  `_covenant_armor_soak_bonus(character)` (calls `get_modifier_total` for the
-  `armor_soak` `ModifierTarget`) on top of `effective_soak_from_armor`. The covenant
-  bonus is intangible; durability wear applies only to physical armor pieces.
-- `_weapon_augmented_budget(profile, budget, weapon, sheet)` — for
+- `apply_equipped_armor_soak(character, damage)` (#1174) — splits worn armor into
+  role-compatible vs incompatible buckets via `_split_armor_soak_by_compatibility`.
+  The *resonant soak pool* (`_resonant_armor_soak`) = eager `CharacterModifier` total +
+  `equipment_walk_total_unblended(sheet, armor_soak_target)`, where the latter sums
+  facet + `covenant_role_base_total` + covenant-level (`covenant_level_bonus`) + mantle +
+  motif-style (role base × level, pooled once per character). Final soak: `compat_physical + max(incompat_physical, resonant)`.
+  Durability wears only on armor whose physical soak contributed.
+- `_weapon_augmented_budget(profile, budget, weapon, sheet)` (#985) — for
   `uses_equipped_weapon` profiles, adds `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)`
   on top of the weapon's `effective_weapon_damage`. No sheet supplied → bonus skipped.
+  Routes through `get_modifier_total` → `covenant_role_bonus` (per-slot blended).
 
-Both seams route through `get_modifier_total(sheet, target)`, which calls
-`covenant_role_bonus` via the equipment walk (target category in
-`EQUIPMENT_RELEVANT_CATEGORIES`). Non-covenant characters and base combat
-damage/soak are unaffected.
+Non-covenant characters and base combat damage/soak are unaffected.
 
 ## 6. Anchor Cap Formulas
 
@@ -1339,9 +1340,10 @@ stats need combat balance; transfer service functions are independent.
   `armor_soak` `ModifierTarget` names; 0 for other targets. Stale
   `ItemCombatStat` docstring removed. **[BUILT & WIRED — #985]**
 - Combat seams consuming the covenant-role bonus: `apply_equipped_armor_soak`
-  adds `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top
-  of raw soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
-  WEAPON_DAMAGE_TARGET_NAME)` to the technique budget. **[BUILT & WIRED — #985]**
+  uses a role-gated compatible/incompatible split with a resonant pool
+  (`compat_physical + max(incompat_physical, resonant)`) — see #1174;
+  `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
+  WEAPON_DAMAGE_TARGET_NAME)` to the technique budget. **[BUILT & WIRED — #985, #1174]**
 - Default authoring is empty → no live numeric change until staff author rows
   in `CovenantRoleBonus`. **[BUILT & WIRED — pending staff content]**
 - `ItemCapabilityGrant` model — items as capability sources, parallel to
