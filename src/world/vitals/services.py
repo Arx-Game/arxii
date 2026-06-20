@@ -733,6 +733,35 @@ def recompute_max_health(
     return new_max
 
 
+def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTDB_PARAM
+    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'
+    MAX_HEALTH CovenantRoleBonus rows.
+
+    For each covenant role the character is currently ENGAGED in (engaged=True, left_at IS NULL),
+    sums ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
+    ModifierTarget. One DB query for the bonuses; no query-in-loop.
+
+    Args:
+        character: The Character typeclass instance (has .covenant_roles handler).
+        level: Character level to scale the bonus against.
+
+    Returns:
+        Total covenant-role health armor for this character at the given level.
+    """
+    from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
+    from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET  # noqa: PLC0415
+
+    engaged = character.covenant_roles.currently_engaged_roles()
+    role_ids = [role.pk for role in engaged]
+    if not role_ids:
+        return 0
+    bonuses = CovenantRoleBonus.objects.filter(
+        covenant_role_id__in=role_ids,
+        modifier_target__name=MAX_HEALTH_MODIFIER_TARGET,
+    )
+    return sum(level * bonus.bonus_per_level for bonus in bonuses)
+
+
 def apply_clamped_chronic_damage(character_sheet: CharacterSheet, amount: int) -> int:
     """Reduce health by ``amount`` but never to/below the knockout floor, never increasing it.
 

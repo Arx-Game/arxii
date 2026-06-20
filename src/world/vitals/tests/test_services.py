@@ -183,6 +183,46 @@ class ProcessDamageConsequencesTest(TestCase):
         assert result.message == "No vitals found"
 
 
+class CovenantRoleHealthTest(TestCase):
+    """Tests for covenant_role_health — level-scaled MAX_HEALTH armor from covenant roles."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CovenantRoleBonusFactory,
+            make_engaged_member,
+        )
+        from world.mechanics.factories import max_health_modifier_target
+
+        # Character engaged in a role with MAX_HEALTH bonus_per_level=4
+        cls.character = CharacterFactory(db_key="CovenantHealthChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character, primary_persona=False)
+        cls.target = max_health_modifier_target()
+        membership = make_engaged_member(character_sheet=cls.sheet)
+        CovenantRoleBonusFactory(
+            covenant_role=membership.covenant_role,
+            modifier_target=cls.target,
+            bonus_per_level=4,
+        )
+
+        # Character with no engaged role
+        cls.character_no_role = CharacterFactory(db_key="NoRoleHealthChar")
+        CharacterSheetFactory(character=cls.character_no_role, primary_persona=False)
+
+    def test_covenant_role_health_sums_engaged_roles_times_level(self) -> None:
+        from world.vitals.services import covenant_role_health
+
+        # 5 * 4 = 20
+        self.assertEqual(covenant_role_health(self.character, level=5), 20)
+
+    def test_covenant_role_health_zero_without_engaged_role(self) -> None:
+        from world.vitals.services import covenant_role_health
+
+        self.assertEqual(covenant_role_health(self.character_no_role, level=5), 0)
+
+
 class MaybeDangerRoundOnBleedOutTest(TestCase):
     """Unit tests for _maybe_danger_round_on_bleed_out helper."""
 
