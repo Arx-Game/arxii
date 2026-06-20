@@ -994,3 +994,144 @@ class TestEffortAndFatigueOnTargetedResolution(TestCase):
             request, self.target, difficulty_override=None
         )
         self.assertEqual(difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
+
+
+class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
+    """Task 4 (A4): defender supplies difficulty at consent; diverges per-target.
+
+    One cast, two targets (primary + one SceneActionTarget).  Primary accepts
+    with difficulty="easy"; additional accepts with difficulty="daunting".
+    Asserts that resolved_difficulty diverges per-target and that
+    resist_effort_level is persisted when provided.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.primary_target = PersonaFactory()
+        cls.additional_target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request(self) -> "SceneActionRequest":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.primary_target,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_accepts_with_easy_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Primary target accepts with difficulty='easy'; resolved_difficulty == EASY."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.EASY,
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_accepts_with_daunting_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Additional target accepts with difficulty='daunting'; resolved_difficulty == DAUNTING."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.DAUNTING,
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.DAUNTING])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_divergent_per_target_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Primary (easy) and additional (daunting) diverge on resolved_difficulty."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.EASY,
+        )
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.DAUNTING,
+        )
+
+        request.refresh_from_db()
+        row.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.DAUNTING])
+        # Sanity: easy (30) != daunting (75)
+        self.assertNotEqual(request.resolved_difficulty, row.resolved_difficulty)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resist_effort_level_persisted_on_primary(self, mock_resolve: MagicMock) -> None:
+        """resist_effort_level is persisted on the primary request when provided."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resist_effort_level, "high")
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resist_effort_level_persisted_on_additional_target(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """resist_effort_level is persisted on the additional target row when provided."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="low",
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resist_effort_level, "low")

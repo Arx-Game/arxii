@@ -291,6 +291,8 @@ def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
     decision: str,
+    difficulty: str | None = None,
+    resist_effort: str = "",
 ) -> EnhancedSceneActionResult | None:
     """Process a consent decision on an action request.
 
@@ -300,6 +302,11 @@ def respond_to_action_request(
     Args:
         action_request: The pending action request.
         decision: ConsentDecision value (ACCEPT or DENY).
+        difficulty: Optional DifficultyChoice value supplied by the defender at
+            consent. When present, overrides the initiator's authored band for
+            this target only (Task 4 — per-target plausibility).
+        resist_effort: Optional EffortLevel value for the defender's active
+            resistance. Stored on the request; increment applied in a later task.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved via the cast/action
@@ -322,6 +329,13 @@ def respond_to_action_request(
 
     if decision == ConsentDecision.ACCEPT:
         with transaction.atomic():
+            # Persist the defender's plausibility band before resolving so that
+            # _resolve_standard_action picks it up via action_request.difficulty_choice.
+            if difficulty:
+                action_request.difficulty_choice = difficulty
+            action_request.resist_effort_level = resist_effort
+            action_request.save(update_fields=["difficulty_choice", "resist_effort_level"])
+
             # Standalone cast (no action_template, no action_key) — resolve via the cast
             # pipeline; enhanced/plain actions go through the standard resolution path.
             # The inner transaction.atomic() blocks in resolve_accepted_cast and
@@ -514,12 +528,19 @@ def respond_to_action_target(
     *,
     action_target: SceneActionTarget,
     decision: str,
+    difficulty: str | None = None,
+    resist_effort: str = "",
 ) -> EnhancedSceneActionResult | None:
     """Consent + resolution for ONE additional target row. Never touches siblings.
 
     Args:
         action_target: The SceneActionTarget row to resolve.
         decision: ConsentDecision value (ACCEPT or DENY).
+        difficulty: Optional DifficultyChoice value supplied by the defender at
+            consent. When present, stored on the target row and used as the
+            difficulty_override for resolution (Task 4 — per-target plausibility).
+        resist_effort: Optional EffortLevel value for the defender's active
+            resistance. Stored on the target row; increment applied in a later task.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved. None if denied, already
@@ -535,15 +556,31 @@ def respond_to_action_target(
     if decision == ConsentDecision.ACCEPT:
         action_request = action_target.action_request
         with transaction.atomic():
-            result, result_interaction, difficulty = _resolve_action_against_persona(
-                action_request, action_target.target_persona
+            # Persist defender's plausibility band on the target row, then pass it
+            # as difficulty_override so the per-target band is used for resolution
+            # (the target's band lives on SceneActionTarget, not the request).
+            if difficulty:
+                action_target.difficulty_choice = difficulty
+            action_target.resist_effort_level = resist_effort
+            difficulty_override = DIFFICULTY_VALUES[action_target.difficulty_choice]
+            result, result_interaction, resolved_difficulty = _resolve_action_against_persona(
+                action_request,
+                action_target.target_persona,
+                difficulty_override=difficulty_override,
             )
             action_target.status = ActionRequestStatus.RESOLVED
             action_target.resolved_at = timezone.now()
-            action_target.resolved_difficulty = difficulty
+            action_target.resolved_difficulty = resolved_difficulty
             action_target.result_interaction = result_interaction
             action_target.save(
-                update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
+                update_fields=[
+                    "status",
+                    "resolved_at",
+                    "resolved_difficulty",
+                    "result_interaction",
+                    "difficulty_choice",
+                    "resist_effort_level",
+                ]
             )
             _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
             # Per-target resolver invocation (#1178): fire the registered resolver for

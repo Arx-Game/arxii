@@ -8,7 +8,12 @@ from rest_framework import serializers
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
 from world.magic.services.hostility import is_technique_hostile
-from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, ConsentDecision
+from world.scenes.action_constants import (
+    ActionDelivery,
+    ActionRequestStatus,
+    ConsentDecision,
+    DifficultyChoice,
+)
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 
@@ -351,6 +356,10 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
 class ConsentResponseSerializer(serializers.Serializer):
     decision = serializers.ChoiceField(choices=ConsentDecision.choices)
     target_persona_id = serializers.IntegerField(required=False)
+    difficulty = serializers.ChoiceField(choices=DifficultyChoice.choices, required=False)
+    resist_effort = serializers.ChoiceField(
+        choices=EffortLevel.choices, required=False, allow_blank=True, default=""
+    )
 
 
 class StepResultSerializer(serializers.Serializer):

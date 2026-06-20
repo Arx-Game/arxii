@@ -934,7 +934,10 @@ class PerTargetRespondTestCase(APITestCase):
         )
         assert response.status_code == status.HTTP_200_OK, response.data
         mock_respond.assert_called_once_with(
-            action_target=action_target, decision=ConsentDecision.ACCEPT
+            action_target=action_target,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=None,
+            resist_effort="",
         )
         # Response carries the row's id and action_request_id
         assert response.data["action_target_id"] == action_target.pk

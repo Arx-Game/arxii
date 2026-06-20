@@ -215,6 +215,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         consent_serializer.is_valid(raise_exception=True)
         decision = consent_serializer.validated_data["decision"]
         target_persona_id = consent_serializer.validated_data.get("target_persona_id")
+        difficulty = consent_serializer.validated_data.get("difficulty")
+        resist_effort = consent_serializer.validated_data.get("resist_effort", "")
 
         if target_persona_id is not None:
             # Per-target consent path: look up the additional-target row directly.
@@ -230,7 +232,12 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             try:
-                result = respond_to_action_target(action_target=action_target, decision=decision)
+                result = respond_to_action_target(
+                    action_target=action_target,
+                    decision=decision,
+                    difficulty=difficulty,
+                    resist_effort=resist_effort,
+                )
             except ValueError:
                 return Response(
                     {"detail": "Unable to process this action request."},
@@ -267,6 +274,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             result = respond_to_action_request(
                 action_request=action_request,
                 decision=decision,
+                difficulty=difficulty,
+                resist_effort=resist_effort,
             )
         except ValueError as _exc:
             return Response(
