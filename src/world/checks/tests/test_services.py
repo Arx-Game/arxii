@@ -426,13 +426,10 @@ class ComputeResistIncrementTests(TestCase):
         assert increment_high > 0
         assert increment_high > increment_low
 
-    def test_increment_is_nonnegative_when_no_composure_check_type(self):
+    def test_returns_zero_when_no_composure_check_type(self):
         """When Composure CheckType does not exist, compute_resist_increment returns 0."""
-        # Patch CheckType.objects inside the services module to simulate an absent
-        # Composure CheckType (filter().first() returns None).
-        with patch(
-            "world.checks.models.CheckType.objects",
-        ) as mock_manager:
-            mock_manager.filter.return_value.first.return_value = None
-            result = compute_resist_increment(self.character, resist_effort_level="high")
+        from world.checks.models import CheckType
+
+        CheckType.objects.filter(name="Composure").delete()
+        result = compute_resist_increment(self.character, resist_effort_level="high")
         assert result == 0
