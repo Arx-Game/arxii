@@ -41499,6 +41499,9 @@ components:
         allowed_tenure:
           type: integer
           description: Tenure permitted to target owner_tenure with social actions.
+        allowed_tenure_name:
+          type: string
+          readOnly: true
         category:
           type: integer
           description: Allowlist is scoped per category.
@@ -41509,6 +41512,7 @@ components:
       required:
       - added_at
       - allowed_tenure
+      - allowed_tenure_name
       - category
       - id
       - owner_tenure

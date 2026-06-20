@@ -22853,6 +22853,7 @@ export interface components {
       owner_tenure: number;
       /** @description Tenure permitted to target owner_tenure with social actions. */
       allowed_tenure: number;
+      readonly allowed_tenure_name: string;
       /** @description Allowlist is scoped per category. */
       category: number;
       /** Format: date-time */

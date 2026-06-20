@@ -82,10 +82,21 @@ class SocialConsentCategoryRuleSerializer(serializers.ModelSerializer):
 class SocialConsentWhitelistSerializer(serializers.ModelSerializer):
     """Serializer for consent whitelist entries."""
 
+    allowed_tenure_name = serializers.CharField(
+        source="allowed_tenure.display_name", read_only=True
+    )
+
     class Meta:
         model = SocialConsentWhitelist
-        fields = ("id", "owner_tenure", "allowed_tenure", "category", "added_at")
-        read_only_fields = ("id", "added_at")
+        fields = (
+            "id",
+            "owner_tenure",
+            "allowed_tenure",
+            "allowed_tenure_name",
+            "category",
+            "added_at",
+        )
+        read_only_fields = ("id", "allowed_tenure_name", "added_at")
 
     def validate(self, attrs: dict) -> dict:
         """Ensure the owner_tenure belongs to the requesting player."""

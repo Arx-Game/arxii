@@ -124,7 +124,7 @@ const mockPreferenceNoId = {
   allow_social_actions: true,
 };
 
-function setupDefaultMocks(overrides: Partial<typeof queries> = {}) {
+function setupDefaultMocks() {
   const upsertMutate = vi.fn();
   const deleteMutate = vi.fn();
   const addMutate = vi.fn();
@@ -187,9 +187,6 @@ function setupDefaultMocks(overrides: Partial<typeof queries> = {}) {
     isLoading: false,
   } as unknown as ReturnType<typeof mailQueries.useTenureSearch>);
 
-  // Apply any overrides
-  Object.assign({ upsertMutate, deleteMutate, addMutate, removeMutate, updateMutate }, overrides);
-
   return { upsertMutate, deleteMutate, addMutate, removeMutate, updateMutate, createMutateAsync };
 }
 
@@ -234,7 +231,7 @@ describe('PrivacyPage', () => {
   // WhitelistManager revealed when mode = "allowlist"
   // -------------------------------------------------------------------------
 
-  it('reveals WhitelistManager when category mode is switched to Allowlist only', async () => {
+  it('calls upsertCategoryRule when switching to allowlist mode', async () => {
     const { upsertMutate } = setupDefaultMocks();
     renderWithProviders(<PrivacyPage />);
 
@@ -316,6 +313,7 @@ describe('PrivacyPage', () => {
             id: 55,
             owner_tenure: 1,
             allowed_tenure: 7,
+            allowed_tenure_name: '1st player of Zara',
             category: 10,
             added_at: '2026-01-01T00:00:00Z',
           },
@@ -328,9 +326,9 @@ describe('PrivacyPage', () => {
 
     fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
 
-    await waitFor(() => screen.getByLabelText('Remove tenure 7 from allowlist'));
+    await waitFor(() => screen.getByLabelText('Remove 1st player of Zara from allowlist'));
 
-    await userEvent.click(screen.getByLabelText('Remove tenure 7 from allowlist'));
+    await userEvent.click(screen.getByLabelText('Remove 1st player of Zara from allowlist'));
 
     expect(removeMutate).toHaveBeenCalledWith({
       id: 55,

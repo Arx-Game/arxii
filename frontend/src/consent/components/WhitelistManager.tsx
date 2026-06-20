@@ -38,10 +38,10 @@ function WhitelistManagerInner({ tenureId, categoryId }: Props) {
               key={entry.id}
               className="flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm"
             >
-              {entry.allowed_tenure}
+              {entry.allowed_tenure_name ?? entry.allowed_tenure}
               <button
                 type="button"
-                aria-label={`Remove tenure ${entry.allowed_tenure} from allowlist`}
+                aria-label={`Remove ${entry.allowed_tenure_name ?? `tenure ${entry.allowed_tenure}`} from allowlist`}
                 className="ml-1 text-muted-foreground hover:text-foreground"
                 onClick={() =>
                   removeWhitelist.mutate({
