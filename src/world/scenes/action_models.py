@@ -9,6 +9,7 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.fatigue.constants import EffortLevel
 from world.magic.models.commitments import CommittingDeclaration
 from world.scenes.action_constants import (
     ActionDelivery,
@@ -23,7 +24,39 @@ if TYPE_CHECKING:
 _PERSONA_MODEL = "scenes.Persona"
 
 
-class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
+class DefenderConsentFields(models.Model):
+    """Per-defender consent fields shared by the primary-target request and
+    each additional-target row. Difficulty is authored by the DEFENDER at
+    consent (not the initiator at dispatch)."""
+
+    difficulty_choice = models.CharField(
+        max_length=20,
+        choices=DifficultyChoice.choices,
+        default=DifficultyChoice.NORMAL,
+        help_text="Plausibility band chosen by the defender at consent.",
+    )
+    resolved_difficulty = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Numeric difficulty used for resolution.",
+    )
+    resist_effort_level = models.CharField(
+        max_length=20,
+        choices=EffortLevel.choices,
+        blank=True,
+        default="",
+        help_text="Optional active-resistance effort spent by the defender.",
+    )
+    engagement_credited = models.BooleanField(
+        default=False,
+        help_text="Whether this consent already accrued good-sport credit.",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMemoryModel):
     """A request to perform a social action against another character in a scene.
 
     Represents the full lifecycle of a contested social action: request,
@@ -174,17 +207,6 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         default=ActionRequestStatus.PENDING,
         db_index=True,
     )
-    difficulty_choice = models.CharField(
-        max_length=20,
-        choices=DifficultyChoice.choices,
-        default=DifficultyChoice.NORMAL,
-        help_text="Difficulty level chosen or determined for this action",
-    )
-    resolved_difficulty = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="The numeric difficulty used for resolution",
-    )
     result_interaction = models.OneToOneField(
         "scenes.Interaction",
         on_delete=models.SET_NULL,
@@ -238,7 +260,7 @@ class SceneActionRequest(CommittingDeclaration, SharedMemoryModel):
         return self.target_persona
 
 
-class SceneActionTarget(SharedMemoryModel):
+class SceneActionTarget(DefenderConsentFields, SharedMemoryModel):
     """One additional (non-primary) target of a multi-target action request.
 
     The primary target stays on ``SceneActionRequest.target_persona``; these rows
@@ -273,7 +295,6 @@ class SceneActionTarget(SharedMemoryModel):
         db_constraint=False,
         related_name="+",
     )
-    resolved_difficulty = models.PositiveIntegerField(null=True, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
