@@ -244,25 +244,6 @@ class CovenantSerializer(serializers.ModelSerializer):
         return get_covenant_legend_total(obj)
 
 
-class PromoteSubroleSerializer(serializers.Serializer):
-    """Input serializer for the CharacterCovenantRoleViewSet.promote action.
-
-    Validates that the target sub-role's parent matches the membership's current role.
-    The actual promotion is performed by the promote_to_subrole service function.
-    """
-
-    target_subrole = serializers.PrimaryKeyRelatedField(
-        queryset=CovenantRole.objects.filter(parent_role__isnull=False),
-    )
-
-    def validate_target_subrole(self, subrole: CovenantRole) -> CovenantRole:
-        membership: CharacterCovenantRole = self.context["membership"]
-        if subrole.parent_role_id != membership.covenant_role_id:
-            msg = "Target sub-role's parent must match your current role in this covenant."
-            raise serializers.ValidationError(msg)
-        return subrole
-
-
 class CovenantLevelThresholdSerializer(serializers.ModelSerializer):
     """Read-only serializer for CovenantLevelThreshold lookup rows."""
 

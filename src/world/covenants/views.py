@@ -23,7 +23,6 @@ from world.covenants.exceptions import (
     NotAStandingBattleCovenantError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
-    SubrolePromotionError,
 )
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
@@ -57,7 +56,6 @@ from world.covenants.serializers import (
     CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
-    PromoteSubroleSerializer,
     ReorderRanksRequestSerializer,
     TransferTopRequestSerializer,
 )
@@ -68,7 +66,6 @@ from world.covenants.services import (
     delete_rank,
     kick_member,
     leave_covenant,
-    promote_to_subrole,
     rename_rank,
     reorder_ranks,
     set_engaged_membership,
@@ -146,42 +143,6 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         membership = self.get_object()
         clear_engaged_membership(membership=membership)
         return Response(self.get_serializer(membership).data)
-
-    @action(
-        detail=True,
-        methods=["POST"],
-        permission_classes=[IsAuthenticated, IsOwnMembership],
-        serializer_class=PromoteSubroleSerializer,
-    )
-    def promote(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/covenants/character-roles/{id}/promote/
-
-        Promote the membership from its current parent role to a sub-role.
-        Body: { "target_subrole": <pk> }
-
-        Returns the new CharacterCovenantRole row on success.
-        Returns 400 with a user_message body on promotion failures.
-        """
-        membership = self.get_object()
-        ser = PromoteSubroleSerializer(
-            data=request.data,
-            context={"membership": membership},
-        )
-        ser.is_valid(raise_exception=True)
-        try:
-            new_membership = promote_to_subrole(
-                membership=membership,
-                target_subrole=ser.validated_data["target_subrole"],
-            )
-        except SubrolePromotionError as exc:
-            return Response(
-                {"detail": exc.user_message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            CharacterCovenantRoleSerializer(new_membership, context={"request": request}).data,
-            status=status.HTTP_200_OK,
-        )
 
     @action(
         detail=True,

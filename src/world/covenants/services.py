@@ -26,9 +26,6 @@ from world.covenants.exceptions import (
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
-    SubroleParentMismatchError,
-    SubroleResonanceMismatchError,
-    SubroleThreadLevelInsufficientError,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -1325,56 +1322,6 @@ def covenant_members_present(*, covenant: Covenant, room: ObjectDB) -> list[Char
         if sheet is not None and sheet.pk in active_sheet_ids:
             present.append(sheet)
     return present
-
-
-@transaction.atomic
-def promote_to_subrole(
-    *,
-    membership: CharacterCovenantRole,
-    target_subrole: CovenantRole,
-) -> CharacterCovenantRole:
-    """Promote a character from their current parent role to a sub-role.
-
-    Validates:
-    - target_subrole.parent_role == membership.covenant_role
-    - The character has at least one Thread anchored on
-      target_subrole.parent_role with resonance=target_subrole.resonance
-      and level >= target_subrole.unlock_thread_level.
-
-    Atomic. Closes the existing membership row (sets left_at) and creates
-    a new active row with target_subrole, preserving the engaged flag.
-    Reuses change_role mechanics underneath. Invalidates the
-    character.covenant_roles handler cache.
-    """
-    if target_subrole.parent_role_id != membership.covenant_role_id:
-        raise SubroleParentMismatchError
-    # CharacterThreadHandler.all() returns list[Thread] — NOT a queryset.
-    # No .filter() / .exists() — filter in Python.
-    handler = membership.character_sheet.character.threads
-    matching = [
-        t
-        for t in handler.all()
-        if t.target_covenant_role_id == target_subrole.parent_role_id
-        and t.resonance_id == target_subrole.resonance_id
-    ]
-    if not matching:
-        raise SubroleResonanceMismatchError
-    if not any(t.level >= target_subrole.unlock_thread_level for t in matching):
-        raise SubroleThreadLevelInsufficientError
-    # Reuse change_role: close old, open new with same engaged flag + preserve rank
-    was_engaged = membership.engaged
-    existing_rank = membership.rank
-    end_covenant_role(assignment=membership)
-    new_membership = assign_covenant_role(
-        character_sheet=membership.character_sheet,
-        covenant=membership.covenant,
-        covenant_role=target_subrole,
-        rank=existing_rank,
-    )
-    if was_engaged:
-        set_engaged_membership(membership=new_membership)
-    membership.character_sheet.character.covenant_roles.invalidate()
-    return new_membership
 
 
 def assert_initiator_can_induct(*, session: RitualSession) -> None:

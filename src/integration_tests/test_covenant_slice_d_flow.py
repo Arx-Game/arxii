@@ -2,7 +2,7 @@
 
 Exercises the full pipeline:
   legend creation → credit fan-out → view refresh → covenant level recompute
-  → narrative message delivery → sub-role promotion → anchor cap formula.
+  → narrative message delivery.
 """
 
 from __future__ import annotations
@@ -17,12 +17,7 @@ from world.covenants.factories import (
     CovenantFactory,
     CovenantLevelThresholdFactory,
     CovenantRoleFactory,
-    SubroleCovenantRoleFactory,
 )
-from world.covenants.services import promote_to_subrole
-from world.magic.factories import ResonanceFactory
-from world.magic.models import Thread
-from world.magic.models.threads import TargetKind
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
 from world.societies.factories import LegendSourceTypeFactory
@@ -54,11 +49,10 @@ class CovenantSliceDFlowIntegrationTest(TestCase):
     """End-to-end exercise of the Slice D loop.
 
     Asserts the entire pipeline: legend → credit fan-out → view refresh →
-    covenant level recompute → narrative message delivery → sub-role
-    promotion.
+    covenant level recompute → narrative message delivery.
     """
 
-    def test_full_legend_to_promotion_flow(self) -> None:  # noqa: PLR0915
+    def test_full_legend_to_level_up_flow(self) -> None:
         # ===== Phase 1: Setup =====
         _ensure_active_era()
 
@@ -188,60 +182,4 @@ class CovenantSliceDFlowIntegrationTest(TestCase):
             member2.character_sheet_id,
             delivery_sheets,
             "Expected member2 to receive the covenant level-up message",
-        )
-
-        # ===== Phase 7: Set up Thread for member1 to enable sub-role promotion =====
-        resonance = ResonanceFactory()
-        Thread.objects.create(
-            owner=member1.character_sheet,
-            resonance=resonance,
-            target_kind=TargetKind.COVENANT_ROLE,
-            target_covenant_role=parent_role,
-            level=3,
-        )
-        # Invalidate thread handler cache so promote_to_subrole sees the new thread.
-        member1.character_sheet.character.threads.invalidate()
-
-        # ===== Phase 8: Author the sub-role and promote =====
-        sub_role = SubroleCovenantRoleFactory(
-            parent_role=parent_role,
-            resonance=resonance,
-            unlock_thread_level=3,
-        )
-
-        new_membership = promote_to_subrole(
-            membership=member1,
-            target_subrole=sub_role,
-        )
-
-        # ===== Phase 9: Assertions on promotion =====
-        self.assertEqual(
-            new_membership.covenant_role,
-            sub_role,
-            "Expected new membership to have the sub-role",
-        )
-        self.assertTrue(
-            new_membership.engaged,
-            "Expected promoted membership to preserve the engaged flag",
-        )
-        self.assertIsNone(
-            new_membership.left_at,
-            "Expected new membership to be active (left_at IS NULL)",
-        )
-
-        member1.refresh_from_db()
-        self.assertIsNotNone(
-            member1.left_at,
-            "Expected old membership to be closed (left_at IS NOT NULL)",
-        )
-
-        # Anchor cap formula reads from historical rows — should still see
-        # covenant.level for the parent role from the now-closed membership.
-        handler = member1.character_sheet.character.covenant_roles
-        handler.invalidate()
-        max_level = handler.max_covenant_level_for_role(parent_role)
-        self.assertEqual(
-            max_level,
-            covenant.level,
-            f"Expected max_covenant_level_for_role to return {covenant.level}, got {max_level}",
         )

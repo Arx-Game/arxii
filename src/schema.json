@@ -4821,40 +4821,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
-  /api/covenants/character-roles/{id}/promote/:
-    post:
-      operationId: covenants_character_roles_promote_create
-      description: |-
-        POST /api/covenants/character-roles/{id}/promote/
-
-        Promote the membership from its current parent role to a sub-role.
-        Body: { "target_subrole": <pk> }
-
-        Returns the new CharacterCovenantRole row on success.
-        Returns 400 with a user_message body on promotion failures.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - covenants
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PromoteSubroleRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PromoteSubrole'
-          description: ''
   /api/covenants/covenants/:
     get:
       operationId: covenants_covenants_list
@@ -39525,30 +39491,6 @@ components:
       - milestones
       - stage
       - stage_label
-    PromoteSubrole:
-      type: object
-      description: |-
-        Input serializer for the CharacterCovenantRoleViewSet.promote action.
-
-        Validates that the target sub-role's parent matches the membership's current role.
-        The actual promotion is performed by the promote_to_subrole service function.
-      properties:
-        target_subrole:
-          type: integer
-      required:
-      - target_subrole
-    PromoteSubroleRequest:
-      type: object
-      description: |-
-        Input serializer for the CharacterCovenantRoleViewSet.promote action.
-
-        Validates that the target sub-role's parent matches the membership's current role.
-        The actual promotion is performed by the promote_to_subrole service function.
-      properties:
-        target_subrole:
-          type: integer
-      required:
-      - target_subrole
     Pronouns:
       type: object
       description: Serializer for pronoun sets.
