@@ -4058,4 +4058,3 @@
 **Foreign Keys:**
   - chart -> traits.ResultChart [FK]
   - outcome -> traits.CheckOutcome [FK]
-
