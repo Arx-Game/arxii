@@ -351,12 +351,21 @@ def respond_to_action_request(
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
+    *,
+    difficulty_override: int | None = None,
 ) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
     Status bookkeeping is the caller's job (request.status for the primary,
     SceneActionTarget.status for additional targets), so this helper never
     writes a status field.
+
+    Args:
+        action_request: The action request being resolved.
+        target_persona: The persona being targeted.
+        difficulty_override: When provided, overrides the difficulty computed
+            from ``action_request.difficulty_choice``. Task 4 (plausibility
+            defender) supplies per-target values via this seam.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -365,9 +374,16 @@ def _resolve_action_against_persona(
     Raises:
         ValueError: If the request has no action_template set.
     """
-    difficulty = DIFFICULTY_VALUES.get(
-        action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-    )
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    if difficulty_override is not None:
+        difficulty = difficulty_override
+    else:
+        difficulty = DIFFICULTY_VALUES.get(
+            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        )
     action_template = action_request.action_template
     if action_template is None:
         msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
@@ -394,17 +410,28 @@ def _resolve_action_against_persona(
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
         # inside use_technique). The serializer rejects fury_commitment_id on
         # plain actions, so fury_commitment is always None here.
+        check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
         action_resolution = start_action_resolution(
             character=character,
             template=action_template,
             target_difficulty=difficulty,
             context=context,
+            extra_modifiers=check_modifiers,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
             action_key=action_request.action_key,
             fury_committed=None,
         )
+
+    # Charge social fatigue once per target resolved. Multi-target casts charge
+    # the initiator per-target — this is the intended per-target-independent model.
+    apply_fatigue(
+        action_request.initiator_persona.character_sheet,
+        ActionCategory.SOCIAL,
+        action_template.social_fatigue_cost,
+        action_request.effort_level,
+    )
 
     # Dispatch the action's inherent target effects (e.g. RestoreSense removing a
     # Berserk condition). The check chain above resolves the action; this is where

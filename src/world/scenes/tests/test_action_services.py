@@ -924,3 +924,73 @@ class TestPerTargetResolverIntegration(TestCase):
 
         result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
         self.assertIsNotNone(result)  # must not raise
+
+
+class TestEffortAndFatigueOnTargetedResolution(TestCase):
+    """Targeted social-action resolution charges initiator effort + fatigue (Task A3)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from actions.factories import ActionTemplateFactory
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        # social_fatigue_cost=1 → HIGH effort multiplier 2.0 → 2 fatigue charged
+        cls.action_template = ActionTemplateFactory(social_fatigue_cost=1)
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request(self, effort_level: str = "high") -> "SceneActionRequest":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+            effort_level=effort_level,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_effort_charges_initiator_social_fatigue(self, mock_resolve: MagicMock) -> None:
+        """HIGH-effort accept should increase the initiator's social_current fatigue."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="high")
+
+        pool_before = get_or_create_fatigue_pool(self.initiator.character_sheet).get_current(
+            "social"
+        )
+
+        respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+        pool_after = get_or_create_fatigue_pool(self.initiator.character_sheet).get_current(
+            "social"
+        )
+        self.assertGreater(pool_after, pool_before)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_difficulty_override_none_falls_back_to_normal(self, mock_resolve: MagicMock) -> None:
+        """When difficulty_override=None, difficulty should match NORMAL default."""
+        from world.scenes.action_services import _resolve_action_against_persona
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="medium")
+
+        _result, _interaction, difficulty = _resolve_action_against_persona(
+            request, self.target, difficulty_override=None
+        )
+        self.assertEqual(difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
