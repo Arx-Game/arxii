@@ -282,11 +282,19 @@ direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventN
 
 | Function | Summary |
 |----------|---------|
-| `maybe_emit_fall(objectdb, position)` | Emit `EventName.FELL` when `position.kind == CHASM`; returns `True` if the event was emitted, `False` otherwise |
+| `maybe_emit_fall(objectdb, position)` | Emit `EventName.FELL` when `position.kind == CHASM`; idempotently installs the room-owned `fall_to_plummet` trigger first (so the consumer is always present at the fall choke point), then emits. Returns `True` if the event was emitted, `False` otherwise |
 
-The reactive catch consumer (capability-based fly/acrobatics interrupt + AFK-safe
-multi-round plummet down the `elevation_anchor` chain with impact consequences) is being
-built as the #1228 task series.
+**FELL consumer (`world/areas/positioning/plummet.py`, #1228).** A room-owned system
+trigger (`fall_to_plummet`, `source_condition=None`) dispatches `EventName.FELL` to
+`begin_plummet_handler` via a CALL_SERVICE_FUNCTION flow step. `begin_plummet(faller,
+position)` then (a) starts/extends an AFK-safe DANGER `SceneRound` with the faller
+enrolled (`auto_start_or_extend_danger_round`), (b) applies the seeded `Plummeting`
+condition, and (c) instantiates the seeded **"Catch the Faller"** `ChallengeInstance`
+bound to the faller via `target_object`. It is idempotent — a no-op when the faller
+already carries the Plummeting condition. The trigger definition is seeded by
+`wire_fall_triggers()` (positioning factories); `install_fall_triggers(room)` installs
+it (called from `maybe_emit_fall`). The per-round descent (Task 6) and catch resolution
+(Task 7) are subsequent #1228 tasks.
 
 **Plummet + catch content seed (`world/areas/positioning/plummet_content.py`).**
 `ensure_fall_content()` idempotently seeds all plummet + catch content (it calls
@@ -324,9 +332,11 @@ entries in the player's move list until the gating challenge is resolved.
   blueprint is instantiated the `instantiate_blueprint` service skips gating. Full
   gated-edge instantiation requires the absent `instantiate_situation()` service (which
   mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
-- **Reactive fall catch + multi-round plummet:** `EventName.FELL` is emitted; the consumer
-  (fly/teleport/acrobatics interrupt, AFK-safe plummet down the `elevation_anchor` chain
-  with impact consequences) is deferred to the round/turn framework follow-up (#520).
+- **Reactive fall catch + multi-round plummet:** `EventName.FELL` is now consumed —
+  `begin_plummet` (`plummet.py`) starts the DANGER round, applies `Plummeting`, and binds
+  the catch challenge to the faller (#1228, Task 5). Still deferred within the #1228 series:
+  the per-round descent down the `elevation_anchor` chain with impact consequences (Task 6)
+  and the catch resolution (Task 7).
 - **Anti-air "blocks-flight" gate flag:** a future `PositionEdge` flag (or Property tag)
   that prevents `enter_aerial` from crossing above a blocked node.
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)

@@ -618,15 +618,22 @@ def leave_aerial(objectdb: ObjectDB) -> ObjectPosition:
 def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
     """Emit FELL if *position* is a CHASM. Returns whether an event was emitted.
 
-    The reactive catch/plummet consumer is deferred to the #1018 follow-up; this
-    only opens the seam.
+    Idempotently installs the room-owned FELL → plummet trigger
+    (``install_fall_triggers``) before emitting, so the reactive plummet consumer
+    (``world.areas.positioning.plummet.begin_plummet``) is always present at the
+    fall choke point (#1228).
     """
     if position.kind != PositionKind.CHASM:
         return False
     from flows.constants import EventName
     from flows.emit import emit_event
     from flows.events.payloads import FallEvent
+    from world.areas.positioning.plummet import install_fall_triggers
 
+    # The fall choke point guarantees the consumer exists: idempotently install
+    # the room-owned FELL → plummet trigger right before emitting. No-ops when
+    # the seeded TriggerDefinition is absent (content not wired here).
+    install_fall_triggers(objectdb.location)
     emit_event(
         EventName.FELL,
         FallEvent(faller=objectdb, position=position),
