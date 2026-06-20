@@ -31,13 +31,23 @@ class SocialConsentPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = SocialConsentPreference
         fields = ("id", "tenure", "allow_social_actions")
-        read_only_fields = ("id", "tenure")
+        read_only_fields = ("id",)
 
     def validate(self, attrs: dict) -> dict:
-        """Ensure the referenced tenure belongs to the requesting player."""
+        """Ensure the referenced tenure belongs to the requesting player.
+
+        On create, ``tenure`` is required and must belong to the requesting player.
+        On update (instance already set), the existing tenure is used and not
+        re-validated (tenure is effectively immutable after creation).
+        """
         request = self.context.get("request")
+        is_create = self.instance is None
         if request is not None and hasattr(request.user, "player_data"):
             tenure = attrs.get("tenure")
+            if is_create and tenure is None:
+                raise serializers.ValidationError(
+                    {"tenure": "tenure is required when creating a preference."}
+                )
             if tenure is not None:
                 player_data = request.user.player_data
                 if tenure.player_data_id != player_data.pk:
@@ -53,6 +63,7 @@ class SocialConsentCategoryRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = SocialConsentCategoryRule
         fields = ("id", "preference", "category", "mode")
+        read_only_fields = ("id",)
 
     def validate(self, attrs: dict) -> dict:
         """Ensure the referenced preference belongs to the requesting player."""

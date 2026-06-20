@@ -41,8 +41,6 @@ class SocialConsentCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = SocialConsentCategory.objects.all()
     serializer_class = SocialConsentCategorySerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields: list[str] = []
     pagination_class = ConsentPagination
 
 

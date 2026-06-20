@@ -20715,6 +20715,8 @@ export interface components {
     };
     /** @description Serializer for per-tenure social consent preferences. */
     PatchedSocialConsentPreferenceRequest: {
+      /** @description One preference record per tenure. */
+      tenure?: number;
       /** @description If False, this character never appears as a valid social action target. */
       allow_social_actions?: boolean;
     };
@@ -22833,12 +22835,14 @@ export interface components {
     SocialConsentPreference: {
       readonly id: number;
       /** @description One preference record per tenure. */
-      readonly tenure: number;
+      tenure: number;
       /** @description If False, this character never appears as a valid social action target. */
       allow_social_actions?: boolean;
     };
     /** @description Serializer for per-tenure social consent preferences. */
     SocialConsentPreferenceRequest: {
+      /** @description One preference record per tenure. */
+      tenure: number;
       /** @description If False, this character never appears as a valid social action target. */
       allow_social_actions?: boolean;
     };
@@ -28125,7 +28129,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['SocialConsentPreferenceRequest'];
       };
@@ -28173,7 +28177,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
+    requestBody: {
       content: {
         'application/json': components['schemas']['SocialConsentPreferenceRequest'];
       };

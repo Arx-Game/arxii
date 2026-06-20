@@ -140,9 +140,45 @@ class SocialConsentPreferenceViewSetTests(TestCase):
     def test_for_tenure_cross_player_returns_404(self):
         """for-tenure action does not expose another player's tenure."""
         response = self.client.get(f"/api/consent/preferences/for-tenure/{self.tenure_b.id}/")
-        # Should 404 (row exists but belongs to another player, scoped queryset + DoesNotExist)
-        # The synthesized default would leak tenure existence; the view returns 404.
+        # 404 comes from the RosterTenure ownership guard (exists() check) — the view
+        # never reaches the preference lookup.  The synthesized default would otherwise
+        # leak tenure existence.
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_post_creates_preference_for_own_tenure(self):
+        """Player can POST to create a preference for a tenure they own."""
+        tenure_new = RosterTenureFactory(player_data=self.player_a)
+        response = self.client.post(
+            "/api/consent/preferences/",
+            {"tenure": tenure_new.id, "allow_social_actions": False},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert SocialConsentPreference.objects.filter(tenure=tenure_new).exists()
+
+    def test_post_with_other_players_tenure_rejected(self):
+        """POST with another player's tenure id is rejected and no row is created."""
+        response = self.client.post(
+            "/api/consent/preferences/",
+            {"tenure": self.tenure_b.id, "allow_social_actions": True},
+            format="json",
+        )
+        assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN)
+        # No preference row must have been created for the other player's tenure.
+        assert not SocialConsentPreference.objects.filter(
+            tenure=self.tenure_b,
+            tenure__player_data=self.player_a,
+        ).exists()
+
+    def test_post_duplicate_tenure_returns_400(self):
+        """POST a second preference for a tenure that already has one returns 400."""
+        # pref_a is already created for tenure_a in setUpTestData.
+        response = self.client.post(
+            "/api/consent/preferences/",
+            {"tenure": self.tenure_a.id, "allow_social_actions": False},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 class SocialConsentCategoryRuleViewSetTests(TestCase):

@@ -4201,6 +4201,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SocialConsentPreferenceRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -4257,6 +4258,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SocialConsentPreferenceRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -37094,6 +37096,9 @@ components:
       type: object
       description: Serializer for per-tenure social consent preferences.
       properties:
+        tenure:
+          type: integer
+          description: One preference record per tenure.
         allow_social_actions:
           type: boolean
           description: If False, this character never appears as a valid social action
@@ -41460,7 +41465,6 @@ components:
           readOnly: true
         tenure:
           type: integer
-          readOnly: true
           description: One preference record per tenure.
         allow_social_actions:
           type: boolean
@@ -41473,10 +41477,15 @@ components:
       type: object
       description: Serializer for per-tenure social consent preferences.
       properties:
+        tenure:
+          type: integer
+          description: One preference record per tenure.
         allow_social_actions:
           type: boolean
           description: If False, this character never appears as a valid social action
             target.
+      required:
+      - tenure
     SocialConsentWhitelist:
       type: object
       description: Serializer for consent whitelist entries.
