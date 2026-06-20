@@ -323,8 +323,10 @@ effects for graph mutation and flight).
   `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service);
-  reactive fall consumer (catch/plummet tied to #520)
+- **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
+  `dispatch_catch` → `resolve_catch` (`plummet.py`) — DANGER round + `Plummeting` + per-round
+  descent/impact + capability-gated bystander catch
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),

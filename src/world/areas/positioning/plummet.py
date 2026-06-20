@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
     from world.areas.positioning.models import Position
     from world.conditions.models import ConditionInstance
+    from world.mechanics.types import AvailableAction, ChallengeResolutionResult
 
 
 def _faller_is_plummeting(faller: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
@@ -138,12 +139,19 @@ def _apply_fall_impact(target: ObjectDB, instance: ConditionInstance) -> None:  
     end_plummet(target, caught=False)
 
 
-def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: ARG001, OBJECTDB_PARAM
+def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: OBJECTDB_PARAM
     """End a plummet: remove the Plummeting condition and clear the catch challenge.
 
-    ``caught=True`` is the Task-7 bystander-catch path (no impact); Task 6 calls it
-    with ``caught=False`` after applying impact. Either way the faller stops
-    plummeting and the bound "Catch the Faller" challenge is deactivated.
+    ``caught`` selects which terminal narration the room sees:
+
+    - ``caught=True`` — a bystander caught the faller (Task 7). A relieved
+      safe-landing line is narrated; no impact has been applied.
+    - ``caught=False`` — the faller hit the floor (Task 6). A grim impact line is
+      narrated *after* ``_apply_fall_impact`` has already run the damage
+      consequences.
+
+    Either way the faller stops plummeting and the bound "Catch the Faller"
+    challenge is deactivated.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
@@ -160,6 +168,26 @@ def end_plummet(faller: ObjectDB, *, caught: bool = False) -> None:  # noqa: ARG
         target_object=faller,
         is_active=True,
     ).update(is_active=False)
+    _narrate_plummet_end(faller, caught=caught)
+
+
+def _narrate_plummet_end(faller: ObjectDB, *, caught: bool) -> None:  # noqa: OBJECTDB_PARAM
+    """Narrate the terminal plummet outcome to the room (caught vs impact).
+
+    Best-effort: a faller with no location (detached) narrates nothing. The
+    ``caught`` distinction is observable — a relieved catch reads differently from
+    a grim impact, so the parameter drives real room output rather than sitting
+    inert.
+    """
+    location = faller.location
+    if location is None:
+        return
+    name = faller.key
+    if caught:
+        message = f"{name} is caught, halting the plummet, and set down safely."
+    else:
+        message = f"{name} slams into the ground."
+    location.msg_contents(message)
 
 
 def advance_plummet(targets: Iterable[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM
@@ -197,6 +225,131 @@ def advance_plummet(targets: Iterable[ObjectDB]) -> None:  # noqa: OBJECTDB_PARA
         if below.elevation_anchor is None:
             # Landed on solid ground this round — impact fires now.
             _apply_fall_impact(target, instance)
+
+
+def _safe_position_for(catcher: ObjectDB) -> Position | None:  # noqa: OBJECTDB_PARAM
+    """The catcher's position if it is a safe (non-CHASM) resting place, else None."""
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+
+    pos = position_of(catcher)
+    if pos is None or pos.kind == PositionKind.CHASM:
+        return None
+    return pos
+
+
+def resolve_catch(
+    faller: ObjectDB,  # noqa: OBJECTDB_PARAM
+    catcher: ObjectDB,  # noqa: OBJECTDB_PARAM
+    resolution_result: ChallengeResolutionResult,
+) -> None:
+    """Map a graded catch resolution onto the faller's plummet.
+
+    Translates the ``ChallengeResolutionResult`` from ``resolve_challenge`` into a
+    plummet effect:
+
+    - **clean catch** (a SUCCESS check outcome, or any DESTROY resolution): end the
+      plummet with no impact (``end_plummet(caught=True)``) and place the faller at
+      the catcher's safe non-CHASM position;
+    - **partial** (a neutral / zero-success outcome that did not destroy the
+      challenge): soften the fall — decrement the accumulated Plummeting
+      ``severity`` (floored at 0) — but let the descent continue;
+    - **failure** (a negative outcome): no-op; the plummet continues.
+
+    The catch challenge is bound to the faller, so the faller — not the catcher — is
+    the entity whose plummet state changes.
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = resolution_result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    is_clean_catch = (
+        resolution_result.resolution_type == ResolutionType.DESTROY or success_level > 0
+    )
+
+    if is_clean_catch:
+        from world.areas.positioning.services import force_move_to_position  # noqa: PLC0415
+
+        end_plummet(faller, caught=True)
+        safe = _safe_position_for(catcher)
+        if safe is not None:
+            force_move_to_position(faller, safe)
+        return
+
+    if success_level == 0:
+        # Partial — soften the descent without ending it.
+        instance = _plummeting_instance(faller)
+        if instance is not None and instance.severity > 0:
+            instance.severity -= 1
+            instance.save(update_fields=["severity"])
+        return
+
+    # Failure (success_level < 0) — the plummet continues untouched.
+
+
+def dispatch_catch(
+    catcher: ObjectDB,  # noqa: OBJECTDB_PARAM
+    faller: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    approach: str,
+) -> ChallengeResolutionResult | None:
+    """Resolve *catcher*'s catch attempt against *faller* and apply the outcome.
+
+    Reuses the existing machinery rather than adding a new dispatch surface:
+
+    1. ``get_available_actions`` surfaces only the catch approaches the catcher's
+       capabilities qualify for (pure data-gating — a catcher with no catch
+       capability gets nothing, so this raises ``LookupError``);
+    2. ``resolve_challenge`` resolves the chosen approach against the faller's bound
+       catch challenge — the same synchronous immediate-challenge path a DANGER
+       round drives through ``_dispatch_immediate_challenge``;
+    3. ``resolve_catch`` translates the graded outcome onto the plummet.
+
+    *approach* names the catch capability (e.g. ``"telekinesis"``); the matching
+    available action is selected by its capability name.
+
+    Returns the ``ChallengeResolutionResult``, or None if the faller carries no
+    active catch challenge.
+    """
+    from world.mechanics.challenge_resolution import resolve_challenge  # noqa: PLC0415
+    from world.mechanics.services import get_available_actions  # noqa: PLC0415
+
+    location = catcher.location
+    available = get_available_actions(catcher, location)
+    catch_actions = [
+        action
+        for action in available
+        if action.challenge_name == CATCH_THE_FALLER_NAME
+        and action.resolved_challenge_instance is not None
+        and action.resolved_challenge_instance.target_object_id == faller.id
+    ]
+    if not catch_actions:
+        raise LookupError(_ERR_NO_CATCH_APPROACH)
+
+    chosen = _select_catch_action(catch_actions, approach)
+
+    result = resolve_challenge(
+        catcher,
+        chosen.resolved_challenge_instance,  # type: ignore[arg-type] — filtered non-None above
+        chosen.resolved_challenge_approach,  # type: ignore[arg-type] — set whenever instance is
+        chosen.capability_source,
+    )
+    resolve_catch(faller, catcher, result)
+    return result
+
+
+_ERR_NO_CATCH_APPROACH = "No catch approach is available to this catcher for this faller."
+
+
+def _select_catch_action(catch_actions: list[AvailableAction], approach: str) -> AvailableAction:
+    """Pick the catch AvailableAction matching *approach* (capability name)."""
+    for action in catch_actions:
+        source = action.capability_source
+        if source is not None and source.capability_name == approach:
+            return action
+    # Fall back to the first available catch action when the name does not match
+    # (e.g. condition-sourced sources carry an empty capability_name).
+    return catch_actions[0]
 
 
 FALL_TRIGGER_NAME = "fall_to_plummet"
