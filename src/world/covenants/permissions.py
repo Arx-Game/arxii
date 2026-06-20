@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 from rest_framework import permissions
 from rest_framework.request import Request
 
 from world.covenants.models import CharacterCovenantRole
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
 
 
 class IsOwnMembership(permissions.BasePermission):
@@ -80,15 +85,14 @@ class CanInviteToCovenant(permissions.BasePermission):
         view: object,
         obj: object,
     ) -> bool:
+        from world.covenants.models import Covenant  # noqa: PLC0415
+        from world.covenants.services import can_invite_to_covenant  # noqa: PLC0415
+
+        if not isinstance(obj, Covenant):
+            return False
         if request.user.is_staff:
             return True
-        return CharacterCovenantRole.objects.filter(
-            covenant=obj,
-            left_at__isnull=True,
-            rank__can_invite=True,
-            character_sheet__roster_entry__tenures__end_date__isnull=True,
-            character_sheet__roster_entry__tenures__player_data__account=request.user,
-        ).exists()
+        return can_invite_to_covenant(obj, account=cast("AccountDB", request.user))
 
 
 class CanManageCovenantRanks(permissions.BasePermission):

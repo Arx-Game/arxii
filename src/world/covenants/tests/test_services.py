@@ -1598,3 +1598,29 @@ class LockOutInvariantTests(TestCase):
 
         cov.refresh_from_db()
         self.assertIsNotNone(cov.dissolved_at)
+
+
+class CanInviteToCovenantPredicateTests(TestCase):
+    def test_character_with_can_invite_rank_returns_true(self):
+        from world.covenants.services import can_invite_to_covenant
+
+        cov = CovenantFactory()
+        rank = CovenantManagerRankFactory(covenant=cov)  # can_invite=True
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+        self.assertTrue(can_invite_to_covenant(cov, character_sheet=sheet))
+
+    def test_character_without_can_invite_rank_returns_false(self):
+        from world.covenants.services import can_invite_to_covenant
+
+        cov = CovenantFactory()
+        rank = CovenantRankFactory(covenant=cov)  # all caps False
+        sheet = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, rank=rank)
+        self.assertFalse(can_invite_to_covenant(cov, character_sheet=sheet))
+
+    def test_non_member_returns_false(self):
+        from world.covenants.services import can_invite_to_covenant
+
+        cov = CovenantFactory()
+        self.assertFalse(can_invite_to_covenant(cov, character_sheet=CharacterSheetFactory()))

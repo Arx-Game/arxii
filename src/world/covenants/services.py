@@ -44,6 +44,7 @@ from world.magic.constants import ParticipantState, ReferenceKind
 from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatEncounter
@@ -252,6 +253,33 @@ def add_member(
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
     return row
+
+
+def can_invite_to_covenant(
+    covenant: Covenant,
+    *,
+    character_sheet: CharacterSheet | None = None,
+    account: AccountDB | None = None,
+) -> bool:
+    """Return True if an active member with a can_invite rank grants invite authority.
+
+    Character-scoped (character_sheet=) for the ritual-draft gate; account-scoped
+    (account=) for the CanInviteToCovenant DRF permission. The rank__can_invite +
+    active-membership core is shared so the can_invite flag has a single home.
+    """
+    qs = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+        rank__can_invite=True,
+    )
+    if character_sheet is not None:
+        qs = qs.filter(character_sheet=character_sheet)
+    if account is not None:
+        qs = qs.filter(
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=account,
+        )
+    return qs.exists()
 
 
 @transaction.atomic
