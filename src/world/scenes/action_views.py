@@ -450,7 +450,9 @@ class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):
                 "action_request__initiator_persona",
                 "action_request__scene",
                 "action_request__technique",
+                "action_request__technique__effect_type",
                 "target_persona",
+                "target_persona__character_sheet",
             )
             .order_by("-action_request__created_at", "id")
         )

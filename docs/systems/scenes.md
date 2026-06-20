@@ -256,7 +256,9 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 **Typical use:** `GET /api/action-targets/?scene={id}&status=pending` — fetched by `ConsentPrompt` every 5 seconds to surface the additional-target consent queue alongside the primary-request queue. Accepting or denying dispatches to `POST /api/action-requests/{id}/respond/` with `target_persona_id` set.
 
-**Response shape** (`SceneActionTargetSerializer`): `action_target_id`, `action_request_id`, `target_persona_id`, `status`, `initiator_persona`, `initiator_name`, `scene`, `action_key`, `action_template`, `technique`, `technique_name`, `pose_text`, `strain_commitment`, `created_at`.
+**Response shape** (`SceneActionTargetSerializer`): `action_target_id`, `action_request_id`, `target_persona_id`, `status`, `initiator_persona`, `initiator_name`, `scene`, `action_key`, `action_template`, `technique`, `technique_name`, `pose_text`, `strain_commitment`, `created_at`, `combat_risk_level`.
+
+`combat_risk_level` is computed from the row's own target persona — mirroring the primary-request field — so additional targets of a hostile AOE cast receive the same combat-risk warning in `ConsentPrompt` as the primary target does (#1259).
 
 ---
 
