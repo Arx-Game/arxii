@@ -29,6 +29,7 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
 - **Never use file path patterns in `manualChunks` for app code** — only split `node_modules` into vendor chunks. App code splitting creates circular chunk dependencies that work in Vite dev mode but crash in production (`Cannot access 'x' before initialization`). For feature-based splitting, use `React.lazy(() => import('./SomePage'))` at the route level instead
 - **After any Vite config change, test the production build end-to-end** — run `pnpm build`, then verify the app loads on the Django/TwistedWeb server (port 4001). Vite dev mode (port 3000) resolves ESM imports differently and will not catch circular chunk dependencies or static file serving issues
 - **`pnpm build` succeeding does not mean the app works** — the build only checks that code compiles. Module evaluation order, CORS on static files, and asset path rewriting are only testable against the production server
+- **pnpm `overrides` live in `pnpm-workspace.yaml`, not `package.json`** — under pnpm v11 the `package.json` `pnpm.overrides`/`onlyBuiltDependencies` fields are ignored. Edit `frontend/pnpm-workspace.yaml` (authoritative), keep the `package.json` `pnpm` block mirrored, and confirm `git diff --stat pnpm-lock.yaml` is non-empty before running build/tests — otherwise the override silently had no effect
 
 ### Development
 

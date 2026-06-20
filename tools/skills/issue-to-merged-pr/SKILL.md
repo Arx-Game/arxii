@@ -240,6 +240,11 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
 The PR body references the approved spec via `Closes #<issue>` — the spec lives
 in the issue body, so there is no spec-file link to pass.
 
+**Before pushing, run `uv run pre-commit run --all-files`** — this matches CI's
+`pre-commit` job exactly. Committing with hooks only checks *changed* files, so
+ruff-format / Prettier / the custom linters can still reflow or flag untouched files
+that CI then rejects. Running the full pass locally avoids a wasted CI round-trip.
+
 ### 6. CI watch
 
 > ⚠️ **NEVER use Opus for CI watch or any looping/polling phase.** The watch
@@ -300,7 +305,11 @@ NEW_MAX=<max comment id you addressed>
 BODY=$(gh pr view <pr> --json body --jq .body)
 # -E (ERE) so [0-9]+ works on both GNU sed (Linux) and BSD sed (macOS).
 NEW_BODY=$(sed -E "s/<!-- last-addressed-comment: [0-9]+ -->/<!-- last-addressed-comment: $NEW_MAX -->/" <<<"$BODY")
-printf '%s' "$NEW_BODY" | gh pr edit <pr> --body-file -
+# Use the REST API, not `gh pr edit`: `gh pr edit` fetches the deprecated
+# Projects-classic `projectCards` field and now errors out, silently leaving the
+# body unchanged. REST PATCH is unaffected.
+REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+printf '%s' "$NEW_BODY" | gh api -X PATCH "repos/$REPO/pulls/<pr>" -F body=@-
 ```
 
 #### Takeaway evaluation

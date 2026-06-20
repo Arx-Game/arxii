@@ -53,15 +53,20 @@ fi
 # 3. Infer type from labels
 LABELS=$(jq -r '.labels[].name' <<<"$ISSUE_JSON")
 TYPE=""
-for candidate in feature fix chore refactor test docs perf; do
+for candidate in feature fix chore refactor test docs perf performance; do
   if grep -qx "$candidate" <<<"$LABELS"; then
     TYPE="$candidate"
     break
   fi
 done
+# Normalize label aliases to canonical branch-prefix types: the repo uses the
+# `performance` label, but the branch/type prefix convention is `perf`.
+if [[ "$TYPE" == "performance" ]]; then
+  TYPE="perf"
+fi
 if [[ -z "$TYPE" ]]; then
   echo "ERROR: issue #$ISSUE has no recognized type label" >&2
-  echo "(expected one of: feature, fix, chore, refactor, test, docs, perf)." >&2
+  echo "(expected one of: feature, fix, chore, refactor, test, docs, perf/performance)." >&2
   echo "Labels found: $LABELS" >&2
   exit 1
 fi
