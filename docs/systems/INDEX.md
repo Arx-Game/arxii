@@ -504,8 +504,8 @@ Roleplay session recording with participant tracking, interaction logging, perso
 - **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
   `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
   additional-target consent rows for the authenticated player's personas).
-- **Frontend:** `ConsentPrompt` polls both `GET /api/action-requests/?status=pending` and
-  `GET /api/action-targets/?status=pending` every 5 s and renders amber consent cards for
+- **Frontend:** `ConsentPrompt` polls both `GET /api/action-requests/?scene={id}&status=pending`
+  and `GET /api/action-targets/?scene={id}&status=pending` every 5 s and renders amber consent cards for
   each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`),
