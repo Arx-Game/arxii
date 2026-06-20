@@ -118,8 +118,11 @@ result is wired into `TargetFilters.excluded_persona_ids`.
 | `GET /api/consent/preferences/` | `SocialConsentPreferenceViewSet` | IsTenureOwner | Scoped to requesting player's tenures |
 | `GET /api/consent/preferences/for-tenure/<id>/` | `SocialConsentPreferenceViewSet.for_tenure` | IsTenureOwner | Returns preference or synthesized default |
 | `POST /api/consent/preferences/` | `SocialConsentPreferenceViewSet` | IsTenureOwner | Create preference for own tenure |
+| `PATCH /api/consent/preferences/<id>/` | `SocialConsentPreferenceViewSet` | IsTenureOwner | Update master switch / allow_social_actions |
 | `GET /api/consent/category-rules/` | `SocialConsentCategoryRuleViewSet` | IsTenureOwner | Scoped to requesting player's tenures |
 | `POST /api/consent/category-rules/` | `SocialConsentCategoryRuleViewSet` | IsTenureOwner | Set per-category mode |
+| `PATCH /api/consent/category-rules/<id>/` | `SocialConsentCategoryRuleViewSet` | IsTenureOwner | Update per-category consent mode |
+| `DELETE /api/consent/category-rules/<id>/` | `SocialConsentCategoryRuleViewSet` | IsTenureOwner | Remove per-category rule (reverts to default) |
 | `GET /api/consent/whitelist/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Scoped to owner_tenure's player |
 | `POST /api/consent/whitelist/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Add whitelist entry |
 | `DELETE /api/consent/whitelist/<id>/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Remove whitelist entry |
