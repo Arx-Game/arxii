@@ -22,6 +22,7 @@ from world.progression.models import (
     KudosSourceCategory,
     KudosTransaction,
     WeeklySkillUsage,
+    WeeklySocialEngagement,
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
@@ -228,6 +229,23 @@ _DEFAULT_BAND_WEIGHTS: dict[str, Decimal] = {
     "hard": Decimal("0.50"),
     "daunting": Decimal("0.25"),
 }
+
+
+class WeeklySocialEngagementFactory(factory_django.DjangoModelFactory):
+    """Factory for WeeklySocialEngagement."""
+
+    class Meta:
+        model = WeeklySocialEngagement
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    game_week = factory.LazyFunction(
+        lambda: __import__(
+            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+        ).get_current_game_week()
+    )
+    pending_points = Decimal(0)
+    distinct_initiators = 0
+    granted = False
 
 
 def seed_kudos_difficulty_weights() -> None:
