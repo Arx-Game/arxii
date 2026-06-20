@@ -29,7 +29,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `ROOM` removed; SANCTUM is the leveled room anchor, cap = sanctum level × 10,
     in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
-    `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
+    `Ritual` (`service_function_path` dispatches the ritual at fire time;
+    `draft_validator_path` — new CharField, blank — is called inside `draft_session`
+    before the session row is created, letting domain code gate who may initiate the
+    ritual without coupling magic to any specific domain),
+    `RitualComponentRequirement`, `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
     `ThreadSurvivabilityTuning` (per-`VitalBonusTarget` tuning row for the
@@ -144,7 +148,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
   mechanics (Property via Ritual site_property),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
-  flows (Ritual FLOW dispatch via FlowDefinition)
+  flows (Ritual FLOW dispatch via FlowDefinition),
+  covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
 - **API endpoints (Spec A §4.5):**
   - `GET/POST/DELETE /api/magic/threads/`,
     `GET /api/magic/threads/{id}/` — list/create/soft-retire owned threads;
@@ -955,6 +960,18 @@ These two axes are orthogonal — never re-merge them.
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
     `LastManagerRankError` if an op would leave zero active managers.
+  - **Induction draft gate (#1231):**
+    - `can_invite_to_covenant(covenant, *, character_sheet=None, account=None) -> bool`
+      — canonical predicate: True iff the character's active rank in that covenant
+      has `can_invite=True`. Accepts either a `character_sheet` or an `account` (resolves
+      the active sheet from the account's puppeted character). Returns False when the
+      character is not a member or holds no rank.
+    - `assert_initiator_can_induct(*, session: RitualSession) -> None`
+      — draft-time validator dispatched via `Ritual.draft_validator_path` from
+      `draft_session`. Reads the COVENANT `RitualSessionReference` from the session,
+      calls `can_invite_to_covenant`, and raises `NotAuthorizedToInviteError` when
+      the initiator's rank lacks `can_invite`. Wired on the Covenant Induction ritual
+      factory as `draft_validator_path = "world.covenants.services.assert_initiator_can_induct"`.
 - **Combat seams (#985, #1174):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
@@ -968,21 +985,31 @@ These two axes are orthogonal — never re-merge them.
   `CannotKickSelfError` (kick service);
   `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
   `CrossCovenantRankError`, `IncompleteRankReorderError`,
-  `CannotTransferToDepartedMemberError` (rank management, #1027)
+  `CannotTransferToDepartedMemberError` (rank management, #1027);
+  `NotAuthorizedToInviteError` (induction draft gate, #1231)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
     currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+    (includes `can_invite` bool for the "Induct New Member" CTA)
   - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
   - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
   - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
   - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
   - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
 - **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
-  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
-- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
-  mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
-  `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
+  `CanInviteToCovenant` (unattached seam — delegates to `can_invite_to_covenant` with
+  `account=`; NOT currently wired to any ViewSet; induction-draft authorization is
+  enforced by `assert_initiator_can_induct` via `Ritual.draft_validator_path`),
+  `CanManageCovenantRanks` (rank.can_manage_ranks)
+- **Frontend:** The covenant detail page's "Induct New Member" CTA is rendered only when
+  `viewer_capabilities.can_invite` is true (read from the first member row of the
+  `character-roles` endpoint). The induction `RitualSessionDraftDialog` sets the
+  COVENANT reference so `assert_initiator_can_induct` can validate rank at draft time.
+- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
+  `Ritual.draft_validator_path` for induction gate), mechanics (`covenant_role_bonus`
+  in modifier walk), items (`gear_archetype` on `ItemTemplate`),
+  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
 - **Source:** `src/world/covenants/`
 
 ### Relationships
