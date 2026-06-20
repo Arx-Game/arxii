@@ -24,10 +24,10 @@ from rest_framework.views import APIView
 
 from world.combat.constants import OpponentStatus
 from world.combat.models import ClashContribution, CombatRoundAction
+from world.combat.permissions import can_view_encounter_effects
 from world.scenes.action_serializers import PowerLedgerSerializer
 
 if TYPE_CHECKING:
-    from world.combat.models import CombatEncounter
     from world.magic.types.power_ledger import PowerLedger
 
 _ERR_NON_INTEGER_IDS = "action_interaction_ids must be comma-separated integers."
@@ -116,32 +116,6 @@ class OutcomeDetailSerializer(serializers.Serializer):
     strain_committed = serializers.IntegerField(allow_null=True, required=False)
     power = serializers.IntegerField(allow_null=True, required=False)
     progress_delta = serializers.IntegerField(allow_null=True, required=False)
-
-
-# ---------------------------------------------------------------------------
-# Permission helper
-# ---------------------------------------------------------------------------
-
-
-def _viewer_can_see(user: object, encounter: CombatEncounter) -> bool:
-    """Return True iff the user can view this encounter's effects.
-
-    Staff and the encounter's scene GM see everything. Encounter participants
-    (PCs in the fight) and scene participants (anyone in the scene) also see
-    effects. Other users see nothing — the view returns an empty effects list.
-    """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
-        return False
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
-        return True
-    if encounter.scene is not None and encounter.scene.is_gm(user):
-        return True
-    # Check participation by walking played_character_sheet_ids.
-    viewer_character_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
-    for participant in encounter.participants.all():
-        if participant.character_sheet.character_id in viewer_character_ids:
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +263,7 @@ def _build_outcome_detail(
         .first()
     )
     if action is not None:
-        if not _viewer_can_see(user, action.participant.encounter):
+        if not can_view_encounter_effects(user, action.participant.encounter):
             return ActionOutcomeDetail(
                 action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
             )
@@ -312,7 +286,7 @@ def _build_outcome_detail(
     )
     if contribution is not None:
         encounter = contribution.clash_round.clash.encounter
-        if not _viewer_can_see(user, encounter):
+        if not can_view_encounter_effects(user, encounter):
             return ActionOutcomeDetail(
                 action_interaction_id=action_interaction_id, effects=[], power_ledger=ledger
             )

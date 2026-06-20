@@ -78,6 +78,13 @@ export interface InteractionPersona {
   thumbnail_url?: string;
 }
 
+export interface EndorserBadge {
+  persona_id: number;
+  persona_name: string;
+  thumbnail_url: string;
+  resonance_id: number;
+}
+
 export interface InteractionReaction {
   emoji: string;
   count: number;
@@ -150,4 +157,12 @@ export interface Interaction {
   target_persona_ids: number[];
   /** ACTION Interactions linked to this POSE (populated only for POSE-mode rows). */
   action_links?: ActionLink[];
+  /** Classifies the pose for entry-endorsement filtering. Matches PoseKind TextChoices (lowercase wire format). */
+  pose_kind: 'standard' | 'entry' | 'departure';
+  endorsee_sheet_id: number | null;
+  endorsable_resonances: { id: number; name: string }[];
+  pose_endorsers: EndorserBadge[];
+  my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
+  entry_endorsers: EndorserBadge[];
+  entry_endorsed_by_me: boolean;
 }

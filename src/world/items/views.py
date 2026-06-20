@@ -546,7 +546,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         this view resolves the actor, enforces ownership, and maps
         ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
         surface does NOT accept a target — on-use effects apply to the holder
-        only. Targeted use belongs in the future use-item Action layer, which
+        only by design. Targeted use is handled by ``UseItemAction``, which
         carries proximity/prerequisite checks.
         """
         user = cast(AccountDB, request.user)

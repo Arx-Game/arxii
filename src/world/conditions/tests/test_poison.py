@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.test import TestCase, tag
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
@@ -96,6 +98,63 @@ class AcuteDotDamagesHealthTests(TestCase):
         self.assertEqual(self.vitals.health, 90)
 
 
+class ProcessRoundTickStageMultiplierTests(TestCase):
+    """Regression for #1117 — the staged DoT stage multiplier is applied exactly once.
+
+    ``effective_severity`` already folds in ``current_stage.severity_multiplier``, so a
+    severity-scaling staged DoT must NOT also multiply by the stage multiplier a second
+    time (that squared it: #230). The two paths are mutually exclusive (if/elif): the
+    severity path owns the multiplier via ``effective_severity``; the non-severity path
+    applies the raw stage multiplier itself.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.target = cls.sheet.character
+        cls.template = ConditionTemplateFactory(name="Staged-dot-1117")
+        # Stage-2 multiplier 2.00x; severity stays at the instance default of 1.
+        cls.stage = ConditionStageFactory(
+            condition=cls.template, stage_order=2, severity_multiplier=Decimal("2.00")
+        )
+
+    def _tick(self) -> int:
+        result = _process_round_tick(self.target, DamageTickTiming.END_OF_ROUND)
+        return sum(amt for _dt, amt in result.damage_dealt)
+
+    def test_severity_scaling_dot_applies_stage_multiplier_once(self):
+        """scales_with_severity=True: base 4 * effective_severity (1 * 2.00) = 8, not 16."""
+        ConditionDamageOverTimeFactory(
+            condition=self.template,
+            damage_type=DamageTypeFactory(name="staged-sev-true"),
+            base_damage=4,
+            tick_timing=DamageTickTiming.END_OF_ROUND,
+            is_long_term=False,
+            scales_with_severity=True,
+            scales_with_stacks=False,
+        )
+        ConditionInstanceFactory(
+            target=self.target, condition=self.template, current_stage=self.stage, severity=1
+        )
+        self.assertEqual(self._tick(), 8)
+
+    def test_non_severity_dot_applies_stage_multiplier_once(self):
+        """scales_with_severity=False: base 4 * stage multiplier 2.00 = 8 (applied once)."""
+        ConditionDamageOverTimeFactory(
+            condition=self.template,
+            damage_type=DamageTypeFactory(name="staged-sev-false"),
+            base_damage=4,
+            tick_timing=DamageTickTiming.END_OF_ROUND,
+            is_long_term=False,
+            scales_with_severity=False,
+            scales_with_stacks=False,
+        )
+        ConditionInstanceFactory(
+            target=self.target, condition=self.template, current_stage=self.stage, severity=1
+        )
+        self.assertEqual(self._tick(), 8)
+
+
 class EnsurePoisonContentTests(TestCase):
     def test_seeds_idempotently(self):
         from world.conditions.constants import (
@@ -192,12 +251,12 @@ class PoisonStagingScalesDotTests(TestCase):
 
         dmg1 = tick_damage(char1)
         dmg2 = tick_damage(char2)
-        # Staging scales the DoT: the higher stage deals strictly more damage. We assert the
-        # monotonic intent rather than an exact ratio because _process_round_tick composes the
-        # stage multiplier with effective_severity (which itself folds in the stage multiplier
-        # — preexisting #230 behavior), so a severity-scaling staged DoT does not scale by a
-        # clean 2x. The mechanic that matters here is "higher stage => more DoT".
-        self.assertGreater(dmg2, dmg1, "Stage 2 must compute more DoT than stage 1")
+        # Staging scales the DoT by exactly the stage multiplier, applied once (#1117).
+        # base_damage 4 * effective_severity (severity 1 * stage multiplier) * stacks 1:
+        # stage 1 (1.00x) => 4, stage 2 (2.00x) => 8 — a clean 2x, not the 4x that the
+        # double-applied stage multiplier (#230) produced before the fix.
+        self.assertEqual(dmg1, 4, "Stage 1 DoT = base 4 * 1.00x severity")
+        self.assertEqual(dmg2, 8, "Stage 2 DoT = base 4 * 2.00x severity (applied once)")
 
         # And the health loss through the real tick path reflects the staging.
         tick_round_for_targets([char1], timing="end")

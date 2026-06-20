@@ -203,7 +203,7 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
   model lineup.
 - **Survivability pipeline (world.vitals.services):** `process_damage_consequences()` is the system-agnostic entry point for damage consequences. Uses `perform_check` with scaled difficulty for knockout (below 20% health), death (at or below 0%), and permanent wound (hit > 50% max health) checks. Callable by combat, missions, traps, or any damage source
 - **DEAL_DAMAGE effect handler:** Connected — `ConsequenceEffect` with `EffectType.DEAL_DAMAGE` applies damage to CharacterVitals and triggers the survivability pipeline. Works for combat, missions, traps, and challenges
-- **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready, combo upgrade/revert, my_action, available_combos), and participation (join, flee). Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff, IsEncounterParticipant, IsInEncounterRoom
+- **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready, combo upgrade/revert, my_action, available_combos), and participation (join, flee). Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff, IsEncounterParticipant, IsInEncounterRoom. **Encounter list/retrieve read gate (#1041):** `CombatEncounterViewSet._filter_readable()` restricts list and retrieve to encounters whose scene is viewable by the caller (`Scene.objects.viewable_by(user)`) OR encounters the caller is actively fighting in (participant union via `participants__character_sheet__character_id`). Non-viewable encounters return 404. Staff bypass full queryset. Null-scene encounters are staff-only (deny-by-default). Effect/power-ledger details are separately gated by `combat.permissions.can_view_encounter_effects` (staff, scene GM, or encounter participant — stricter than scene visibility by design).
 - **Round pacing:** Timed mode (default, configurable minutes with auto-resolve), Ready mode (all players mark ready), Manual mode (GM triggers). Timer task runs every 30 seconds via game clock scheduler
 - **Participation:** PCs in the room can self-join active encounters. Flee resolves as a graded check at round resolution with authored tier difficulty, ally cover bonuses, and pool-routed failure consequences (#878)
 - **Tests:** 599 tests across combat, vitals, conditions, mechanics, checks, and covenants
@@ -836,11 +836,8 @@ tied to the combat subsystem.
   and dispatched via `ActionRef` with a `position_id` token — slots into the
   unified player-action interface shipped in Phase 7
 
-**Deferred to follow-up issues:**
+**Deferred to follow-up issues (still open):**
 
-- Cross-a-gated-edge-via-approach resolution (approach-resolver + Challenge spawn)
-- Dynamic-reshaping consequence `EffectType`s
-- Implicit aerial positions
 - Occupancy-screening reachability (crowded-position filtering)
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
 
@@ -886,6 +883,58 @@ GM terrain-blueprint authoring and non-combat scene positioning, building on Pha
   skips gating. Full gated-edge instantiation requires `instantiate_situation()` to mint
   `ChallengeInstance`s.
 
+### Positioning — Dynamic Reshaping, Aerial Layer, Gated Crossings (SHIPPED — #1018)
+
+Battlefield mutation via consequence effects, flight, chasms, and approach-based
+gated-edge crossing. Builds on the Phase-1 and Blueprint (#1017) positioning base.
+
+**Location:** `src/world/areas/positioning/` + `src/world/checks/constants.py` +
+`src/world/mechanics/effect_handlers.py` + `src/world/mechanics/factories.py`
+
+**What ships:**
+
+- **`Position.elevation_anchor`** (self-FK, null=floor/top-level) — links each AERIAL or
+  CHASM position to the ground node directly below it
+- **`PositionKind.CHASM`** — a below-ground region; entering one triggers `maybe_emit_fall`
+  which emits `EventName.FELL` into the reactive layer
+- **Aerial layer services:**
+  - `materialize_aerial_layer(room)` — idempotent: for each non-AERIAL position X, creates
+    `"Above X"` (AERIAL, `elevation_anchor=X`) with a vertical edge X↔Above X; mirrors every
+    ground horizontal edge as a passable, ungated aerial edge (flight bypasses all obstacles)
+  - `teardown_aerial_layer(room)` — delete all AERIAL positions (cascade edges + occupancy)
+    once no airborne occupants remain
+  - `enter_aerial(objectdb)` — materialize layer + move to AERIAL twin + set `"aerial"`
+    `ObjectProperty`
+  - `leave_aerial(objectdb)` — return to `elevation_anchor` ground position, clear property,
+    teardown layer when empty
+  - `maybe_emit_fall(objectdb, position)` — emit `EventName.FELL` when entering a CHASM;
+    returns `True` if emitted
+- **`"aerial"` Property seed** — `AerialPropertyFactory` in `world/mechanics/factories.py`
+  (get-or-create by name; doubles as seed and test factory)
+- **Dynamic-reshaping `EffectType`s** (dispatched via `apply_resolution`):
+  - `CREATE_POSITION` — carve a new position node and optionally connect + place occupant
+  - `MOVE_TO_POSITION` — force-move a target; destination resolved via `PositionDestination`
+  - `SEVER_EDGE` — disconnect a named edge (skips gracefully if absent)
+  - `CONNECT_EDGE` — connect two named positions (idempotent)
+  - `GRANT_FLIGHT` — call `enter_aerial` on the resolved target
+  - `REMOVE_FLIGHT` — call `leave_aerial` on the resolved target
+- **`PositionDestination`** enum (`world/checks/constants.py`): `ACTOR_POSITION` /
+  `GATING_FAR_SIDE` / `NAMED` — determines how `MOVE_TO_POSITION` locates its destination
+- **`ConsequenceEffect` positioning columns** — `position_name`, `position_name_b`,
+  `position_kind`, `position_description`, `position_destination`,
+  `position_connect_from_actor`, `position_place_occupant`
+- **Gated-edge crossing via approach:** `PERSONAL` resolution mode lets one character cross a
+  gated edge (the `ChallengeInstance` stays active for others); a `MOVE_TO_POSITION` /
+  `GATING_FAR_SIDE` consequence on the approach pool executes `force_move_to_position` to
+  the far side; gated edges surface as locked entries in the player's move list
+
+**Deferred to follow-up (#520 + reactive-layer):**
+
+- Reactive fall consumer: `EventName.FELL` seam is open; the capability-based catch
+  (fly/teleport/acrobatics interrupt) and AFK-safe multi-round plummet down the
+  `elevation_anchor` chain with impact consequences await the round/turn framework (#520)
+- Anti-air "blocks-flight" gate flag: a future `PositionEdge` flag preventing flight over
+  certain edges
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management

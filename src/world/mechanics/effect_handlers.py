@@ -18,6 +18,7 @@ from world.vitals.services import process_damage_consequences
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence, ConsequenceEffect
     from world.checks.types import ResolutionContext
@@ -26,6 +27,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SKIP_ATTACK = "Attack system not yet implemented."
+
+# Role constants for _resolve_position — discriminate named-lookup variants.
+_ROLE_DESTINATION = "destination"
+_ROLE_NAMED = "named"
+_ROLE_NAMED_B = "named_b"
 
 
 def apply_effect(
@@ -495,6 +501,181 @@ def _apply_capture(
     )
 
 
+def _gating_far_side(
+    effect: "ConsequenceEffect",  # noqa: ARG001
+    context: "ResolutionContext",
+) -> "Position | None":
+    """Return the far side of the gating edge the actor is currently crossing.
+
+    Reads context.challenge_instance; finds the edge whose gating_challenge
+    is that instance; returns the endpoint that is NOT the actor's current
+    position. Returns None if context has no challenge_instance, the actor
+    has no position, or no matching edge is found.
+    """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+
+    if context.challenge_instance is None:
+        return None
+    actor_pos = position_of(context.character)
+    if actor_pos is None:
+        return None
+    edges = context.challenge_instance.gated_position_edges.select_related(
+        "position_a", "position_b"
+    )
+    for edge in edges:
+        if edge.position_a_id == actor_pos.pk:
+            return edge.position_b
+        if edge.position_b_id == actor_pos.pk:
+            return edge.position_a
+    return None
+
+
+def _resolve_position(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+    *,
+    role: str,
+) -> "Position | None":
+    """Resolve a Position within the actor's room for a positioning effect.
+
+    role="destination" uses effect.position_destination; role="named" looks up
+    effect.position_name by name in the room; role="named_b" uses position_name_b.
+    Returns None when unresolved (handler skips).
+    """
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.checks.constants import PositionDestination  # noqa: PLC0415
+
+    room = context.location
+    if role == _ROLE_NAMED:
+        return Position.objects.filter(room=room, name=effect.position_name).first()
+    if role == _ROLE_NAMED_B:
+        return Position.objects.filter(room=room, name=effect.position_name_b).first()
+    # destination role — dispatch on PositionDestination value
+    dest = effect.position_destination
+    if dest == PositionDestination.ACTOR_POSITION:
+        return position_of(context.character)
+    if dest == PositionDestination.NAMED:
+        return Position.objects.filter(room=room, name=effect.position_name).first()
+    if dest == PositionDestination.GATING_FAR_SIDE:
+        return _gating_far_side(effect, context)
+    return None
+
+
+def _create_position(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Create a new Position in the actor's room and optionally connect/place occupant."""
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        connect_positions,
+        create_position,
+        force_move_to_position,
+        maybe_emit_fall,
+        position_of,
+    )
+
+    room = context.location
+    kind = effect.position_kind or PositionKind.FEATURE
+    new_pos = create_position(
+        room,
+        effect.position_name,
+        kind=kind,
+        description=effect.position_description,
+    )
+    actor_pos = position_of(context.character)
+    if effect.position_connect_from_actor and actor_pos is not None:
+        connect_positions(actor_pos, new_pos)
+    if effect.position_place_occupant:
+        occupant = _resolve_target(effect, context)
+        force_move_to_position(occupant, new_pos)
+        maybe_emit_fall(occupant, new_pos)
+    return AppliedEffect(
+        effect_type=EffectType.CREATE_POSITION,
+        description=f"Created position {new_pos.name} in {room.db_key}",
+        applied=True,
+        created_instance=new_pos,
+    )
+
+
+def _sever_edge(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Remove the edge between two named positions in the actor's room."""
+    from world.areas.positioning.services import disconnect_positions, edge_between  # noqa: PLC0415
+
+    a = _resolve_position(effect, context, role=_ROLE_NAMED)
+    b = _resolve_position(effect, context, role=_ROLE_NAMED_B)
+    if a is None or b is None or edge_between(a, b) is None:
+        return AppliedEffect(
+            effect_type=EffectType.SEVER_EDGE,
+            description="No edge to sever",
+            applied=False,
+            skip_reason="Endpoints/edge not found",
+        )
+    disconnect_positions(a, b)
+    return AppliedEffect(
+        effect_type=EffectType.SEVER_EDGE,
+        description=f"Severed edge {a.name}<->{b.name}",
+        applied=True,
+    )
+
+
+def _connect_edge(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Create an edge between two named positions in the actor's room (idempotent)."""
+    from world.areas.positioning.services import connect_positions, edge_between  # noqa: PLC0415
+
+    a = _resolve_position(effect, context, role=_ROLE_NAMED)
+    b = _resolve_position(effect, context, role=_ROLE_NAMED_B)
+    if a is None or b is None:
+        return AppliedEffect(
+            effect_type=EffectType.CONNECT_EDGE,
+            description="Endpoints not found",
+            applied=False,
+            skip_reason="Named endpoints not found",
+        )
+    if edge_between(a, b) is None:
+        connect_positions(a, b)
+    return AppliedEffect(
+        effect_type=EffectType.CONNECT_EDGE,
+        description=f"Connected {a.name}<->{b.name}",
+        applied=True,
+    )
+
+
+def _move_to_position(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Move the resolved target to the destination position."""
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        force_move_to_position,
+        maybe_emit_fall,
+    )
+
+    target = _resolve_target(effect, context)
+    destination = _resolve_position(effect, context, role=_ROLE_DESTINATION)
+    if destination is None:
+        return AppliedEffect(
+            effect_type=EffectType.MOVE_TO_POSITION,
+            description="No destination resolved",
+            applied=False,
+            skip_reason="Destination position could not be resolved",
+        )
+    force_move_to_position(target, destination)
+    maybe_emit_fall(target, destination)
+    return AppliedEffect(
+        effect_type=EffectType.MOVE_TO_POSITION,
+        description=f"Moved {target.db_key} to {destination.name}",
+        applied=True,
+    )
+
+
 def _setup_rescue_discovery(captivity: object, setup: object) -> None:
     """Stamp the rescue mission on the captivity and plant its discovery clue (#931).
 
@@ -568,6 +749,38 @@ def _apply_escape_captivity(
     )
 
 
+def _grant_flight(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Move the resolved target to the aerial layer above their current position."""
+    from world.areas.positioning.services import enter_aerial  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    enter_aerial(target)
+    return AppliedEffect(
+        effect_type=EffectType.GRANT_FLIGHT,
+        description=f"{target.db_key} took to the air",
+        applied=True,
+    )
+
+
+def _remove_flight(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Return the resolved target from the aerial layer back to the ground."""
+    from world.areas.positioning.services import leave_aerial  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    leave_aerial(target)
+    return AppliedEffect(
+        effect_type=EffectType.REMOVE_FLIGHT,
+        description=f"{target.db_key} returned to the ground",
+        applied=True,
+    )
+
+
 def _apply_rescue_captive(
     _effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -626,4 +839,10 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.CAPTURE: _apply_capture,
     EffectType.ESCAPE_CAPTIVITY: _apply_escape_captivity,
     EffectType.RESCUE_CAPTIVE: _apply_rescue_captive,
+    EffectType.CREATE_POSITION: _create_position,
+    EffectType.MOVE_TO_POSITION: _move_to_position,
+    EffectType.SEVER_EDGE: _sever_edge,
+    EffectType.CONNECT_EDGE: _connect_edge,
+    EffectType.GRANT_FLIGHT: _grant_flight,
+    EffectType.REMOVE_FLIGHT: _remove_flight,
 }

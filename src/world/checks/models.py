@@ -5,7 +5,8 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.checks.constants import EffectTarget, EffectType
+from world.areas.positioning.constants import PositionKind
+from world.checks.constants import EffectTarget, EffectType, PositionDestination
 
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
@@ -312,6 +313,20 @@ class ConsequenceEffect(SharedMemoryModel):
         help_text="Override Search difficulty to spot the rescue clue. Unset = config default.",
     )
 
+    # Positioning / reshaping effects (#1018). Resolved contextually within the
+    # actor's room at apply time; no FK to a per-room runtime Position.
+    position_name = models.CharField(max_length=50, blank=True, default="")
+    position_name_b = models.CharField(max_length=50, blank=True, default="")
+    position_kind = models.CharField(
+        max_length=20, choices=PositionKind.choices, blank=True, default=""
+    )
+    position_description = models.TextField(blank=True, default="")
+    position_destination = models.CharField(
+        max_length=20, choices=PositionDestination.choices, blank=True, default=""
+    )
+    position_connect_from_actor = models.BooleanField(default=True)
+    position_place_occupant = models.BooleanField(default=False)
+
     class Meta:
         ordering = ["execution_order"]
 
@@ -332,6 +347,15 @@ class ConsequenceEffect(SharedMemoryModel):
         EffectType.LAUNCH_FLOW: [("flow_definition", "flow_definition_id")],
         EffectType.GRANT_CODEX: [("codex_entry", "codex_entry_id")],
         EffectType.MAGICAL_SCARS: [("condition_template", "condition_template_id")],
+        EffectType.CREATE_POSITION: [("position_name", "position_name")],
+        EffectType.SEVER_EDGE: [
+            ("position_name", "position_name"),
+            ("position_name_b", "position_name_b"),
+        ],
+        EffectType.CONNECT_EDGE: [
+            ("position_name", "position_name"),
+            ("position_name_b", "position_name_b"),
+        ],
     }
 
     def clean(self) -> None:
@@ -342,6 +366,8 @@ class ConsequenceEffect(SharedMemoryModel):
             self._validate_legend_award_fields(errors)
         else:
             self._validate_non_legend_award_fields(errors)
+        if self.effect_type == EffectType.MOVE_TO_POSITION:
+            self._validate_move_to_position_fields(errors)
 
         if errors:
             raise ValidationError(errors)
@@ -373,3 +399,11 @@ class ConsequenceEffect(SharedMemoryModel):
         if self.legend_description_template:
             msg = "legend_description_template must be blank for non-LEGEND_AWARD effects"
             errors["legend_description_template"] = msg
+
+    def _validate_move_to_position_fields(self, errors: dict[str, str]) -> None:
+        """Populate *errors* for MOVE_TO_POSITION-specific required fields."""
+        if not self.position_destination:
+            errors["position_destination"] = "position_destination is required for MOVE_TO_POSITION"
+            return
+        if self.position_destination == PositionDestination.NAMED and not self.position_name:
+            errors["position_name"] = "position_name is required when destination is NAMED"

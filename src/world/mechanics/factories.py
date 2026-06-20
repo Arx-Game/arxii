@@ -184,6 +184,17 @@ class PropertyFactory(DjangoModelFactory):
     category = factory.SubFactory(PropertyCategoryFactory)
 
 
+class AerialPropertyFactory(PropertyFactory):
+    """Named factory for the 'aerial' property tag.
+
+    Marks an object as currently airborne (navigating the aerial layer).
+    ``django_get_or_create = ("name",)`` is inherited; repeated calls return the same row.
+    """
+
+    name = "aerial"
+    description = "Marks an object as currently navigating the aerial layer."
+
+
 class BlocksAnimaRegenPropertyFactory(PropertyFactory):
     """Named factory for the 'blocks_anima_regen' property tag.
 

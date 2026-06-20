@@ -46,6 +46,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
     tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
     `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
+  - **Spec C Resonance Gain (endorsements + audit — #1138):** `ResonanceGainConfig`
+    (singleton pk=1 tuning surface), `PoseEndorsement` (weekly deferred; `endorser_sheet`
+    FK, `resonance` FK (PROTECT), `persona_snapshot` FK to `scenes.Persona` (SET_NULL),
+    unique `(endorser_sheet, interaction)`), `SceneEntryEndorsement` (immediate flat
+    grant; same FK shape, unique `(endorser_sheet, endorsee_sheet, scene)`),
+    `ResonanceGrant` (universal audit ledger — discriminator `source` + typed source FKs).
+    Read surface: `InteractionListSerializer` now nests `pose_kind`, `endorsee_sheet_id`,
+    `endorsable_resonances`, `pose_endorsers`/`my_pose_endorsement`,
+    `entry_endorsers`/`entry_endorsed_by_me` on every `GET /api/interactions/?scene=<id>`
+    row. Frontend: `EndorsementControl` in `PoseUnit` (`frontend/src/scenes/components/`).
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -120,6 +130,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
+  - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
+  - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
+  - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
@@ -231,12 +244,14 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
-### Positioning (#530 + #1017)
+### Positioning (#530 + #1017 + #1018)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
-occupancy, capability-gated movement, GM terrain blueprints, and non-combat scene
-positioning UI.
+occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
+positioning UI, and dynamic battlefield reshaping (aerial layer, chasms, consequence
+effects for graph mutation and flight).
 
-- **Models:** `Position` (`PositionKind` discriminator), `PositionEdge` (optional
+- **Models:** `Position` (`PositionKind` discriminator; `elevation_anchor` self-FK —
+  the ground node an AERIAL or CHASM node is anchored to), `PositionEdge` (optional
   `gating_challenge` FK + `is_passable`), `ObjectPosition` (OneToOne occupancy);
   **abstract bases** `PositionNodeBase` / `PositionEdgeBase` shared by live and blueprint
   layers; **blueprint models** `PositionBlueprint` (reusable GM-authored layout),
@@ -248,7 +263,15 @@ positioning UI.
   `force_move_to_position` / `position_of` / `reachable_positions` /
   `adjacent_open_positions`; **blueprint authoring** `create_blueprint` /
   `add_blueprint_position` / `connect_blueprint_positions` / `remove_blueprint`;
-  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`
+  **staging** `instantiate_blueprint(blueprint, room, *, replace=False)`;
+  **aerial layer** `materialize_aerial_layer(room)` / `teardown_aerial_layer(room)` /
+  `enter_aerial(objectdb)` / `leave_aerial(objectdb)`;
+  **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
+- **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
+  `PositionDestination` in `world/checks/constants.py`
+  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED) — governs `MOVE_TO_POSITION` effect destination
+- **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
+  factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
@@ -258,10 +281,14 @@ positioning UI.
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
   `RoomPositionsPanel` (scene detail, in `frontend/src/scenes/components/`)
-- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
+- **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
+  aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
+- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service);
+  reactive fall consumer (catch/plummet tied to #520)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
-  mechanics (Challenge/gating), actions (`MoveToPositionAction` / `SetTheStageAction`)
+  mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
+  flows (`EventName.FELL` reactive seam),
+  actions (`MoveToPositionAction` / `SetTheStageAction`)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
@@ -419,9 +446,17 @@ Roleplay session recording with participant tracking and message logging.
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
 - **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
 - **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Read-visibility surface (canonical):**
+  - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
+    anonymous=public. Use in `get_queryset()` / filter chains.
+  - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
+    `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
+    encounter read gate all consume these two forms.
 - **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
 - **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
-- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check), flows (auto-logging via message_location)
+- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
+  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories
@@ -686,7 +721,14 @@ Unified modifier system — categories, types, sources, and per-character modifi
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Equipment
   bonuses flow through `passive_facet_bonuses` + `covenant_role_bonus` (called inline
   by `get_modifier_total`, not stored as `CharacterModifier` rows).
-- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
+- **EffectType values** (`world/checks/constants.py` — dispatched by `world/mechanics/effect_handlers.py`):
+  - Pre-#1018: `APPLY_CONDITION`, `REMOVE_CONDITION`, `ADD_PROPERTY`, `REMOVE_PROPERTY`,
+    `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,
+    `LEGEND_AWARD`, `CAPTURE`, `ESCAPE_CAPTIVITY`, `RESCUE_CAPTIVE`
+  - Added in #1018: `CREATE_POSITION`, `MOVE_TO_POSITION`, `SEVER_EDGE`,
+    `CONNECT_EDGE`, `GRANT_FLIGHT`, `REMOVE_FLIGHT`
+- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
+  action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 
@@ -710,6 +752,9 @@ crafting framework and check-driven facet/style attachment.
     the old `FacetCraftingConfig` singleton.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
+  — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
+  by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
@@ -763,12 +808,18 @@ crafting framework and check-driven facet/style attachment.
     at 0 charges
   - `is_lore_critical` — True if the item must never be auto-purged: `lore_value != 0`,
     OR has facets, OR has GIVEN/STOLEN/TRANSFERRED provenance
-- **Usable vs consumable:** an item is *usable* iff `template.on_use_pool_id is not None`.
+- **Usable vs consumable:** `ItemTemplate.is_usable` (= `on_use_pool_id is not None`) is the
+  canonical predicate; `use_item`, `ItemUsablePrerequisite`, and the serializer all delegate to it.
   *Consumable* is the subset where `template.is_consumable` is True; consumables spend a charge
   per use and are destroyed at 0 charges. Non-consumable usable items are reusable.
 - **Serializer field `is_usable`:** `ItemInstanceReadSerializer` exposes `is_usable` (bool,
   `SerializerMethodField`) — `True` iff `template.on_use_pool_id is not None`. Clients gate the
   Use button on this field.
+- **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
+  point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
+  instance), optional `target` (validated by `OnUseTargetPrerequisite` against
+  `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
+  Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `StyleAlreadyAttached`,
   `StyleCapacityExceeded`, `SlotConflict`, `SlotIncompatible`, `ItemNotUsable`,
   `NoChargesRemaining`, `CraftingNotConfigured`, `CraftingCostUnaffordable` — all in
@@ -809,20 +860,30 @@ crafting framework and check-driven facet/style attachment.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles and gear compatibility. Spec D PR1 shipped
-the role-assignment and gear-compatibility data layer; #985 wired the per-role bonus
-authoring model and the combat seams that consume it.
+Magically-empowered group oaths with roles, gear compatibility, and a per-covenant
+rank ladder. Spec D PR1 shipped the role-assignment and gear-compatibility data
+layer; #985 wired per-role bonus authoring and the combat seams; #1027 added
+`CovenantRank` (administrative authority, orthogonal to `CovenantRole` power).
+
+**Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
+Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
+These two axes are orthogonal — never re-merge them.
 
 - **Models:**
-  - `CharacterCovenantRole` — per-character record of a covenant role assignment;
-    `left_at IS NULL` = currently active (Spec D §4.4)
+  - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
+    currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
+    boolean, `rank` FK → `CovenantRank` (added #1027).
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
-  - `CovenantRoleBonus` (NEW #985) — authored config: one row per
+  - `CovenantRoleBonus` (#985) — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
-    `char_level × bonus_per_level`; no row → 0. Admin-registered. Default
-    authoring empty → no live numeric effect until staff author rows.
+    `char_level × bonus_per_level`; no row → 0. Admin-registered.
+  - `CovenantRank` (#1027) — per-covenant administrative authority tier.
+    Fields: `covenant` FK (CASCADE, `related_name="ranks"`), `name` (max 60,
+    player-chosen), `tier` (PositiveInt; 1 = top authority), `description`,
+    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
+    `(covenant, tier)` and `(covenant, name)`. Ordered by `["covenant", "tier"]`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
     `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
@@ -830,22 +891,40 @@ authoring model and the combat seams that consume it.
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
+  - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
+    and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
+    `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
   - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
     `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
     `char_level × bonus_per_level`; 0 if no row (#985)
+  - **Rank management (#1027)** — all require `actor.rank.can_manage_ranks=True`:
+    `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
+    `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
+    `LastManagerRankError` if an op would leave zero active managers.
 - **Combat seams (#985):** `apply_equipped_armor_soak` adds
   `_covenant_armor_soak_bonus` (armor-soak `ModifierTarget` total) on top of raw
   soak; `_weapon_augmented_budget` adds `_combat_target_bonus(sheet,
   WEAPON_DAMAGE_TARGET_NAME)` to technique budget. Both route through
   `get_modifier_total` → `covenant_role_bonus` equipment walk.
-- **Exceptions:** `CovenantRoleNeverHeldError` (raised by `weave_thread` when
-  `target_kind=COVENANT_ROLE` and character never held the role) — in
-  `world.covenants.exceptions`
+- **Exceptions:** `world.covenants.exceptions` —
+  `CovenantRoleNeverHeldError` (Thread weave gate);
+  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
+  `CannotKickSelfError` (kick service);
+  `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
+  `CrossCovenantRankError`, `IncompleteRankReorderError`,
+  `CannotTransferToDepartedMemberError` (rank management, #1027)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
-    currently-played sheets
+    currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+  - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
+  - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
+  - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
+  - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
+  - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
+- **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
+  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
   mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
   `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
@@ -871,10 +950,11 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`
-- **Pattern:** `action.run(actor, **kwargs)` → checks prerequisites → executes → returns `ActionResult`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `ActionEnhancement` model, `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Source:** `src/actions/`
 
 ### Flows
@@ -933,6 +1013,21 @@ Extensions to Evennia models for additional data storage.
 - **Integrates with:** accounts, characters, Evennia core
 - **Source:** `src/evennia_extensions/`
 - **Details:** [evennia_extensions.md](evennia_extensions.md)
+
+### Dev Seed Orchestrator
+Production-callable seed layer for populating sane defaults on a fresh dev install.
+
+- **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name (`"magic"`, `"items"`, `"combat"`, `"checks"`). Add a new cluster by appending an entry here.
+- **Surfaces:**
+  - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
+  - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message.
+- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220).
+- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (`seed_check_resolution_tables()` — the natively-owned checks cluster), `types.py` (`SeedReport` dataclass).
+- **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression.
+- **Source:** `src/world/seeds/`
+- **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
+
 ---
 
 ## Frontend

@@ -1,7 +1,9 @@
 # Covenants Slice D — Covenant Legend, Story Integration, Sub-roles
 
 **Date:** 2026-05-12
-**Status:** Draft (post-brainstorm; awaiting spec review)
+**Status:** SHIPPED. This document records the Slice D design. See
+`docs/roadmap/covenants.md` for the current state of the codebase including
+subsequent additions (rank ladder #1027).
 **Branch:** `covenants-slice-d-progression`
 **Related:**
 - `docs/roadmap/covenants.md` — domain roadmap; Slice D owns covenant Legend, Story integration, and sub-role authoring per the slice decomposition

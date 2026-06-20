@@ -4044,7 +4044,8 @@ paths:
     post:
       operationId: covenants_character_roles_kick_create
       description: |-
-        POST /api/covenants/character-roles/{id}/kick/ — a leader removes a non-leader.
+        POST /api/covenants/character-roles/{id}/kick/ — remove a member with lower rank
+        authority (rank tier precedence: actor.rank.tier < target.rank.tier).
 
         The target may be outside the requester's own-scoped get_queryset, so fetch it
         via the full manager and run object permissions explicitly rather than get_object().
@@ -4360,6 +4361,254 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CovenantLevelThreshold'
+          description: ''
+  /api/covenants/ranks/:
+    get:
+      operationId: covenants_ranks_list
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCovenantRankList'
+          description: ''
+    post:
+      operationId: covenants_ranks_create
+      description: POST /api/covenants/ranks/ — create a new rank via the service.
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+  /api/covenants/ranks/{id}/:
+    get:
+      operationId: covenants_ranks_retrieve
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    put:
+      operationId: covenants_ranks_update
+      description: PUT/PATCH — rename and/or set capability flags via service functions.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CovenantRankRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    patch:
+      operationId: covenants_ranks_partial_update
+      description: |-
+        ViewSet for CovenantRank (the per-covenant administrative authority ladder).
+
+        Reads: any active covenant member.
+        Writes (create/update/partial_update/destroy): requires CanManageCovenantRanks
+        (requester's active membership must have rank.can_manage_ranks=True).
+
+        All rank management operations route through the Task 5 service functions
+        (create_rank, rename_rank, set_rank_capabilities, reorder_ranks, delete_rank).
+        No business logic lives in the view.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCovenantRankRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+    delete:
+      operationId: covenants_ranks_destroy
+      description: DELETE — requires reassign_to in body; routes through delete_rank
+        service.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/covenants/ranks/{id}/assign-member/:
+    post:
+      operationId: covenants_ranks_assign_member_create
+      description: |-
+        POST /api/covenants/ranks/{pk}/assign-member/
+
+        Body: { "membership": <pk> }
+        Assigns the given membership to this rank — requires can_manage_ranks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignMemberRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterCovenantRole'
+          description: ''
+  /api/covenants/ranks/{id}/transfer-top/:
+    post:
+      operationId: covenants_ranks_transfer_top_create
+      description: |-
+        POST /api/covenants/ranks/{pk}/transfer-top/
+
+        Body: { "new_top_membership": <pk> }
+        Transfer the top rank (this rank) from the actor to the given membership.
+        Requires can_manage_ranks.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferTopRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CovenantRank'
+          description: ''
+  /api/covenants/ranks/reorder/:
+    post:
+      operationId: covenants_ranks_reorder_create
+      description: |-
+        POST /api/covenants/ranks/reorder/
+
+        Body: { "covenant": <pk>, "ordered_rank_ids": [<pk>, ...] }
+        Reorders the covenant's ranks — requires can_manage_ranks.
+      tags:
+      - covenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRanksRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CovenantRank'
           description: ''
   /api/covenants/rites/:
     get:
@@ -8290,7 +8539,7 @@ paths:
         this view resolves the actor, enforces ownership, and maps
         ``ItemError`` to HTTP 400 (mirroring the facet write path). The REST
         surface does NOT accept a target — on-use effects apply to the holder
-        only. Targeted use belongs in the future use-item Action layer, which
+        only by design. Targeted use is handled by ``UseItemAction``, which
         carries proximity/prerequisite checks.
       parameters:
       - in: path
@@ -21693,6 +21942,15 @@ components:
       required:
       - id
       - name
+    AssignMemberRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/{pk}/assign-member/.
+      properties:
+        membership:
+          type: integer
+          description: PK of the CharacterCovenantRole to assign to this rank.
+      required:
+      - membership
     AssistantGMClaim:
       type: object
       description: Read-only serializer for AssistantGMClaim records.
@@ -23240,7 +23498,12 @@ components:
       - name
     CharacterCovenantRole:
       type: object
-      description: Read-only serializer for a character's covenant role assignment.
+      description: |-
+        Read-only serializer for a character's covenant role assignment.
+
+        Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
+        block showing the requesting user's own active membership capabilities in
+        the same covenant (or all-False if the viewer has no active membership).
       properties:
         id:
           type: integer
@@ -23255,6 +23518,10 @@ components:
         covenant_role:
           allOf:
           - $ref: '#/components/schemas/CovenantRole'
+          readOnly: true
+        rank:
+          allOf:
+          - $ref: '#/components/schemas/CovenantRankNested'
           readOnly: true
         engaged:
           type: boolean
@@ -23283,6 +23550,10 @@ components:
           type: string
           nullable: true
           readOnly: true
+        viewer_capabilities:
+          allOf:
+          - $ref: '#/components/schemas/ViewerCapabilities'
+          readOnly: true
       required:
       - can_engage
       - character_sheet
@@ -23294,6 +23565,8 @@ components:
       - is_active
       - joined_at
       - left_at
+      - rank
+      - viewer_capabilities
     CharacterDraft:
       type: object
       description: Serializer for character drafts.
@@ -24884,6 +25157,100 @@ components:
       required:
       - level
       - required_legend
+    CovenantRank:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        covenant:
+          type: integer
+        name:
+          type: string
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
+      required:
+      - covenant
+      - id
+      - name
+      - tier
+    CovenantRankNested:
+      type: object
+      description: |-
+        Minimal nested representation of a CovenantRank (id, name, tier) for embedding
+        inside CharacterCovenantRoleSerializer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Player-chosen tier name, e.g. 'Magister'.
+        tier:
+          type: integer
+          readOnly: true
+          description: Precedence; lower = higher authority (1 = top).
+      required:
+      - id
+      - name
+      - tier
+    CovenantRankRequest:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        covenant:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
+      required:
+      - covenant
+      - name
+      - tier
     CovenantRite:
       type: object
       description: Read-only serializer for CovenantRite authored definitions.
@@ -24988,11 +25355,6 @@ components:
           type: integer
           readOnly: true
           description: Combat resolution order. Lower is faster (1 = fastest).
-        is_leadership:
-          type: boolean
-          readOnly: true
-          description: 'Staff-authored. Members holding a leadership role may kick
-            non-leader members. Leaders cannot kick other leaders. See issue #519.'
         description:
           type: string
           readOnly: true
@@ -25010,7 +25372,6 @@ components:
       - covenant_type_display
       - description
       - id
-      - is_leadership
       - name
       - parent_role
       - slug
@@ -28867,6 +29228,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
+        endorsee_sheet_id:
+          type: integer
+          readOnly: true
         is_favorited:
           type: boolean
           readOnly: true
@@ -28918,6 +29291,57 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        endorsable_resonances:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of resonances claimed by the endorsee (pose author).
+
+            Reads from the prefetched ``persona__character_sheet__resonances``
+            path (set up in ``interaction_views.get_queryset``) via the
+            ``cached_resonances`` to_attr. Falls back to a live query if the attr
+            is absent (e.g. serializer used outside the view's queryset pipeline).
+          readOnly: true
+        pose_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who endorsed this pose, with persona info.
+
+            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+            view queryset). Each endorser's primary persona is pre-loaded via
+            ``cached_primary_persona`` (another nested Prefetch).
+          readOnly: true
+        my_pose_endorsement:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the viewer's own endorsement for this pose, or None.
+
+            Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+            each cached endorsement's ``endorser_sheet_id``.
+          readOnly: true
+        entry_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who gave this character a scene-entry endorsement.
+
+            Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+            context (populated by the view's ``get_serializer_context``).
+          readOnly: true
+        entry_endorsed_by_me:
+          type: boolean
+          description: True when the viewer has given this character a scene-entry
+            endorsement.
+          readOnly: true
         receivers:
           type: array
           items:
@@ -28926,10 +29350,16 @@ components:
       required:
       - action_links
       - content
+      - endorsable_resonances
+      - endorsee_sheet_id
+      - entry_endorsed_by_me
+      - entry_endorsers
       - id
       - is_favorited
+      - my_pose_endorsement
       - persona
       - place_name
+      - pose_endorsers
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -29019,6 +29449,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
+        endorsee_sheet_id:
+          type: integer
+          readOnly: true
         is_favorited:
           type: boolean
           readOnly: true
@@ -29070,13 +29512,70 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        endorsable_resonances:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of resonances claimed by the endorsee (pose author).
+
+            Reads from the prefetched ``persona__character_sheet__resonances``
+            path (set up in ``interaction_views.get_queryset``) via the
+            ``cached_resonances`` to_attr. Falls back to a live query if the attr
+            is absent (e.g. serializer used outside the view's queryset pipeline).
+          readOnly: true
+        pose_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who endorsed this pose, with persona info.
+
+            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+            view queryset). Each endorser's primary persona is pre-loaded via
+            ``cached_primary_persona`` (another nested Prefetch).
+          readOnly: true
+        my_pose_endorsement:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Return the viewer's own endorsement for this pose, or None.
+
+            Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+            each cached endorsement's ``endorser_sheet_id``.
+          readOnly: true
+        entry_endorsers:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            List of peers who gave this character a scene-entry endorsement.
+
+            Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+            context (populated by the view's ``get_serializer_context``).
+          readOnly: true
+        entry_endorsed_by_me:
+          type: boolean
+          description: True when the viewer has given this character a scene-entry
+            endorsement.
+          readOnly: true
       required:
       - action_links
       - content
+      - endorsable_resonances
+      - endorsee_sheet_id
+      - entry_endorsed_by_me
+      - entry_endorsers
       - id
       - is_favorited
+      - my_pose_endorsement
       - persona
       - place_name
+      - pose_endorsers
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -29119,6 +29618,15 @@ components:
 
             * `default` - Default
             * `very_private` - Very Private
+        pose_kind:
+          allOf:
+          - $ref: '#/components/schemas/PoseKindEnum'
+          description: |-
+            Classifies the pose as standard, entry, or departure. Set by the +enter command (future) or scene-entry hook. Spec C reads ENTRY to filter scene-entry-endorsement targets.
+
+            * `standard` - Standard
+            * `entry` - Entry
+            * `departure` - Departure
       required:
       - content
     InteractionOffer:
@@ -29337,7 +29845,7 @@ components:
           type: boolean
           description: |-
             True iff use_item would proceed: the template has an on-use pool.
-            Mirrors the precondition in services.usage.use_item.
+            Delegates to the canonical ``ItemTemplate.is_usable`` predicate.
           readOnly: true
         contained_in:
           type: integer
@@ -32344,6 +32852,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Covenant'
+    PaginatedCovenantRankList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CovenantRank'
     PaginatedCovenantRiteList:
       type: object
       required:
@@ -34792,6 +35323,37 @@ components:
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
+    PatchedCovenantRankRequest:
+      type: object
+      description: |-
+        Serializer for CovenantRank (the per-covenant authority ladder).
+
+        Read: exposes all rank fields.
+        Write: validates tier uniqueness per covenant and capability flags.
+      properties:
+        covenant:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          description: Player-chosen tier name, e.g. 'Magister'.
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Precedence; lower = higher authority (1 = top).
+        description:
+          type: string
+          description: Optional flavor/ceremony text.
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+          description: May remove members of a strictly lower tier.
+        can_manage_ranks:
+          type: boolean
+          description: May edit the ladder and assign members.
     PatchedEncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.
@@ -37327,6 +37889,16 @@ components:
       required:
       - interaction
       - resonance
+    PoseKindEnum:
+      enum:
+      - standard
+      - entry
+      - departure
+      type: string
+      description: |-
+        * `standard` - Standard
+        * `entry` - Entry
+        * `departure` - Departure
     PositionAdjacencyItem:
       type: object
       description: |-
@@ -38037,6 +38609,22 @@ components:
       - persona_name
       - visible_deeds
       - visible_reputation
+    ReorderRanksRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/reorder/.
+      properties:
+        covenant:
+          type: integer
+          description: PK of the Covenant whose rank ladder is being reordered.
+        ordered_rank_ids:
+          type: array
+          items:
+            type: integer
+          description: All rank PKs for this covenant in desired order (index 0 =
+            top authority / tier 1).
+      required:
+      - covenant
+      - ordered_rank_ids
     RequiredOutcomeEnum:
       enum:
       - unsatisfied
@@ -42252,6 +42840,15 @@ components:
         * `skill` - Skill
         * `modifier` - Modifier
         * `other` - Other
+    TransferTopRequestRequest:
+      type: object
+      description: Request body for POST /api/covenants/ranks/{pk}/transfer-top/.
+      properties:
+        new_top_membership:
+          type: integer
+          description: PK of the CharacterCovenantRole that will receive the top rank.
+      required:
+      - new_top_membership
     Transition:
       type: object
       description: |-
@@ -42667,6 +43264,20 @@ components:
           type: integer
       required:
       - story
+    ViewerCapabilities:
+      type: object
+      description: Inline serializer for the viewer's capabilities in a covenant.
+      properties:
+        can_invite:
+          type: boolean
+        can_kick:
+          type: boolean
+        can_manage_ranks:
+          type: boolean
+      required:
+      - can_invite
+      - can_kick
+      - can_manage_ranks
     VisibilityF91Enum:
       enum:
       - default

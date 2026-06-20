@@ -69,7 +69,7 @@ from world.combat.services import (
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.scenes.constants import PersonaType
-from world.scenes.models import Persona
+from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 # Fixed error messages for API responses (never expose raw exception strings).
@@ -217,7 +217,26 @@ class CombatEncounterViewSet(ModelViewSet):
         )
 
     def get_queryset(self) -> QuerySet[CombatEncounter]:
-        return self._base_queryset().order_by("-created_at")
+        qs = self._base_queryset().order_by("-created_at")
+        if self.action in ("list", "retrieve"):
+            return self._filter_readable(qs)
+        return qs
+
+    def _filter_readable(self, qs: QuerySet[CombatEncounter]) -> QuerySet[CombatEncounter]:
+        """Restrict reads to encounters whose scene the caller may view, plus
+        encounters the caller is fighting in (combat never creates a
+        SceneParticipation row, so participants need an explicit union or they
+        would 404 on their own fight). Applied to list/retrieve only — action
+        routes resolve via the unfiltered base queryset and keep their own
+        permission gates."""
+        user = self.request.user
+        if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+            return qs
+        cond = Q(scene__in=Scene.objects.viewable_by(user))
+        played_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+        if played_ids:
+            cond |= Q(participants__character_sheet__character_id__in=played_ids)
+        return qs.filter(cond).distinct()
 
     # --- GM Lifecycle Actions ---
 

@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -11,12 +11,14 @@ objective that all members commit to achieving together. The magic is real: the
 oath grants power, and the roles shape how that power manifests.
 
 This domain owns the Covenant entity, character memberships (with engagement
-context), role definitions, gear compatibility, and combat speed integration.
+context), role definitions, gear compatibility, combat speed integration, and
+(#1027) the rank ladder that provides per-covenant administrative authority.
 Slice A landed the foundational entity + membership FK + engagement gating in
 the modifier pipeline and Thread pull eligibility. Later slices added the
-formation ritual, progression, group abilities/rites, and (in #519) the exit
-lifecycle — voluntary leave, leader-gated kick, and below-2 auto-dissolution
-(all soft).
+formation ritual, progression, group abilities/rites, the exit lifecycle (#519
+— voluntary leave, rank-gated kick, and below-2 auto-dissolution, all soft),
+and the two-axis authority model (#1027 — `CovenantRole` for power, `CovenantRank`
+for administrative authority; see "Two Orthogonal Authority Axes" below).
 
 ## Key Design Points
 
@@ -214,6 +216,14 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     target, char_level)` returns `char_level × bonus_per_level`; no row → 0.
     Admin-registered. Default authoring empty → no live numeric effect until
     staff author rows.
+  - `CovenantRank` (#1027) — per-covenant administrative authority tier
+    (the rank ladder). Fields: `covenant` FK (CASCADE, `related_name="ranks"`),
+    `name` (max 60, player-chosen), `tier` (PositiveInt; lower = higher
+    authority, 1 = top), `description` (optional flavor text),
+    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
+    `(covenant, tier)` and `(covenant, name)` enforced by DB constraints.
+    `Meta.ordering = ["covenant", "tier"]`. See "Two Orthogonal Authority
+    Axes" above for the full model contract.
 
 - **Constants** (`world.covenants.constants`): `CovenantType` (DURANCE,
   BATTLE), `RoleArchetype` (SWORD, SHIELD, CROWN).
@@ -238,6 +248,22 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     - `clear_engaged_for_type(*, character_sheet, covenant_type)` —
       bulk un-engage by type.
   - `is_gear_compatible(role, archetype)` — existence-only lookup.
+  - **Rank ladder (#1027):** all require `actor.rank.can_manage_ranks=True`;
+    raise `NotAuthorizedToManageRanksError` otherwise. The lock-out invariant
+    (`_assert_keeps_a_manager`) is applied atomically inside each operation.
+    - `create_rank(*, covenant, actor, name, tier, can_invite, can_kick, can_manage_ranks)`
+    - `rename_rank(*, rank, actor, name)`
+    - `set_rank_capabilities(*, rank, actor, **flags)` — raises
+      `LastManagerRankError` if the change would leave no active manager.
+    - `reorder_ranks(*, covenant, actor, ordered_rank_ids)` — atomically
+      rewrites tier values to match the supplied ordering.
+    - `delete_rank(*, rank, actor, reassign_to)` — moves affected memberships
+      to `reassign_to` before deletion; raises `CrossCovenantRankError` if
+      `reassign_to` belongs to a different covenant, `LastManagerRankError` if
+      deletion would remove the last manager seat.
+    - `assign_rank(*, membership, actor, rank)` — promotes/demotes a member.
+    - `transfer_top(*, covenant, actor, new_top_membership)` — moves tier=1
+      rank to a different member.
 
 - **Cached handler** (`world.covenants.handlers.CharacterCovenantRoleHandler`,
   attached as `character.covenant_roles`):
@@ -254,6 +280,20 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
 - **Typed exceptions** (`world.covenants.exceptions`):
   - `CovenantError` (base, with `user_message` and `SAFE_MESSAGES` allowlist).
   - `CovenantRoleNeverHeldError` — raised by Thread weaving.
+  - `CannotKickEqualOrHigherRankError` (#1027) — actor's tier is not strictly
+    lower than target's tier.
+  - `NotAuthorizedToKickError` (#1027) — actor's rank lacks `can_kick`.
+  - `NotAuthorizedToManageRanksError` (#1027) — actor's rank lacks
+    `can_manage_ranks`.
+  - `LastManagerRankError` (#1027) — proposed change would leave the covenant
+    with zero active members who can manage ranks.
+  - `CrossCovenantRankError` (#1027) — rank and membership belong to different
+    covenants.
+  - `CannotKickSelfError` — self-kick attempt.
+  - `IncompleteRankReorderError` (#1027) — `ordered_rank_ids` does not cover all
+    covenant ranks.
+  - `CannotTransferToDepartedMemberError` (#1027) — attempted to transfer top rank
+    to a departed member.
 
 - **REST API** (`/api/covenants/`):
   - `GET /covenants/` — `CovenantViewSet` (read-only). Non-staff scoped to
@@ -263,13 +303,23 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `GET /character-roles/` — `CharacterCovenantRoleViewSet` (read-only).
     Non-staff scoped to character sheets the user currently plays via the
     active RosterTenure chain. Staff see all. Serializer exposes
-    `covenant` (PK) + `engaged`.
+    `covenant` (PK), `engaged`, nested `rank`, and `viewer_capabilities`
+    block (`can_invite`/`can_kick`/`can_manage_ranks` for the requesting
+    user's own active membership).
   - `GET /gear-compatibilities/` — `GearArchetypeCompatibilityViewSet`
     (read-only, no pagination — small lookup table). Filterable by
     `covenant_role` and `gear_archetype`.
   - Engage/disengage actions + `RitualSessionViewSet` landed in Slice B.
-    Voluntary leave + leader-gated kick (with below-2 auto-dissolve) landed
-    in #519 (see the "Covenant Exit Lifecycle" design decision below).
+    Voluntary leave + rank-gated kick (with below-2 auto-dissolve) landed
+    in #519; kick re-gated on `CovenantRank` capability + tier precedence
+    in #1027 (see "Two Orthogonal Authority Axes" above).
+  - `CovenantRankViewSet` (#1027) at `/api/covenants/ranks/`:
+    - `GET/POST /ranks/` — list / create (create requires `can_manage_ranks`).
+    - `GET/PATCH/DELETE /ranks/{pk}/` — retrieve / partial-update / delete
+      (write requires `can_manage_ranks`).
+    - `POST /ranks/reorder/` — bulk tier reorder.
+    - `POST /ranks/{pk}/assign-member/` — assign a member to this rank.
+    - `POST /ranks/{pk}/transfer-top/` — move the top rank to a member.
 
 - **Tests** (`world/covenants/tests/`): exceptions, handler caching,
   models (incl. `Covenant` model + constraint + clean tests),
@@ -356,18 +406,81 @@ resurrectable:
 
 - **Voluntary leave** — `leave_covenant` ends the calling member's active
   membership (stamps `left_at`); the membership row is retained for history.
-- **Leader-gated kick** — `kick_member` lets a member holding a
-  `CovenantRole.is_leadership` role remove a non-leader member. A leader cannot
-  remove a fellow leader. The removed membership is soft-ended (`left_at`).
+- **Rank-gated kick** — `kick_member` lets a member whose `CovenantRank` has
+  `can_kick=True` remove a member of a **strictly lower tier** (lower tier number
+  = higher authority). Equal or higher tier cannot be kicked. The removed
+  membership is soft-ended (`left_at`). See "Rank Ladder (#1027)" below for the
+  full two-axis model.
 - **Immediate auto-dissolution** — when active membership drops below 2 (whether
   by leave or kick), the covenant auto-dissolves immediately: `dissolved_at` is
   stamped and remaining active memberships are soft-ended. No grace period. The
   covenant record persists (dormant, resurrectable), consistent with the
   no-hard-delete rule.
 
-**Ranking among leaders is intentionally out of scope** — every leadership role
-is peer-equal for kick purposes (a leader cannot kick another leader). A future
-extension could introduce a leader hierarchy; that is not part of #519.
+### Durable Design Decision: Two Orthogonal Authority Axes (#1027)
+
+**`CovenantRole` and `CovenantRank` are ORTHOGONAL and must NEVER be merged.**
+This is a standing invariant — do not add `is_leadership` or any authority flag
+back to `CovenantRole`, and do not encode combat/role bonuses onto `CovenantRank`.
+
+- **`CovenantRole`** = the **power** a member wields on behalf of the covenant
+  (Sword/Shield/Crown combat archetype, `speed_rank`, `CovenantRoleBonus` Thread
+  pulls). `is_leadership` was removed from `CovenantRole` when #1027 shipped — it
+  no longer exists anywhere in the codebase.
+- **`CovenantRank`** (new in #1027) = **administrative authority** over the
+  covenant. Per-covenant, player-named ordered tiers with integer `tier`
+  (1 = top authority), capability flags (`can_invite`, `can_kick`, `can_manage_ranks`),
+  and optional flavor `description`. `CharacterCovenantRole.rank` FK holds each
+  member's current authority tier. Rank is role-agnostic and per-person.
+
+The separation means a member's combat power (role) and their covenant authority
+(rank) are independently managed: a powerful Sword can be a junior member; a quiet
+Shield can be a senior administrator.
+
+#### Rank Ladder
+
+- Formation builds a **default two-tier ladder**: top rank "Founder" (all three
+  capability flags true) + base rank "Member" (no flags). The designated founder(s)
+  are seated at the Founder rank; other members default to Member. Passing
+  `flat=True` to `create_covenant` produces a single-rank covenant (no authority
+  distinctions).
+- Each covenant's ladder is **player-named** — staff/players rename tiers via
+  `rename_rank` after formation.
+- Kick precedence: actor's `rank.can_kick` must be True AND `actor.rank.tier` must
+  be **strictly less than** `target.rank.tier` (lower tier number = higher authority).
+  Equal or higher tier is always refused (`CannotKickEqualOrHigherRankError`).
+- A lock-out invariant (`LastManagerRankError`) guarantees the covenant always
+  retains at least one active member whose rank has `can_manage_ranks=True`. Any
+  rank management operation that would violate this is refused atomically.
+- Invite gating: `can_invite` flag (no invite endpoint exists yet — induction
+  remains ritual-driven via `RitualSession`; the flag is reserved for a direct
+  invite flow post-MVP).
+
+#### Rank Management Service Functions
+
+All require the actor's `rank.can_manage_ranks=True`; raise
+`NotAuthorizedToManageRanksError` otherwise:
+
+- `create_rank(*, covenant, actor, name, tier, can_invite, can_kick, can_manage_ranks)`
+- `rename_rank(*, rank, actor, name)`
+- `set_rank_capabilities(*, rank, actor, **flags)`
+- `reorder_ranks(*, covenant, actor, ordered_rank_ids)` — atomically rewrites all
+  tier values to match the supplied ordering.
+- `delete_rank(*, rank, actor, reassign_to)` — moves all members on the deleted
+  rank to `reassign_to` before deletion; cross-covenant reassign raises
+  `CrossCovenantRankError`.
+- `assign_rank(*, membership, actor, rank)` — promotes or demotes a member.
+- `transfer_top(*, covenant, actor, new_top_membership)` — moves the top
+  (tier=1) rank to a different member.
+
+#### API
+
+`CovenantRankViewSet` at `POST/GET/PATCH/DELETE /api/covenants/ranks/` (CRUD) with
+additional actions: `POST /ranks/reorder/`, `POST /ranks/{pk}/assign-member/`,
+`POST /ranks/{pk}/transfer-top/`. `CanManageCovenantRanks` permission class gates
+write operations. Membership serializer exposes nested `rank` + a
+`viewer_capabilities` block (can_invite/can_kick/can_manage_ranks for the requesting
+user's own active membership).
 
 ### Durable Design Decision: Sworn Objective Is an Enduring Mission Statement
 

@@ -57,6 +57,14 @@ class Position(PositionNodeBase):
     """A named tactical region within a room. The node of the positioning graph."""
 
     room = models.ForeignKey("objects.ObjectDB", on_delete=models.CASCADE, related_name="positions")
+    elevation_anchor = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="elevated_over",
+        help_text="The position immediately below this one (null = solid floor / bottom).",
+    )
 
     class Meta:
         app_label = "areas"

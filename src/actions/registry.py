@@ -26,6 +26,7 @@ from actions.definitions.items import (
     PutInAction,
     TakeOutAction,
     UnequipAction,
+    UseItemAction,
 )
 from actions.definitions.movement import (
     DropAction,
@@ -77,6 +78,7 @@ _ALL_ACTIONS: list[Action] = [  # type: ignore[list-item]
     PutInAction(),
     TakeOutAction(),
     ActivatePermitAction(),
+    UseItemAction(),
     ApplyOutfitAction(),
     UndressAction(),
     PresentOutfitAction(),

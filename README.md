@@ -125,6 +125,16 @@ New-Item -Path .\src\.env -ItemType File
 pre-commit install
 ```
 
+## First-run seeding
+
+After `uv sync` and `arx manage migrate`, populate sane defaults:
+
+    arx seed dev
+
+Idempotent — safe to re-run; it only fills missing rows and never overwrites
+your edits or loaded fixtures. Superusers can also click **Load sane defaults**
+in Django admin.
+
 ## Using the arx CLI
 After setup, use the arx command-line tool:
 

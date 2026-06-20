@@ -1609,17 +1609,20 @@ def _process_round_tick(
         for dot in dot_effects:
             damage = dot.base_damage
 
-            # Scale by severity
+            # effective_severity already folds in the stage multiplier, so scaling
+            # by severity and by the stage are mutually exclusive — if/elif, not two
+            # ifs, mirroring get_check_modifier / get_condition_modifier_total. (Two
+            # ifs double-applied the stage multiplier for a staged severity-scaled DoT.)
             if dot.scales_with_severity:
                 damage = damage * instance.effective_severity
+            elif instance.current_stage:
+                damage = damage * instance.current_stage.severity_multiplier
 
             # Scale by stacks
             if dot.scales_with_stacks:
                 damage = damage * instance.stacks
 
-            # Apply stage multiplier
-            if instance.current_stage:
-                damage = int(damage * instance.current_stage.severity_multiplier)
+            damage = int(damage)
 
             if damage > 0:
                 result.damage_dealt.append((dot.damage_type, damage))

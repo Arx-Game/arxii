@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.constants import AERIAL_PROPERTY_NAME, PositionKind
 from world.areas.positioning.exceptions import PositionError, PositionTransitionError
 from world.areas.positioning.models import (
     BlueprintEdge,
@@ -497,3 +497,118 @@ def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPositi
         defaults={"position": target},
     )
     return obj_pos
+
+
+# ---------------------------------------------------------------------------
+# Aerial layer (flight / airborne movement)
+# ---------------------------------------------------------------------------
+
+
+def _ground_positions(room: ObjectDB) -> list[Position]:
+    """Return all non-AERIAL positions in the room."""
+    return list(Position.objects.filter(room=room).exclude(kind=PositionKind.AERIAL))
+
+
+def _aerial_property():
+    """Return the 'aerial' Property (lazy import to avoid circular deps)."""
+    from world.mechanics.models import Property
+
+    return Property.objects.get(name=AERIAL_PROPERTY_NAME)
+
+
+def materialize_aerial_layer(room: ObjectDB) -> None:
+    """Build the AERIAL mirror over the room's ground positions (idempotent).
+
+    Each ground position X gets an AERIAL twin "Above X" with elevation_anchor=X
+    and a vertical edge X<->above-X. Horizontal aerial edges mirror ground
+    adjacency (every PositionEdge between ground nodes) but are passable/ungated,
+    so flight crosses over walls/chasms/gates.
+    """
+    if Position.objects.filter(room=room, kind=PositionKind.AERIAL).exists():
+        return
+    ground = _ground_positions(room)
+    twin: dict[int, Position] = {}
+    for g in ground:
+        above = create_position(room, f"Above {g.name}", kind=PositionKind.AERIAL)
+        above.elevation_anchor = g
+        above.save(update_fields=["elevation_anchor"])
+        twin[g.pk] = above
+        connect_positions(g, above)  # vertical
+    # Horizontal: mirror every ground edge (ignore passability/gating).
+    for edge in PositionEdge.objects.filter(position_a__room=room).exclude(
+        position_a__kind=PositionKind.AERIAL
+    ):
+        a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
+        if a is not None and b is not None:
+            connect_positions(a, b)
+
+
+def teardown_aerial_layer(room: ObjectDB) -> None:
+    """Delete every AERIAL position in the room (cascades aerial edges/occupancy)."""
+    Position.objects.filter(room=room, kind=PositionKind.AERIAL).delete()
+
+
+def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
+    """Move objectdb to the AERIAL twin above its current position.
+
+    Materializes the aerial layer if not yet present (idempotent).
+    Sets the 'aerial' ObjectProperty on the object.
+    """
+    from world.mechanics.models import ObjectProperty
+
+    room = objectdb.location
+    materialize_aerial_layer(room)
+    ground = position_of(objectdb)
+    above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
+    ObjectProperty.objects.update_or_create(
+        object=objectdb,
+        property=_aerial_property(),
+        defaults={"value": 1},
+    )
+    return force_move_to_position(objectdb, above)
+
+
+def leave_aerial(objectdb: ObjectDB) -> ObjectPosition:
+    """Move objectdb back to its anchor ground position and clear the aerial property.
+
+    Tears down the aerial layer once no AERIAL position in the room has occupants.
+    Falls to the room's PRIMARY position if elevation_anchor is None.
+    """
+    from world.mechanics.models import ObjectProperty
+
+    room = objectdb.location
+    current = position_of(objectdb)
+    landing: Position | None = current.elevation_anchor if current is not None else None
+    if landing is None:
+        landing = Position.objects.filter(room=room, kind=PositionKind.PRIMARY).first()
+    if landing is None:
+        msg = "No ground position to land on."
+        raise PositionError(msg)
+    obj_pos = force_move_to_position(objectdb, landing)
+    ObjectProperty.objects.filter(object=objectdb, property=_aerial_property()).delete()
+    # Tear down once no AERIAL node retains occupants.
+    if not ObjectPosition.objects.filter(
+        position__room=room, position__kind=PositionKind.AERIAL
+    ).exists():
+        teardown_aerial_layer(room)
+    return obj_pos
+
+
+def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
+    """Emit FELL if *position* is a CHASM. Returns whether an event was emitted.
+
+    The reactive catch/plummet consumer is deferred to the #1018 follow-up; this
+    only opens the seam.
+    """
+    if position.kind != PositionKind.CHASM:
+        return False
+    from flows.constants import EventName
+    from flows.emit import emit_event
+    from flows.events.payloads import FallEvent
+
+    emit_event(
+        EventName.FELL,
+        FallEvent(faller=objectdb, position=position),
+        location=objectdb.location,
+    )
+    return True

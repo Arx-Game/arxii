@@ -12,6 +12,7 @@ from world.covenants.models import (
     Covenant,
     CovenantLevelBonus,
     CovenantLevelThreshold,
+    CovenantRank,
     CovenantRite,
     CovenantRiteRolePackage,
     CovenantRole,
@@ -37,14 +38,6 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     archetype = RoleArchetype.SWORD
     speed_rank = 5
     description = ""
-
-
-class LeaderCovenantRoleFactory(CovenantRoleFactory):
-    """A CovenantRole flagged as leadership (may kick non-leader members). See #519."""
-
-    name = factory.Sequence(lambda n: f"Leader Role {n}")
-    slug = factory.Sequence(lambda n: f"leader-role-{n}")
-    is_leadership = True
 
 
 class SubroleCovenantRoleFactory(CovenantRoleFactory):
@@ -90,6 +83,30 @@ class CovenantFactory(factory_django.DjangoModelFactory):
     sworn_objective = "Sworn to test things."
 
 
+class CovenantRankFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantRank — a per-covenant administrative authority tier."""
+
+    class Meta:
+        model = CovenantRank
+
+    covenant = factory.SubFactory(CovenantFactory)
+    name = factory.Sequence(lambda n: f"Rank {n}")
+    tier = factory.Sequence(lambda n: n + 1)
+    description = ""
+    can_invite = False
+    can_kick = False
+    can_manage_ranks = False
+
+
+class CovenantManagerRankFactory(CovenantRankFactory):
+    """A CovenantRank with full administrative capabilities."""
+
+    name = factory.Sequence(lambda n: f"Manager Rank {n}")
+    can_invite = True
+    can_kick = True
+    can_manage_ranks = True
+
+
 class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     """Factory for CharacterCovenantRole.
 
@@ -102,6 +119,9 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     (character_sheet, covenant) would silently return an existing
     *ended* assignment when a test wants a fresh active one. Tests that
     need lookup-or-create semantics should query directly.
+
+    ``rank`` is wired to the same covenant as the membership via a
+    LazyAttribute so the rank/covenant-match invariant is always satisfied.
     """
 
     class Meta:
@@ -110,6 +130,7 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
+    rank = factory.LazyAttribute(lambda o: CovenantRankFactory(covenant=o.covenant))
     engaged = False
 
 

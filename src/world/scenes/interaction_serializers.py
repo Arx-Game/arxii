@@ -93,6 +93,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         read_only=True,
         source="cached_action_links",
     )
+    endorsee_sheet_id = serializers.IntegerField(
+        source="persona.character_sheet_id", read_only=True
+    )
+    endorsable_resonances = serializers.SerializerMethodField()
+    pose_endorsers = serializers.SerializerMethodField()
+    my_pose_endorsement = serializers.SerializerMethodField()
+    entry_endorsers = serializers.SerializerMethodField()
+    entry_endorsed_by_me = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
@@ -105,6 +113,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "mode",
             "visibility",
             "timestamp",
+            "pose_kind",
+            "endorsee_sheet_id",
             "is_favorited",
             "reactions",
             "reaction_windows",
@@ -112,15 +122,46 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "place_name",
             "target_persona_ids",
             "action_links",
+            "endorsable_resonances",
+            "pose_endorsers",
+            "my_pose_endorsement",
+            "entry_endorsers",
+            "entry_endorsed_by_me",
         ]
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
-        p = obj.persona
-        return PersonaPayload(
-            id=p.pk,
-            name=p.name,
-            thumbnail_url=p.thumbnail_url or "",
+        # Per-viewer name resolution (#1109): own faces and named-public faces render real;
+        # discovered anonymous faces reveal "<real> (as <mask>)"; undiscovered anonymous faces
+        # render a composed sdesc. Resolved once for the whole page (see _persona_display_map).
+        name, _is_discovered = self._persona_display_map().get(
+            obj.persona_id, (obj.persona.name, False)
         )
+        return PersonaPayload(
+            id=obj.persona_id,
+            name=name,
+            thumbnail_url=obj.persona.thumbnail_url or "",
+        )
+
+    def _persona_display_map(self) -> dict[int, tuple[str, bool]]:
+        """Cache the page's persona-display resolution on the shared context (O(1) queries)."""
+        cached = self.context.get("_persona_display_map")
+        if cached is not None:
+            return cached
+        from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
+
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        display_map = build_persona_display_map(
+            [row.persona for row in rows],
+            viewer_persona_ids=set(self.context.get("persona_ids", set())),
+            viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
+        )
+        self.context["_persona_display_map"] = display_map
+        return display_map
 
     def get_receiver_persona_ids(self, obj: Interaction) -> list[int]:
         return [r.persona_id for r in obj.cached_receivers]
@@ -214,6 +255,93 @@ class InteractionListSerializer(serializers.ModelSerializer):
             ReactionAggregation(emoji=emoji, count=count, reacted=emoji in user_reacted)
             for emoji, count in counts.items()
         ]
+
+    def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
+        """List of resonances claimed by the endorsee (pose author).
+
+        Reads from the prefetched ``persona__character_sheet__resonances``
+        path (set up in ``interaction_views.get_queryset``) via the
+        ``cached_resonances`` to_attr. Falls back to a live query if the attr
+        is absent (e.g. serializer used outside the view's queryset pipeline).
+        """
+        sheet = obj.persona.character_sheet
+        if sheet is None:
+            return []
+        resonances = getattr(sheet, "cached_resonances", None)  # noqa: GETATTR_LITERAL
+        if resonances is None:
+            resonances = list(sheet.resonances.select_related("resonance"))
+        return [{"id": cr.resonance_id, "name": cr.resonance.name} for cr in resonances]
+
+    def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
+        """List of peers who endorsed this pose, with persona info.
+
+        Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
+        view queryset). Each endorser's primary persona is pre-loaded via
+        ``cached_primary_persona`` (another nested Prefetch).
+        """
+        out = []
+        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+            persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
+            if persona is None:
+                continue
+            out.append(
+                {
+                    "persona_id": persona.pk,
+                    "persona_name": persona.name,
+                    "thumbnail_url": persona.thumbnail_url or "",
+                    "resonance_id": e.resonance_id,
+                }
+            )
+        return out
+
+    def get_my_pose_endorsement(self, obj: Interaction) -> dict | None:
+        """Return the viewer's own endorsement for this pose, or None.
+
+        Checks ``character_sheet_ids`` from context (viewer's sheet PKs) against
+        each cached endorsement's ``endorser_sheet_id``.
+        """
+        sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
+        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+            if e.endorser_sheet_id in sheet_ids:
+                return {
+                    "id": e.pk,
+                    "resonance_id": e.resonance_id,
+                    "settled": e.settled_at is not None,
+                }
+        return None
+
+    def _entry_rows(self, obj: Interaction) -> list:
+        """Return scene-entry endorsement rows for ENTRY poses only."""
+        if obj.pose_kind != PoseKind.ENTRY:
+            return []
+        sheet_id = obj.persona.character_sheet_id
+        return self.context.get("scene_entry_endorsements", {}).get(sheet_id, [])
+
+    def get_entry_endorsers(self, obj: Interaction) -> list[dict]:
+        """List of peers who gave this character a scene-entry endorsement.
+
+        Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
+        context (populated by the view's ``get_serializer_context``).
+        """
+        out = []
+        for r in self._entry_rows(obj):
+            persona = next(iter(r.endorser_sheet.cached_primary_persona), None)
+            if persona is None:
+                continue
+            out.append(
+                {
+                    "persona_id": persona.pk,
+                    "persona_name": persona.name,
+                    "thumbnail_url": persona.thumbnail_url or "",
+                    "resonance_id": r.resonance_id,
+                }
+            )
+        return out
+
+    def get_entry_endorsed_by_me(self, obj: Interaction) -> bool:
+        """True when the viewer has given this character a scene-entry endorsement."""
+        sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
+        return any(r.endorser_sheet_id in sheet_ids for r in self._entry_rows(obj))
 
 
 class InteractionDetailSerializer(InteractionListSerializer):

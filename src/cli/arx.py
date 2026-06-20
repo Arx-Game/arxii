@@ -237,6 +237,13 @@ def run_tests_fast(
     raise typer.Exit(result.returncode)
 
 
+@app.command()
+def seed(target: str = typer.Argument("dev", help="What to seed (default: dev)")) -> None:
+    """Seed sane defaults into the database (e.g. `arx seed dev`)."""
+    setup_env()
+    subprocess.run(["evennia", "seed", target], check=True)
+
+
 @app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
