@@ -285,8 +285,26 @@ direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventN
 | `maybe_emit_fall(objectdb, position)` | Emit `EventName.FELL` when `position.kind == CHASM`; returns `True` if the event was emitted, `False` otherwise |
 
 The reactive catch consumer (capability-based fly/acrobatics interrupt + AFK-safe
-multi-round plummet down the `elevation_anchor` chain with impact consequences) is deferred
-to a follow-up tied to the round/turn framework (#520).
+multi-round plummet down the `elevation_anchor` chain with impact consequences) is being
+built as the #1228 task series.
+
+**Plummet + catch content seed (`world/areas/positioning/plummet_content.py`).**
+`ensure_fall_content()` idempotently seeds all plummet + catch content (it calls
+`ensure_catch_content()`):
+
+- the `Fall` `DamageType` (null pools → config-default survivability) and the staged
+  `Plummeting` `ConditionTemplate` (descent-depth severity stages, no DoT);
+- the capability-gated **"Catch the Faller"** `ChallengeTemplate` (authored `severity` on
+  the row). Its approaches are gated by catch capabilities — the seed examples are the four
+  `CapabilityType` rows `fly` / `teleport` / `telekinesis` / `acrobatics`. Every catch
+  `Application` shares one target `Property` (`catchable`, linked to the template so the
+  approaches surface in `_match_approaches`), and every `ChallengeApproach` reuses one
+  `Reflexes` `CheckType`. A SUCCESS-tier `ResolutionType.DESTROY` consequence resolves the
+  challenge on a clean catch.
+
+Adding a new catch capability is **pure data** — one `CapabilityType` +
+`Application(target_property=catchable)` + `ChallengeApproach` row, with zero engine code.
+Identity-key names live in `world/areas/positioning/constants.py`.
 
 **Gated-edge crossing and `MOVE_TO_POSITION`:**
 
