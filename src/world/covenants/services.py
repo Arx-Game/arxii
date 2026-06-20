@@ -22,6 +22,7 @@ from world.covenants.exceptions import (
     InsufficientFoundersError,
     LastManagerRankError,
     NoActiveBattleError,
+    NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
@@ -46,6 +47,7 @@ from world.magic.constants import ParticipantState, ReferenceKind
 from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatEncounter
@@ -260,6 +262,33 @@ def add_member(
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
     return row
+
+
+def can_invite_to_covenant(
+    covenant: Covenant,
+    *,
+    character_sheet: CharacterSheet | None = None,
+    account: AccountDB | None = None,
+) -> bool:
+    """Return True if an active member with a can_invite rank grants invite authority.
+
+    Character-scoped (character_sheet=) for the ritual-draft gate; account-scoped
+    (account=) for the CanInviteToCovenant DRF permission. The rank__can_invite +
+    active-membership core is shared so the can_invite flag has a single home.
+    """
+    qs = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+        rank__can_invite=True,
+    )
+    if character_sheet is not None:
+        qs = qs.filter(character_sheet=character_sheet)
+    if account is not None:
+        qs = qs.filter(
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=account,
+        )
+    return qs.exists()
 
 
 @transaction.atomic
@@ -1293,6 +1322,22 @@ def promote_to_subrole(
         set_engaged_membership(membership=new_membership)
     membership.character_sheet.character.covenant_roles.invalidate()
     return new_membership
+
+
+def assert_initiator_can_induct(*, session: RitualSession) -> None:
+    """Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite
+    rank in the target covenant. Dispatched via Ritual.draft_validator_path from
+    draft_session. Reads the session-level COVENANT reference exactly like
+    induct_member_via_session (the fire handler) does.
+    """
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if target_ref is None or target_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+    if not can_invite_to_covenant(target_ref.ref_covenant, character_sheet=session.initiator):
+        raise NotAuthorizedToInviteError
 
 
 @transaction.atomic

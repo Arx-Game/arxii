@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { fetchPendingRequests, respondToRequest } from '../actionQueries';
-import type { ActionRequest } from '../actionTypes';
+import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
+import type { ActionRequest, PendingActionTarget } from '../actionTypes';
 
 interface Props {
   sceneId: string;
@@ -39,9 +39,32 @@ export function ConsentPrompt({ sceneId }: Props) {
     },
   });
 
-  const requests = data?.results ?? [];
+  const { data: targetData } = useQuery({
+    queryKey: ['pending-targets', sceneId],
+    queryFn: () => fetchPendingTargets(sceneId),
+    refetchInterval: 5_000,
+  });
 
-  if (requests.length === 0) return null;
+  const respondTarget = useMutation({
+    mutationFn: ({
+      requestId,
+      targetPersonaId,
+      accept,
+    }: {
+      requestId: number;
+      targetPersonaId: number;
+      accept: boolean;
+    }) => respondToRequest(sceneId, requestId, { accept, target_persona_id: targetPersonaId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-targets', sceneId] });
+      queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
+    },
+  });
+
+  const requests = data?.results ?? [];
+  const targets = targetData?.results ?? [];
+
+  if (requests.length === 0 && targets.length === 0) return null;
 
   return (
     <div className="space-y-2">
@@ -100,6 +123,61 @@ export function ConsentPrompt({ sceneId }: Props) {
                 {opt.label}
               </Button>
             ))}
+          </div>
+        </div>
+      ))}
+      {targets.map((t: PendingActionTarget) => (
+        <div
+          key={`target-${t.action_target_id}`}
+          className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30"
+        >
+          <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              <span className="font-semibold">{t.initiator_name}</span> wants to use{' '}
+              <span className="font-semibold">
+                {t.action_key}
+                {t.technique_name ? ` (${t.technique_name})` : ''}
+              </span>{' '}
+              on your character.
+            </p>
+            {t.strain_commitment > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.initiator_name} is committing {t.strain_commitment} strain.
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                respondTarget.mutate({
+                  requestId: t.action_request_id,
+                  targetPersonaId: t.target_persona_id,
+                  accept: false,
+                })
+              }
+              disabled={respondTarget.isPending}
+            >
+              <X className="mr-1 h-3.5 w-3.5" />
+              Deny
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                respondTarget.mutate({
+                  requestId: t.action_request_id,
+                  targetPersonaId: t.target_persona_id,
+                  accept: true,
+                })
+              }
+              disabled={respondTarget.isPending}
+            >
+              <Check className="mr-1 h-3.5 w-3.5" />
+              Accept
+            </Button>
           </div>
         </div>
       ))}

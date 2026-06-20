@@ -2373,6 +2373,7 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     narrative_prose = "An existing covenant inducts a new member..."
     execution_kind = RitualExecutionKind.SERVICE
     service_function_path = "world.covenants.services.induct_member_via_session"
+    draft_validator_path = "world.covenants.services.assert_initiator_can_induct"
     flow = None
     participation_rule = ParticipationRule.INDUCTION
     input_schema = factory.LazyFunction(

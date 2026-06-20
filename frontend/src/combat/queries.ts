@@ -34,6 +34,11 @@ export const combatKeys = {
 
   consequenceOutcomes: (params: api.ConsequenceOutcomesParams) =>
     [...combatKeys.all, 'consequence-outcomes', params] as const,
+
+  duelChallengesAll: () => [...combatKeys.all, 'duel-challenges'] as const,
+
+  duelChallenges: (role?: api.DuelChallengeRole) =>
+    [...combatKeys.duelChallengesAll(), role ?? 'all'] as const,
 };
 
 /**
@@ -126,6 +131,32 @@ export function useEncounterForScene(sceneId: number): {
     isLoading: result.isLoading,
     isError: result.isError,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Duel-challenge inbox hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the requesting player's PENDING duel challenges (#1180).
+ *
+ * GET /api/combat/duel-challenges/[?role=...]. The result is scoped server-side
+ * to the caller's played characters, so the page filters by challenged.id to find
+ * the incoming challenge for the active character. Polls so an incoming challenge
+ * appears without a manual refresh; disabled via `enabled` (e.g. when no character
+ * is resolved).
+ */
+export function useDuelChallengeInbox(
+  options: { enabled?: boolean; role?: api.DuelChallengeRole } = {}
+) {
+  const { enabled = true, role } = options;
+  return useQuery({
+    queryKey: combatKeys.duelChallenges(role),
+    queryFn: () => api.fetchDuelChallengeInbox(role),
+    enabled,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
 }
 
 // ---------------------------------------------------------------------------

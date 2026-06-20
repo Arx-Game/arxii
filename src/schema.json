@@ -270,6 +270,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneActionRequest'
           description: ''
+  /api/action-targets/:
+    get:
+      operationId: action_targets_list
+      description: Read-only listing of a persona's pending additional-target consent
+        rows (#1177).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - action-targets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSceneActionTargetList'
+          description: ''
+  /api/action-targets/{id}/:
+    get:
+      operationId: action_targets_retrieve
+      description: Read-only listing of a persona's pending additional-target consent
+        rows (#1177).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene action target.
+        required: true
+      tags:
+      - action-targets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActionTarget'
+          description: ''
   /api/actions/characters/{character_id}/available/:
     get:
       operationId: actions_characters_available_list
@@ -3657,6 +3711,82 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OutcomeDetail'
+          description: ''
+  /api/combat/duel-challenges/:
+    get:
+      operationId: combat_duel_challenges_list
+      description: |-
+        Read-only inbox of the requesting player's PENDING duel challenges (#1180).
+
+        Lists every PENDING ``DuelChallenge`` where the caller plays either the
+        challenger or the challenged character, so the web UI can render the
+        incoming-challenge prompt (and surface a player's outgoing challenges).
+        ``?role=incoming|outgoing`` narrows to one side. Scoped to the caller's
+        played characters, so it never leaks other players' challenges.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: string
+          enum:
+          - incoming
+          - outgoing
+        description: |-
+          Challenge direction relative to the requesting player.
+
+          * `incoming` - Incoming
+          * `outgoing` - Outgoing
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDuelChallengeList'
+          description: ''
+  /api/combat/duel-challenges/{id}/:
+    get:
+      operationId: combat_duel_challenges_retrieve
+      description: |-
+        Read-only inbox of the requesting player's PENDING duel challenges (#1180).
+
+        Lists every PENDING ``DuelChallenge`` where the caller plays either the
+        challenger or the challenged character, so the web UI can render the
+        incoming-challenge prompt (and surface a player's outgoing challenges).
+        ``?role=incoming|outgoing`` narrows to one side. Scoped to the caller's
+        played characters, so it never leaks other players' challenges.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this duel challenge.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuelChallenge'
           description: ''
   /api/conditions/capabilities/:
     get:
@@ -19407,6 +19537,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/scenes/{id}/highlight-reel/:
+    get:
+      operationId: scenes_highlight_reel_retrieve
+      description: |-
+        #1241 — the scene's highlight reel: a sealed featured moment + a ranked index.
+
+        Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
+        zero reactions, because storyteller curation has primacy. When the scene has no
+        tags, this falls back to the single most-reacted pose. The index is the remaining
+        poses with at least one reaction, ranked by reaction count (ties -> most recent)
+        and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
+        reel can never surface a pose the viewer cannot already see — not even as a sealed
+        slot. The payload carries only interaction ids (the featured card is fully sealed);
+        the frontend reveals a pose by fetching it through the existing interaction-detail
+        endpoint, which re-checks visibility.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HighlightReel'
+          description: ''
   /api/scenes/spotlight/:
     get:
       operationId: scenes_spotlight_retrieve
@@ -27184,6 +27348,70 @@ components:
       description: |-
         * `menu` - Menu
         * `pool` - Pool
+    DuelChallenge:
+      type: object
+      description: |-
+        Read serializer for the DuelChallenge pending-challenge inbox.
+
+        Exposes challenger/challenged identities (id + name), status, timestamps,
+        and the resulting_encounter FK PK. Intended for a player's incoming or
+        outgoing challenge list.
+
+        N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
+        "challenged_sheet__character")``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        challenger:
+          allOf:
+          - $ref: '#/components/schemas/_DuelParticipantIdentity'
+          readOnly: true
+        challenged:
+          allOf:
+          - $ref: '#/components/schemas/_DuelParticipantIdentity'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/DuelChallengeStatusEnum'
+          readOnly: true
+          default: pending
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resulting_encounter:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The CombatEncounter opened when the challenge was accepted.
+      required:
+      - challenged
+      - challenger
+      - created_at
+      - id
+      - resolved_at
+      - resulting_encounter
+      - status
+    DuelChallengeStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - withdrawn
+      - expired
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `withdrawn` - Withdrawn
+        * `expired` - Expired
     DuelWinner:
       type: object
       description: |-
@@ -29874,6 +30102,51 @@ components:
       - max_inches
       - min_inches
       - name
+    HighlightReel:
+      type: object
+      description: |-
+        A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+
+        ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
+        (an empty reel — the frontend hides the collapsible section).
+      properties:
+        featured:
+          allOf:
+          - $ref: '#/components/schemas/HighlightReelFeatured'
+          nullable: true
+        index:
+          type: array
+          items:
+            $ref: '#/components/schemas/HighlightReelEntry'
+      required:
+      - featured
+      - index
+    HighlightReelEntry:
+      type: object
+      description: One sealed entry in the ranked index below the featured moment
+        (#1241).
+      properties:
+        interaction_id:
+          type: integer
+        rank:
+          type: integer
+      required:
+      - interaction_id
+      - rank
+    HighlightReelFeatured:
+      type: object
+      description: |-
+        The single featured moment of a scene's highlight reel (#1241).
+
+        Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
+        pose content, type, participants, or reaction count until the viewer expands it, at
+        which point the frontend fetches the pose through the existing interaction-detail
+        endpoint (which re-checks visibility). Sending content here would defeat the seal.
+      properties:
+        interaction_id:
+          type: integer
+      required:
+      - interaction_id
     HybridRelationshipType:
       type: object
       description: Serializer for HybridRelationshipType with nested requirements.
@@ -33858,6 +34131,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DramaticMomentTag'
+    PaginatedDuelChallengeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuelChallenge'
     PaginatedEncounterListList:
       type: object
       required:
@@ -35251,6 +35547,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SceneActionRequest'
+    PaginatedSceneActionTargetList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SceneActionTarget'
     PaginatedSceneListList:
       type: object
       required:
@@ -38234,7 +38553,20 @@ components:
             - type: string
           nullable: true
           readOnly: true
+        allow_social_actions:
+          type: boolean
+          description: |-
+            Whether this persona's character may be targeted by social actions.
+
+            Mirrors the challenge consent gate (``_tenure_blocks_actor`` with
+            ``category=None``): blocked only when the active tenure's
+            ``SocialConsentPreference`` has ``allow_social_actions=False``. Lets the
+            scene UI hide/disable the duel-challenge affordance for opted-out
+            characters (#1181); the backend still enforces the full gate at dispatch.
+            Defaults to True when there is no tenure or preference row.
+          readOnly: true
       required:
+      - allow_social_actions
       - character_sheet
       - id
       - name
@@ -40723,7 +41055,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         status:
           allOf:
-          - $ref: '#/components/schemas/SceneActionStatusEnum'
+          - $ref: '#/components/schemas/Status307Enum'
           readOnly: true
         difficulty_choice:
           allOf:
@@ -40844,20 +41176,71 @@ components:
       required:
       - initiator_persona
       - scene
-    SceneActionStatusEnum:
-      enum:
-      - pending
-      - accepted
-      - denied
-      - resolved
-      - expired
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `denied` - Denied
-        * `resolved` - Resolved
-        * `expired` - Expired
+    SceneActionTarget:
+      type: object
+      description: Flat read payload for a pending additional-target consent row (#1177).
+      properties:
+        action_target_id:
+          type: integer
+          readOnly: true
+        action_request_id:
+          type: integer
+          readOnly: true
+        target_persona_id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/Status307Enum'
+        initiator_persona:
+          type: integer
+          readOnly: true
+        initiator_name:
+          type: string
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+        action_key:
+          type: string
+          readOnly: true
+        action_template:
+          type: integer
+          readOnly: true
+          nullable: true
+        technique:
+          type: integer
+          readOnly: true
+          nullable: true
+        technique_name:
+          type: string
+          nullable: true
+          description: Human label for the enhancing technique (mirrors the request
+            serializer).
+          readOnly: true
+        pose_text:
+          type: string
+          readOnly: true
+        strain_commitment:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action_key
+      - action_request_id
+      - action_target_id
+      - action_template
+      - created_at
+      - initiator_name
+      - initiator_persona
+      - pose_text
+      - scene
+      - strain_commitment
+      - target_persona_id
+      - technique
+      - technique_name
     SceneActivity:
       type: object
       description: A scene room's current activity band (shown before a teller commits).
@@ -42302,6 +42685,20 @@ components:
         * `approved` - Approved
         * `denied` - Denied
         * `withdrawn` - Withdrawn
+    Status307Enum:
+      enum:
+      - pending
+      - accepted
+      - denied
+      - resolved
+      - expired
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `denied` - Denied
+        * `resolved` - Resolved
+        * `expired` - Expired
     Status4e6Enum:
       enum:
       - declaring
@@ -44700,6 +45097,24 @@ components:
       - created_at
       - id
       - title
+    _DuelParticipantIdentity:
+      type: object
+      description: |-
+        Compact identity for one side of a DuelChallenge (CharacterSheet id + name).
+
+        Note: CharacterSheet's primary key is the ``character`` OneToOneField, so
+        there is no ``.id`` attribute — ``source="pk"`` reads ``.pk`` explicitly.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Return the character's display name from CharacterSheet.character.db_key.
+          readOnly: true
+      required:
+      - id
+      - name
     _Fame:
       type: object
       description: Persona's fame state for the renown tab header.

@@ -39,6 +39,14 @@ export interface ScenePersona {
   id: number;
   name: string;
   persona_type?: string;
+  /** The persona's character (CharacterSheet pk == character ObjectDB pk). */
+  character_sheet?: number;
+  /**
+   * Whether this persona's character may be socially targeted. Mirrors the
+   * challenge consent gate; the scene UI hides the duel-challenge affordance when
+   * false (#1181). Defaults to true server-side.
+   */
+  allow_social_actions?: boolean;
 }
 
 /** Compact public representation of a room position (id + name). */
@@ -175,4 +183,26 @@ export interface Interaction {
   my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
   entry_endorsers: EndorserBadge[];
   entry_endorsed_by_me: boolean;
+}
+
+/** The single featured (fully sealed) moment of a scene's highlight reel (#1241). */
+export interface HighlightReelFeatured {
+  interaction_id: number;
+}
+
+/** One sealed, ranked entry in the index below the featured moment (#1241). */
+export interface HighlightReelEntry {
+  interaction_id: number;
+  rank: number;
+}
+
+/**
+ * A scene's highlight reel (#1241): a sealed featured moment + a ranked index.
+ * `featured` is null when the scene has no tagged moments and no reacted poses
+ * (an empty reel — the section is hidden). The payload carries ids only; a pose
+ * is revealed by fetching the interaction-detail endpoint on demand.
+ */
+export interface HighlightReel {
+  featured: HighlightReelFeatured | null;
+  index: HighlightReelEntry[];
 }

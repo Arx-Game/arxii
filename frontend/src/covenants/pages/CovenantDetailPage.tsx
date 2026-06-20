@@ -291,7 +291,7 @@ function MemberRow({
 function findInductionRitual(rituals: RitualWithSchema[]): RitualWithSchema | null {
   return (
     rituals.find(
-      (r) => r.name === 'Covenant Induction' && (r.participation_rule as string) === 'SESSION'
+      (r) => r.name === 'Covenant Induction' && (r.participation_rule as string) === 'INDUCTION'
     ) ?? null
   );
 }
@@ -389,7 +389,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Members</h2>
-          {isActiveMember && inductionRitual && (
+          {viewerCapabilities.can_invite && inductionRitual && (
             <Button
               size="sm"
               onClick={() => setInductionOpen(true)}
@@ -398,7 +398,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
               Induct New Member
             </Button>
           )}
-          {isActiveMember && !ritualsLoading && !inductionRitual && (
+          {viewerCapabilities.can_invite && !ritualsLoading && !inductionRitual && (
             <Button size="sm" disabled title="Covenant Induction ritual not available">
               Induct New Member
             </Button>
@@ -448,6 +448,7 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
         <RitualSessionDraftDialog
           ritual={inductionRitual as RitualWithSchema & { input_schema: RitualInputSchema | null }}
           characterSheetId={characterSheetId}
+          sessionReferences={[{ kind: 'COVENANT', ref_covenant_id: covenantId }]}
           open={inductionOpen}
           onOpenChange={setInductionOpen}
           onSuccess={(session) => {

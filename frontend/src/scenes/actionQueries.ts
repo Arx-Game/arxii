@@ -10,6 +10,7 @@ import type {
   CastPullRequestBody,
   CastRequestBody,
   CastResponse,
+  PendingActionTarget,
 } from './actionTypes';
 
 /**
@@ -86,6 +87,14 @@ export async function createActionRequest(
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {
   const res = await apiFetch(`/api/action-requests/?scene=${sceneId}&status=pending`);
   if (!res.ok) throw new Error('Failed to load pending requests');
+  return res.json();
+}
+
+export async function fetchPendingTargets(
+  sceneId: string
+): Promise<{ results: PendingActionTarget[] }> {
+  const res = await apiFetch(`/api/action-targets/?scene=${sceneId}&status=pending`);
+  if (!res.ok) throw new Error('Failed to load pending action targets');
   return res.json();
 }
 

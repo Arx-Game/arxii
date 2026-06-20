@@ -8,7 +8,7 @@ from rest_framework import serializers
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.magic.services.hostility import is_technique_hostile
 from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, ConsentDecision
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 
 def _cap_fury_by_provocation(attrs: dict) -> dict:
@@ -471,3 +471,55 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
             return None
         payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL
         return AnimaRecoverySerializer(payload).data if payload is not None else None
+
+
+class SceneActionTargetSerializer(serializers.ModelSerializer):
+    """Flat read payload for a pending additional-target consent row (#1177)."""
+
+    action_target_id = serializers.IntegerField(source="id", read_only=True)
+    action_request_id = serializers.IntegerField(read_only=True)
+    target_persona_id = serializers.IntegerField(read_only=True)
+    initiator_persona = serializers.IntegerField(
+        source="action_request.initiator_persona_id", read_only=True
+    )
+    initiator_name = serializers.CharField(
+        source="action_request.initiator_persona.name", read_only=True
+    )
+    scene = serializers.IntegerField(source="action_request.scene_id", read_only=True)
+    action_key = serializers.CharField(source="action_request.action_key", read_only=True)
+    action_template = serializers.IntegerField(
+        source="action_request.action_template_id", read_only=True, allow_null=True
+    )
+    technique = serializers.IntegerField(
+        source="action_request.technique_id", read_only=True, allow_null=True
+    )
+    technique_name = serializers.SerializerMethodField()
+    pose_text = serializers.CharField(source="action_request.pose_text", read_only=True)
+    strain_commitment = serializers.IntegerField(
+        source="action_request.strain_commitment", read_only=True
+    )
+    created_at = serializers.DateTimeField(source="action_request.created_at", read_only=True)
+
+    def get_technique_name(self, obj: SceneActionTarget) -> str | None:
+        """Human label for the enhancing technique (mirrors the request serializer)."""
+        technique = obj.action_request.technique
+        return technique.name if technique is not None else None
+
+    class Meta:
+        model = SceneActionTarget
+        fields = [
+            "action_target_id",
+            "action_request_id",
+            "target_persona_id",
+            "status",
+            "initiator_persona",
+            "initiator_name",
+            "scene",
+            "action_key",
+            "action_template",
+            "technique",
+            "technique_name",
+            "pose_text",
+            "strain_commitment",
+            "created_at",
+        ]

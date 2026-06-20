@@ -51,9 +51,29 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **Frontend:** ActionPanel, ConsentPrompt, PersonaContextMenu components
 - **Constants:** SceneActionRequestStatus, SceneActionType
 
+### Multi-Target Action Consent (#572 follow-ups) — DONE (#1177, #1178)
+
+Two follow-ups from the #572 multi-target dispatch foundation:
+
+- **Per-target resolver invocation (#1178):** `respond_to_action_target()` now fires
+  the registered action resolver once per accepted `SceneActionTarget` row, symmetric with
+  `respond_to_action_request()`. Resolvers for multi-target actions must keep cast-level
+  side-effects idempotent across invocations.
+- **Additional-target consent UI (#1177):**
+  - `SceneActionTarget` read-only listing endpoint — `GET /api/action-targets/` (filterable
+    by `scene` and `status`); registered in scenes URL router as `action-targets`.
+  - `SceneActionTargetSerializer` — flat read payload with `action_target_id`,
+    `action_request_id`, `target_persona_id`, `initiator_name`, `scene`, `action_key`,
+    `technique_name`, `pose_text`, `strain_commitment`, `status`, `created_at`.
+  - `SceneActionTargetFilter` — `scene` + `status` django-filter FilterSet.
+  - Frontend `ConsentPrompt` extended: polls `GET /api/action-targets/?scene={id}&status=pending`
+    every 5 s alongside the primary-request queue; renders amber consent cards for pending
+    additional-target rows; Accept/Deny dispatches to
+    `POST /api/action-requests/{id}/respond/` with `target_persona_id`.
+
 ### Scene System (core)
 - **Models:** Scene (privacy_mode, summary fields), SceneParticipation, SceneSummaryRevision
-- **APIs:** SceneViewSet, PersonaViewSet, SceneSummaryRevisionViewSet, PlaceViewSet, SceneActionRequestViewSet
+- **APIs:** SceneViewSet, PersonaViewSet, SceneSummaryRevisionViewSet, PlaceViewSet, SceneActionRequestViewSet, SceneActionTargetViewSet
 - **Frontend:** Scene list/detail pages, interaction feed, action panel
 
 ### Positioning in Scenes — DONE (#1017)

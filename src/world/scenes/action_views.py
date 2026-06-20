@@ -21,7 +21,7 @@ from actions.registry import get_action
 from actions.types import TargetType
 from world.magic.exceptions import MagicError
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
-from world.scenes.action_filters import SceneActionRequestFilter
+from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_serializers import (
     CastableTechniqueSerializer,
@@ -29,6 +29,7 @@ from world.scenes.action_serializers import (
     EnhancedSceneActionResultSerializer,
     SceneActionRequestCreateSerializer,
     SceneActionRequestSerializer,
+    SceneActionTargetSerializer,
     TechniqueCastCreateSerializer,
 )
 from world.scenes.action_services import (
@@ -426,3 +427,30 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         techniques = [ct.technique for ct in char_techniques]
         return Response(CastableTechniqueSerializer(techniques, many=True).data)
+
+
+class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only listing of a persona's pending additional-target consent rows (#1177)."""
+
+    serializer_class = SceneActionTargetSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SceneActionRequestPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SceneActionTargetFilter
+    http_method_names = ["get"]
+
+    def get_queryset(self) -> QuerySet[SceneActionTarget]:
+        persona_ids = get_account_personas(self.request)
+        if not persona_ids:
+            return SceneActionTarget.objects.none()
+        return (
+            SceneActionTarget.objects.filter(target_persona_id__in=persona_ids)
+            .select_related(
+                "action_request",
+                "action_request__initiator_persona",
+                "action_request__scene",
+                "action_request__technique",
+                "target_persona",
+            )
+            .order_by("-action_request__created_at", "id")
+        )

@@ -4,10 +4,11 @@
  * Three independent components surfaced by CombatTurnPanel when relevant:
  *
  * 1. DuelChallengeControls — Accept/Decline prompt for an incoming pending challenge.
- *    Backend gap: there is no /api/combat/duel-challenges/ list endpoint yet;
- *    the caller must derive `hasPendingIncomingChallenge` from other data sources
- *    (e.g. the encounter detail, a WebSocket push, or the available-actions list).
- *    Dispatches registry actions 'accept' / 'decline' via useDispatchPlayerAction.
+ *    Driven by the GET /api/combat/duel-challenges/ inbox (#1180): the caller fetches
+ *    the inbox, finds the incoming challenge for this character, and passes
+ *    `hasPendingIncomingChallenge`, `challengerName`, and the specific `challengeId`.
+ *    Dispatches registry actions 'accept' / 'decline' (threading `challenge_id`) via
+ *    useDispatchPlayerAction.
  *
  * 2. DuelYieldControls — Yield button shown while an active duel is in progress.
  *    Dispatches registry action 'yield'. Guards on `isActiveDuel` (caller derives
@@ -20,14 +21,9 @@
  *    to the frontend; the backend removes this action from availability once acked).
  *
  * All three components dispatch through useDispatchPlayerAction (the same hook
- * used by YourTurn for combat actions). No new API client functions needed.
+ * used by YourTurn for combat actions).
  *
- * Backend gap note (Task 14):
- *   A dedicated GET /api/combat/duel-challenges/ endpoint does not yet exist.
- *   The challenge prompt is driven by a caller-supplied `hasPendingIncomingChallenge`
- *   prop. Once the endpoint ships the caller can derive this via a React Query hook.
- *
- * Part of #568 — Duels feature, Task 14.
+ * Part of #568 — Duels feature, Task 14. Inbox wiring + challenge_id threading: #1180.
  */
 
 import { useState } from 'react';
@@ -38,13 +34,13 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 // Dispatch helper — registry-backend action with no extra kwargs
 // ---------------------------------------------------------------------------
 
-function registryRef(key: string) {
+function registryRef(key: string, kwargs: Record<string, unknown> = {}) {
   return {
     ref: {
       backend: 'registry' as const,
       registry_key: key,
     },
-    kwargs: {} as Record<string, unknown>,
+    kwargs,
   };
 }
 
@@ -59,31 +55,47 @@ export interface DuelChallengeControlsProps {
   hasPendingIncomingChallenge: boolean;
   /** Display name of the challenger — shown in the prompt. */
   challengerName: string | null;
+  /**
+   * The specific PENDING challenge this prompt acts on. Threaded into the action
+   * kwargs as `challenge_id` so accept/decline target the intended challenge when
+   * a PC has more than one pending (#1180). Null when unknown (back-compat).
+   */
+  challengeId?: number | null;
+  /**
+   * Called after a successful accept/decline so the caller can refresh caches
+   * (e.g. invalidate the inbox + the scene's active-encounter list).
+   */
+  onResolved?: () => void;
 }
 
 /**
  * Accept/Decline prompt for an incoming duel challenge.
  *
  * Renders null when `hasPendingIncomingChallenge` is false.
- * Dispatches the 'accept' or 'decline' registry action on click.
- *
- * Backend gap: caller must supply `hasPendingIncomingChallenge` from an external
- * source (WebSocket, encounter detail, or a future challenge-inbox endpoint).
+ * Dispatches the 'accept' or 'decline' registry action (threading `challenge_id`)
+ * on click. The caller supplies the availability + identity from the
+ * GET /api/combat/duel-challenges/ inbox (#1180).
  */
 export function DuelChallengeControls({
   characterId,
   hasPendingIncomingChallenge,
   challengerName,
+  challengeId = null,
+  onResolved,
 }: DuelChallengeControlsProps) {
   const { mutateAsync, isPending } = useDispatchPlayerAction(characterId);
   const [error, setError] = useState<string | null>(null);
 
   if (!hasPendingIncomingChallenge) return null;
 
+  const challengeKwargs: Record<string, unknown> =
+    challengeId != null ? { challenge_id: challengeId } : {};
+
   async function handleAccept() {
     setError(null);
     try {
-      await mutateAsync(registryRef('accept'));
+      await mutateAsync(registryRef('accept', challengeKwargs));
+      onResolved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept challenge');
     }
@@ -92,7 +104,8 @@ export function DuelChallengeControls({
   async function handleDecline() {
     setError(null);
     try {
-      await mutateAsync(registryRef('decline'));
+      await mutateAsync(registryRef('decline', challengeKwargs));
+      onResolved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to decline challenge');
     }

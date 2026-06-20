@@ -1009,3 +1009,70 @@ class PerTargetRespondTestCase(APITestCase):
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["detail"] == "Unable to process this action request."
+
+
+class TestSceneActionTargetViewSet(APITestCase):
+    """GET /api/action-targets/ lists the requester's pending additional-target rows (#1177)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.my_persona = cls.identity.primary_persona
+
+        cls.other_account = AccountFactory()
+        cls.other_character = CharacterFactory()
+        cls.other_roster_entry = RosterEntryFactory(character_sheet__character=cls.other_character)
+        cls.other_player_data = PlayerDataFactory(account=cls.other_account)
+        cls.other_tenure = RosterTenureFactory(
+            player_data=cls.other_player_data,
+            roster_entry=cls.other_roster_entry,
+        )
+        cls.other_identity = CharacterSheetFactory(character=cls.other_character)
+        cls.other_persona = cls.other_identity.primary_persona
+
+        cls.scene = SceneFactory()
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(user=self.account)
+
+    def test_lists_only_my_pending_target_rows(self) -> None:
+        request = SceneActionRequestFactory(scene=self.scene, initiator_persona=self.other_persona)
+        mine = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.my_persona,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionTargetFactory(  # someone else's row — must not appear
+            action_request=request,
+            target_persona=self.other_persona,
+            status=ActionRequestStatus.PENDING,
+        )
+
+        resp = self.client.get(f"/api/action-targets/?scene={self.scene.pk}&status=pending")
+
+        self.assertEqual(resp.status_code, 200)
+        ids = [r["action_target_id"] for r in resp.json()["results"]]
+        self.assertEqual(ids, [mine.pk])
+        row = resp.json()["results"][0]
+        self.assertEqual(row["target_persona_id"], self.my_persona.pk)
+        self.assertEqual(row["initiator_name"], self.other_persona.name)
+        self.assertIn("action_key", row)
+        self.assertIn("pose_text", row)
+
+    def test_status_filter_excludes_resolved(self) -> None:
+        request = SceneActionRequestFactory(scene=self.scene, initiator_persona=self.other_persona)
+        SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.my_persona,
+            status=ActionRequestStatus.RESOLVED,
+        )
+        resp = self.client.get(f"/api/action-targets/?scene={self.scene.pk}&status=pending")
+        self.assertEqual(resp.json()["results"], [])

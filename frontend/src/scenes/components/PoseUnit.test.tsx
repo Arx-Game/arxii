@@ -12,8 +12,12 @@ import { PoseUnit } from './PoseUnit';
 import type { Interaction } from '../types';
 
 // Mock @/combat/queries — used by PoseUnitDetailPanel; prevents real fetches.
+// PoseUnit also renders PersonaContextMenu, which reads useDispatchPlayerAction
+// + combatKeys for the duel-challenge affordance (#1181).
 vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
+  useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
 }));
 
 // Stub PoseUnitDetailPanel with the canonical data-testid. Renders

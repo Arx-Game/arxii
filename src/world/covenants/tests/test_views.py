@@ -1099,3 +1099,111 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
         unauthenticated_client = APIClient()
         response = unauthenticated_client.get("/api/covenants/ranks/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class InductionDraftAuthzApiTests(TestCase):
+    """POST /api/magic/rituals/sessions/ maps CovenantError → 400 for induction gate.
+
+    Verifies that a character without can_invite cannot bypass the
+    assert_initiator_can_induct gate via the generic draft endpoint.
+    """
+
+    def _make_authenticated_client_with_sheet(self) -> tuple:
+        """Return (client, initiator_sheet) for a user with an active character.
+
+        Creates an AccountDB → PlayerData → RosterTenure → RosterEntry →
+        CharacterSheet chain so the serializer's for_account() lookup
+        resolves the initiator from request.user.
+        """
+        from evennia.accounts.models import AccountDB
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        account = AccountDB.objects.create_user(
+            username=f"induct_test_{id(self)}",
+            email=f"induct_{id(self)}@test.com",
+            password="testpass123",
+        )
+        sheet = CharacterSheetFactory()
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        player_data = PlayerDataFactory(account=account)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=player_data,
+            end_date=None,
+        )
+        client = APIClient()
+        client.force_authenticate(user=account)
+        return client, sheet
+
+    def _build_request_body(self, *, ritual, invitee_sheet, covenant) -> dict:
+        """Build the POST body for drafting a covenant induction session."""
+        return {
+            "ritual_id": ritual.pk,
+            "invitee_ids": [invitee_sheet.pk],
+            "session_references": [{"kind": "COVENANT", "ref_covenant_id": covenant.pk}],
+        }
+
+    def test_generic_endpoint_blocks_non_can_invite_initiator(self) -> None:
+        """A member without can_invite gets HTTP 400 from the draft endpoint."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRankFactory,
+        )
+        from world.magic.factories import CovenantInductionRitualFactory
+
+        client, initiator_sheet = self._make_authenticated_client_with_sheet()
+        cov = CovenantFactory()
+        # Initiator is a member but rank has can_invite=False.
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator_sheet,
+            covenant=cov,
+            rank=CovenantRankFactory(covenant=cov, can_invite=False),
+        )
+        candidate = CharacterSheetFactory()
+        ritual = CovenantInductionRitualFactory()
+
+        response = client.post(
+            "/api/magic/rituals/sessions/",
+            self._build_request_body(ritual=ritual, invitee_sheet=candidate, covenant=cov),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permission to invite", response.data["detail"])
+
+    def test_generic_endpoint_allows_can_invite_initiator(self) -> None:
+        """A member with can_invite=True gets HTTP 201 from the draft endpoint."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+        )
+        from world.magic.factories import CovenantInductionRitualFactory
+
+        client, initiator_sheet = self._make_authenticated_client_with_sheet()
+        cov = CovenantFactory()
+        # Initiator is a manager (can_invite=True).
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator_sheet,
+            covenant=cov,
+            rank=CovenantManagerRankFactory(covenant=cov),
+        )
+        candidate = CharacterSheetFactory()
+        ritual = CovenantInductionRitualFactory()
+
+        response = client.post(
+            "/api/magic/rituals/sessions/",
+            self._build_request_body(ritual=ritual, invitee_sheet=candidate, covenant=cov),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)

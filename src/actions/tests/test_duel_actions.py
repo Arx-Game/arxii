@@ -88,6 +88,32 @@ class ChallengeActionConsentingTargetTests(django.test.TestCase):
         self.assertTrue(result.success, msg=result.message)
         self.assertIn("challenge_id", result.data)
 
+    def test_challenge_resolves_persona_id_target(self) -> None:
+        """The web dispatch path passes a Persona pk; the action resolves it to the
+        target's character and creates the challenge (#1181)."""
+        from actions.registry import get_action
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory(character_sheet=self.target_sheet)
+
+        result = get_action("challenge").run(self.actor, target=persona.pk)
+
+        self.assertTrue(result.success, msg=result.message)
+        challenge = DuelChallenge.objects.filter(
+            challenger_sheet=self.actor_sheet,
+            challenged_sheet=self.target_sheet,
+            status=DuelChallengeStatus.PENDING,
+        ).first()
+        self.assertIsNotNone(challenge, "Expected the persona-id target to resolve to a challenge")
+
+    def test_challenge_unresolvable_persona_id_target_fails(self) -> None:
+        """A Persona pk that doesn't exist resolves to no target → 'Challenge whom?'."""
+        from actions.registry import get_action
+
+        result = get_action("challenge").run(self.actor, target=999_999)
+
+        self.assertFalse(result.success)
+
 
 class ChallengeActionConsentBlockedTests(django.test.TestCase):
     """challenge at a target who has opted out of social actions → blocked."""
@@ -294,6 +320,56 @@ class AcceptChallengeActionTests(django.test.TestCase):
         result = get_action("accept").run(self.challenged)
 
         self.assertFalse(result.success)
+
+
+class AcceptChallengeChallengeIdTests(django.test.TestCase):
+    """A threaded challenge_id disambiguates which incoming challenge is accepted (#1180)."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("MultiChallengeArena")
+        self.challenger_a, self.sheet_a = _make_pc("MultiChallengerA", self.room)
+        self.challenger_b, self.sheet_b = _make_pc("MultiChallengerB", self.room)
+        self.challenged, self.challenged_sheet = _make_pc("MultiChallenged", self.room)
+        # Two distinct PENDING incoming challenges against the same challenged PC.
+        self.challenge_a = DuelChallengeFactory(
+            challenger_sheet=self.sheet_a,
+            challenged_sheet=self.challenged_sheet,
+            room=self.room,
+        )
+        self.challenge_b = DuelChallengeFactory(
+            challenger_sheet=self.sheet_b,
+            challenged_sheet=self.challenged_sheet,
+            room=self.room,
+        )
+
+    def test_challenge_id_targets_the_intended_challenge(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("accept").run(self.challenged, challenge_id=self.challenge_b.pk)
+
+        self.assertTrue(result.success, msg=result.message)
+        self.assertEqual(result.data["challenge_id"], self.challenge_b.pk)
+        self.challenge_a.refresh_from_db()
+        self.challenge_b.refresh_from_db()
+        self.assertEqual(self.challenge_b.status, DuelChallengeStatus.ACCEPTED)
+        # The other pending challenge is left untouched.
+        self.assertEqual(self.challenge_a.status, DuelChallengeStatus.PENDING)
+
+    def test_foreign_challenge_id_is_rejected(self) -> None:
+        """A challenge_id for a challenge not directed at the actor resolves to None."""
+        from actions.registry import get_action
+
+        foreign = DuelChallengeFactory(
+            challenger_sheet=self.sheet_a,
+            challenged_sheet=self.sheet_b,
+            room=self.room,
+        )
+
+        result = get_action("accept").run(self.challenged, challenge_id=foreign.pk)
+
+        self.assertFalse(result.success)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.status, DuelChallengeStatus.PENDING)
 
 
 class DeclineChallengeActionTests(django.test.TestCase):
