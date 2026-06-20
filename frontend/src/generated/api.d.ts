@@ -22745,6 +22745,23 @@ export interface components {
        */
       readonly resolved_at: string | null;
     };
+    SceneActionRequestCreateRequest: {
+      scene: number;
+      initiator_persona: number;
+      target_persona?: number;
+      target_persona_ids?: number[];
+      action_key: string;
+      /** @default medium */
+      effort_level: components['schemas']['EffortLevelEnum'];
+      technique_id?: number | null;
+      /** @default 0 */
+      strain_commitment: number;
+      fury_commitment_id?: number | null;
+      fury_anchor_id?: number | null;
+      /** @default  */
+      delivery: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
+      delivery_receiver_ids?: number[];
+    };
     SceneActionRequestRequest: {
       /** @description The scene where this action takes place */
       scene: number;
@@ -24976,7 +24993,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneActionRequestRequest'];
+        'application/json': components['schemas']['SceneActionRequestCreateRequest'];
       };
     };
     responses: {

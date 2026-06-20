@@ -154,7 +154,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneActionRequestRequest'
+              $ref: '#/components/schemas/SceneActionRequestCreateRequest'
         required: true
       security:
       - cookieAuth: []
@@ -41119,6 +41119,53 @@ components:
       - status
       - target_name
       - technique_name
+    SceneActionRequestCreateRequest:
+      type: object
+      properties:
+        scene:
+          type: integer
+        initiator_persona:
+          type: integer
+        target_persona:
+          type: integer
+        target_persona_ids:
+          type: array
+          items:
+            type: integer
+        action_key:
+          type: string
+          minLength: 1
+          maxLength: 100
+        effort_level:
+          allOf:
+          - $ref: '#/components/schemas/EffortLevelEnum'
+          default: medium
+        technique_id:
+          type: integer
+          nullable: true
+        strain_commitment:
+          type: integer
+          minimum: 0
+          default: 0
+        fury_commitment_id:
+          type: integer
+          nullable: true
+        fury_anchor_id:
+          type: integer
+          nullable: true
+        delivery:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/DeliveryEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        delivery_receiver_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - action_key
+      - initiator_persona
+      - scene
     SceneActionRequestRequest:
       type: object
       properties:

@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -85,6 +86,9 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
+    @extend_schema(
+        request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
+    )
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
@@ -101,7 +105,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         initiator_persona_id = serializer.validated_data["initiator_persona"]
         action_key = serializer.validated_data["action_key"]
         target_ids: list[int] = serializer.validated_data["target_ids"]
-        effort_level: str = serializer.validated_data.get("effort_level", "medium")
+        effort_level: str = serializer.validated_data["effort_level"]
 
         # Cardinality validation: enforce the action's target_type against the
         # normalised target_ids list.  Unknown / unregistered actions default to
