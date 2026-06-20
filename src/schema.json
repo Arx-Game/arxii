@@ -41061,7 +41061,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/DifficultyChoiceEnum'
           description: |-
-            Difficulty level chosen or determined for this action
+            Plausibility band chosen by the defender at consent.
 
             * `trivial` - Trivial
             * `easy` - Easy
@@ -41072,7 +41072,7 @@ components:
           type: integer
           readOnly: true
           nullable: true
-          description: The numeric difficulty used for resolution
+          description: Numeric difficulty used for resolution.
         result_interaction:
           type: integer
           readOnly: true
@@ -41160,7 +41160,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/DifficultyChoiceEnum'
           description: |-
-            Difficulty level chosen or determined for this action
+            Plausibility band chosen by the defender at consent.
 
             * `trivial` - Trivial
             * `easy` - Easy

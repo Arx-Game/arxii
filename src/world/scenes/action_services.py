@@ -150,7 +150,7 @@ def create_action_request(  # noqa: PLR0913
     initiator_persona: Persona,
     target_persona: Persona | None,
     action_key: str,
-    difficulty_choice: str = DifficultyChoice.NORMAL,
+    effort_level: str = "medium",
     technique: Technique | None = None,
     ritual_id: int | None = None,
     strain_commitment: int = 0,
@@ -175,7 +175,9 @@ def create_action_request(  # noqa: PLR0913
         initiator_persona: The persona attempting the action.
         target_persona: The persona being targeted.
         action_key: Key identifying the action type.
-        difficulty_choice: Difficulty level for this action.
+        effort_level: EffortLevel value declared by the initiator at dispatch.
+            Modifies the check and scales social fatigue. Defaults to "medium".
+            Difficulty is left at NORMAL (model default); the defender sets it later.
         technique: Optional technique to enhance this action. Must have an
             ActionEnhancement record for the given action_key and the
             initiator's character must know it.
@@ -231,7 +233,7 @@ def create_action_request(  # noqa: PLR0913
         target_persona=target_persona,
         action_key=action_key,
         action_template=_action_template_for_key(action_key),
-        difficulty_choice=difficulty_choice,
+        effort_level=effort_level,
         status=ActionRequestStatus.PENDING,
         technique=technique,
         strain_commitment=strain_commitment,

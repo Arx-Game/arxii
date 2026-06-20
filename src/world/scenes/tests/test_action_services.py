@@ -75,15 +75,16 @@ class TestCreateActionRequest(TestCase):
         assert request.action_key == "intimidate"
         assert request.difficulty_choice == DifficultyChoice.NORMAL
 
-    def test_creates_with_custom_difficulty(self) -> None:
+    def test_create_persists_effort_not_initiator_difficulty(self) -> None:
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
-            action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
+            action_key="intimidate",
+            effort_level="high",
         )
-        assert request.difficulty_choice == DifficultyChoice.HARD
+        self.assertEqual(request.effort_level, "high")
+        self.assertEqual(request.difficulty_choice, DifficultyChoice.NORMAL)  # defender sets later
 
 
 class TestRespondToActionRequest(TestCase):
@@ -169,6 +170,7 @@ class TestRespondToActionRequest(TestCase):
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_accept_with_hard_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Defender sets difficulty_choice before accepting; resolved_difficulty reflects it."""
         mock_resolve.return_value = _make_pending_resolution(success=True)
 
         action_template = ActionTemplateFactory()
@@ -177,10 +179,11 @@ class TestRespondToActionRequest(TestCase):
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
         )
+        # Defender sets difficulty at consent time (not the initiator at dispatch)
+        request.difficulty_choice = DifficultyChoice.HARD
         request.action_template = action_template
-        request.save(update_fields=["action_template"])
+        request.save(update_fields=["action_template", "difficulty_choice"])
 
         result = respond_to_action_request(
             action_request=request,

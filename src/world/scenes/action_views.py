@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from actions.registry import get_action
 from actions.types import TargetType
 from world.magic.exceptions import MagicError
-from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_serializers import (
@@ -101,9 +101,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         initiator_persona_id = serializer.validated_data["initiator_persona"]
         action_key = serializer.validated_data["action_key"]
         target_ids: list[int] = serializer.validated_data["target_ids"]
-        difficulty_choice = serializer.validated_data.get(
-            "difficulty_choice", DifficultyChoice.NORMAL
-        )
+        effort_level: str = serializer.validated_data.get("effort_level", "medium")
 
         # Cardinality validation: enforce the action's target_type against the
         # normalised target_ids list.  Unknown / unregistered actions default to
@@ -171,7 +169,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 initiator_persona=initiator_persona,
                 target_persona=target_persona,
                 action_key=action_key,
-                difficulty_choice=difficulty_choice,
+                effort_level=effort_level,
                 technique=technique,
                 strain_commitment=strain_commitment,
                 delivery=delivery,

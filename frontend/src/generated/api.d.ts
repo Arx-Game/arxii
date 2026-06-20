@@ -22718,7 +22718,7 @@ export interface components {
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       readonly status: components['schemas']['Status307Enum'];
       /**
-       * @description Difficulty level chosen or determined for this action
+       * @description Plausibility band chosen by the defender at consent.
        *
        *     * `trivial` - Trivial
        *     * `easy` - Easy
@@ -22727,7 +22727,7 @@ export interface components {
        *     * `daunting` - Daunting
        */
       difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
-      /** @description The numeric difficulty used for resolution */
+      /** @description Numeric difficulty used for resolution. */
       readonly resolved_difficulty: number | null;
       /** @description The interaction recording the result of this action */
       readonly result_interaction: number | null;
@@ -22768,7 +22768,7 @@ export interface components {
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       /**
-       * @description Difficulty level chosen or determined for this action
+       * @description Plausibility band chosen by the defender at consent.
        *
        *     * `trivial` - Trivial
        *     * `easy` - Easy
