@@ -1624,3 +1624,75 @@ class CanInviteToCovenantPredicateTests(TestCase):
 
         cov = CovenantFactory()
         self.assertFalse(can_invite_to_covenant(cov, character_sheet=CharacterSheetFactory()))
+
+
+class AssertInitiatorCanInductTests(TestCase):
+    def _session_with_cov_ref(self, *, initiator, covenant):
+        from datetime import UTC, datetime, timedelta
+
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import CovenantInductionRitualFactory
+        from world.magic.models.sessions import RitualSession, RitualSessionReference
+
+        ritual = CovenantInductionRitualFactory()
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=covenant,
+        )
+        return session
+
+    def test_passes_for_can_invite_initiator(self):
+        from world.covenants.services import assert_initiator_can_induct
+
+        cov = CovenantFactory()
+        initiator = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator,
+            covenant=cov,
+            rank=CovenantManagerRankFactory(covenant=cov),
+        )
+        assert_initiator_can_induct(
+            session=self._session_with_cov_ref(initiator=initiator, covenant=cov)
+        )
+
+    def test_raises_for_non_can_invite_initiator(self):
+        from world.covenants.exceptions import NotAuthorizedToInviteError
+        from world.covenants.services import assert_initiator_can_induct
+
+        cov = CovenantFactory()
+        initiator = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=initiator,
+            covenant=cov,
+            rank=CovenantRankFactory(covenant=cov),
+        )
+        with self.assertRaises(NotAuthorizedToInviteError):
+            assert_initiator_can_induct(
+                session=self._session_with_cov_ref(initiator=initiator, covenant=cov)
+            )
+
+    def test_raises_when_covenant_reference_missing(self):
+        from datetime import UTC, datetime, timedelta
+
+        from world.covenants.services import assert_initiator_can_induct
+        from world.magic.exceptions import SessionTargetMissingError
+        from world.magic.factories import CovenantInductionRitualFactory
+        from world.magic.models.sessions import RitualSession
+
+        ritual = CovenantInductionRitualFactory()
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=CharacterSheetFactory(),
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        with self.assertRaises(SessionTargetMissingError):
+            assert_initiator_can_induct(session=session)

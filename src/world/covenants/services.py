@@ -22,6 +22,7 @@ from world.covenants.exceptions import (
     InsufficientFoundersError,
     LastManagerRankError,
     NoActiveBattleError,
+    NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
@@ -1313,6 +1314,22 @@ def promote_to_subrole(
         set_engaged_membership(membership=new_membership)
     membership.character_sheet.character.covenant_roles.invalidate()
     return new_membership
+
+
+def assert_initiator_can_induct(*, session: RitualSession) -> None:
+    """Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite
+    rank in the target covenant. Dispatched via Ritual.draft_validator_path from
+    draft_session. Reads the session-level COVENANT reference exactly like
+    induct_member_via_session (the fire handler) does.
+    """
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if target_ref is None or target_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+    if not can_invite_to_covenant(target_ref.ref_covenant, character_sheet=session.initiator):
+        raise NotAuthorizedToInviteError
 
 
 @transaction.atomic
