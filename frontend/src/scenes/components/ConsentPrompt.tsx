@@ -34,6 +34,102 @@ const RESIST_EFFORT_OPTIONS = [
   { label: 'Extreme effort', value: 'extreme' },
 ] as const;
 
+interface ConsentCardProps {
+  cardKey: string;
+  initiatorName: string;
+  actionKey: string;
+  techniqueName?: string | null;
+  strainCommitment: number;
+  combatRiskLevel?: string | null;
+  resistEffort: string;
+  onResistChange: (v: string) => void;
+  onDeny: () => void;
+  onAccept: (difficulty: string) => void;
+  isPending: boolean;
+}
+
+function ConsentCard({
+  initiatorName,
+  actionKey,
+  techniqueName,
+  strainCommitment,
+  combatRiskLevel,
+  resistEffort,
+  onResistChange,
+  onDeny,
+  onAccept,
+  isPending,
+}: ConsentCardProps) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+      <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
+      <div className="flex-1">
+        <p className="text-sm font-medium">
+          <span className="font-semibold">{initiatorName}</span> wants to use{' '}
+          <span className="font-semibold">
+            {actionKey}
+            {techniqueName ? ` (${techniqueName})` : ''}
+          </span>{' '}
+          on your character.
+        </p>
+        {strainCommitment > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {initiatorName} is committing {strainCommitment} strain.
+          </p>
+        )}
+        {combatRiskLevel && (
+          <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+            The fight before you is {combatRiskLevel.toUpperCase()} risk — accepting wades your
+            character into the combat encounter.
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Select value={resistEffort} onValueChange={onResistChange}>
+          <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Dig in (costs stamina)">
+            <SelectValue placeholder="Dig in (costs stamina)" />
+          </SelectTrigger>
+          <SelectContent>
+            {RESIST_EFFORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={onDeny} disabled={isPending}>
+          <X className="mr-1 h-3.5 w-3.5" />
+          Deny
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => onAccept('normal')}
+          disabled={isPending}
+        >
+          <Check className="mr-1 h-3.5 w-3.5" />
+          Accept
+        </Button>
+        {PLAUSIBILITY_BANDS.map((opt) => {
+          const Icon = opt.icon;
+          return (
+            <Button
+              key={opt.value}
+              size="sm"
+              variant="secondary"
+              onClick={() => onAccept(opt.value)}
+              disabled={isPending}
+            >
+              <Icon className="mr-1 h-3.5 w-3.5" />
+              {opt.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ConsentPrompt({ sceneId }: Props) {
   const queryClient = useQueryClient();
 
@@ -106,210 +202,63 @@ export function ConsentPrompt({ sceneId }: Props) {
     <div className="space-y-2">
       {requests.map((req: ActionRequest) => {
         const cardKey = `req-${req.id}`;
-        const selectedResist = resistEffort[cardKey];
+        const selectedResist = resistEffort[cardKey] ?? '';
         return (
-          <div
+          <ConsentCard
             key={req.id}
-            className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30"
-          >
-            <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">
-                <span className="font-semibold">{req.initiator_name}</span> wants to use{' '}
-                <span className="font-semibold">
-                  {req.action_key}
-                  {req.technique_name ? ` (${req.technique_name})` : ''}
-                </span>{' '}
-                on your character.
-              </p>
-              {req.strain_commitment > 0 && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {req.initiator_name} is committing {req.strain_commitment} strain.
-                </p>
-              )}
-              {req.combat_risk_level && (
-                <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                  The fight before you is {req.combat_risk_level.toUpperCase()} risk — accepting
-                  wades your character into the combat encounter.
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Select
-                value={selectedResist ?? ''}
-                onValueChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
-              >
-                <SelectTrigger
-                  className="h-8 w-[160px] text-xs"
-                  aria-label="Dig in (costs stamina)"
-                >
-                  <SelectValue placeholder="Dig in (costs stamina)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESIST_EFFORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => respond.mutate({ requestId: req.id, accept: false })}
-                disabled={respond.isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Deny
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  respond.mutate({
-                    requestId: req.id,
-                    accept: true,
-                    difficulty: 'normal',
-                    resist_effort: selectedResist || undefined,
-                  })
-                }
-                disabled={respond.isPending}
-              >
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Accept
-              </Button>
-              {PLAUSIBILITY_BANDS.map((opt) => {
-                const Icon = opt.icon;
-                return (
-                  <Button
-                    key={opt.value}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() =>
-                      respond.mutate({
-                        requestId: req.id,
-                        accept: true,
-                        difficulty: opt.value,
-                        resist_effort: selectedResist || undefined,
-                      })
-                    }
-                    disabled={respond.isPending}
-                  >
-                    <Icon className="mr-1 h-3.5 w-3.5" />
-                    {opt.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+            cardKey={cardKey}
+            initiatorName={req.initiator_name}
+            actionKey={req.action_key}
+            techniqueName={req.technique_name}
+            strainCommitment={req.strain_commitment}
+            combatRiskLevel={req.combat_risk_level}
+            resistEffort={selectedResist}
+            onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
+            onDeny={() => respond.mutate({ requestId: req.id, accept: false })}
+            onAccept={(difficulty) =>
+              respond.mutate({
+                requestId: req.id,
+                accept: true,
+                difficulty,
+                resist_effort: selectedResist !== '' ? selectedResist : undefined,
+              })
+            }
+            isPending={respond.isPending}
+          />
         );
       })}
       {targets.map((t: PendingActionTarget) => {
         const cardKey = `target-${t.action_target_id}`;
-        const selectedResist = resistEffort[cardKey];
+        const selectedResist = resistEffort[cardKey] ?? '';
         return (
-          <div
+          <ConsentCard
             key={`target-${t.action_target_id}`}
-            className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30"
-          >
-            <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">
-                <span className="font-semibold">{t.initiator_name}</span> wants to use{' '}
-                <span className="font-semibold">
-                  {t.action_key}
-                  {t.technique_name ? ` (${t.technique_name})` : ''}
-                </span>{' '}
-                on your character.
-              </p>
-              {t.strain_commitment > 0 && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t.initiator_name} is committing {t.strain_commitment} strain.
-                </p>
-              )}
-              {t.combat_risk_level && (
-                <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                  The fight before you is {t.combat_risk_level.toUpperCase()} risk — accepting wades
-                  your character into the combat encounter.
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Select
-                value={selectedResist ?? ''}
-                onValueChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
-              >
-                <SelectTrigger
-                  className="h-8 w-[160px] text-xs"
-                  aria-label="Dig in (costs stamina)"
-                >
-                  <SelectValue placeholder="Dig in (costs stamina)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESIST_EFFORT_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  respondTarget.mutate({
-                    requestId: t.action_request_id,
-                    targetPersonaId: t.target_persona_id,
-                    accept: false,
-                  })
-                }
-                disabled={respondTarget.isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Deny
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  respondTarget.mutate({
-                    requestId: t.action_request_id,
-                    targetPersonaId: t.target_persona_id,
-                    accept: true,
-                    difficulty: 'normal',
-                    resist_effort: selectedResist || undefined,
-                  })
-                }
-                disabled={respondTarget.isPending}
-              >
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Accept
-              </Button>
-              {PLAUSIBILITY_BANDS.map((opt) => {
-                const Icon = opt.icon;
-                return (
-                  <Button
-                    key={opt.value}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() =>
-                      respondTarget.mutate({
-                        requestId: t.action_request_id,
-                        targetPersonaId: t.target_persona_id,
-                        accept: true,
-                        difficulty: opt.value,
-                        resist_effort: selectedResist || undefined,
-                      })
-                    }
-                    disabled={respondTarget.isPending}
-                  >
-                    <Icon className="mr-1 h-3.5 w-3.5" />
-                    {opt.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+            cardKey={cardKey}
+            initiatorName={t.initiator_name}
+            actionKey={t.action_key}
+            techniqueName={t.technique_name}
+            strainCommitment={t.strain_commitment}
+            combatRiskLevel={t.combat_risk_level}
+            resistEffort={selectedResist}
+            onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
+            onDeny={() =>
+              respondTarget.mutate({
+                requestId: t.action_request_id,
+                targetPersonaId: t.target_persona_id,
+                accept: false,
+              })
+            }
+            onAccept={(difficulty) =>
+              respondTarget.mutate({
+                requestId: t.action_request_id,
+                targetPersonaId: t.target_persona_id,
+                accept: true,
+                difficulty,
+                resist_effort: selectedResist !== '' ? selectedResist : undefined,
+              })
+            }
+            isPending={respondTarget.isPending}
+          />
         );
       })}
     </div>
