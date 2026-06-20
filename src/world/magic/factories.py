@@ -1515,6 +1515,8 @@ class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     scene = None
     tagged_by = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    interaction = None
+    interaction_timestamp = None
 
 
 def with_corruption_at_stage(sheet, resonance, stage: int):

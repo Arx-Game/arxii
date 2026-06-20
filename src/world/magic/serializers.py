@@ -48,6 +48,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadWeavingTeachingOffer,
 )
+from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -3305,3 +3306,80 @@ class TechniqueDesignSerializer(serializers.Serializer):
                 for a in attrs["applied_conditions"]
             ),
         )
+
+
+# =============================================================================
+# Dramatic Moment Tagging — GM/staff endpoint (#1139)
+# =============================================================================
+
+
+class DramaticMomentTypeSerializer(serializers.ModelSerializer):
+    """Read-only catalog of authored dramatic-moment types (for the tag picker)."""
+
+    class Meta:
+        model = DramaticMomentType
+        fields = ["id", "label", "description", "resonance", "resonance_amount", "per_scene_cap"]
+
+
+class DramaticMomentTagSerializer(serializers.ModelSerializer):
+    """Create + read dramatic-moment tags (#1139).
+
+    Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
+    ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
+    ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+    """
+
+    class Meta:
+        model = DramaticMomentTag
+        fields = [
+            "id",
+            "moment_type",
+            "character_sheet",
+            "scene",
+            "interaction",
+            "tagged_by",
+            "tagged_at",
+        ]
+        read_only_fields = ["tagged_by", "tagged_at"]
+        extra_kwargs = {
+            "character_sheet": {"required": False},
+            "scene": {"required": False},
+            "interaction": {"required": False},
+        }
+
+    def validate(self, attrs: dict) -> dict:
+        interaction = attrs.get("interaction")
+        if interaction is not None:
+            persona = interaction.persona
+            sheet = persona.character_sheet if persona is not None else None
+            if attrs.get("character_sheet") is None:
+                if sheet is None:
+                    raise serializers.ValidationError(
+                        {"character_sheet": "Pose has no character sheet; supply character_sheet."}
+                    )
+                attrs["character_sheet"] = sheet
+            if attrs.get("scene") is None:
+                attrs["scene"] = interaction.scene
+        if attrs.get("character_sheet") is None:
+            raise serializers.ValidationError(
+                {"character_sheet": "Provide interaction or character_sheet."}
+            )
+        return attrs
+
+    def create(self, validated_data: dict) -> DramaticMomentTag:
+        from world.magic.exceptions import (  # noqa: PLC0415
+            DramaticMomentCapExceeded,
+            EndorsementValidationError,
+        )
+        from world.magic.services.gain import create_dramatic_moment_tag  # noqa: PLC0415
+
+        try:
+            return create_dramatic_moment_tag(
+                character_sheet=validated_data["character_sheet"],
+                moment_type=validated_data["moment_type"],
+                tagged_by=validated_data["tagged_by"],
+                scene=validated_data.get("scene"),
+                interaction=validated_data.get("interaction"),
+            )
+        except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc

@@ -15,9 +15,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
+import { Badge } from '@/components/ui/badge';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
 import { ReactionStrip } from './ReactionStrip';
+import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
 import { EndorsementControl } from './EndorsementControl';
 import { postInteractionReaction } from '../queries';
 import type { Interaction, ActionLink } from '../types';
@@ -90,9 +92,17 @@ export interface PoseUnitProps {
   sceneId: string;
   onAddTarget?: (personaName: string) => void;
   onAttachAction?: (action: ActionAttachmentInfo) => void;
+  /** When true, shows the "Tag dramatic moment" GM control (#1139). */
+  canGm?: boolean;
 }
 
-export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: PoseUnitProps) {
+export function PoseUnit({
+  interaction,
+  sceneId,
+  onAddTarget,
+  onAttachAction,
+  canGm = false,
+}: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
   const hasLinks = actionLinks.length > 0;
@@ -100,8 +110,10 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
   // Auto-expand on first paint when a linked action had a critical outcome
   // (e.g. it defeated its focused opponent) so players don't miss it (#996).
   const [expanded, setExpanded] = useState(() => actionLinks.some((l) => l.has_critical_effect));
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
 
   const actionInteractionIds = actionLinks.map((l) => l.action_interaction.id);
+  const dramaticTags = interaction.dramatic_moment_tags ?? [];
 
   // -------------------------------------------------------------------------
   // State 3: standalone ACTION (not linked to any pose)
@@ -232,6 +244,42 @@ export function PoseUnit({ interaction, sceneId, onAddTarget, onAttachAction }: 
       )}
 
       <ReactionStrip windows={interaction.reaction_windows ?? []} sceneId={sceneId} />
+
+      {/* Dramatic-moment tag badges (#1139) */}
+      {dramaticTags.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1" data-testid="dramatic-moment-badges">
+          {dramaticTags.map((tag) => (
+            <Badge
+              key={`${tag.moment_type_label}-${tag.character_sheet_id ?? 'none'}`}
+              variant="secondary"
+              className="text-xs"
+            >
+              ✶ {tag.moment_type_label}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* GM control: tag a dramatic moment (#1139) */}
+      {canGm && (
+        <div className="mt-1">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setTagDialogOpen(true)}
+            data-testid="tag-moment-button"
+          >
+            ✶ Tag moment
+          </button>
+          <DramaticMomentTagDialog
+            open={tagDialogOpen}
+            onClose={() => setTagDialogOpen(false)}
+            interactionId={interaction.id}
+            sceneId={sceneId}
+          />
+        </div>
+      )}
+
       <ReactionsFooter interaction={interaction} sceneId={sceneId} />
       <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
       {interaction.pose_kind === 'entry' && (

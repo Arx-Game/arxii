@@ -387,6 +387,77 @@ evaluated in `accrue_corruption` on the Sineater's own casting path. Value deriv
 - `StageAdvanceBonusResult` — outcome of the Sineater's stage-advance response.
 - `RescueOutcome` — frozen dataclass; severity_reduced, stage_before/after, strain_taken.
 
+### Dramatic Moment Tagging (#545 / #1139)
+
+`models/dramatic_moment.py` — Staff-initiated scene moments that grant both resonance
+and a renown award:
+
+- `DramaticMomentType` (inherits `RenownAwardConfig`) — staff-authored lookup. Carries
+  `label`, `description`, `resonance` (FK — the resonance granted), `resonance_amount`
+  (flat units, default 15), and `per_scene_cap` (max awards per character per scene,
+  default 1). Inherits `magnitude` / `risk` / `reach` / `archetypes` from
+  `RenownAwardConfig` for the simultaneous renown leg.
+- `DramaticMomentTag` — per-event record. FKs: `moment_type`, `character_sheet`,
+  `scene` (nullable, `SET_NULL` — resilient to scene cleanup), `tagged_by` (AccountDB,
+  `PROTECT` for provenance), `interaction` (optional pose anchor; `db_constraint=False`
+  because `scenes_interaction` is a partitioned table with a composite PK),
+  `interaction_timestamp` (denormalized from `interaction.timestamp` so the composite
+  FK is navigable). `tagged_at` is auto-timestamped.
+
+**Service (`services/gain.py`):**
+
+`create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
+
+Validates that the character has claimed `moment_type.resonance` and that the
+`per_scene_cap` for this `(moment_type, scene, sheet)` combination has not been
+reached. On success, atomically:
+1. Creates a `DramaticMomentTag` row (with `interaction_timestamp` denormalized when a
+   pose is provided).
+2. Calls `grant_resonance(..., source=GainSource.DRAMATIC_MOMENT, dramatic_moment=tag)`.
+3. Calls `fire_renown_award` for the character's primary persona (skipped silently if no
+   primary persona).
+
+Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapExceeded`
+(per-scene cap hit) — both carry `user_message` for safe 400 responses.
+
+**REST API (`views.py`, `urls.py`, `serializers.py`):**
+
+- `GET /api/magic/dramatic-moment-types/` — `DramaticMomentTypeViewSet` (read-only, no
+  pagination; authenticated). Supplies the tag-picker dropdown in the GM control panel.
+- `POST /api/magic/dramatic-moment-tags/` — create a tag; gated by
+  `IsSceneGMOrOwnerOrStaff` (scene GMs, scene owners, and staff may tag — not
+  restricted to staff-only). Body fields: `character_sheet`, `moment_type`,
+  optional `scene`, optional `interaction`. Service errors map to HTTP 400
+  with `user_message`. No `DELETE` endpoint — tags are immutable provenance records.
+- `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`
+  and `scene`; paginated.
+
+**Django admin (`admin.py`):**
+
+- `DramaticMomentTypeAdmin` — full CRUD for the authored catalog. Fields:
+  `label`, `resonance`, `resonance_amount`, `per_scene_cap`, `magnitude`, `risk`.
+  Staff author types here; no special approval workflow.
+- `DramaticMomentTagAdmin` — read-only (no add/change permissions). All fields are
+  readonly for provenance audit. Staff can inspect issued tags but cannot fabricate them.
+
+**Scene/interaction context fields (scenes serializers):**
+
+- `SceneDetailSerializer.viewer_can_gm` (SerializerMethodField, bool) — `True` when
+  the requesting user is the scene's GM, owner, or a staff member. The frontend uses
+  this flag to show or hide the GM tagging control per pose.
+- `InteractionSerializer.dramatic_moment_tags` (SerializerMethodField, list) — tags
+  anchored to this interaction (Prefetch `to_attr=cached_dramatic_moment_tags`).
+  Drives the badge displayed on the pose in the scene log.
+- `SceneParticipationSerializer.dramatic_moment_count` (SerializerMethodField, int) —
+  count of tags for this participant in the scene, derived from a `dramatic_moment_counts`
+  context dict built at scene-serialization time. Powers per-participant tallies.
+
+**React frontend (`frontend/src/scenes/components/`):**
+
+- Per-pose GM "Tag dramatic moment" control (visible only when `viewer_can_gm`).
+- `DramaticMomentTagDialog.tsx` — modal dialog for type selection + confirmation.
+- Badge displayed on tagged interactions in the scene log.
+
 ### Audere & Audere Majora (#873, #543)
 
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global

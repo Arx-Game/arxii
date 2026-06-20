@@ -7,6 +7,8 @@ interface Props {
   filteredInteractions: Interaction[];
   onAddTarget?: (personaName: string) => void;
   onAttachAction?: (action: ActionAttachmentInfo) => void;
+  /** When true, shows the GM dramatic-moment tagging control on each pose (#1139). */
+  canGm?: boolean;
 }
 
 export function SceneMessages({
@@ -14,6 +16,7 @@ export function SceneMessages({
   filteredInteractions,
   onAddTarget,
   onAttachAction,
+  canGm,
 }: Props) {
   // Collect the set of ACTION interaction IDs that are already embedded inside
   // a POSE via action_links. These are rendered inside their parent PoseUnit
@@ -42,6 +45,7 @@ export function SceneMessages({
             sceneId={sceneId}
             onAddTarget={onAddTarget}
             onAttachAction={onAttachAction}
+            canGm={canGm}
           />
         );
       })}

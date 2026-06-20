@@ -54,10 +54,11 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
     """Simplified participant representation for scene lists"""
 
     roster_entry = serializers.SerializerMethodField()
+    dramatic_moment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Persona
-        fields = ["id", "name", "roster_entry"]
+        fields = ["id", "name", "roster_entry", "dramatic_moment_count"]
 
     def get_roster_entry(self, obj):
         try:
@@ -67,6 +68,13 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
         if entry:
             return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
+
+    def get_dramatic_moment_count(self, obj) -> int:
+        sheet = getattr(obj, "character_sheet", None)  # noqa: GETATTR_LITERAL - Persona.character_sheet FK; getattr used for None-safety across nullable FK
+        if sheet is None:
+            return 0
+        count_map: dict[int, int] = self.context.get("dramatic_moment_counts", {})
+        return count_map.get(sheet.pk, 0)
 
 
 class SceneListSerializer(serializers.ModelSerializer):
@@ -82,6 +90,7 @@ class SceneListSerializer(serializers.ModelSerializer):
         source="location",
     )
     is_owner = serializers.SerializerMethodField()
+    viewer_can_gm = serializers.SerializerMethodField()
 
     class Meta:
         model = Scene
@@ -94,6 +103,7 @@ class SceneListSerializer(serializers.ModelSerializer):
             "location_id",
             "participants",
             "is_owner",
+            "viewer_can_gm",
         ]
 
     def get_location(self, obj):
@@ -103,7 +113,22 @@ class SceneListSerializer(serializers.ModelSerializer):
 
     def get_participants(self, obj: Scene) -> list[dict]:
         personas = self._collect_personas(obj, only_real_names=True)
-        return SceneParticipantSerializer(personas, many=True).data
+        # Build a {character_sheet_id: count} map from the prefetched tags
+        # (cached_scene_drama_tags set by SceneViewSet.get_queryset) to avoid N+1.
+        # Falls back to an empty map if the attr is absent (e.g. direct
+        # serializer instantiation in tests that don't use the viewset).
+        cached_tags = getattr(obj, "cached_scene_drama_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if cached_tags is not None:
+            count_map: dict[int, int] = {}
+            for tag in cached_tags:
+                count_map[tag.character_sheet_id] = count_map.get(tag.character_sheet_id, 0) + 1
+        else:
+            count_map = {}
+        return SceneParticipantSerializer(
+            personas,
+            many=True,
+            context={"scene": obj, "dramatic_moment_counts": count_map},
+        ).data
 
     @staticmethod
     def _collect_personas(obj: Scene, *, only_real_names: bool) -> list[Persona]:
@@ -137,6 +162,13 @@ class SceneListSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return obj.is_owner(request.user)
         return False
+
+    def get_viewer_can_gm(self, obj: Scene) -> bool:
+        request = self.context.get("request")
+        if not (request and request.user and request.user.is_authenticated):
+            return False
+        user = request.user
+        return bool(user.is_staff or obj.is_gm(user) or obj.is_owner(user))
 
 
 class SceneDetailSerializer(SceneListSerializer):

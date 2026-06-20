@@ -93,6 +93,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         read_only=True,
         source="cached_action_links",
     )
+    dramatic_moment_tags = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.IntegerField(
         source="persona.character_sheet_id", read_only=True
     )
@@ -122,6 +123,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "place_name",
             "target_persona_ids",
             "action_links",
+            "dramatic_moment_tags",
             "endorsable_resonances",
             "pose_endorsers",
             "my_pose_endorsement",
@@ -254,6 +256,15 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return [
             ReactionAggregation(emoji=emoji, count=count, reacted=emoji in user_reacted)
             for emoji, count in counts.items()
+        ]
+
+    def get_dramatic_moment_tags(self, obj: Interaction) -> list[dict]:
+        tags = getattr(obj, "cached_dramatic_moment_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if tags is None:
+            return []
+        return [
+            {"moment_type_label": t.moment_type.label, "character_sheet_id": t.character_sheet_id}
+            for t in tags
         ]
 
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:

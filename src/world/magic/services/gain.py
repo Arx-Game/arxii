@@ -682,6 +682,7 @@ def create_dramatic_moment_tag(
     moment_type: DramaticMomentType,
     tagged_by: AccountDB,
     scene: Scene | None,
+    interaction: Interaction | None = None,
 ) -> DramaticMomentTag:
     """Tag a character's dramatic scene moment and fire resonance + renown.
 
@@ -718,6 +719,8 @@ def create_dramatic_moment_tag(
         character_sheet=character_sheet,
         scene=scene,
         tagged_by=tagged_by,
+        interaction=interaction,
+        interaction_timestamp=interaction.timestamp if interaction is not None else None,
     )
     grant_resonance(
         character_sheet,

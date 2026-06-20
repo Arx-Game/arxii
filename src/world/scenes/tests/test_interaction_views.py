@@ -863,7 +863,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(48):
+        with self.assertNumQueries(49):
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -873,7 +873,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         must not degenerate into N+1 queries per endorser).
 
         Uses the same interaction count as the small dataset (3 interactions) but with
-        5+ endorsers per pose instead of 2, then asserts the same 48-query budget.
+        5+ endorsers per pose instead of 2, then asserts the same 49-query budget.
         If this fails with a higher count, an endorser-prefetch path is broken.
         """
         from evennia.utils.idmapper import models as idmapper_models
@@ -943,7 +943,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(48):
+        with self.assertNumQueries(49):
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

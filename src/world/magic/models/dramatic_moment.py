@@ -76,6 +76,20 @@ class DramaticMomentTag(SharedMemoryModel):
         related_name="dramatic_moment_tags_issued",
         help_text="Account that tagged this moment. PROTECT because provenance must be kept.",
     )
+    interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dramatic_moment_tags",
+        db_constraint=False,  # scenes_interaction is partitioned (composite PK)
+        help_text="The pose that earned this moment; nullable for non-pose tags.",
+    )
+    interaction_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
     tagged_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

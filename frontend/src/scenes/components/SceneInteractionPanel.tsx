@@ -14,6 +14,8 @@ interface SceneInteractionPanelProps {
   onComposerModeChange?: (mode: ComposerMode) => void;
   onAddTarget?: (personaName: string) => void;
   onAttachAction?: (action: ActionAttachmentInfo) => void;
+  /** When true, shows the GM dramatic-moment tagging control on each pose (#1139). */
+  canGm?: boolean;
 }
 
 function threadToComposerMode(thread: Thread, roomName: string): ComposerMode {
@@ -43,6 +45,7 @@ export function SceneInteractionPanel({
   onComposerModeChange,
   onAddTarget,
   onAttachAction,
+  canGm,
 }: SceneInteractionPanelProps) {
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
   const {
@@ -103,6 +106,7 @@ export function SceneInteractionPanel({
           filteredInteractions={filteredInteractions}
           onAddTarget={onAddTarget}
           onAttachAction={onAttachAction}
+          canGm={canGm}
         />
         {hasNextPage && (
           <button onClick={() => fetchNextPage()} className="mt-4 px-4">
