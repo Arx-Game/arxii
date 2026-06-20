@@ -11,3 +11,11 @@ class PositionKind(models.TextChoices):
 
 
 AERIAL_PROPERTY_NAME = "aerial"
+
+
+# Plummet content identity keys (#1228). The fall DamageType, the Falling
+# ConditionCategory, and the staged Plummeting ConditionTemplate are seeded
+# idempotently by ensure_fall_content(); these names locate those rows.
+FALL_DAMAGE_TYPE_NAME: str = "Fall"
+PLUMMETING_CONDITION_NAME: str = "Plummeting"
+FALLING_CATEGORY_NAME: str = "Falling"
