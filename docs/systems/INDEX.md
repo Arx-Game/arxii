@@ -105,7 +105,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
     Strain stage for the active resonance; used in sineating offer payloads)
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
-    `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+    `apply_damage_reduction_from_threads(character, damage_amount) -> int`.
+    `recompute_max_health_with_threads` calls `world.vitals.services.recompute_max_health`,
+    which derives the base from `derive_base_max_health` when `base_max_health IS NULL`.
+  - **Level-derived health (#1256, `world.vitals.services`):**
+    - `derive_base_max_health(character_sheet) -> int` — base = class_term + stamina_term +
+      covenant_term. Reads `effective_combat_level`; class_term sums
+      `ClassStageHealthRate.health_per_level` per level via `stage_for_level`; stamina_term =
+      `stamina × VitalsConsequenceConfig.stamina_to_health_weight`; covenant_term via
+      `covenant_role_health`. Used when `CharacterVitals.base_max_health IS NULL`.
+    - `covenant_role_health(character, level) -> int` — sum of
+      `level × CovenantRoleBonus.bonus_per_level` over ENGAGED roles targeting the
+      `max_health` ModifierTarget; one DB query, no query-in-loop.
   - Thread survivability baseline (#1175): `survivability_baseline(character, vital_target) -> int`
     (soft-capped formula `round(cap × S / (S + half_saturation))` keyed by
     `ThreadSurvivabilityTuning`; injected into DR and MAX_HEALTH paths above),
@@ -265,12 +276,25 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
 - **Status:** design (slices); depends on #1044
 - **Details:** [appearance_and_identity.md](appearance_and_identity.md)
 ### Classes (Paths)
-Character paths with evolution hierarchy through stages of power.
+Character paths with evolution hierarchy through stages of power; also owns the
+per-class, per-stage health rate authoring and the primary-class level service.
 
-- **Models:** `Path`, `CharacterClass`
-- **Enums:** `PathStage` (Prospect, Potential, Puissant, True, Grand, Transcendent)
+- **Models:** `Path`, `CharacterClass`, `CharacterClassLevel`,
+  `ClassStageHealthRate` (authored per `(CharacterClass, PathStage)`;
+  `health_per_level` SmallInt — the HP gained per level while in that stage band;
+  unique `(character_class, stage)`)
+- **Enums:** `PathStage` (Prospect L1, Potential L3, Puissant L6, True L11,
+  Grand L16, Transcendent L21)
+- **Key Services (`world.classes.services`):**
+  - `stage_for_level(level) -> PathStage` — maps a class level to its PathStage band
+    (breakpoints L1/3/6/11/16/21; clamps <1 to PROSPECT).
+  - `set_primary_class_level(character, character_class, level) -> CharacterClassLevel`
+    — upserts the primary class level and triggers a full `recompute_max_health_with_threads`
+    so vitals reflect the new level immediately. **Always use this, never mutate
+    `CharacterClassLevel` rows directly.**
 - **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
-- **Integrates with:** progression (level requirements), character_creation (Prospect selection)
+- **Integrates with:** progression (level requirements), character_creation (Prospect
+  selection), vitals (`derive_base_max_health` reads `ClassStageHealthRate` + `stage_for_level`)
 - **Source:** `src/world/classes/`
 - **Details:** [classes.md](classes.md)
 ### Areas
@@ -1049,7 +1073,10 @@ These two axes are orthogonal — never re-merge them.
   `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate),
   mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`),
   items (`gear_archetype` on `ItemTemplate`),
-  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`)
+  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`),
+  vitals (`covenant_role_health` in `world.vitals.services` reads `CovenantRoleBonus` rows
+  targeting the `max_health` ModifierTarget to compute the covenant-role health armor term
+  in `derive_base_max_health`; recompute triggers fire on role engagement/membership change)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 

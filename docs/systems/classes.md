@@ -35,7 +35,8 @@ from world.classes.models import PathStage
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterClass` | Class definition with trait requirements | `name`, `description`, `is_hidden`, `minimum_level` (0-10), `core_traits` (M2M to Trait) |
-| `CharacterClassLevel` | Character-to-class assignment with level | `character` (FK ObjectDB), `character_class` (FK), `level` (1-10), `is_primary` |
+| `CharacterClassLevel` | Character-to-class assignment with level | `character` (FK ObjectDB), `character_class` (FK), `level` (1-30), `is_primary` |
+| `ClassStageHealthRate` | Authored HP-per-level rate per class per PathStage band | `character_class` (FK), `stage` (PathStage), `health_per_level` (PositiveSmallInt); unique `(character_class, stage)` |
 
 ---
 
@@ -80,6 +81,20 @@ class_level.is_elite_eligible  # True if level >= 6
 CharacterClassLevel.objects.get(character=character, is_primary=True)
 ```
 
+### Services (`world.classes.services`)
+
+```python
+from world.classes.services import stage_for_level, set_primary_class_level
+
+# Map a level to its PathStage band (breakpoints L1/3/6/11/16/21)
+stage = stage_for_level(5)   # PathStage.POTENTIAL (3 <= 5 < 6)
+stage = stage_for_level(11)  # PathStage.TRUE
+
+# Set a character's primary class level and immediately recompute max_health.
+# Always use this — never mutate CharacterClassLevel rows directly.
+ccl = set_primary_class_level(character, character_class, level=7)
+```
+
 ### PathAspect
 
 ```python
@@ -118,6 +133,9 @@ The Path model integrates with other apps through their own models:
 - **Codex System** (`world.codex`): `PathCodexGrant` links paths to codex entries that are granted when a path is chosen.
 - **Skills System** (`world.skills`): `PathSkillSuggestion` links paths to suggested skills for that path.
 - **Traits System** (`world.traits`): `CharacterClass.core_traits` references `Trait` for class trait requirements.
+- **Vitals System** (`world.vitals`): `derive_base_max_health` reads `ClassStageHealthRate` rows
+  and calls `stage_for_level` to compute the class-term contribution to a character's base health.
+  `set_primary_class_level` triggers `recompute_max_health_with_threads` on every level change.
 
 Both `PathCodexGrant` and `PathSkillSuggestion` appear as inlines on the Path admin page.
 

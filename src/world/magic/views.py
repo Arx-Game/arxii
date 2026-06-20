@@ -13,14 +13,13 @@ import dataclasses
 from dataclasses import asdict
 from typing import cast
 
-from django.db.models import Count, F, Prefetch
+from django.db.models import Count, Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, inline_serializer
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -120,7 +119,6 @@ from world.magic.serializers import (
     RitualSerializer,
     RitualSessionDetailSerializer,
     RitualSessionDraftSerializer,
-    RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
     SineatingOfferSerializer,
     SineatingRequestSerializer,
@@ -1739,7 +1737,6 @@ class ThreadHubSummaryView(APIView):
         character = sheet.character
         weavable_traits: list[dict] = []
         weavable_techniques: list[dict] = []
-        room_property_ids: list[int] = []
         weavable_relationship_track_ids: list[int] = []
 
         for cu in unlocks:
@@ -1781,15 +1778,9 @@ class ThreadHubSummaryView(APIView):
             "weaving_eligibility": eligibility,
             "weavable_traits": weavable_traits,
             "weavable_techniques": weavable_techniques,
-            "room_property_ids": room_property_ids,
             "weavable_relationship_track_ids": weavable_relationship_track_ids,
         }
         return Response(ThreadHubSummarySerializer(payload).data)
-
-
-# =============================================================================
-# Rooms-by-property (GET /api/magic/rooms-by-property/)
-# =============================================================================
 
 
 class RitualSessionViewSet(viewsets.ModelViewSet):
@@ -2023,35 +2014,6 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
             {"result_kind": result_kind, "result_id": result_id},
             status=status.HTTP_200_OK,
         )
-
-
-class RoomsByPropertyView(APIView):
-    """List rooms (ObjectDB) bearing any of the requested Property ids.
-
-    Used by the Weave Thread wizard to populate the ROOM-anchor picker.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        responses={200: RoomBriefSerializer(many=True)},
-    )
-    def get(self, request: Request) -> Response:
-        """Return rooms that have at least one matching ObjectProperty."""
-        from world.magic.serializers import RoomsByPropertyQuerySerializer  # noqa: PLC0415
-
-        serializer = RoomsByPropertyQuerySerializer(
-            data={"property_ids": request.query_params.getlist("property_id")},
-        )
-        serializer.is_valid(raise_exception=True)
-        ids = serializer.validated_data["property_ids"]
-        rooms = (
-            ObjectDB.objects.filter(object_properties__property__in=ids)
-            .annotate(name=F("db_key"))
-            .distinct()
-            .values("id", "name")
-        )
-        return Response(list(rooms))
 
 
 class ApplicablePullsView(APIView):

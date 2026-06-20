@@ -7,10 +7,15 @@ adjacency_offset=1.
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.classes.factories import (
+    CharacterClassFactory,
+    CharacterClassLevelFactory,
+    ClassStageHealthRateFactory,
+)
 from world.covenants.constants import MentorBondAdjusted
 from world.covenants.factories import CovenantFactory, MentorBondFactory, seed_mentor_bond_defaults
 from world.covenants.mentorship import (
+    _adjusted_level_for_mentor,
     active_bond_adjusting,
     bond_adjusted_level,
     covenant_band,
@@ -272,3 +277,129 @@ class DissolvedBondTests(TestCase):
         # Should fall back to raw (1)
         self.assertEqual(effective_combat_level(sidekick_sheet), 1)
         self.assertIsNone(active_bond_adjusting(sidekick_sheet))
+
+
+class BondLifecycleHealthRecomputeTests(TestCase):
+    """establish_mentor_bond and dissolve_mentor_bond recompute health for both parties (#1256)."""
+
+    def setUp(self):
+        seed_mentor_bond_defaults()
+        self.covenant = CovenantFactory(level=4)  # band [2, 6]
+        self.char_class = CharacterClassFactory()
+        ClassStageHealthRateFactory(character_class=self.char_class, health_per_level=10)
+
+    def _make_sheet_with_vitals(self, level: int):
+        """Create a sheet with a primary class level and vitals (base_max_health=None)."""
+        from world.vitals.factories import CharacterVitalsFactory
+
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=sheet.character,
+            character_class=self.char_class,
+            level=level,
+            is_primary=True,
+        )
+        CharacterVitalsFactory(
+            character_sheet=sheet, base_max_health=None, health=10, max_health=10
+        )
+        return sheet
+
+    def test_establishing_bond_recomputes_sidekick_health(self):
+        """Forming a sidekick bond raises the sidekick's effective level → more health."""
+        from world.covenants.mentorship import establish_mentor_bond
+        from world.vitals.models import CharacterVitals
+
+        # mentor raw 4 (in band [2,6]), sidekick raw 1 (out of band) → adjusted_party=SIDEKICK
+        mentor_sheet = self._make_sheet_with_vitals(4)
+        sidekick_sheet = self._make_sheet_with_vitals(1)
+
+        before = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+
+        establish_mentor_bond(
+            covenant=self.covenant,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_sheet,
+        )
+
+        after = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+        # sidekick elevated from raw 1 to effective 3 (= 4-1 adjacency), so health grows.
+        self.assertGreater(after, before)
+
+    def test_dissolving_bond_recomputes_health(self):
+        """Dissolving a bond reverts the sidekick's elevated health back toward the raw level."""
+        from world.covenants.mentorship import dissolve_mentor_bond, establish_mentor_bond
+        from world.vitals.models import CharacterVitals
+
+        mentor_sheet = self._make_sheet_with_vitals(4)
+        sidekick_sheet = self._make_sheet_with_vitals(1)
+
+        bond = establish_mentor_bond(
+            covenant=self.covenant,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_sheet,
+        )
+        after_establish = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+
+        dissolve_mentor_bond(bond)
+
+        after_dissolve = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+        # After dissolve, effective level drops back to raw 1 → health decreases.
+        self.assertLess(after_dissolve, after_establish)
+
+
+class CrossCovenantMentorIsolationTests(TestCase):
+    """Mentor bonded as MENTOR in two covenants: each covenant aggregates its own sidekicks (#1264).
+
+    Covenant A: level=10, band [8, 12]. Sidekick S_A primary level=10.
+      expected = clamp(10 + 1, 8, 12) = 11
+    Covenant B: level=6, band [4, 8]. Sidekick S_B primary level=4.
+      expected = clamp(4 + 1, 4, 8) = 5
+    The two covenants must yield different results driven by their own sidekick.
+    """
+
+    def setUp(self):
+        seed_mentor_bond_defaults()
+        # Covenant A: level=10, band_width=2 → band [8, 12]
+        self.covenant_a = CovenantFactory(level=10)
+        # Covenant B: level=6, band_width=2 → band [4, 8]
+        self.covenant_b = CovenantFactory(level=6)
+
+    def test_mentor_aggregates_each_covenant_independently(self):
+        """Mentor M in covenant A (sidekick level 10) and covenant B (sidekick level 4).
+
+        _adjusted_level_for_mentor must draw only from each covenant's own sidekick bonds.
+        Covenant A expected: clamp(10 + 1, 8, 12) = 11.
+        Covenant B expected: clamp(4 + 1, 4, 8) = 5.
+        """
+        mentor_sheet = CharacterSheetFactory()
+        sidekick_a = CharacterSheetFactory()
+        sidekick_b = CharacterSheetFactory()
+
+        # Mentor is out-of-band in both covenants (level 20 is outside [8,12] and [4,8]).
+        _set_primary_level(mentor_sheet, 20)
+        # S_A primary level 10 — in-band for covenant A [8, 12], drives A's calculation.
+        _set_primary_level(sidekick_a, 10)
+        # S_B primary level 4 — in-band for covenant B [4, 8], drives B's calculation.
+        _set_primary_level(sidekick_b, 4)
+
+        bond_in_a = MentorBondFactory(
+            covenant=self.covenant_a,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_a,
+            adjusted_party=MentorBondAdjusted.MENTOR,
+        )
+        bond_in_b = MentorBondFactory(
+            covenant=self.covenant_b,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_b,
+            adjusted_party=MentorBondAdjusted.MENTOR,
+        )
+
+        # Covenant A: clamp(10 + 1, 8, 12) = 11
+        self.assertEqual(_adjusted_level_for_mentor(bond_in_a), 11)
+        # Covenant B: clamp(4 + 1, 4, 8) = 5
+        self.assertEqual(_adjusted_level_for_mentor(bond_in_b), 5)
+        # Sanity: the two covenants yield different results driven by their own sidekick.
+        result_a = _adjusted_level_for_mentor(bond_in_a)
+        result_b = _adjusted_level_for_mentor(bond_in_b)
+        self.assertGreater(result_a, result_b)

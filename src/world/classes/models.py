@@ -247,6 +247,33 @@ class CharacterClassLevel(SharedMemoryModel):
         return self.level >= ELITE_ELIGIBILITY_LEVEL
 
 
+class ClassStageHealthRate(SharedMemoryModel):
+    """Authored per-class health gained per level while in a given PathStage band."""
+
+    character_class = models.ForeignKey(
+        CharacterClass,
+        on_delete=models.CASCADE,
+        related_name="stage_health_rates",
+        help_text="Class this health rate applies to",
+    )
+    stage = models.PositiveSmallIntegerField(
+        choices=PathStage.choices,
+        help_text="PathStage band this rate applies within",
+    )
+    health_per_level = models.PositiveSmallIntegerField(
+        help_text="Health gained per character level while in this stage band",
+    )
+
+    class Meta:
+        unique_together = ["character_class", "stage"]
+        ordering = ["character_class", "stage"]
+        verbose_name = "Class Stage Health Rate"
+        verbose_name_plural = "Class Stage Health Rates"
+
+    def __str__(self) -> str:
+        return f"{self.character_class.name} @ stage {self.stage}: {self.health_per_level}/lvl"
+
+
 class Aspect(NaturalKeyMixin, SharedMemoryModel):
     """
     Broad character archetype that provides bonuses to matching checks.

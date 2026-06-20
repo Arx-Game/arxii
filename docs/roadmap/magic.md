@@ -1390,9 +1390,13 @@ Cross-references:
 
   What's deferred:
   - TRAIT / TECHNIQUE / ROOM / RELATIONSHIP_TRACK anchor pickers — **SHIPPED (#538):**
-    `ThreadHubSummary` now carries `weavable_traits`, `weavable_techniques`,
-    `room_property_ids`, and `weavable_relationship_track_ids`; all four pickers are wired
+    `ThreadHubSummary` carried `weavable_traits`, `weavable_techniques`,
+    `room_property_ids`, and `weavable_relationship_track_ids`; the pickers are wired
     in `WeaveThreadWizard` (`frontend/src/magic/components/threads/WeaveThreadWizard.tsx`).
+    **ROOM anchor REMOVED (#879 / #1199):** the bare ROOM anchor was superseded by the
+    consecrated-SANCTUM anchor (its own slot-based weaving flow), so the ROOM wizard step,
+    the `RoomsByPropertyView` / `rooms-by-property` discovery endpoint, and the now-always-empty
+    `room_property_ids` summary field were all removed.
   - `ThreadPullDialog` (multi-thread pull) — **SHIPPED (#539):** `ThreadPullDialog`
     (`frontend/src/magic/components/threads/ThreadPullDialog.tsx`) is wired into
     `PullEffectPreview` and mounted in the YourTurn combat panel in

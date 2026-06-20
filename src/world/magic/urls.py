@@ -36,7 +36,6 @@ from world.magic.views import (
     RitualPerformView,
     RitualSessionViewSet,
     RitualViewSet,
-    RoomsByPropertyView,
     SceneEntryEndorsementViewSet,
     SineatingPendingOfferViewSet,
     SineatingRequestView,
@@ -142,11 +141,6 @@ urlpatterns = [
         "applicable-pulls/",
         ApplicablePullsView.as_view(),
         name="applicable-pulls",
-    ),
-    path(
-        "rooms-by-property/",
-        RoomsByPropertyView.as_view(),
-        name="rooms-by-property",
     ),
     path(
         "thread-hub-summary/",

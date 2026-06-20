@@ -354,5 +354,4 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["weavable_traits"], [])
         self.assertEqual(response.data["weavable_techniques"], [])
-        self.assertEqual(response.data["room_property_ids"], [])
         self.assertEqual(response.data["weavable_relationship_track_ids"], [])
