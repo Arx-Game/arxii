@@ -504,8 +504,16 @@ Roleplay session recording with participant tracking, interaction logging, perso
     anonymous=public. Use in `get_queryset()` / filter chains.
   - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
     `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
-  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
-    encounter read gate all consume these two forms.
+  - `Interaction.objects.visible_to(account, persona_ids=..., since=...)` — queryset; the
+    pose-level read tiers (room-heard public, pinned party, present/participated, GM-of-scene;
+    very-private excluded except for the party). Consumed by `InteractionViewSet.get_queryset`
+    and `SceneViewSet.highlight_reel`.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
+    encounter read gate, and the interaction/reel read gates all consume these forms.
+- **Highlight reel (#1241):** `GET /api/scenes/{id}/highlight-reel/` — a fully-sealed featured
+  moment + ranked index (ids only), ranked by `InteractionReaction` counts (a queryset-level
+  `Count` annotation, no denormalized column), GM-tagged poses headline. Filtered through
+  `Interaction.objects.visible_to`. Frontend: `HighlightReel` (`frontend/src/scenes/components/`).
 - **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
   `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
   additional-target consent rows for the authenticated player's personas).

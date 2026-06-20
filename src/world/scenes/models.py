@@ -22,7 +22,7 @@ from world.scenes.constants import (
     SummaryAction,
     SummaryStatus,
 )
-from world.scenes.managers import SceneManager
+from world.scenes.managers import InteractionManager, SceneManager
 from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
@@ -561,6 +561,8 @@ class Interaction(SharedMemoryModel):
         help_text="Post-resolution audit of the realized Fury tier (clash + non-clash).",
     )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    objects = InteractionManager()
 
     class Meta:
         # NO ordering — cursor pagination handles it. Default ordering on a

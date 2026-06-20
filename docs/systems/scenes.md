@@ -78,6 +78,19 @@ scene.is_viewable_by(account)
 # is already in the identity map — same approach as is_gm / is_owner).
 ```
 
+**Interaction** read-access has its own canonical queryset surface (the pose-level tiers:
+room-heard public, pinned party, present/participated scenes, GM-of-scene; very-private
+excluded except for the party themselves):
+
+```python
+from world.scenes.models import Interaction
+
+# Single source of truth for interaction read-visibility (was inlined in
+# InteractionViewSet.get_queryset). Preserves any prefetches on the chain. Callers pass
+# the account's CURRENT persona ids (empty for anonymous) and an optional `since` bound.
+Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
+```
+
 **Consumers:**
 - `SceneViewSet.get_queryset()` calls `Scene.objects.viewable_by(request.user)` for the
   `list` action (`src/world/scenes/views.py`); retrieve is gated separately via the
@@ -87,6 +100,10 @@ scene.is_viewable_by(account)
 - `CombatEncounterViewSet._filter_readable()` calls `Scene.objects.viewable_by(user)`
   as the base of the encounter read-gate, unioned with encounter-participant membership
   (`src/world/combat/views.py`).
+- `InteractionViewSet.get_queryset()` calls `Interaction.objects.visible_to(...)`
+  (`src/world/scenes/interaction_views.py`).
+- `SceneViewSet.highlight_reel()` calls `Interaction.objects.visible_to(...)` so the reel
+  can never surface a pose the viewer cannot see — not even as a sealed slot (#1241).
 
 ### SceneMessage
 
@@ -195,6 +212,12 @@ result = respond_to_action_target(action_target=target_row, decision=ConsentDeci
 - `DELETE /api/scenes/{id}/` - Delete scene (owner/staff only)
 - `POST /api/scenes/{id}/finish/` - Finish an active scene (owner/GM/staff)
 - `GET /api/scenes/spotlight/` - Active scenes + recently finished (last 7 days)
+- `GET /api/scenes/{id}/highlight-reel/` - Highlight reel (#1241): one **fully sealed**
+  featured moment + a ranked index, ids only. Featured = highest-reacted GM-tagged pose
+  (headlines even at 0 reactions — curation primacy), else the single most-reacted pose;
+  index = remaining poses with ≥1 reaction, ranked by reaction count, capped at 10. Source
+  set is filtered through `Interaction.objects.visible_to`, so hidden poses never appear.
+  Reveal a pose via `GET /api/interactions/{id}/`.
 
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 

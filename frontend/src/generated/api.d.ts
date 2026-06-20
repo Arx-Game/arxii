@@ -11535,6 +11535,35 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/scenes/{id}/highlight-reel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #1241 — the scene's highlight reel: a sealed featured moment + a ranked index.
+     *
+     *     Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
+     *     zero reactions, because storyteller curation has primacy. When the scene has no
+     *     tags, this falls back to the single most-reacted pose. The index is the remaining
+     *     poses with at least one reaction, ranked by reaction count (ties -> most recent)
+     *     and capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the
+     *     reel can never surface a pose the viewer cannot already see — not even as a sealed
+     *     slot. The payload carries only interaction ids (the featured card is fully sealed);
+     *     the frontend reveals a pose by fetching it through the existing interaction-detail
+     *     endpoint, which re-checks visibility.
+     */
+    get: operations['scenes_highlight_reel_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/spotlight/': {
     parameters: {
       query?: never;
@@ -16762,6 +16791,32 @@ export interface components {
       max_inches: number;
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
+    };
+    /**
+     * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+     *
+     *     ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
+     *     (an empty reel — the frontend hides the collapsible section).
+     */
+    HighlightReel: {
+      featured: components['schemas']['HighlightReelFeatured'] | null;
+      index: components['schemas']['HighlightReelEntry'][];
+    };
+    /** @description One sealed entry in the ranked index below the featured moment (#1241). */
+    HighlightReelEntry: {
+      interaction_id: number;
+      rank: number;
+    };
+    /**
+     * @description The single featured moment of a scene's highlight reel (#1241).
+     *
+     *     Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
+     *     pose content, type, participants, or reaction count until the viewer expands it, at
+     *     which point the frontend fetches the pose through the existing interaction-detail
+     *     endpoint (which re-checks visibility). Sending content here would defeat the seal.
+     */
+    HighlightReelFeatured: {
+      interaction_id: number;
     };
     /** @description Serializer for HybridRelationshipType with nested requirements. */
     HybridRelationshipType: {
@@ -41561,6 +41616,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_highlight_reel_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HighlightReel'];
         };
       };
     };

@@ -287,6 +287,36 @@ class ScenesSpotlightSerializer(serializers.Serializer):
     recent = SceneListSerializer(many=True, source="recent_scenes")
 
 
+class HighlightReelFeaturedSerializer(serializers.Serializer):
+    """The single featured moment of a scene's highlight reel (#1241).
+
+    Intentionally IDs-only: the collapsed featured card is *fully sealed* — it shows no
+    pose content, type, participants, or reaction count until the viewer expands it, at
+    which point the frontend fetches the pose through the existing interaction-detail
+    endpoint (which re-checks visibility). Sending content here would defeat the seal.
+    """
+
+    interaction_id = serializers.IntegerField()
+
+
+class HighlightReelEntrySerializer(serializers.Serializer):
+    """One sealed entry in the ranked index below the featured moment (#1241)."""
+
+    interaction_id = serializers.IntegerField()
+    rank = serializers.IntegerField()
+
+
+class HighlightReelSerializer(serializers.Serializer):
+    """A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
+
+    ``featured`` is null when the scene has no GM-tagged moments AND no reacted poses
+    (an empty reel — the frontend hides the collapsible section).
+    """
+
+    featured = HighlightReelFeaturedSerializer(allow_null=True)
+    index = HighlightReelEntrySerializer(many=True)
+
+
 class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
     persona_name = serializers.CharField(source="persona.name", read_only=True)
 
