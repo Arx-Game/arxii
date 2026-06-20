@@ -244,7 +244,6 @@ class WeeklySocialEngagementFactory(factory_django.DjangoModelFactory):
         ).get_current_game_week()
     )
     pending_points = Decimal(0)
-    distinct_initiators = 0
     granted = False
 
 

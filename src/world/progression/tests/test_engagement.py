@@ -10,8 +10,20 @@ from decimal import Decimal
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
+from world.progression.factories import WeeklySocialEngagementFactory
 from world.progression.models import KudosPointsData, KudosSourceCategory, WeeklySocialEngagement
 from world.progression.services.engagement import accrue
+
+
+class WeeklySocialEngagementFactoryTest(TestCase):
+    """The factory must build cleanly — distinct_initiators is a derived property."""
+
+    def test_factory_builds_with_derived_distinct_initiators(self) -> None:
+        ledger = WeeklySocialEngagementFactory()
+        # distinct_initiators is a read-only @property derived from child rows.
+        self.assertEqual(ledger.distinct_initiators, 0)
+        self.assertEqual(ledger.pending_points, Decimal(0))
+        self.assertFalse(ledger.granted)
 
 
 class WeeklySocialEngagementAccrueTest(TestCase):
