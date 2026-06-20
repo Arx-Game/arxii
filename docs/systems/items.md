@@ -347,7 +347,7 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 Used by both crafting (`stage_and_assert_affordable`) and the ritual path
 (`PerformRitualAction`):
 
-- `gather_consumable_pks(available, requirements) -> list[int]` — validates inventory
+- `gather_consumable_pks(*, available, requirements) -> list[int]` — validates inventory
   against requirements, returns PKs to delete; raises `InsufficientMaterials` on first
   shortfall.
 - `consume_pks(pks) -> None` — deletes `ItemInstance` rows by PK.

@@ -753,7 +753,7 @@ crafting framework and check-driven facet/style attachment.
       -> StyleCraftResult`
     - `compute_quality_score(check_result, *, step, min_success_level) -> int`
   - **Shared material helper** (`world.items.services.materials`):
-    - `gather_consumable_pks(available, requirements) -> list[int]` — validates inventory,
+    - `gather_consumable_pks(*, available, requirements) -> list[int]` — validates inventory,
       returns PKs to delete; also used by the ritual path
     - `consume_pks(pks) -> None`
     - `meets_quality_tier(inst, requirement) -> bool`
