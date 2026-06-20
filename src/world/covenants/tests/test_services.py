@@ -1864,3 +1864,61 @@ class RecomputeHealthOnEngagementTests(TestCase):
         clear_engaged_membership(membership=membership)
         after_clear = self._get_max_health()
         self.assertLess(after_clear, after_engage)
+
+
+class StandDownBattleCovenantHealthTests(TestCase):
+    """stand_down_battle_covenant must recompute max_health for each member."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.constants import BattleBinding, CovenantType
+        from world.covenants.factories import CovenantRoleBonusFactory
+        from world.mechanics.factories import max_health_modifier_target
+        from world.vitals.factories import CharacterVitalsFactory
+
+        # A STANDING BATTLE covenant, already risen (is_dormant=False).
+        self.covenant = CovenantFactory(
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            is_dormant=False,
+        )
+
+        # Role with a MAX_HEALTH bonus — same pattern as RecomputeHealthOnEngagementTests.
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        target = max_health_modifier_target()
+        CovenantRoleBonusFactory(
+            covenant_role=self.role,
+            modifier_target=target,
+            bonus_per_level=5,
+        )
+
+        # Member with derived max_health (base_max_health=None), currently engaged.
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character, primary_persona=False)
+        CharacterVitalsFactory(
+            character_sheet=self.sheet,
+            base_max_health=None,
+            max_health=0,
+            health=0,
+        )
+        self.membership = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+        )
+        # Engage the member so the role bonus is included in max_health.
+        set_engaged_membership(membership=self.membership)
+
+    def _get_max_health(self) -> int:
+        from world.vitals.models import CharacterVitals
+
+        return CharacterVitals.objects.get(character_sheet=self.sheet).max_health
+
+    def test_stand_down_recomputes_max_health(self) -> None:
+        """After stand-down, the role-bonus is gone and max_health must decrease."""
+        from world.covenants.services import stand_down_battle_covenant
+
+        after_rise = self._get_max_health()
+        stand_down_battle_covenant(covenant=self.covenant)
+        after_stand_down = self._get_max_health()
+        self.assertLess(after_stand_down, after_rise)

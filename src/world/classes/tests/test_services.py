@@ -70,3 +70,31 @@ class SetPrimaryClassLevelTests(TestCase):
         ccl = set_primary_class_level(self.character, self.klass, 3)
         self.assertEqual(ccl.level, 3)
         self.assertTrue(ccl.is_primary)
+
+    def test_set_primary_class_level_demotes_prior_primary(self):
+        """Switching primary class to B demotes A — only one is_primary=True row remains."""
+        from world.classes.factories import CharacterClassFactory, ClassStageHealthRateFactory
+        from world.classes.models import CharacterClassLevel
+        from world.classes.services import set_primary_class_level
+
+        klass_b = CharacterClassFactory()
+        ClassStageHealthRateFactory(
+            character_class=klass_b, stage=PathStage.PROSPECT, health_per_level=10
+        )
+
+        # Establish class A as primary.
+        set_primary_class_level(self.character, self.klass, 3)
+
+        # Switch to class B as primary.
+        ccl_b = set_primary_class_level(self.character, klass_b, 5)
+
+        primary_rows = CharacterClassLevel.objects.filter(character=self.character, is_primary=True)
+        self.assertEqual(primary_rows.count(), 1)
+        self.assertEqual(primary_rows.first().character_class, klass_b)
+        self.assertTrue(ccl_b.is_primary)
+
+        # Class A must now be demoted.
+        ccl_a = CharacterClassLevel.objects.get(
+            character=self.character, character_class=self.klass
+        )
+        self.assertFalse(ccl_a.is_primary)

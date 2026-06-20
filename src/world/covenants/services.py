@@ -1045,6 +1045,9 @@ def stand_down_battle_covenant(*, covenant: Covenant) -> None:
         m.save(update_fields=["engaged"])
         m.character_sheet.character.covenant_roles.invalidate()
         _invalidate_role_caches(m.character_sheet)
+        from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+        recompute_max_health_with_threads(m.character_sheet)
 
 
 def _emit_rise_message(covenant: Covenant) -> None:
