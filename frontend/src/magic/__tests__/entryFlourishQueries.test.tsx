@@ -195,7 +195,7 @@ describe('useRespondToEntryFlourish', () => {
     });
   });
 
-  it('invalidates the character-resonances query key on success', async () => {
+  it('invalidates the canonical characterResonanceList query key on success', async () => {
     vi.mocked(api.respondToEntryFlourish).mockResolvedValue(RESULT_FIXTURE);
 
     const { wrapper, client } = createWrapperWithClient();
@@ -209,7 +209,7 @@ describe('useRespondToEntryFlourish', () => {
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ['character-resonances', 4],
+        queryKey: magicKeys.characterResonanceList(),
       });
     });
   });
