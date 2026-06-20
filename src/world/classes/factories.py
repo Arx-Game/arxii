@@ -9,6 +9,7 @@ from world.classes.models import (
     Aspect,
     CharacterClass,
     CharacterClassLevel,
+    ClassStageHealthRate,
     Path,
     PathAspect,
     PathStage,
@@ -64,6 +65,17 @@ class AspectFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Aspect {n}")
     description = factory.Faker("sentence")
+
+
+class ClassStageHealthRateFactory(factory.django.DjangoModelFactory):
+    """Factory for ClassStageHealthRate."""
+
+    class Meta:
+        model = ClassStageHealthRate
+
+    character_class = factory.SubFactory(CharacterClassFactory)
+    stage = PathStage.PROSPECT
+    health_per_level = 10
 
 
 class PathAspectFactory(factory.django.DjangoModelFactory):

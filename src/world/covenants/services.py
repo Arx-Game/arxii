@@ -314,6 +314,9 @@ def change_role(
     membership.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(membership.character_sheet)
     membership.covenant.member_roster.invalidate()
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(membership.character_sheet)
     return new_row
 
 
@@ -366,6 +369,9 @@ def assign_covenant_role(
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(character_sheet)
     return row
 
 
@@ -380,6 +386,9 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(assignment.character_sheet)
     assignment.covenant.member_roster.invalidate()
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(assignment.character_sheet)
 
 
 @transaction.atomic
@@ -513,6 +522,9 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     membership.save(update_fields=["engaged"])
     membership.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(membership.character_sheet)
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(membership.character_sheet)
 
 
 @transaction.atomic
@@ -524,6 +536,9 @@ def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     membership.save(update_fields=["engaged"])
     membership.character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(membership.character_sheet)
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(membership.character_sheet)
 
 
 @transaction.atomic
@@ -548,6 +563,9 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
         row.save(update_fields=["engaged"])
     character_sheet.character.covenant_roles.invalidate()
     _invalidate_role_caches(character_sheet)
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(character_sheet)
 
 
 def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
@@ -1027,6 +1045,9 @@ def stand_down_battle_covenant(*, covenant: Covenant) -> None:
         m.save(update_fields=["engaged"])
         m.character_sheet.character.covenant_roles.invalidate()
         _invalidate_role_caches(m.character_sheet)
+        from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+        recompute_max_health_with_threads(m.character_sheet)
 
 
 def _emit_rise_message(covenant: Covenant) -> None:

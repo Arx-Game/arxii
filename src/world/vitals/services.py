@@ -720,7 +720,10 @@ def recompute_max_health(
         vitals = character_sheet.vitals
     except ObjectDoesNotExist:
         return 0
-    new_max = max(vitals.base_max_health + thread_addend, 0)
+    base = vitals.base_max_health
+    if base is None:
+        base = derive_base_max_health(character_sheet)
+    new_max = max(base + thread_addend, 0)
     update_fields: list[str] = []
     if vitals.max_health != new_max:
         vitals.max_health = new_max
@@ -731,6 +734,74 @@ def recompute_max_health(
     if update_fields:
         vitals.save(update_fields=update_fields)
     return new_max
+
+
+def covenant_role_health(character: object, level: int) -> int:  # noqa: OBJECTDB_PARAM
+    """Level-scaled covenant-role 'armor': sum of level * bonus_per_level over engaged roles'
+    MAX_HEALTH CovenantRoleBonus rows.
+
+    For each covenant role the character is currently ENGAGED in (engaged=True, left_at IS NULL),
+    sums ``level * CovenantRoleBonus.bonus_per_level`` where the bonus targets the MAX_HEALTH
+    ModifierTarget. One DB query for the bonuses; no query-in-loop.
+
+    Args:
+        character: The Character typeclass instance (has .covenant_roles handler).
+        level: Character level to scale the bonus against.
+
+    Returns:
+        Total covenant-role health armor for this character at the given level.
+    """
+    from world.covenants.models import CovenantRoleBonus  # noqa: PLC0415
+    from world.vitals.constants import MAX_HEALTH_MODIFIER_TARGET  # noqa: PLC0415
+
+    engaged = character.covenant_roles.currently_engaged_roles()
+    role_ids = [role.pk for role in engaged]
+    if not role_ids:
+        return 0
+    bonuses = CovenantRoleBonus.objects.filter(
+        covenant_role_id__in=role_ids,
+        modifier_target__name=MAX_HEALTH_MODIFIER_TARGET,
+    )
+    return sum(level * bonus.bonus_per_level for bonus in bonuses)
+
+
+def derive_base_max_health(character_sheet: CharacterSheet) -> int:
+    """Derive base_max_health = class stage-rate sum + stamina term + covenant-role armor.
+
+    Reads effective_combat_level so a bonded sidekick's elevation / mentor's cap flow in.
+
+    class_term:    Sum of ClassStageHealthRate.health_per_level for each level 1..effective_level,
+                   resolved via stage_for_level(lvl). Zero when no primary class is found.
+    stamina_term:  stamina trait value * VitalsConsequenceConfig.stamina_to_health_weight.
+    covenant_term: covenant_role_health(character, level) — MAX_HEALTH armor from engaged roles.
+    """
+    from world.classes.models import CharacterClassLevel, ClassStageHealthRate  # noqa: PLC0415
+    from world.classes.services import stage_for_level  # noqa: PLC0415
+    from world.covenants.mentorship import effective_combat_level  # noqa: PLC0415
+    from world.traits.constants import PrimaryStat  # noqa: PLC0415
+
+    character = character_sheet.character
+    level = effective_combat_level(character_sheet)
+
+    primary = (
+        CharacterClassLevel.objects.filter(character=character, is_primary=True)
+        .select_related("character_class")
+        .first()
+    )
+    class_term = 0
+    if primary is not None:
+        rates = {
+            r.stage: r.health_per_level
+            for r in ClassStageHealthRate.objects.filter(character_class=primary.character_class)
+        }
+        for lvl in range(1, level + 1):
+            class_term += rates.get(stage_for_level(lvl), 0)
+
+    cfg = get_vitals_consequence_config()
+    stamina = character.traits.get_trait_value(PrimaryStat.STAMINA)
+    stamina_term = stamina * cfg.stamina_to_health_weight
+
+    return class_term + stamina_term + covenant_role_health(character, level)
 
 
 def apply_clamped_chronic_damage(character_sheet: CharacterSheet, amount: int) -> int:

@@ -125,6 +125,18 @@ def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) ->
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
     _apply_character_mechanics(character, draft)
 
+    # Initialize CharacterVitals and set to full health now that class levels / stats exist
+    # so derive_base_max_health has meaningful inputs. recompute alone never heals from 0,
+    # so we explicitly set health = max_health to give fresh characters a full pool.
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _ = CharacterVitals.objects.get_or_create(character_sheet=sheet)
+    recompute_max_health_with_threads(sheet)
+    vitals.refresh_from_db()
+    vitals.health = vitals.max_health
+    vitals.save(update_fields=["health"])
+
     # Handle roster assignment
     if add_to_roster:
         # Staff/GM directly adding to roster - no application needed

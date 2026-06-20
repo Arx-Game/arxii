@@ -936,6 +936,7 @@
 ### CharacterClass
 **Pointed to by:**
   - character_assignments <- classes.CharacterClassLevel
+  - stage_health_rates <- classes.ClassStageHealthRate
   - xp_costs <- progression.ClassXPCost
   - level_unlocks <- progression.ClassLevelUnlock
   - classlevelrequirement_set <- progression.ClassLevelRequirement
@@ -948,6 +949,10 @@
   - character -> objects.ObjectDB [FK]
   - character_class -> classes.CharacterClass [FK]
 
+### ClassStageHealthRate
+**Foreign Keys:**
+  - character_class -> classes.CharacterClass [FK]
+
 ### Aspect
 **Pointed to by:**
   - path_aspects <- classes.PathAspect
@@ -957,6 +962,10 @@
 **Foreign Keys:**
   - character_path -> classes.Path [FK]
   - aspect -> classes.Aspect [FK]
+
+### Service Functions
+- `set_primary_class_level(character: object, character_class: object, level: int) -> object — Set the character's primary class level and recompute level-derived health.`
+- `stage_for_level(level: int) -> int — Map a class level to its PathStage value (clamps <1 to PROSPECT).`
 
 
 ## world.clues

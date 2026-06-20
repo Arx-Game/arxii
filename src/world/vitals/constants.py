@@ -82,3 +82,12 @@ WOUND_SCALING_PER_PERCENT: int = 2
 ENDURANCE_CHECK_NAME: str = "Endurance"  # shared: knockout + permanent wound
 DEATH_CHECK_NAME: str = "Mortal Resolve"  # distinct, high-stakes (death)
 SURVIVABILITY_CHECK_CATEGORY: str = "Survival"
+
+# ---------------------------------------------------------------------------
+# Modifier target natural keys
+# ---------------------------------------------------------------------------
+
+# Natural-key name for the ModifierTarget used by covenant-role health armor.
+# Production code references this by name; tests create the row via
+# world.mechanics.factories.max_health_modifier_target().
+MAX_HEALTH_MODIFIER_TARGET: str = "max_health"
