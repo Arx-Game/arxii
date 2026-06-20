@@ -303,13 +303,12 @@ def passive_mantle_bonuses(sheet: object, target: ModifierTarget) -> int:
     return total
 
 
-def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
-    """Sum the coherence bonus from worn styles bound to the character's Motif (Spec D §5.3).
+def motif_coherence_bonus(sheet: object, resonance_id: int) -> int:
+    """Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.
 
-    For each style binding in the character's MotifResonance for ``target``'s resonance,
-    check whether the character currently wears items carrying that style. The bonus
-    scales with coverage (fraction of bound styles worn) × quality aggregate. When all
-    bound styles are worn the ``full_combination_bonus`` multiplier is applied.
+    Computes coverage × quality × full-combo × perception-breadth for ``resonance_id``.
+    Decoupled from ``ModifierTarget`` so it can be called by the survivability amplifier
+    (and any other caller) with a bare resonance pk.
 
     **Composition rule — style × facet coexistence:** An item that carries both an
     ``ItemStyle`` and an ``ItemFacet`` contributes to this walker (style coherence)
@@ -317,20 +316,18 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
     are independent; their results are summed by ``equipment_walk_total``.
 
     **Dilution-only rule — unbound styles are inert:** The walker iterates only the
-    character's ``MotifResonanceStyle`` bindings for ``target``'s resonance. A worn
+    character's ``MotifResonanceStyle`` bindings for ``resonance_id``. A worn
     ``ItemStyle`` that does not appear in those bindings is completely invisible to this
     walker — it neither increases coverage nor applies any penalty. Characters may freely
     wear items tagged with unrelated styles without degrading their coherence bonus.
 
     Args:
         sheet: CharacterSheet instance.
-        target: The ModifierTarget to aggregate the style coherence bonus for.
+        resonance_id: PK of the Resonance to compute coherence for.
 
     Returns:
         Integer bonus (truncated), or 0 if no binding or no matching worn styles.
     """
-    if target.target_resonance_id is None:
-        return 0
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
     # Character typeclass handlers. Skip the walk gracefully.
@@ -342,7 +339,7 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
         # Reverse OneToOne raises DoesNotExist, NOT AttributeError — getattr default won't catch it.
         return 0
     try:
-        mr = motif.resonances.get(resonance_id=target.target_resonance_id)
+        mr = motif.resonances.get(resonance_id=resonance_id)
     except MotifResonance.DoesNotExist:
         return 0
     bound = list(mr.style_assignments.all())
@@ -368,7 +365,7 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
         n = (
             StylePresentationEndorsement.objects.filter(
                 endorsee_sheet=sheet,
-                resonance_id=target.target_resonance_id,
+                resonance_id=resonance_id,
             )
             .values("endorser_sheet")
             .distinct()
@@ -379,6 +376,22 @@ def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
         )
         bonus *= factor
     return int(bonus)
+
+
+def passive_motif_style_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over
+    ``motif_coherence_bonus`` — see it for the dilution-only and style×facet rules.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate the style coherence bonus for.
+
+    Returns:
+        Integer bonus (truncated), or 0 if no binding or no matching worn styles.
+    """
+    if target.target_resonance_id is None:
+        return 0
+    return motif_coherence_bonus(sheet, target.target_resonance_id)
 
 
 def _thread_pull_effects_for(
