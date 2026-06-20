@@ -4193,16 +4193,6 @@ def _combat_target_bonus(sheet: object, target_name: str) -> int:
     return get_modifier_total(sheet, target)
 
 
-def _covenant_armor_soak_bonus(character: Character) -> int:
-    """Covenant-role armor-soak bonus for ``character``; 0 if no sheet or no target row."""
-    from world.items.constants import ARMOR_SOAK_TARGET_NAME  # noqa: PLC0415
-
-    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
-    if sheet is None:
-        return 0
-    return _combat_target_bonus(sheet, ARMOR_SOAK_TARGET_NAME)
-
-
 def effective_soak_from_armor(character: Character) -> int:
     """Sum effective armor soak across the character's equipped armor pieces."""
     from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
@@ -4215,31 +4205,109 @@ def effective_soak_from_armor(character: Character) -> int:
     return total
 
 
-def apply_equipped_armor_soak(character: Character, damage: int) -> int:
-    """Reduce ``damage`` by equipped-armor soak plus the covenant-role soak bonus.
+def _resonant_armor_soak(character: Character) -> int:
+    """The character's un-blended resonant armor-soak pool (#1174).
 
-    The covenant-role bonus is derived on read via ``_covenant_armor_soak_bonus``
-    and added to the raw armor soak; durability wear is applied only to physical
-    armor pieces (covenant bonuses are intangible). Returns the post-soak damage
-    (floored at 0).
+    eager CharacterModifier total + equipment_walk_total_unblended for the armor_soak
+    target. 0 when the sheet or the seeded target row is absent (combat never hard-depends
+    on seed order). This is the pool the incompatible-armor ``max`` competes against.
     """
-    soak = effective_soak_from_armor(character) + _covenant_armor_soak_bonus(character)
-    if soak <= 0 or damage <= 0:
+    from world.items.constants import ARMOR_SOAK_TARGET_NAME  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import (  # noqa: PLC0415
+        equipment_walk_total_unblended,
+        get_modifier_breakdown,
+    )
+
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+    if sheet is None:
+        return 0
+    try:
+        target = ModifierTarget.objects.get(name=ARMOR_SOAK_TARGET_NAME)
+    except ModifierTarget.DoesNotExist:
+        return 0
+    eager = get_modifier_breakdown(sheet, target).total
+    return eager + equipment_walk_total_unblended(sheet, target)
+
+
+def _split_armor_soak_by_compatibility(
+    character: Character,
+) -> tuple[int, int, list, list]:
+    """Split worn armor's effective soak into role-compatible vs incompatible buckets (#1174).
+
+    A piece is compatible when ANY engaged covenant role is gear-compatible with its
+    archetype (existing GearArchetypeCompatibility). With no engaged role, all armor is
+    incompatible (it then competes via ``max`` against a 0 resonant pool → armor-only).
+
+    Returns ``(compat_soak, incompat_soak, compat_pieces, incompat_pieces)`` where the
+    piece lists are the ItemInstances whose physical soak fell in each bucket (for
+    durability wear).
+    """
+    from world.covenants.services import is_gear_compatible  # noqa: PLC0415
+    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
+
+    engaged_roles = (
+        character.covenant_roles.currently_engaged_roles()
+        if hasattr(character, "covenant_roles")
+        else []
+    )
+    compat_soak = incompat_soak = 0
+    compat_pieces: list = []
+    incompat_pieces: list = []
+    for equipped in list(character.equipped_items):
+        inst = equipped.item_instance
+        archetype = inst.template.gear_archetype
+        if archetype not in ARMOR_ARCHETYPES:
+            continue
+        soak = inst.effective_armor_soak
+        if soak <= 0:
+            continue
+        if any(is_gear_compatible(role, archetype) for role in engaged_roles):
+            compat_soak += soak
+            compat_pieces.append(inst)
+        else:
+            incompat_soak += soak
+            incompat_pieces.append(inst)
+    return compat_soak, incompat_soak, compat_pieces, incompat_pieces
+
+
+def apply_equipped_armor_soak(character: Character, damage: int) -> int:
+    """Reduce ``damage`` by role-gated equipped-armor soak (#1174).
+
+    Worn armor is split by covenant-role compatibility. The resonant soak pool
+    (covenant role base + facet + mantle + motif + covenant-level, un-blended) competes
+    with *incompatible* armor via ``max``; *compatible* armor adds on top:
+
+        soak = compat_physical + max(incompat_physical, resonant)
+
+    Because ``resonant`` scales on character level and physical armor does not, a role
+    incompatible with heavy armor sees its resonant protection overtake platemail past
+    low levels. Durability wears only on armor whose physical soak contributes to the
+    result (all compatible pieces; incompatible pieces only when they win the ``max``).
+    Returns post-soak damage, floored at 0.
+    """
+    if damage <= 0:
         return damage
 
-    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
-    # Materialize before decrementing — decrement_item_durability invalidates
-    # the equipped_items handler, which would mutate a live iterator.
-    contributors = [
-        eq.item_instance
-        for eq in list(character.equipped_items)
-        if eq.item_instance.template.gear_archetype in ARMOR_ARCHETYPES
-        and eq.item_instance.effective_armor_soak > 0
-    ]
+    compat_soak, incompat_soak, compat_pieces, incompat_pieces = _split_armor_soak_by_compatibility(
+        character
+    )
+    resonant = _resonant_armor_soak(character)
+
+    incompatible_wins = incompat_soak >= resonant
+    soak = compat_soak + (incompat_soak if incompatible_wins else resonant)
+    if soak <= 0:
+        return damage
+
+    # Wear only armor whose physical soak actually contributed.
+    contributors = list(compat_pieces)
+    if incompatible_wins:
+        contributors += incompat_pieces
     for inst in contributors:
         decrement_item_durability(item_instance=inst)
+
     return max(0, damage - soak)
 
 
