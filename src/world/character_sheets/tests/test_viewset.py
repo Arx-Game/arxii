@@ -895,10 +895,10 @@ class TestDistinctionsSection(TestCase):
         assert len(distinctions) == 2
 
     def test_distinction_entry_keys(self) -> None:
-        """Each distinction entry has id, name, rank, notes."""
+        """Each distinction entry has id, name, rank, notes, visibility."""
         distinctions = self._get_distinctions()
         for entry in distinctions:
-            assert set(entry.keys()) == {"id", "name", "rank", "notes"}
+            assert set(entry.keys()) == {"id", "name", "rank", "notes", "visibility"}
 
     def test_distinction_entry_values(self) -> None:
         """Distinction entries contain correct values from the models."""
@@ -2089,7 +2089,7 @@ class TestPrefetchCompleteness(TestCase):
     def test_distinctions_zero_queries(self) -> None:
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_distinctions(sheet)
+            _build_distinctions(sheet, privileged=True)
 
     def test_magic_zero_queries(self) -> None:
         sheet = self._get_sheet()

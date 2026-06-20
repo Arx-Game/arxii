@@ -19,7 +19,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import DistinctionOrigin, OtherStatus
+from world.distinctions.types import DistinctionOrigin, DistinctionVisibility, OtherStatus
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -208,6 +208,16 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
     is_active = models.BooleanField(
         default=True,
         help_text="Whether this distinction is available for selection.",
+    )
+
+    # Privacy: the default visibility for this kind of distinction on a character's
+    # profile. Most kinds are PUBLIC; criminal / scandalous kinds are authored PRIVATE so
+    # they do not out a player by default. A player can override per character.
+    default_visibility = models.CharField(
+        max_length=10,
+        choices=DistinctionVisibility.choices,
+        default=DistinctionVisibility.PUBLIC,
+        help_text="Default profile visibility for this distinction kind (player-overridable).",
     )
 
     objects = DistinctionManager()
@@ -449,6 +459,17 @@ class CharacterDistinction(SharedMemoryModel):
         default=False,
         help_text="Whether this distinction is temporary (e.g., magical effect).",
     )
+    visibility_override = models.CharField(
+        max_length=10,
+        choices=DistinctionVisibility.choices,
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Player's per-character privacy gate. When set, overrides the distinction "
+            "kind's default visibility; null inherits the kind default."
+        ),
+    )
     source_description = models.TextField(
         blank=True,
         help_text="Description of how the distinction was acquired (for gameplay).",
@@ -470,6 +491,16 @@ class CharacterDistinction(SharedMemoryModel):
     def __str__(self) -> str:
         rank_str = f" (Rank {self.rank})" if self.distinction.max_rank > 1 else ""
         return f"{self.distinction.name}{rank_str} on {self.character}"
+
+    @property
+    def effective_visibility(self) -> str:
+        """The visibility actually in force: the per-character override, else kind default."""
+        return self.visibility_override or self.distinction.default_visibility
+
+    @property
+    def is_publicly_visible(self) -> bool:
+        """Whether this distinction shows on the profile to other players."""
+        return self.effective_visibility == DistinctionVisibility.PUBLIC
 
     def calculate_total_cost(self) -> int:
         """

@@ -11,6 +11,8 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.character_sheets.models import Gender
+from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.distinctions.types import DistinctionVisibility
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaDiscoveryFactory, PersonaFactory
@@ -154,3 +156,58 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # The owner is never restricted, and a non-primary active face shows the real (primary)
         # identity in parens so it is never ambiguous which character the mask belongs to.
         assert data["identity"]["name"] == f"stag mask ({sheet.primary_persona.name})"
+
+    def _distinction_names(self, data) -> set[str]:
+        return {d["name"] for d in data["distinctions"]}
+
+    def test_a_kind_private_distinction_is_hidden_from_a_non_owner(self) -> None:
+        # Most distinctions are public, but a scandalous/criminal kind is authored PRIVATE and
+        # must not out the player to a passer-by — while the owner still sees it.
+        sheet = self._character_sheet(AccountFactory(), fake_active=False)
+        CharacterDistinctionFactory(
+            character=sheet.character,
+            distinction=DistinctionFactory(
+                name="Renowned Duelist", default_visibility=DistinctionVisibility.PUBLIC
+            ),
+        )
+        CharacterDistinctionFactory(
+            character=sheet.character,
+            distinction=DistinctionFactory(
+                name="Wanted Criminal", default_visibility=DistinctionVisibility.PRIVATE
+            ),
+        )
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        assert self._distinction_names(self._get(sheet, viewer).data) == {"Renowned Duelist"}
+        assert self._distinction_names(self._get(sheet, AccountFactory(is_staff=True)).data) == {
+            "Renowned Duelist",
+            "Wanted Criminal",
+        }
+
+    def test_owner_sees_every_distinction_including_private(self) -> None:
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=False)
+        CharacterDistinctionFactory(
+            character=sheet.character,
+            distinction=DistinctionFactory(
+                name="Wanted Criminal", default_visibility=DistinctionVisibility.PRIVATE
+            ),
+        )
+        assert self._distinction_names(self._get(sheet, owner).data) == {"Wanted Criminal"}
+
+    def test_player_privacy_gate_overrides_a_public_default(self) -> None:
+        # The per-character gate: a player hides an otherwise-public distinction. The override
+        # wins over the kind default, so a non-owner no longer sees it.
+        sheet = self._character_sheet(AccountFactory(), fake_active=False)
+        CharacterDistinctionFactory(
+            character=sheet.character,
+            distinction=DistinctionFactory(
+                name="Secret Affair", default_visibility=DistinctionVisibility.PUBLIC
+            ),
+            visibility_override=DistinctionVisibility.PRIVATE,
+        )
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        assert self._distinction_names(self._get(sheet, viewer).data) == set()
