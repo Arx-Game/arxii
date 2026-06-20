@@ -132,10 +132,10 @@ export async function respondToRequest(
   if (body.target_persona_id !== undefined) {
     requestBody.target_persona_id = body.target_persona_id;
   }
-  if (body.difficulty) {
+  if (body.difficulty !== undefined) {
     requestBody.difficulty = body.difficulty;
   }
-  if (body.resist_effort) {
+  if (body.resist_effort !== undefined) {
     requestBody.resist_effort = body.resist_effort;
   }
   const res = await apiFetch(`/api/action-requests/${requestId}/respond/`, {
