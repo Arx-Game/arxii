@@ -126,9 +126,9 @@ class TargetedActionE2EWithStrainTests(TestCase):
         cls.soulfray_config = SoulfrayConfigFactory()
 
     def setUp(self) -> None:
-        # Patch kudos to avoid loading the social_engagement KudosSourceCategory.
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        # Patch accrue to avoid loading the social_engagement KudosSourceCategory + GameWeek.
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
         # Fresh anima per test: 10 current, strain=3 is well within cap.
         self.anima = CharacterAnimaFactory(
@@ -139,7 +139,7 @@ class TargetedActionE2EWithStrainTests(TestCase):
         self.client = APIClient()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _dispatch_payload(self) -> dict:
         return {

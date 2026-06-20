@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -10,7 +11,8 @@ from django.utils import timezone
 from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
 from world.progression.models import KudosSourceCategory
-from world.progression.services.kudos import award_kudos
+from world.progression.models.kudos import KudosDifficultyWeight
+from world.progression.services.engagement import accrue
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     RESIST_FATIGUE_BASE,
@@ -375,7 +377,10 @@ def respond_to_action_request(
                     action_request, difficulty_override=difficulty_override
                 )
 
-            _award_acceptance_kudos(action_request)
+            _accrue_engagement_for_primary(action_request)
+            if action_request.target_persona is not None:
+                action_request.engagement_credited = True
+                action_request.save(update_fields=["engagement_credited"])
 
             # result is None only for hostile consent-accepts (#777), which have
             # an empty action_key and therefore never a resolver.
@@ -508,43 +513,42 @@ def _resolve_standard_action(
     return result
 
 
-def _award_acceptance_kudos_for_persona(
+def _accrue_engagement_for_persona(
     action_request: SceneActionRequest,
     persona: Persona,
+    band: str,
 ) -> None:
-    """Award kudos to ``persona`` for accepting an action request.
+    """Accrue graded good-sport credit for ``persona`` accepting an action request.
 
-    Skips when the persona's character has no linked account (NPC personas
-    and established/temporary personas without an account are valid; the kudos
-    award only applies to real player accounts).
+    Skips when:
+    - The persona's character has no linked account (NPC defender — no accrual).
+    - The initiator has no account (NPC initiator — no accrual).
+    - The initiator and target share the same account (self-target — no farming).
     """
     target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
         return
-    category = _get_social_engagement_category()
     initiator_character = action_request.initiator_persona.character_sheet.character
     initiator_account = initiator_character.db_account
-    initiator_name = action_request.initiator_persona.name
-    award_kudos(
-        account=target_account,
-        amount=category.default_amount,
-        source_category=category,
-        description=f"Engaged with action request from {initiator_name}",
-        awarded_by=initiator_account,
-    )
+    if initiator_account is None or initiator_account == target_account:
+        return
+    category = _get_social_engagement_category()
+    pts = Decimal(category.default_amount) * KudosDifficultyWeight.weight_for(band)
+    accrue(target_account, initiator_account, pts)
 
 
-def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
-    """Award kudos to the primary target for accepting an action request.
+def _accrue_engagement_for_primary(action_request: SceneActionRequest) -> None:
+    """Accrue graded good-sport credit for the primary target of an action request.
 
-    Skips the award when the target persona is absent (standalone casts allow
-    no-target). Delegates the per-persona kudos rule to
-    ``_award_acceptance_kudos_for_persona``.
+    Skips when the target persona is absent (standalone casts allow no-target).
+    Delegates the per-persona accrual rule to ``_accrue_engagement_for_persona``.
     """
     if action_request.target_persona is None:
         return
-    _award_acceptance_kudos_for_persona(action_request, action_request.target_persona)
+    _accrue_engagement_for_persona(
+        action_request, action_request.target_persona, band=action_request.difficulty_choice
+    )
 
 
 def _persona_is_npc(persona: Persona) -> bool:
@@ -618,6 +622,10 @@ def respond_to_action_target(
             action_target.resolved_at = timezone.now()
             action_target.resolved_difficulty = resolved_difficulty
             action_target.result_interaction = result_interaction
+            _accrue_engagement_for_persona(
+                action_request, action_target.target_persona, band=action_target.difficulty_choice
+            )
+            action_target.engagement_credited = True
             action_target.save(
                 update_fields=[
                     "status",
@@ -626,9 +634,9 @@ def respond_to_action_target(
                     "result_interaction",
                     "difficulty_choice",
                     "resist_effort_level",
+                    "engagement_credited",
                 ]
             )
-            _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
             # Per-target resolver invocation (#1178): fire the registered resolver for
             # THIS target's result, symmetric with respond_to_action_request (:340).
             # Runs once per accepted target; resolvers registered for multi-target

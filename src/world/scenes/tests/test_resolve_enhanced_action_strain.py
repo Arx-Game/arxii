@@ -43,11 +43,11 @@ class ResolveEnhancedActionStrainTests(TestCase):
         cls.action_template = ActionTemplateFactory()
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_resolved_interaction_records_strain(self, mock_resolve: MagicMock) -> None:

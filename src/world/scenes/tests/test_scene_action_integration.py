@@ -28,16 +28,16 @@ from world.traits.models import CharacterTraitValue, Trait
 
 
 class _BaseActionIntegrationTest(TestCase):
-    """Base class that mocks award_kudos for all action integration tests."""
+    """Base class that mocks accrue for all action integration tests."""
 
     def setUp(self) -> None:
-        """Mock award_kudos for all tests in this class."""
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        """Mock accrue for all tests in this class."""
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        """Stop mocking award_kudos."""
-        self.award_kudos_patcher.stop()
+        """Stop mocking accrue."""
+        self.accrue_patcher.stop()
 
 
 class TestSceneActionIntegration(_BaseActionIntegrationTest):
