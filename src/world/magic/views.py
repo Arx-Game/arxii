@@ -1910,9 +1910,13 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
 
         serializer = RitualSessionDraftSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
+        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
+
         try:
             self.perform_create(serializer)
         except (RitualSessionError, ParticipantCountError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        except CovenantError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         out = RitualSessionDetailSerializer(serializer.instance, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
