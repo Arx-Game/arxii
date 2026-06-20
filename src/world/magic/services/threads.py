@@ -638,6 +638,28 @@ def get_thread_survivability_tuning(vital_target: str) -> "ThreadSurvivabilityTu
     return ThreadSurvivabilityTuning.objects.filter(vital_target=vital_target).first()
 
 
+def _soft_cap(score: int, cap: int, half_saturation: int) -> int:
+    """round(cap * score / (score + half)) with a 0 floor at score<=0."""
+    if score <= 0:
+        return 0
+    return round(cap * score / (score + half_saturation))
+
+
+def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
+    """Universal soft-capped survivability baseline from thread investment (#1175).
+
+    S = coefficient * Σ max(1, thread.level // 10) over owned (non-retired)
+    threads; baseline = round(cap * S / (S + half_saturation)). Returns 0 when
+    no tuning row exists for the target or the character owns no threads.
+    """
+    tuning = get_thread_survivability_tuning(vital_target)
+    if tuning is None:
+        return 0
+    threads = character.threads._all  # noqa: SLF001 — same handler used by passive_vital_bonuses
+    score = sum(max(1, t.level // 10) for t in threads)
+    return _soft_cap(tuning.coefficient * score, tuning.cap, tuning.half_saturation)
+
+
 # =============================================================================
 # Phase 13 — VITAL_BONUS routing (Spec A §3.8, §5.5, §5.8, §7.4)
 # =============================================================================
