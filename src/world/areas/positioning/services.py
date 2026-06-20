@@ -558,12 +558,20 @@ def enter_aerial(objectdb: ObjectDB) -> ObjectPosition:
 
     Materializes the aerial layer if not yet present (idempotent).
     Sets the 'aerial' ObjectProperty on the object.
+
+    Raises PositionError if the actor is unplaced (no ObjectPosition).
+    Returns the existing ObjectPosition without moving if actor is already aerial.
     """
     from world.mechanics.models import ObjectProperty
 
+    ground = position_of(objectdb)
+    if ground is None:
+        msg = "Cannot take flight: actor is not placed."
+        raise PositionError(msg)
+    if ground.kind == PositionKind.AERIAL:
+        return objectdb.object_position
     room = objectdb.location
     materialize_aerial_layer(room)
-    ground = position_of(objectdb)
     above = Position.objects.get(room=room, kind=PositionKind.AERIAL, elevation_anchor=ground)
     ObjectProperty.objects.update_or_create(
         object=objectdb,
@@ -578,12 +586,20 @@ def leave_aerial(objectdb: ObjectDB) -> ObjectPosition:
 
     Tears down the aerial layer once no AERIAL position in the room has occupants.
     Falls to the room's PRIMARY position if elevation_anchor is None.
+
+    Raises PositionError if the actor is unplaced or is not in an aerial position.
     """
     from world.mechanics.models import ObjectProperty
 
     room = objectdb.location
     current = position_of(objectdb)
-    landing: Position | None = current.elevation_anchor if current is not None else None
+    if current is None:
+        msg = "Cannot land: actor is not placed."
+        raise PositionError(msg)
+    if current.kind != PositionKind.AERIAL:
+        msg = "Actor is not aerial."
+        raise PositionError(msg)
+    landing: Position | None = current.elevation_anchor
     if landing is None:
         landing = Position.objects.filter(room=room, kind=PositionKind.PRIMARY).first()
     if landing is None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
     connect_positions,
@@ -109,6 +110,35 @@ class AerialLifecycleTests(TestCase):
 
         leave_aerial(self.char)
         self.assertEqual(position_of(self.char).kind, PositionKind.PRIMARY)
+
+    def make_unplaced_actor(self):
+        """Return a character that is IN the room but has no ObjectPosition."""
+        from evennia_extensions.factories import CharacterFactory
+
+        return CharacterFactory(location=self.room)
+
+    # ------------------------------------------------------------------
+    # Guard tests (Task 2)
+    # ------------------------------------------------------------------
+
+    def test_enter_aerial_unplaced_actor_raises(self) -> None:
+        """enter_aerial raises PositionError when the actor has no ObjectPosition."""
+        actor = self.make_unplaced_actor()
+        with self.assertRaises(PositionError):
+            enter_aerial(actor)
+
+    def test_enter_aerial_already_aerial_is_idempotent(self) -> None:
+        """A second call to enter_aerial does not crash or double-move the actor."""
+        enter_aerial(self.char)
+        result = enter_aerial(self.char)  # idempotent — should NOT raise
+        self.assertEqual(position_of(self.char).kind, PositionKind.AERIAL)
+        self.assertEqual(result.position.kind, PositionKind.AERIAL)
+
+    def test_leave_aerial_when_not_aerial_raises(self) -> None:
+        """leave_aerial raises PositionError when the actor is on the ground (not aerial)."""
+        # self.char is placed at courtyard (ground) — never entered aerial
+        with self.assertRaises(PositionError):
+            leave_aerial(self.char)
 
     def test_blocks_flight_edge_is_not_bypassed_by_aerial_layer(self) -> None:
         """A ground edge with blocks_flight=True must NOT get a freely passable aerial twin."""
