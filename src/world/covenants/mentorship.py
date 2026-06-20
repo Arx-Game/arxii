@@ -265,8 +265,8 @@ def establish_mentor_bond(
         # sidekick is out-of-band → adjusted_party = SIDEKICK
         adjusted_party = MentorBondAdjusted.SIDEKICK
 
-    # Enforce max_sidekicks_per_mentor cap (counted only for SIDEKICK-adjusted bonds,
-    # since that's what creates a "sidekick" relationship for the mentor).
+    # Enforce max_sidekicks_per_mentor cap: counts all active bonds in this covenant
+    # where this character is the mentor, regardless of adjusted_party.
     cfg = get_mentor_bond_config()
     if cfg.max_sidekicks_per_mentor is not None:
         active_sidekick_count = (

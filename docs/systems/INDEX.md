@@ -904,10 +904,8 @@ crafting framework and check-driven facet/style attachment.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles, gear compatibility, and a per-covenant
-rank ladder. Spec D PR1 shipped the role-assignment and gear-compatibility data
-layer; #985 wired per-role bonus authoring and the combat seams; #1027 added
-`CovenantRank` (administrative authority, orthogonal to `CovenantRole` power).
+Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
+ladder, and a Mentor's Vow bond system for level-mismatched parties (#1165).
 
 **Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
 Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
@@ -916,18 +914,25 @@ These two axes are orthogonal — never re-merge them.
 - **Models:**
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
-    boolean, `rank` FK → `CovenantRank` (added #1027).
+    boolean, `rank` FK → `CovenantRank`.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
-  - `CovenantRoleBonus` (#985) — authored config: one row per
+  - `CovenantRoleBonus` — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
     `char_level × bonus_per_level`; no row → 0. Admin-registered.
-  - `CovenantRank` (#1027) — per-covenant administrative authority tier.
-    Fields: `covenant` FK (CASCADE, `related_name="ranks"`), `name` (max 60,
-    player-chosen), `tier` (PositiveInt; 1 = top authority), `description`,
-    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
-    `(covenant, tier)` and `(covenant, name)`. Ordered by `["covenant", "tier"]`.
+  - `CovenantRank` — per-covenant administrative authority tier.
+    Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
+    `can_invite`, `can_kick`, `can_manage_ranks`. Unique `(covenant, tier)` and
+    `(covenant, name)`.
+  - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
+    `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
+    Staff-tunable in Django admin.
+  - **`MentorBond`** (#1165) — per-pair bond record. `covenant`, `mentor_sheet`,
+    `sidekick_sheet`, `adjusted_party` (`MentorBondAdjusted.MENTOR`/`SIDEKICK`),
+    `formed_at`, `dissolved_at` (null = active). Partial unique on
+    `(covenant, sidekick_sheet)` when active; dissolved bonds are retained as audit
+    trail. Custom manager: `.active()` → `dissolved_at__isnull=True`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
     `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
@@ -935,46 +940,65 @@ These two axes are orthogonal — never re-merge them.
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
-  - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
-    and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
+  - `kick_member(*, target, actor) -> None` — raises
     `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
-  - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
+  - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
-    `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
-    `char_level × bonus_per_level`; 0 if no row (#985)
-  - **Rank management (#1027)** — all require `actor.rank.can_manage_ranks=True`:
+    `world.mechanics.services`)
+  - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
     `LastManagerRankError` if an op would leave zero active managers.
-- **Combat seams (#985, #1174):** `apply_equipped_armor_soak` splits worn armor into
+  - **Mentor's Vow services** (`world.covenants.mentorship`, #1165):
+    - `effective_combat_level(sheet) -> int` — bond-adjusted combat level used by
+      `compute_party_profile`; returns the raw primary level when no active
+      non-graduated bond applies.
+    - `bond_adjusted_level(sheet) -> int | None` — adjusted level or None.
+    - `active_bond_adjusting(sheet) -> MentorBond | None` — the active non-graduated
+      bond where sheet is the adjusted party; None if absent.
+    - `establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet) -> MentorBond`
+    - `dissolve_mentor_bond(bond) -> None`
+    - `is_bond_graduated(bond) -> bool` — True when adjusted party is now in band.
+    - `assert_membership_level_allowed(*, covenant, character_sheet) -> None` — **Vow gate**:
+      raises `VowGateError` if character is out-of-band and has no active bond in this
+      covenant. Called by `add_member`; `create_covenant` is ungated.
+    - `establish_mentor_bond_via_session(*, session) -> MentorBond` — service function
+      wired to `MentorsVowRitualFactory` (consensual BILATERAL_SERVICE ritual).
+- **Combat seams (#985, #1174, #1165):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
   `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
   covenant-level + mantle + motif-style). `_weapon_augmented_budget` adds
   `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget
-  via `get_modifier_total` → `covenant_role_bonus`.
+  via `get_modifier_total` → `covenant_role_bonus`. In combat,
+  `_combat_target_bonus(sheet)` passes `bond_adjusted_level(sheet)` as `level_override`
+  so role bonuses reflect the bond-adjusted level (not raw). Encounter scaling:
+  `compute_party_profile` calls `effective_combat_level` per ACTIVE participant before
+  averaging — outlier distortion is absorbed in the bond math; graduated bonds dissolve
+  at `begin_declaration_phase`.
+- **Enums:** `MentorBondAdjusted` (`MENTOR`/`SIDEKICK` — which party is adjusted)
 - **Exceptions:** `world.covenants.exceptions` —
-  `CovenantRoleNeverHeldError` (Thread weave gate);
-  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
-  `CannotKickSelfError` (kick service);
+  `CovenantRoleNeverHeldError`, `CannotKickEqualOrHigherRankError`,
+  `NotAuthorizedToKickError`, `CannotKickSelfError`,
   `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
   `CrossCovenantRankError`, `IncompleteRankReorderError`,
-  `CannotTransferToDepartedMemberError` (rank management, #1027)
+  `CannotTransferToDepartedMemberError`,
+  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate)
 - **API Endpoints:**
-  - `GET /api/covenants/gear-compatibilities/` — read-only authored content
-  - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
-    currently-played sheets; exposes nested `rank` + `viewer_capabilities`
-  - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
-  - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
-  - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
-  - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
-  - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
-- **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
-  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
-- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
-  mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
-  `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
+  - `GET /api/covenants/gear-compatibilities/`
+  - `GET /api/covenants/character-roles/`
+  - `GET|POST /api/covenants/ranks/`
+  - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/`
+  - `POST /api/covenants/ranks/reorder/`
+  - `POST /api/covenants/ranks/{pk}/assign-member/`
+  - `POST /api/covenants/ranks/{pk}/transfer-top/`
+- **Permission classes:** `CanKickFromCovenant`, `CanInviteToCovenant`, `CanManageCovenantRanks`
+- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
+  `MentorsVowRitualFactory`), mechanics (`covenant_role_bonus` in modifier walk;
+  `level_override` via `bond_adjusted_level`), items (`gear_archetype` on `ItemTemplate`),
+  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`)
 - **Source:** `src/world/covenants/`
+- **Details:** [covenants.md](covenants.md)
 
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.

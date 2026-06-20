@@ -1,3 +1,5 @@
+/workspaces/arxii/.claude/worktrees/feature-1165-outlier-aware-encounter-scaling-sidekick/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -33,7 +35,6 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
-  - consent_category -> consent.SocialConsentCategory [FK] (nullable)
 **Pointed to by:**
   - gates <- actions.ActionTemplateGate
   - techniques <- magic.Technique
@@ -727,7 +728,6 @@
   - audere_offers <- magic.PendingAudereOffer
   - audere_majora_offers <- magic.PendingAudereMajoraOffer
   - audere_majora_crossings <- magic.AudereMajoraCrossing
-  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
@@ -795,6 +795,8 @@
   - mantle_clearances <- items.MantleLevelClearance
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
+  - mentor_bonds_as_mentor <- covenants.MentorBond
+  - mentor_bonds_as_sidekick <- covenants.MentorBond
   - duels_won <- combat.CombatEncounter
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
@@ -1255,7 +1257,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>, default_factory=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(character_sheet: 'CharacterSheet') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
@@ -1287,44 +1289,6 @@
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool — Remove suppression from a condition.`
 
 
-## world.consent
-
-### ConsentGroup
-**Foreign Keys:**
-  - owner -> roster.RosterTenure [FK]
-**Pointed to by:**
-  - members <- consent.ConsentGroupMember
-  - codexteachingoffer_visible <- codex.CodexTeachingOffer
-
-### ConsentGroupMember
-**Foreign Keys:**
-  - group -> consent.ConsentGroup [FK]
-  - tenure -> roster.RosterTenure [FK]
-
-### SocialConsentCategory
-**Pointed to by:**
-  - action_templates <- actions.ActionTemplate
-  - rules <- consent.SocialConsentCategoryRule
-  - whitelist_entries <- consent.SocialConsentWhitelist
-
-### SocialConsentPreference
-**Foreign Keys:**
-  - tenure -> roster.RosterTenure [OneToOne]
-**Pointed to by:**
-  - category_rules <- consent.SocialConsentCategoryRule
-
-### SocialConsentCategoryRule
-**Foreign Keys:**
-  - preference -> consent.SocialConsentPreference [FK]
-  - category -> consent.SocialConsentCategory [FK]
-
-### SocialConsentWhitelist
-**Foreign Keys:**
-  - owner_tenure -> roster.RosterTenure [FK]
-  - allowed_tenure -> roster.RosterTenure [FK]
-  - category -> consent.SocialConsentCategory [FK]
-
-
 ## world.covenants
 
 ### Covenant
@@ -1339,6 +1303,7 @@
   - ranks <- covenants.CovenantRank
   - memberships <- covenants.CharacterCovenantRole
   - rite_instances <- covenants.CovenantRiteInstance
+  - mentor_bonds <- covenants.MentorBond
 
 ### CovenantRole
 **Foreign Keys:**
@@ -1410,6 +1375,16 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - granted_condition -> conditions.ConditionTemplate [FK]
 
+### MentorBondConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### MentorBond
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+  - mentor_sheet -> character_sheets.CharacterSheet [FK]
+  - sidekick_sheet -> character_sheets.CharacterSheet [FK]
+
 ### Service Functions
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
@@ -1425,8 +1400,10 @@
 - `delete_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', reassign_to: 'CovenantRank') -> 'None' — Delete a rank after reassigning all active members to ``reassign_to``.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
+- `establish_mentor_bond_via_session(*, session: 'RitualSession') -> 'MentorBond' — Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.`
 - `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met, then`
 - `fold_arrival_into_active_rites(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — When an engaged member arrives in a room with an active CovenantRiteInstance,`
+- `get_mentor_bond_config() -> 'MentorBondConfig' — Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
 - `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' — Return True if a row exists in GearArchetypeCompatibility for this pair.`
 - `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' — Remove a member by rank authority. Soft-ends the target, then`
@@ -1561,11 +1538,6 @@
   - scene -> scenes.Scene [FK] (nullable)
   - declaration_interaction -> scenes.Interaction [FK] (nullable)
   - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
-
-### PendingEntryFlourishOffer
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - scene -> scenes.Scene [FK] (nullable)
 
 ### Affinity
 **Foreign Keys:**
@@ -2101,8 +2073,6 @@
   - resonance -> magic.Resonance [FK]
   - capability_grant -> conditions.CapabilityType [FK] (nullable)
 
-### ThreadSurvivabilityTuning
-
 ### Thread
 **Foreign Keys:**
   - owner -> character_sheets.CharacterSheet [FK]
@@ -2164,7 +2134,6 @@
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
-- `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
@@ -2175,12 +2144,10 @@
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool') -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
-- `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' — Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' — Deduct resonance balance and greedily advance thread level.`
 - `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext') -> 'ResonancePullResult' — Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
-- `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' — Universal soft-capped survivability baseline from thread investment (#1175).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
 - `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
@@ -2389,20 +2356,18 @@
 - `begin_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'CharacterEngagement' — Ensure the character has an engagement; create one if none exists.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the authored covenant-level passive bonus across engaged memberships (#762).`
-- `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' — Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).`
-- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
+- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' — Delete the character's engagement iff it matches type AND source.`
-- `equipment_walk_total(character: 'object', target: 'ModifierTarget') -> 'int' — Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
-- `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' — ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
+- `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' — Perception-relative outfit bonus vs. a society's current fashion (#513).`
 - `get_aesthetic_config() -> 'AestheticAxisConfig' — Lazy-create and return the singleton aesthetic-axis config (pk=1).`
 - `get_all_capability_values(character_sheet: 'CharacterSheet') -> dict[int, int] — Get all capability values for a character.`
 - `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
-- `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None) -> 'int' — Get total modifier value for a target.`
+- `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' — Get total modifier value for a target.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
@@ -2652,7 +2617,7 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>, default_factory=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7e4004ac1400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>, default_factory=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x7223ce41d550>) — Return an object to identify dataclass fields.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3117,7 +3082,6 @@
   - event -> events.Event [FK] (nullable)
 **Pointed to by:**
   - developmenttransaction_set <- progression.DevelopmentTransaction
-  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
@@ -3428,13 +3392,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7e400059c240>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x7223c9f40340>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7e400059c240>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x7223c9f40340>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
