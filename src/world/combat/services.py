@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 import logging
@@ -4193,16 +4193,23 @@ def _combat_target_bonus(sheet: object, target_name: str) -> int:
     return get_modifier_total(sheet, target)
 
 
-def effective_soak_from_armor(character: Character) -> int:
-    """Sum effective armor soak across the character's equipped armor pieces."""
+def _equipped_armor_soak_pieces(
+    character: Character,
+) -> Iterator[tuple[ItemInstance, int]]:
+    """Yield (item_instance, soak) for each worn armor piece with positive soak."""
     from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
 
-    total = 0
-    for equipped in character.equipped_items:
+    for equipped in list(character.equipped_items):
         inst = equipped.item_instance
         if inst.template.gear_archetype in ARMOR_ARCHETYPES:
-            total += inst.effective_armor_soak
-    return total
+            soak = inst.effective_armor_soak
+            if soak > 0:
+                yield inst, soak
+
+
+def effective_soak_from_armor(character: Character) -> int:
+    """Sum effective armor soak across the character's equipped armor pieces."""
+    return sum(soak for _, soak in _equipped_armor_soak_pieces(character))
 
 
 def _resonant_armor_soak(character: Character) -> int:
@@ -4244,7 +4251,6 @@ def _split_armor_soak_by_compatibility(
     durability wear).
     """
     from world.covenants.services import is_gear_compatible  # noqa: PLC0415
-    from world.items.constants import ARMOR_ARCHETYPES  # noqa: PLC0415
 
     engaged_roles = (
         character.covenant_roles.currently_engaged_roles()
@@ -4252,16 +4258,10 @@ def _split_armor_soak_by_compatibility(
         else []
     )
     compat_soak = incompat_soak = 0
-    compat_pieces: list = []
-    incompat_pieces: list = []
-    for equipped in list(character.equipped_items):
-        inst = equipped.item_instance
+    compat_pieces: list[ItemInstance] = []
+    incompat_pieces: list[ItemInstance] = []
+    for inst, soak in _equipped_armor_soak_pieces(character):
         archetype = inst.template.gear_archetype
-        if archetype not in ARMOR_ARCHETYPES:
-            continue
-        soak = inst.effective_armor_soak
-        if soak <= 0:
-            continue
         if any(is_gear_compatible(role, archetype) for role in engaged_roles):
             compat_soak += soak
             compat_pieces.append(inst)
