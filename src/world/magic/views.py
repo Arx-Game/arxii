@@ -101,6 +101,8 @@ from world.magic.serializers import (
     DramaticMomentTagSerializer,
     DramaticMomentTypeSerializer,
     EffectTypeSerializer,
+    EntryFlourishRespondSerializer,
+    EntryFlourishResultSerializer,
     FacetSerializer,
     FacetTreeSerializer,
     GiftCreateSerializer,
@@ -1595,6 +1597,55 @@ class AudereMajoraRespondView(APIView):
         """Validate ownership + dispatch resolve_audere_majora_offer; return the result."""
         return _dispatch_respond(
             request, AudereMajoraRespondSerializer, AudereMajoraCrossingResultSerializer
+        )
+
+
+# =============================================================================
+# Entry flourish REST surface (#1140)
+# =============================================================================
+
+
+class PendingEntryFlourishOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending entry-flourish offers (#1140).
+
+    GET /api/magic/entry-flourish/pending/
+    GET /api/magic/entry-flourish/pending/{id}/
+
+    Scoped to the authenticated user's character sheets (active tenures).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import PendingEntryFlourishOfferSerializer  # noqa: PLC0415
+
+        return PendingEntryFlourishOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
+
+        return _account_scoped_offer_queryset(
+            PendingEntryFlourishOffer, self.request.user, "character_sheet", "scene"
+        )
+
+
+class EntryFlourishRespondView(APIView):
+    """Pick a resonance to broadcast for a pending entry-flourish offer (#1140).
+
+    POST /api/magic/entry-flourish/respond/  {offer_id, resonance_id}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=EntryFlourishRespondSerializer,
+        responses={200: EntryFlourishResultSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        """Validate ownership + dispatch resolve_entry_flourish_offer; return the result."""
+        return _dispatch_respond(
+            request, EntryFlourishRespondSerializer, EntryFlourishResultSerializer
         )
 
 
