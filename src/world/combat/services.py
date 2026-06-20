@@ -3550,7 +3550,15 @@ def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: Encount
 
 
 def _increment_completion_counters(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
-    """encounters_won / encounters_lost / encounters_fled aggregates (#876 §7)."""
+    """encounters_won / encounters_lost / encounters_fled aggregates (#876 §7).
+
+    A DUEL leaves both PCs as ACTIVE participants at completion (only the loser's
+    mirror ``CombatOpponent`` is DEFEATED, never the loser's own participant row),
+    so the generic ACTIVE→won rule would credit *both* duelists with a win. For a
+    DUEL the win is credited solely to ``encounter.duel_winner`` and the loss to
+    the other duelist; an abandoned duel (no ``duel_winner``) credits neither
+    (#1182).
+    """
     from world.combat.achievement_counters import (  # noqa: PLC0415
         STAT_KEY_ENCOUNTERS_FLED,
         STAT_KEY_ENCOUNTERS_LOST,
@@ -3558,14 +3566,28 @@ def _increment_completion_counters(encounter: CombatEncounter, outcome: Encounte
         increment_combat_counter,
     )
 
+    participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
+        "character_sheet"
+    )
+
+    if encounter.encounter_type == EncounterType.DUEL:
+        winner_sheet_id = encounter.duel_winner_id
+        for participant in participants:
+            if participant.status == ParticipantStatus.FLED:
+                increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_FLED)
+            elif winner_sheet_id is None:
+                continue  # Abandoned / mutual stop — no victor; credit neither.
+            elif participant.character_sheet_id == winner_sheet_id:
+                increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_WON)
+            else:
+                increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_LOST)
+        return
+
     outcome_key = {
         EncounterOutcome.VICTORY: STAT_KEY_ENCOUNTERS_WON,
         EncounterOutcome.DEFEAT: STAT_KEY_ENCOUNTERS_LOST,
     }.get(outcome)
 
-    participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
-        "character_sheet"
-    )
     for participant in participants:
         if participant.status == ParticipantStatus.FLED:
             increment_combat_counter(participant.character_sheet, STAT_KEY_ENCOUNTERS_FLED)
