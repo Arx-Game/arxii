@@ -1439,6 +1439,42 @@ Cross-references:
   - Upvote-ranked scene highlight reel consuming pose-anchored tags.
   - Frontend action panel wiring for the 6 new social action singletons.
   - Scene-perception leaderboard / aura ranking surface.
+
+- **Entry-flourish player-declaration (#1140) — SHIPPED:**
+  Follow-up to #544/#545: instead of auto-granting resonance on Entrance success, the
+  entrant is presented a picker so they choose which claimed resonance to broadcast.
+
+  What was built:
+  - `PendingEntryFlourishOffer` model (`entry_flourish.py`) — poll-able offer, one per
+    character (UniqueConstraint on `character_sheet`), nullable `scene` FK. Re-exported
+    in `world/magic/models/__init__.py`.
+  - `EntryFlourishRecord` (`models/endorsement.py`) gained a partial UniqueConstraint
+    `(character_sheet, scene) WHERE scene IS NOT NULL` for per-scene idempotency.
+  - `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) —
+    called on Entrance action success; skips if already flourished this scene or
+    no claimed resonances.
+  - `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult`
+    (`entry_flourish.py`) — two-phase resolve mirroring `resolve_audere_offer`.
+  - `create_entry_flourish` (`services/gain.py`) now skips gracefully on a duplicate
+    `(sheet, scene)` and uses `GainSource.ENTRY_FLOURISH`.
+  - `EntranceAction` (`actions/definitions/social.py`) calls
+    `maybe_create_entry_flourish_offer` on success; the dead `resonance_id`-kwarg path
+    and `_fire_entry_flourish` were removed.
+  - `ResonanceGainConfig.entry_flourish_grant` default updated to 10 (was 4 in #544).
+  - REST: `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` +
+    `POST /api/magic/entry-flourish/respond/` (`{offer_id, resonance_id}`).
+  - Exceptions: `EntryFlourishOfferError` / `NotFoundError` / `StaleError`
+    (`exceptions.py`; carry `user_message`).
+  - Frontend: `EntryFlourishOfferGate` + `EntryFlourishOfferDialog`
+    (`frontend/src/magic/components/`), mounted in `SceneDetailPage`; hooks
+    `usePendingEntryFlourishOffers` / `useRespondToEntryFlourish` in
+    `frontend/src/magic/queries.ts`.
+
+  Design note: the #904 reaction-window framework was evaluated and rejected —
+  `react_to_window` hard-blocks self-reaction (peer-only). Entry flourish (actor
+  self-grant) and scene-entry endorsement (peer grant) are the two complementary
+  halves of the entrance moment.
+
 - Fashion-to-resonance integration (requires Items & Crafting systems —
   designed in `docs/architecture/items-fashion-mantles.md`,
   implementation phased across 4 PRs)

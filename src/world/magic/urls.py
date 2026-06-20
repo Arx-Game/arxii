@@ -21,12 +21,14 @@ from world.magic.views import (
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
+    EntryFlourishRespondView,
     FacetViewSet,
     GiftViewSet,
     MagicProgressionView,
     PendingAlterationViewSet,
     PendingAudereMajoraOfferViewSet,
     PendingAudereOfferViewSet,
+    PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
@@ -283,6 +285,22 @@ urlpatterns = [
         "audere-majora/respond/",
         AudereMajoraRespondView.as_view(),
         name="audere-majora-respond",
+    ),
+    # #1140 — Entry flourish offer inbox + respond
+    path(
+        "entry-flourish/pending/",
+        PendingEntryFlourishOfferViewSet.as_view({"get": "list"}),
+        name="entry-flourish-pending-list",
+    ),
+    path(
+        "entry-flourish/pending/<int:pk>/",
+        PendingEntryFlourishOfferViewSet.as_view({"get": "retrieve"}),
+        name="entry-flourish-pending-detail",
+    ),
+    path(
+        "entry-flourish/respond/",
+        EntryFlourishRespondView.as_view(),
+        name="entry-flourish-respond",
     ),
     *router.urls,
 ]

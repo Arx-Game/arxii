@@ -106,6 +106,9 @@ vi.mock('@/magic/queries', () => ({
   usePendingStageAdvanceOffers: () => mockUsePendingStageAdvanceOffers(),
   useRespondToSineating: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRespondToStageAdvance: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),
+  useRespondToEntryFlourish: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 // ---------------------------------------------------------------------------

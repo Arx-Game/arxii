@@ -458,6 +458,64 @@ Raises `EndorsementValidationError` (unclaimed resonance) or `DramaticMomentCapE
 - `DramaticMomentTagDialog.tsx` — modal dialog for type selection + confirmation.
 - Badge displayed on tagged interactions in the scene log.
 
+### Entry-Flourish Declaration (#1140)
+
+On a **successful Entrance social action**, a poll-able offer is created so the entrant
+declares which of their claimed resonances they broadcast. The pick resolves through
+`create_entry_flourish` (actor self-grant), scoped to the room's active scene and
+idempotent per scene. Mirrors the Audere offer pattern but is a **self-grant** —
+not a reaction window (`react_to_window` hard-blocks self-reaction, so the #904
+framework was evaluated and rejected for this; peer scene-entry endorsement is
+the complementary half of the entrance moment).
+
+**Model (`entry_flourish.py`):**
+- `PendingEntryFlourishOffer` — poll-able offer; one per character (UniqueConstraint on
+  `character_sheet`); nullable `scene` FK. Re-exported in `world/magic/models/__init__.py`.
+
+**Model (`models/endorsement.py`):**
+- `EntryFlourishRecord` — immutable receipt written by `create_entry_flourish`. FK
+  `character_sheet`, FK `resonance`, nullable FK `scene`, `granted_amount`. Partial
+  UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL` — per-scene
+  uniqueness; scene-null grid-RP flourishes are unconstrained.
+
+**Config tuning knob:**
+- `ResonanceGainConfig.entry_flourish_grant` (default 10) — amount granted per flourish.
+
+**Services:**
+- `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) — called on
+  Entrance success; skips if already flourished this scene or no claimed resonances.
+- `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult`
+  (`entry_flourish.py`) — two-phase, mirrors `resolve_audere_offer`.
+- `create_entry_flourish(sheet, resonance, *, scene, amount=None)` (`services/gain.py`) —
+  checks claimed-resonance, creates `EntryFlourishRecord`, writes
+  `ResonanceGrant(source=ENTRY_FLOURISH, entry_flourish=record)`. Skips gracefully on
+  duplicate `(sheet, scene)`.
+
+**Action wiring (`actions/definitions/social.py`):**
+- `EntranceAction` calls `maybe_create_entry_flourish_offer` on success; gated by
+  `ActionTemplate.grants_entry_flourish`.
+
+**REST endpoints (`/api/magic/entry-flourish/`):**
+- `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` —
+  `PendingEntryFlourishOfferViewSet` (account-scoped, read-only).
+- `POST /api/magic/entry-flourish/respond/` — `EntryFlourishRespondView`; body
+  `{offer_id, resonance_id}`; picker data reuses `CharacterResonanceViewSet`.
+
+**Exceptions (`exceptions.py`):**
+- `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError`,
+  `EntryFlourishOfferStaleError` — all carry `user_message` for safe 400 responses.
+
+**Frontend:**
+- `EntryFlourishOfferGate` + `EntryFlourishOfferDialog`
+  (`frontend/src/magic/components/`) — gate polls `usePendingEntryFlourishOffers`;
+  dialog opens once per offer id, lets the player pick a resonance and calls
+  `useRespondToEntryFlourish`.
+- Mounted in `frontend/src/scenes/pages/SceneDetailPage.tsx` (`isActive` guard).
+- Hooks in `frontend/src/magic/queries.ts`: `usePendingEntryFlourishOffers`,
+  `useRespondToEntryFlourish`.
+
+**GainSource:** `ENTRY_FLOURISH` in `world/magic/constants.py` (`GainSource` TextChoices).
+
 ### Audere & Audere Majora (#873, #543)
 
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global

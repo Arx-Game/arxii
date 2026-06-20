@@ -20,6 +20,7 @@ import type {
   AudereMajoraRespondRequest,
   CrossXPLockRequest,
   DissolveRequest,
+  EntryFlourishRespondRequest,
   PatchThreadRequest,
   PullCommitRequest,
   RescueRequest,
@@ -75,6 +76,8 @@ export const magicKeys = {
   auderePending: () => [...magicKeys.all, 'audere', 'pending'] as const,
 
   audereMajoraPending: () => [...magicKeys.all, 'audere-majora', 'pending'] as const,
+
+  entryFlourishPending: () => [...magicKeys.all, 'entry-flourish', 'pending'] as const,
 
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 
@@ -672,6 +675,49 @@ export function useRespondToAudereMajora(characterId: number, encounterId: numbe
       // useRespondToAudere's post-respond refreshes.
       qc.invalidateQueries({ queryKey: magicKeys.characterAnima(characterId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Entry-flourish offers, #1140
+// ---------------------------------------------------------------------------
+
+/**
+ * Pending entry-flourish offers for the account. Mounted only inside the scene
+ * entry flow (offers exist only at scene-entry moments), so the 5 s poll runs
+ * only where it matters.
+ * throwOnError deliberately NOT set: same rationale as usePendingAudereOffers —
+ * this backs an overlay/banner that must degrade to rendering nothing on fetch errors.
+ */
+export function usePendingEntryFlourishOffers(enabled: boolean = true) {
+  return useQuery({
+    queryKey: magicKeys.entryFlourishPending(),
+    queryFn: () => api.getPendingEntryFlourishOffers(),
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+/**
+ * Pick a resonance to broadcast for a pending entry-flourish offer.
+ *
+ * Takes the responding character's sheet id (consumed by callers; kept for
+ * call-site compatibility). The respond endpoint runs grant_resonance, which
+ * changes CharacterResonance balance/lifetime_earned.
+ *
+ * On success invalidates:
+ * - the entry-flourish pending inbox (offer clears)
+ * - magicKeys.characterResonanceList() — the key used by useCharacterResonances
+ *   (covers all per-sheet entries via prefix match)
+ */
+export function useRespondToEntryFlourish(_characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EntryFlourishRespondRequest) => api.respondToEntryFlourish(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.entryFlourishPending() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
     },
   });
 }

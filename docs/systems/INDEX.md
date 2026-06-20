@@ -40,6 +40,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `DramaticMomentTag` (per-event tag — `moment_type`, `character_sheet`,
     `scene`, `tagged_by` AccountDB, `interaction` pose anchor with
     `db_constraint=False` + `interaction_timestamp` denormalized, `tagged_at`)
+  - **Entry-flourish declaration (#1140):** `PendingEntryFlourishOffer`
+    (`entry_flourish.py`; one per character, nullable `scene` FK),
+    `EntryFlourishRecord` (`models/endorsement.py`; actor self-grant receipt with
+    partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL`).
+    `ResonanceGainConfig.entry_flourish_grant` (default 10). The #904
+    reaction-window framework is peer-only and was rejected for this use.
   - **Audere Majora + legend-deed minting (#953):**
     `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
     `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
@@ -148,6 +154,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
   - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
   - `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`/`scene`
+- **API endpoints (entry-flourish declaration — #1140):**
+  - `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` — account-scoped
+    pending entry-flourish offer inbox (#1140)
+  - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
+    offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

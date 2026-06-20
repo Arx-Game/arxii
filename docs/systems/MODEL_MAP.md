@@ -725,6 +725,7 @@
   - audere_offers <- magic.PendingAudereOffer
   - audere_majora_offers <- magic.PendingAudereMajoraOffer
   - audere_majora_crossings <- magic.AudereMajoraCrossing
+  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
@@ -1729,6 +1730,11 @@
   - scene -> scenes.Scene [FK] (nullable)
   - declaration_interaction -> scenes.Interaction [FK] (nullable)
   - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
+
+### PendingEntryFlourishOffer
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### Affinity
 **Foreign Keys:**
@@ -3271,6 +3277,7 @@
   - event -> events.Event [FK] (nullable)
 **Pointed to by:**
   - developmenttransaction_set <- progression.DevelopmentTransaction
+  - entry_flourish_offers <- magic.PendingEntryFlourishOffer
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance

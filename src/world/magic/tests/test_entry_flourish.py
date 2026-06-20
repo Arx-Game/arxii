@@ -67,3 +67,18 @@ class CreateEntryFlourishServiceTest(TestCase):
         other_resonance = ResonanceFactory()
         with self.assertRaises(EndorsementValidationError):
             create_entry_flourish(self.sheet, other_resonance, scene=None)
+
+    def test_skips_grant_gracefully_on_duplicate_scene(self):
+        from world.scenes.factories import SceneFactory
+
+        scene = SceneFactory()
+        first = create_entry_flourish(self.sheet, self.resonance, scene=scene)
+        grants_before = ResonanceGrant.objects.filter(
+            character_sheet=self.sheet, source=GainSource.ENTRY_FLOURISH
+        ).count()
+        second = create_entry_flourish(self.sheet, self.resonance, scene=scene)
+        self.assertEqual(second.pk, first.pk)  # returns existing, no new record
+        grants_after = ResonanceGrant.objects.filter(
+            character_sheet=self.sheet, source=GainSource.ENTRY_FLOURISH
+        ).count()
+        self.assertEqual(grants_after, grants_before)  # no second grant
