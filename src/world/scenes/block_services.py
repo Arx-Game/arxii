@@ -5,10 +5,11 @@ between these two (player, persona) sides?" Block is mutual — it hides each si
 and keyed on PlayerData (account), so it follows the *person* across re-rosters.
 
 Slice 1 added resolution + lifecycle; slice 2 wired the **profile gate**
-(``sheet_blocked_for_viewer`` → the character-sheet view 404s for a blocked viewer); slice 3 wired
-the **scene target picker** (``actions.player_interface._block_excluded_persona_ids`` removes a
-blocked persona from the actor's targets). Interaction/thread visibility, the Mute sibling, the
-awareness/flag + generic "Character Has You Blocked" surface, and the cron job remain follow-ups.
+(``sheet_blocked_for_viewer``); slice 3 wired the **scene target picker**
+(``actions.player_interface._block_excluded_persona_ids``); slice 4 wired **feed visibility**
+(``hidden_persona_ids_for_viewer`` → the interaction feed excludes the blocked party's content).
+The Mute sibling, the awareness/flag + generic "Character Has You Blocked" surface, and the cron
+job remain follow-up slices.
 """
 
 from __future__ import annotations
@@ -143,3 +144,51 @@ def sheet_blocked_for_viewer(*, viewer_account: Any, sheet: CharacterSheet) -> b
         )
 
     return _active_blocks().filter(conditions).exists()
+
+
+def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
+    """Persona ids whose content is hidden from this viewer by an active block (#1278).
+
+    For the scene feed / presence (no persona pair): a blocked viewer sees nothing the blocked
+    party says or does. Persona-scoped blocks hide the exact blocked/blocker face; an
+    ``account_level`` block hides *all* of the blocker's currently-played faces. Mutual.
+
+    At most two queries — the viewer's active blocks, plus (only when an account-level block is
+    present) the owners' current personas. Empty for an anonymous viewer; staff bypass is the
+    caller's concern.
+    """
+    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return set()
+
+    blocks = list(
+        _active_blocks().filter(
+            Q(owner__account=viewer_account) | Q(blocked_player__account=viewer_account)
+        )
+    )
+    if not blocks:
+        return set()
+
+    hidden: set[int] = set()
+    account_level_owner_ids: set[int] = set()
+    # PlayerData's pk is its account_id, so owner_id/blocked_player_id == the account pk.
+    viewer_pk = viewer_account.pk
+    for block in blocks:
+        if block.owner_id == viewer_pk:
+            # Viewer is the blocker → hide the exact face they blocked.
+            if block.blocked_persona_id is not None:
+                hidden.add(block.blocked_persona_id)
+        elif block.account_level:
+            account_level_owner_ids.add(block.owner_id)
+        elif block.blocker_persona_id is not None:
+            hidden.add(block.blocker_persona_id)
+
+    if account_level_owner_ids:
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        hidden.update(
+            Persona.objects.filter(
+                character_sheet__roster_entry__tenures__player_data_id__in=account_level_owner_ids,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+            ).values_list("pk", flat=True)
+        )
+    return hidden

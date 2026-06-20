@@ -863,7 +863,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(49):
+        with self.assertNumQueries(50):  # 49 + 1 for the #1278 block-gate load
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -943,7 +943,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(49):
+        with self.assertNumQueries(50):  # 49 + 1 for the #1278 block-gate load
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

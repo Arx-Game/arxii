@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.magic.models import CharacterResonance, PoseEndorsement, SceneEntryEndorsement
+from world.scenes.block_services import hidden_persona_ids_for_viewer
 from world.scenes.constants import (
     InteractionMode,
     PersonaType,
@@ -207,7 +208,13 @@ class InteractionViewSet(
         user = self.request.user
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
         since = self.request.query_params.get("since")  # noqa: USE_FILTERSET
-        return base_qs.visible_to(user, persona_ids=persona_ids, since=since)
+        qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
+        # #1278 — a blocked viewer sees nothing the blocked party says or does. Staff bypass.
+        if not user.is_staff:
+            hidden = hidden_persona_ids_for_viewer(viewer_account=user)
+            if hidden:
+                qs = qs.exclude(persona_id__in=hidden)
+        return qs
 
     def get_serializer_class(
         self,
