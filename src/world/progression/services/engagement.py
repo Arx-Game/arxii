@@ -5,11 +5,88 @@ Service functions for the weekly social-engagement pending ledger.
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 
 from django.db import transaction
 from evennia.accounts.models import AccountDB
 
-from world.progression.models.engagement import WeeklyEngagementInitiator, WeeklySocialEngagement
+from world.progression.models.engagement import (
+    WeeklyEngagementInitiator,
+    WeeklySocialEngagement,
+)
+
+logger = logging.getLogger("world.progression.engagement")
+
+# Tunable constants for the weekly good-sport kudos grant.
+# MIN_ENGAGEMENT_BAR: minimum distinct initiators required to qualify.
+# Filters single-yes token-farming (one account alone cannot self-grant).
+MIN_ENGAGEMENT_BAR: int = 2
+
+# WEEKLY_KUDOS_SCALE: multiplier applied to pending_points before rounding.
+# Adjust to tune weekly kudos yield without touching the accrual weights.
+WEEKLY_KUDOS_SCALE: Decimal = Decimal(1)
+
+
+def grant_social_engagement_kudos() -> int:
+    """Grant Kudos from accrued weekly social-engagement credit.
+
+    For each ungranted ``WeeklySocialEngagement`` ledger:
+
+    - Skips ledgers below ``MIN_ENGAGEMENT_BAR`` distinct initiators
+      (prevents single-account token-farming).
+    - Computes ``amount = int(round(pending_points * WEEKLY_KUDOS_SCALE))``.
+    - If amount > 0: awards kudos and marks the ledger ``granted=True``.
+    - If amount == 0 or below the bar: leaves ``granted=False`` (no grant).
+
+    Errors on individual ledgers are caught and logged so one bad row
+    does not abort the batch.
+
+    Returns:
+        The count of ledgers that were successfully granted.
+    """
+    from world.progression.models import KudosSourceCategory
+    from world.progression.services.kudos import award_kudos
+
+    try:
+        social_category = KudosSourceCategory.objects.get(name="social_engagement")
+    except KudosSourceCategory.DoesNotExist:
+        logger.exception(
+            "grant_social_engagement_kudos: KudosSourceCategory 'social_engagement' not found; "
+            "skipping weekly grant."
+        )
+        return 0
+
+    ungranted = list(WeeklySocialEngagement.objects.filter(granted=False))
+    granted_count = 0
+
+    for ledger in ungranted:
+        if ledger.distinct_initiators < MIN_ENGAGEMENT_BAR:
+            continue
+
+        amount = round(ledger.pending_points * WEEKLY_KUDOS_SCALE)
+        if amount <= 0:
+            continue
+
+        try:
+            with transaction.atomic():
+                award_kudos(
+                    ledger.account,
+                    amount,
+                    social_category,
+                    "Weekly good-sport kudos",
+                )
+                ledger.granted = True
+                ledger.save(update_fields=["granted"])
+            granted_count += 1
+        except Exception:
+            logger.exception(
+                "grant_social_engagement_kudos: failed to grant ledger pk=%d (account=%s)",
+                ledger.pk,
+                ledger.account_id,
+            )
+
+    logger.info("grant_social_engagement_kudos: granted %d ledgers", granted_count)
+    return granted_count
 
 
 def accrue(
