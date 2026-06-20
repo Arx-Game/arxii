@@ -1,10 +1,11 @@
 """Tests for the plummet content seed service (#1228, Task 3).
 
 ``ensure_fall_content`` idempotently seeds the fall ``DamageType`` and the
-staged "Plummeting" ``ConditionTemplate`` (descent-depth stages, no DoT — the
-impact is applied explicitly at the bottom in Task 6). The fall DamageType
-leaves its wound/death pools null so the config-default survivability pools
-apply, exactly like the poison DamageType.
+"Plummeting" ``ConditionTemplate`` — a simple non-progressive, non-expiring
+(``PERMANENT``) marker with no stages and no DoT (impact is applied explicitly
+at the bottom in Task 6, and depth lives in the instance's ``severity``
+accumulator, not stage multipliers). The fall DamageType leaves its wound/death
+pools null so the config-default survivability pools apply, exactly like poison.
 """
 
 from django.test import TestCase
@@ -15,6 +16,7 @@ from world.areas.positioning.constants import (
     PLUMMETING_CONDITION_NAME,
 )
 from world.areas.positioning.plummet_content import ensure_fall_content
+from world.conditions.constants import DurationType
 from world.conditions.models import (
     ConditionCategory,
     ConditionDamageOverTime,
@@ -37,26 +39,28 @@ class EnsureFallContentTests(TestCase):
         category = ConditionCategory.objects.get(name=FALLING_CATEGORY_NAME)
         self.assertTrue(category.is_negative)
 
-    def test_seeds_plummeting_condition_progressive(self):
+    def test_seeds_plummeting_condition_non_progressive(self):
         ensure_fall_content()
         tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
-        self.assertTrue(tmpl.has_progression)
+        # Non-progressive marker: depth lives in the instance's severity
+        # accumulator, not in stage progression.
+        self.assertFalse(tmpl.has_progression)
         self.assertFalse(tmpl.is_stackable)
 
-    def test_plummeting_has_severity_ramping_stages(self):
+    def test_plummeting_is_non_expiring_permanent(self):
+        # PERMANENT leaves rounds_remaining=None on apply, so the end-of-round
+        # duration countdown never expires it mid-air (the I1 regression): the
+        # descent loop alone removes it on impact / clean catch.
         ensure_fall_content()
         tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
-        stages = list(tmpl.stages.order_by("stage_order"))
-        self.assertGreaterEqual(len(stages), 2)
-        # severity_multiplier strictly increases with descent depth.
-        multipliers = [s.severity_multiplier for s in stages]
-        self.assertEqual(multipliers, sorted(multipliers))
-        self.assertLess(multipliers[0], multipliers[-1])
-        # Non-terminal stages advance one stage per round (the descent cadence);
-        # the terminal stage has no successor.
-        for stage in stages[:-1]:
-            self.assertEqual(stage.rounds_to_next, 1)
-        self.assertIsNone(stages[-1].rounds_to_next)
+        self.assertEqual(tmpl.default_duration_type, DurationType.PERMANENT)
+
+    def test_plummeting_has_no_stages(self):
+        # The stage severity_multiplier bands were dead data — descent depth is
+        # the raw per-round severity accumulator, so no stages are seeded.
+        ensure_fall_content()
+        tmpl = ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME)
+        self.assertFalse(ConditionStage.objects.filter(condition=tmpl).exists())
 
     def test_plummeting_has_no_damage_over_time(self):
         # Impact is applied explicitly at the bottom (Task 6), not per-round DoT.

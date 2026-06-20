@@ -336,8 +336,13 @@ resolution_result)`:
 `ensure_fall_content()` idempotently seeds all plummet + catch content (it calls
 `ensure_catch_content()`):
 
-- the `Fall` `DamageType` (null pools → config-default survivability) and the staged
-  `Plummeting` `ConditionTemplate` (descent-depth severity stages, no DoT);
+- the `Fall` `DamageType` (null pools → config-default survivability) and the `Plummeting`
+  `ConditionTemplate` — a simple non-progressive, `PERMANENT`-duration marker (no stages,
+  no DoT). Depth is tracked solely by the instance's per-round `severity` accumulator
+  (`advance_plummet` does `severity += 1` per level descended), which feeds the impact
+  `damage = severity * FALL_IMPACT_PER_LEVEL`. `PERMANENT` keeps the descent loop the sole
+  authority over its lifetime: the end-of-round duration countdown never expires it mid-air,
+  so deep falls always reach impact — only `advance_plummet`/`end_plummet` remove it;
 - the capability-gated **"Catch the Faller"** `ChallengeTemplate` (authored `severity` on
   the row). Its approaches are gated by catch capabilities — the seed examples are the four
   `CapabilityType` rows `fly` / `teleport` / `telekinesis` / `acrobatics`. Every catch

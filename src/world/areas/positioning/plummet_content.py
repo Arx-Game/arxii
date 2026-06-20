@@ -5,9 +5,16 @@ Idempotently seeds the content the reactive-catch / plummet feature needs:
 * a ``Fall`` :class:`~world.conditions.models.DamageType` (impact damage at the
   bottom of a fall), with null wound/death pools so the config-default
   survivability pools apply — exactly like the poison/exhaustion DamageTypes; and
-* a staged "Plummeting" :class:`~world.conditions.models.ConditionTemplate` whose
-  stages model descent-depth bands (deeper fall → higher severity multiplier),
-  advancing one stage per round (the descent cadence).
+* a simple non-expiring "Plummeting" :class:`~world.conditions.models.ConditionTemplate`
+  marker. It carries **no** stages and a ``PERMANENT`` duration so the descent
+  loop alone owns its lifetime: ``advance_plummet`` removes it on impact and
+  ``end_plummet`` removes it on a clean catch — it never auto-expires mid-air.
+
+Descent depth is tracked solely by the condition instance's per-round
+``severity`` accumulator (``advance_plummet`` does ``severity += 1`` per level
+descended), which then feeds the impact: ``damage = severity *
+FALL_IMPACT_PER_LEVEL``. There is no stage ``severity_multiplier`` — the raw
+accumulator is the depth.
 
 The Plummeting condition has **no** ``ConditionDamageOverTime`` row — the impact
 is applied explicitly when the fall ends (Task 6), not as per-round damage.
@@ -16,8 +23,6 @@ is applied explicitly when the fall ends (Task 6), not as per-round damage.
 and is safe to call repeatedly: every write goes through ``get_or_create``. It
 doubles as integration-test setup and staff seed data.
 """
-
-from decimal import Decimal
 
 from world.areas.positioning.constants import (
     ACROBATICS_CAPABILITY_NAME,
@@ -36,7 +41,6 @@ from world.conditions.constants import DurationType
 from world.conditions.models import (
     CapabilityType,
     ConditionCategory,
-    ConditionStage,
     ConditionTemplate,
     DamageType,
 )
@@ -85,41 +89,20 @@ def _ensure_fall_damage_type() -> DamageType:
     return obj
 
 
-# Descent-depth stage bands for the Plummeting condition. Each entry is one
-# stage: a deeper fall reached on a later round, with a higher severity
-# multiplier feeding the eventual impact. ``rounds_to_next=1`` advances one
-# stage per round (the descent cadence); the terminal stage advances no further.
-_PLUMMET_STAGES: tuple[tuple[str, str, str], ...] = (
-    (
-        "Tipping Over",
-        "The first sickening lurch as footing is lost and the ground falls away.",
-        "1.00",
-    ),
-    (
-        "Gathering Speed",
-        "The plunge accelerates; the world rushes upward.",
-        "1.50",
-    ),
-    (
-        "Terminal Plunge",
-        "A headlong fall from a killing height, an instant from impact.",
-        "2.00",
-    ),
-)
-
-
 def ensure_fall_content() -> None:
     """Idempotently seed the plummet content (#1228).
 
-    Seeds the Falling category, the fall-impact DamageType, and the staged
-    Plummeting ConditionTemplate (descent-depth severity stages, no DoT). Safe
+    Seeds the Falling category, the fall-impact DamageType, and the Plummeting
+    ConditionTemplate as a simple non-expiring marker (no stages, no DoT). The
+    descent loop alone owns the condition's lifetime — a ``PERMANENT`` duration
+    means it never auto-expires mid-air, so deep falls always reach impact. Safe
     to call repeatedly — every write goes through get_or_create.
     """
     category = _ensure_falling_category()
     _ensure_fall_damage_type()
     ensure_catch_content()
 
-    plummeting, _ = ConditionTemplate.objects.get_or_create(
+    ConditionTemplate.objects.get_or_create(
         name=PLUMMETING_CONDITION_NAME,
         defaults={
             "category": category,
@@ -127,25 +110,16 @@ def ensure_fall_content() -> None:
                 "A character is falling through the air, descending deeper each "
                 "round until impact at the bottom."
             ),
-            "has_progression": True,
+            # Non-progressive, non-expiring marker: depth lives in the instance's
+            # per-round ``severity`` accumulator, and only advance_plummet /
+            # end_plummet remove it. PERMANENT leaves rounds_remaining=None so the
+            # end-of-round duration countdown never expires it before the descent
+            # loop reaches the floor.
+            "has_progression": False,
             "is_stackable": False,
-            "default_duration_type": DurationType.ROUNDS,
-            "default_duration_value": len(_PLUMMET_STAGES),
+            "default_duration_type": DurationType.PERMANENT,
         },
     )
-
-    last_index = len(_PLUMMET_STAGES) - 1
-    for index, (name, description, multiplier) in enumerate(_PLUMMET_STAGES):
-        ConditionStage.objects.get_or_create(
-            condition=plummeting,
-            stage_order=index + 1,
-            defaults={
-                "name": name,
-                "description": description,
-                "rounds_to_next": None if index == last_index else 1,
-                "severity_multiplier": Decimal(multiplier),
-            },
-        )
 
 
 # ---------------------------------------------------------------------------

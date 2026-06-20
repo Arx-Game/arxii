@@ -80,6 +80,60 @@ class PlummetDescentTests(TestCase):
         tick_round_for_targets([self.faller], timing="end")
         self.assertEqual(position_of(self.faller), self.mid_chasm)
 
+    def test_deep_fall_reaches_impact_not_stranded_midair(self) -> None:
+        """I1 regression: a chasm deeper than the old 3-round duration must reach
+        the floor and impact, never strand the faller mid-air.
+
+        Builds a ≥4-level chasm chain ABOVE the existing top_chasm, applies the
+        plummet, and ticks end-of-round repeatedly. With a PERMANENT (non-expiring)
+        Plummeting condition the descent loop owns its lifetime, so the faller
+        descends through every level to the floor and impacts — rather than the
+        condition expiring on the 3rd tick mid-air (orphaning the catch challenge).
+        """
+        # Stack three more CHASM levels on top of the existing 3-level stack so the
+        # fall is 5 levels deep (deeper than the old default_duration_value of 3).
+        deeper_top = self.top_chasm
+        for name in ("ledge two up", "ledge three up", "ledge four up"):
+            higher = Position.objects.create(room=self.room, name=name, kind=PositionKind.CHASM)
+            higher.elevation_anchor = deeper_top
+            higher.save(update_fields=["elevation_anchor"])
+            deeper_top = higher
+
+        self._start_plummet_at(deeper_top)
+        health_before = self._vitals().health
+
+        # Tick generously more rounds than there are levels; descent + impact must
+        # land well within them, and ticking past impact is a harmless no-op.
+        for _ in range(12):
+            tick_round_for_targets([self.faller], timing="end")
+            if position_of(self.faller) == self.ground:
+                break
+
+        # Reached the floor — NOT stranded in a chasm mid-air.
+        self.assertEqual(
+            position_of(self.faller),
+            self.ground,
+            "deep fall must descend all the way to the floor, not expire mid-air",
+        )
+        # Impact fired (damage applied through the survivability pipeline).
+        self.assertLess(
+            self._vitals().health,
+            health_before,
+            "deep fall must reach impact and apply fall-damage consequences",
+        )
+        # Plummeting condition removed by impact.
+        self.assertFalse(
+            get_active_conditions(self.faller)
+            .filter(condition__name=PLUMMETING_CONDITION_NAME)
+            .exists(),
+            "impact should remove the Plummeting condition",
+        )
+        # Catch challenge deactivated — not orphaned is_active=True.
+        self.assertFalse(
+            ChallengeInstance.objects.filter(target_object=self.faller, is_active=True).exists(),
+            "impact should deactivate the bound catch challenge",
+        )
+
     def test_impact_at_bottom_applies_fall_damage_consequences(self) -> None:
         self._start_plummet_at(self.mid_chasm)
         health_before = self._vitals().health
