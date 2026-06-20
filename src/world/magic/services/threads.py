@@ -610,6 +610,35 @@ def accept_thread_weaving_unlock(
 
 
 # =============================================================================
+# Phase 14 — Thread survivability tuning (#1175)
+# =============================================================================
+
+THREAD_SURVIVABILITY_DEFAULTS: dict[str, tuple[int, int, int]] = {
+    # vital_target: (coefficient, cap, half_saturation)
+    VitalBonusTarget.DAMAGE_TAKEN_REDUCTION: (1, 20, 8),
+    VitalBonusTarget.MAX_HEALTH: (1, 80, 10),
+}
+
+
+def seed_thread_survivability_tuning() -> None:
+    """Idempotently author the default ThreadSurvivabilityTuning rows (#1175)."""
+    from world.magic.models import ThreadSurvivabilityTuning  # noqa: PLC0415
+
+    for target, (coefficient, cap, half) in THREAD_SURVIVABILITY_DEFAULTS.items():
+        ThreadSurvivabilityTuning.objects.get_or_create(
+            vital_target=target,
+            defaults={"coefficient": coefficient, "cap": cap, "half_saturation": half},
+        )
+
+
+def get_thread_survivability_tuning(vital_target: str) -> "ThreadSurvivabilityTuning | None":  # noqa: F821, UP037
+    """Return the tuning row for a target, or None if unseeded (baseline 0)."""
+    from world.magic.models import ThreadSurvivabilityTuning  # noqa: PLC0415
+
+    return ThreadSurvivabilityTuning.objects.filter(vital_target=vital_target).first()
+
+
+# =============================================================================
 # Phase 13 — VITAL_BONUS routing (Spec A §3.8, §5.5, §5.8, §7.4)
 # =============================================================================
 

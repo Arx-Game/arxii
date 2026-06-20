@@ -5,6 +5,10 @@ from django.test import TestCase
 
 from world.magic.constants import VitalBonusTarget
 from world.magic.models import ThreadSurvivabilityTuning
+from world.magic.services import (
+    get_thread_survivability_tuning,
+    seed_thread_survivability_tuning,
+)
 
 
 class ThreadSurvivabilityTuningModelTests(TestCase):
@@ -30,3 +34,19 @@ class ThreadSurvivabilityTuningModelTests(TestCase):
                 cap=99,
                 half_saturation=99,
             )
+
+
+class ThreadSurvivabilityTuningSeedTests(TestCase):
+    def test_getter_returns_none_when_unseeded(self) -> None:
+        self.assertIsNone(
+            get_thread_survivability_tuning(VitalBonusTarget.DAMAGE_TAKEN_REDUCTION),
+        )
+
+    def test_seed_creates_dr_and_health_rows_idempotently(self) -> None:
+        seed_thread_survivability_tuning()
+        seed_thread_survivability_tuning()  # second call must be a no-op
+        self.assertEqual(ThreadSurvivabilityTuning.objects.count(), 2)
+        dr = get_thread_survivability_tuning(VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
+        self.assertEqual((dr.coefficient, dr.cap, dr.half_saturation), (1, 20, 8))
+        hp = get_thread_survivability_tuning(VitalBonusTarget.MAX_HEALTH)
+        self.assertEqual((hp.coefficient, hp.cap, hp.half_saturation), (1, 80, 10))

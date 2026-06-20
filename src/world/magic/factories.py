@@ -78,6 +78,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
@@ -2966,3 +2967,16 @@ class _RestoreToSenseActionTemplateFactory:
 
 
 RestoreToSenseActionTemplateFactory = _RestoreToSenseActionTemplateFactory()
+
+
+class ThreadSurvivabilityTuningFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadSurvivabilityTuning rows (#1175)."""
+
+    class Meta:
+        model = ThreadSurvivabilityTuning
+        django_get_or_create = ("vital_target",)
+
+    vital_target = VitalBonusTarget.DAMAGE_TAKEN_REDUCTION
+    coefficient = 1
+    cap = 20
+    half_saturation = 8
