@@ -364,7 +364,9 @@ def weave_thread(  # noqa: PLR0913
         "developed_points": 0,
     }
     kwargs[field_map[target_kind]] = target
-    return Thread.objects.create(**kwargs)
+    thread = Thread.objects.create(**kwargs)
+    recompute_max_health_with_threads(character_sheet)
+    return thread
 
 
 def update_thread_narrative(

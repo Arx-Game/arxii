@@ -4,14 +4,22 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import VitalBonusTarget
-from world.magic.factories import ResonanceFactory, ThreadFactory
+from world.magic.constants import TargetKind, VitalBonusTarget
+from world.magic.factories import (
+    CharacterThreadWeavingUnlockFactory,
+    ResonanceFactory,
+    ThreadFactory,
+    ThreadWeavingUnlockFactory,
+)
 from world.magic.models import ThreadSurvivabilityTuning
 from world.magic.services import (
     get_thread_survivability_tuning,
     seed_thread_survivability_tuning,
     survivability_baseline,
+    weave_thread,
 )
+from world.traits.factories import TraitFactory
+from world.vitals.models import CharacterVitals
 
 
 class ThreadSurvivabilityTuningModelTests(TestCase):
@@ -117,3 +125,35 @@ class SurvivabilityBaselineTests(TestCase):
         )
         self.assertGreater(high, low)
         self.assertLessEqual(high, 20)  # never exceeds cap
+
+
+# =============================================================================
+# Recompute-on-change: weave_thread triggers max_health update (#1175)
+# =============================================================================
+
+
+class RecomputeOnThreadChangeTests(TestCase):
+    def setUp(self) -> None:
+        seed_thread_survivability_tuning()
+        self.sheet = CharacterSheetFactory()
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet,
+            health=100,
+            max_health=100,
+            base_max_health=100,
+        )
+
+    def test_weaving_a_thread_updates_max_health(self) -> None:
+        """Weaving a TRAIT thread triggers recompute_max_health_with_threads; max_health rises."""
+        trait = TraitFactory()
+        res = ResonanceFactory()
+        # Mirrors WeaveThreadTests.test_weave_thread_trait_happy_path in test_resonance_services.py.
+        unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait)
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock, xp_spent=100)
+
+        weave_thread(self.sheet, TargetKind.TRAIT, trait, res, name="Survivability Test Thread")
+
+        vitals = CharacterVitals.objects.get(character_sheet=self.sheet)
+        # After weave S goes from 0 to 1 (level-0 thread counts as max(1,0//10)=1).
+        # baseline = round(80 * 1 / (1 + 10)) ≈ 7 → max_health should exceed 100.
+        self.assertGreater(vitals.max_health, 100)
