@@ -79,6 +79,12 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
 
         return create_object("typeclasses.rooms.Room", key="Test Combat Room", nohome=True)
 
+    @factory.lazy_attribute
+    def scene(self) -> object:
+        from world.scenes.factories import SceneFactory
+
+        return SceneFactory(location=self.room)
+
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):
     """Factory for ThreatPool."""
