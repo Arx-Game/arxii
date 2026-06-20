@@ -180,6 +180,10 @@ vi.mock('../../components/ConsentPrompt', () => ({
   ConsentPrompt: () => <div data-testid="consent-prompt">ConsentPrompt</div>,
 }));
 
+vi.mock('../../components/HighlightReel', () => ({
+  HighlightReel: () => <div data-testid="highlight-reel">HighlightReel</div>,
+}));
+
 vi.mock('@/game/components/CommandInput', () => ({
   CommandInput: () => <div data-testid="command-input">CommandInput</div>,
 }));

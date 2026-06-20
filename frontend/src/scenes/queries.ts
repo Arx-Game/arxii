@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import type { HighlightReel, Interaction } from './types';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -26,6 +27,7 @@ export type {
   SceneListItem,
   SceneDetail,
   Interaction,
+  HighlightReel,
 } from './types';
 
 export async function fetchScenes(params: string) {
@@ -70,6 +72,20 @@ export async function fetchInteractions(sceneId: string, cursor?: string) {
   if (cursor) url.searchParams.set('cursor', cursor);
   const res = await apiFetch(url.pathname + url.search);
   if (!res.ok) throw new Error('Failed to load interactions');
+  return res.json();
+}
+
+/** Fetch a single interaction's full detail — used to reveal a sealed reel moment (#1241). */
+export async function fetchInteraction(interactionId: number): Promise<Interaction> {
+  const res = await apiFetch(`/api/interactions/${interactionId}/`);
+  if (!res.ok) throw new Error('Failed to load interaction');
+  return res.json();
+}
+
+/** Fetch a scene's highlight reel: a sealed featured moment + a ranked index (#1241). */
+export async function fetchHighlightReel(sceneId: string): Promise<HighlightReel> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/highlight-reel/`);
+  if (!res.ok) throw new Error('Failed to load highlight reel');
   return res.json();
 }
 

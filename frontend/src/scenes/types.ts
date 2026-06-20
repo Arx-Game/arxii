@@ -176,3 +176,25 @@ export interface Interaction {
   entry_endorsers: EndorserBadge[];
   entry_endorsed_by_me: boolean;
 }
+
+/** The single featured (fully sealed) moment of a scene's highlight reel (#1241). */
+export interface HighlightReelFeatured {
+  interaction_id: number;
+}
+
+/** One sealed, ranked entry in the index below the featured moment (#1241). */
+export interface HighlightReelEntry {
+  interaction_id: number;
+  rank: number;
+}
+
+/**
+ * A scene's highlight reel (#1241): a sealed featured moment + a ranked index.
+ * `featured` is null when the scene has no tagged moments and no reacted poses
+ * (an empty reel — the section is hidden). The payload carries ids only; a pose
+ * is revealed by fetching the interaction-detail endpoint on demand.
+ */
+export interface HighlightReel {
+  featured: HighlightReelFeatured | null;
+  index: HighlightReelEntry[];
+}
