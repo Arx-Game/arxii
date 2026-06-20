@@ -485,11 +485,15 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
 ### Scenes
-Roleplay session recording with participant tracking and message logging.
+Roleplay session recording with participant tracking, interaction logging, persona-based identity, and social action consent flow.
 
-- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
-- **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
-- **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`, `SceneCastPullDeclaration`
+- **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
+- **Key Functions:**
+  - `create_action_request(scene, initiator_persona, target_persona, action_key, ...)` — dispatches a request; NPC additional targets auto-accept immediately.
+  - `respond_to_action_request(action_request, decision)` — primary-target consent + resolution.
+  - `respond_to_action_target(action_target, decision)` — per-additional-target consent + resolution (never touches siblings).
+  - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -497,10 +501,15 @@ Roleplay session recording with participant tracking and message logging.
     `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
   - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
     encounter read gate all consume these two forms.
-- **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
-- **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
+- **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
+  `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
+  additional-target consent rows for the authenticated player's personas).
+- **Frontend:** `ConsentPrompt` polls both `GET /api/action-requests/?status=pending` and
+  `GET /api/action-targets/?status=pending` every 5 s and renders amber consent cards for
+  each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
-  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`)
+  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`),
+  actions (resolver registry via `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories

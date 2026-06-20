@@ -270,6 +270,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneActionRequest'
           description: ''
+  /api/action-targets/:
+    get:
+      operationId: action_targets_list
+      description: Read-only listing of a persona's pending additional-target consent
+        rows (#1177).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      tags:
+      - action-targets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSceneActionTargetList'
+          description: ''
+  /api/action-targets/{id}/:
+    get:
+      operationId: action_targets_retrieve
+      description: Read-only listing of a persona's pending additional-target consent
+        rows (#1177).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene action target.
+        required: true
+      tags:
+      - action-targets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneActionTarget'
+          description: ''
   /api/actions/characters/{character_id}/available/:
     get:
       operationId: actions_characters_available_list
@@ -35251,6 +35305,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SceneActionRequest'
+    PaginatedSceneActionTargetList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SceneActionTarget'
     PaginatedSceneListList:
       type: object
       required:
@@ -40723,7 +40800,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         status:
           allOf:
-          - $ref: '#/components/schemas/SceneActionStatusEnum'
+          - $ref: '#/components/schemas/Status307Enum'
           readOnly: true
         difficulty_choice:
           allOf:
@@ -40844,20 +40921,71 @@ components:
       required:
       - initiator_persona
       - scene
-    SceneActionStatusEnum:
-      enum:
-      - pending
-      - accepted
-      - denied
-      - resolved
-      - expired
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `denied` - Denied
-        * `resolved` - Resolved
-        * `expired` - Expired
+    SceneActionTarget:
+      type: object
+      description: Flat read payload for a pending additional-target consent row (#1177).
+      properties:
+        action_target_id:
+          type: integer
+          readOnly: true
+        action_request_id:
+          type: integer
+          readOnly: true
+        target_persona_id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/Status307Enum'
+        initiator_persona:
+          type: integer
+          readOnly: true
+        initiator_name:
+          type: string
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+        action_key:
+          type: string
+          readOnly: true
+        action_template:
+          type: integer
+          readOnly: true
+          nullable: true
+        technique:
+          type: integer
+          readOnly: true
+          nullable: true
+        technique_name:
+          type: string
+          nullable: true
+          description: Human label for the enhancing technique (mirrors the request
+            serializer).
+          readOnly: true
+        pose_text:
+          type: string
+          readOnly: true
+        strain_commitment:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action_key
+      - action_request_id
+      - action_target_id
+      - action_template
+      - created_at
+      - initiator_name
+      - initiator_persona
+      - pose_text
+      - scene
+      - strain_commitment
+      - target_persona_id
+      - technique
+      - technique_name
     SceneActivity:
       type: object
       description: A scene room's current activity band (shown before a teller commits).
@@ -42302,6 +42430,20 @@ components:
         * `approved` - Approved
         * `denied` - Denied
         * `withdrawn` - Withdrawn
+    Status307Enum:
+      enum:
+      - pending
+      - accepted
+      - denied
+      - resolved
+      - expired
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `denied` - Denied
+        * `resolved` - Resolved
+        * `expired` - Expired
     Status4e6Enum:
       enum:
       - declaring

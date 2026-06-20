@@ -121,6 +121,70 @@ broadcast_scene_message(scene, "end")     # Sets location.active_scene = None
 
 ---
 
+## Scene Action Requests
+
+Social actions within a scene require OOC consent. The `SceneActionRequest` model
+owns the full lifecycle (dispatch → consent → resolution → result recording) for
+**primary-target** requests; `SceneActionTarget` rows extend the same request to
+**additional targets**, each with its own independent consent and result.
+
+**Source:** `src/world/scenes/action_models.py`, `action_services.py`,
+`action_views.py`, `action_serializers.py`, `action_filters.py`
+
+### Models
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `SceneActionRequest` | Primary targeted (or area) social action request | `scene`, `initiator_persona`, `target_persona` (nullable), `action_key`, `action_template`, `technique`, `status` (ActionRequestStatus), `difficulty_choice`, `resolved_difficulty`, `result_interaction`, `action_interaction`, `delivery`, `pose_text`, `effort_level`, `created_at`, `resolved_at` |
+| `SceneActionTarget` | One additional non-primary target in a multi-target request | `action_request` (FK → SceneActionRequest), `target_persona`, `status`, `result_interaction`, `resolved_difficulty`, `resolved_at` |
+| `SceneCastPullDeclaration` | Paid thread-pull declared alongside a benign standalone cast | `request` (OneToOne), `resonance`, `tier`, `threads` (M2M) |
+
+`SceneActionTarget` has a `UniqueConstraint` on `(action_request, target_persona)` —
+a persona cannot appear as an additional target more than once per request.
+
+### Per-Target Resolver Semantics (#1178)
+
+When an action has a registered resolver (`action_resolvers.get_resolver(action_key)`),
+it fires **once per accepted target**:
+
+- `respond_to_action_request(action_request, decision)` — fires the resolver for the
+  primary target when the decision is ACCEPT (line ~340 in `action_services.py`).
+- `respond_to_action_target(action_target, decision)` — fires the same resolver for
+  each accepted additional target row, independently of the primary and of sibling rows.
+
+**Idempotency contract:** a resolver registered for a multi-target action is invoked
+once per accepted `SceneActionTarget`; any cast-level side-effects (e.g. anima deduction,
+kudos, renown) must therefore be idempotent with respect to invocation count across targets.
+NPC targets are auto-accepted at dispatch time via `_auto_resolve_npc_targets()`.
+
+### Key Service Functions
+
+```python
+from world.scenes.action_services import (
+    create_action_request,
+    respond_to_action_request,
+    respond_to_action_target,
+)
+
+# Create a request (primary + additional targets).
+# NPC additional targets are auto-resolved immediately.
+request = create_action_request(
+    scene=scene,
+    initiator_persona=persona,
+    target_persona=primary_target,      # None for area actions
+    action_key="intimidate",
+    additional_target_personas=[p2, p3],
+)
+
+# Primary-target consent (returns EnhancedSceneActionResult | None)
+result = respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+# Additional-target consent — never touches siblings or the primary status
+result = respond_to_action_target(action_target=target_row, decision=ConsentDecision.ACCEPT)
+```
+
+---
+
 ## API Endpoints
 
 ### Scenes (`/api/scenes/`)
@@ -151,6 +215,25 @@ broadcast_scene_message(scene, "end")     # Sets location.active_scene = None
 ### Reactions (`/api/reactions/`)
 - `POST /api/reactions/` - Toggle reaction (creates or removes based on existing state)
 - `DELETE /api/reactions/{id}/` - Remove reaction
+
+### Action Requests (`/api/action-requests/`)
+- `GET /api/action-requests/` - List requests where the caller is initiator or primary target
+- `POST /api/action-requests/` - Dispatch a new action request (single- or multi-target)
+- `POST /api/action-requests/{id}/respond/` - Accept or deny a primary-target request; also handles additional-target consent when `target_persona_id` is included in the payload
+
+**Filters:** `scene`, `status`, `initiator`, `target`
+
+### Action Targets (`/api/action-targets/`)
+
+Read-only listing of a player's pending additional-target consent rows (#1177).
+
+- `GET /api/action-targets/` - List `SceneActionTarget` rows where the caller controls the target persona
+
+**Filters:** `scene`, `status`
+
+**Typical use:** `GET /api/action-targets/?scene={id}&status=pending` — fetched by `ConsentPrompt` every 5 seconds to surface the additional-target consent queue alongside the primary-request queue. Accepting or denying dispatches to `POST /api/action-requests/{id}/respond/` with `target_persona_id` set.
+
+**Response shape** (`SceneActionTargetSerializer`): `action_target_id`, `action_request_id`, `target_persona_id`, `status`, `initiator_persona`, `initiator_name`, `scene`, `action_key`, `action_template`, `technique`, `technique_name`, `pose_text`, `strain_commitment`, `created_at`.
 
 ---
 
