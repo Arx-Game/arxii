@@ -875,11 +875,16 @@ def _scene_actions(character: ObjectDB) -> list[PlayerAction]:
     """
     del character  # placeholder for per-character filtering in a follow-up PR
     from actions.models import ActionTemplate  # noqa: PLC0415
+    from actions.registry import SOCIAL_ACTIONS_BY_TEMPLATE_NAME  # noqa: PLC0415
 
     templates = list(ActionTemplate.objects.filter(category=_SOCIAL_CATEGORY))
     result: list[PlayerAction] = []
     for template in templates:
-        action_key = template.name.lower()
+        # Derive the dispatch key from the registry singleton, not name.lower():
+        # multi-word templates ("Restore to Sense") have a distinct registry key
+        # ("restore_sense") that a slug transform cannot reproduce (#1172).
+        social_action = SOCIAL_ACTIONS_BY_TEMPLATE_NAME.get(template.name)
+        action_key = social_action.key if social_action is not None else template.name.lower()
         ref = ActionRef(
             backend=ActionBackend.REGISTRY,
             registry_key=action_key,
@@ -1034,12 +1039,17 @@ def _enhancements_for_action(
 
 
 def _resolve_action_key(action: PlayerAction) -> str:
-    """Return the action key for *action* used to find ActionEnhancement rows."""
+    """Return the action key for *action* used to find ActionEnhancement rows.
+
+    Prefer the dispatch ref's ``registry_key``: for social actions it is the
+    canonical registry key (e.g. ``restore_sense``), whereas ``template.name.lower()``
+    would yield ``restore to sense`` and miss the ``base_action_key`` index (#1172).
+    """
+    if action.ref.registry_key:
+        return action.ref.registry_key
     template = action.action_template
     if template is not None:
         return template.name.lower()
-    if action.ref.registry_key:
-        return action.ref.registry_key
     return ""
 
 

@@ -2910,8 +2910,9 @@ class _RestoreToSenseActionTemplateFactory:
 
     The ActionEnhancement source is an authored "Restore to Sense" Technique
     so the DB constraint (exactly one source FK non-null) is satisfied.  The
-    enhancement is voluntary (is_involuntary=False) — RestoreSenseAction.execute()
-    queries by base_action_key and dispatches apply_effects explicitly.
+    enhancement is voluntary (is_involuntary=False) — RestoreSenseAction.dispatch_effects()
+    queries by base_action_key and dispatches apply_effects explicitly (on both the
+    registry/run() path and the scene consent path, #1172).
 
     Idempotent: uses get_or_create on ActionTemplate name, ActionEnhancement
     variant_name, and RemoveConditionOnCheckConfig(enhancement, condition).

@@ -3,44 +3,63 @@
 Each singleton exposes ``target_kind = TargetKind.PERSONA`` so the frontend knows
 to prompt for a persona target. The ``execute()`` path goes through
 ``start_action_resolution`` which resolves the linked ActionTemplate's check chain.
+
+These are real ``Action`` subclasses (#1172): the registry dispatch path and the
+scene consent path both rely on the ``Action`` interface (``run()`` / ``execute()`` /
+``dispatch_effects()``). Inherent target effects (e.g. RestoreSense removing a
+Berserk condition) live in ``dispatch_effects`` so they fire exactly once whether
+the action is driven through ``run()`` or through the scene consent resolution.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
+from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
 from actions.types import TargetFilters, TargetType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from actions.base import ActionContext
-    from actions.types import ActionResult
+    from actions.types import ActionContext, ActionResult
+    from flows.scene_data_manager import SceneDataManager
 
 
-class _SocialTemplateAction:
+@dataclass
+class _SocialTemplateAction(Action):
     """Base for social ActionTemplate-driven actions.
 
-    Subclasses MUST set ``key``, ``name``, ``description``, ``template_name``.
-    Not a subclass of ``Action`` (which is a dataclass with required positional
-    fields); instead it exposes the same interface as class attributes so the
-    registry and player_interface can treat it identically to an ``Action``.
+    Subclasses set ``key``, ``name``, ``icon``, and ``template_name``. The
+    common social defaults (PERSONA single target, social category, turn cost)
+    are supplied here so concrete classes only declare what differs.
     """
 
-    template_name: str = ""
+    category: str = "social"
     target_type: TargetType = TargetType.SINGLE
-    target_kind: TargetKind = TargetKind.PERSONA
-    target_filters: TargetFilters = TargetFilters(in_same_scene=True, exclude_self=True)
-    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_kind: TargetKind | None = TargetKind.PERSONA
+    target_filters: TargetFilters | None = field(
+        default_factory=lambda: TargetFilters(in_same_scene=True, exclude_self=True)
+    )
+    action_category: ActionCategory | None = ActionCategory.SOCIAL
     costs_turn: bool = True
-    intent_event: str | None = None
-    result_event: str | None = None
 
-    def execute(self, actor: ObjectDB, context: ActionContext, **kwargs) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         from actions.models import ActionTemplate  # noqa: PLC0415
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+        # Dispatch any inherent target effects first (no-op for plain social
+        # actions; RestoreSense removes Berserk here). On this path a single
+        # dispatch only runs through execute(), never the consent path too.
+        scene_data = context.scene_data if context is not None else None
+        self.dispatch_effects(actor, kwargs.get("target"), scene_data)
 
         template = ActionTemplate.objects.get(name=self.template_name)
         resolution_ctx = ResolutionContext(action_context=context)
@@ -52,60 +71,65 @@ class _SocialTemplateAction:
         )
 
 
+@dataclass
 class IntimidateAction(_SocialTemplateAction):
-    key = "intimidate"
-    name = "Intimidate"
+    key: str = "intimidate"
+    name: str = "Intimidate"
+    icon: str = "skull"
+    template_name: str = "Intimidate"
     description = "Coerce through force of presence, threats, or physical dominance."
-    icon = "skull"
-    template_name = "Intimidate"
-    category = "social"
 
 
+@dataclass
 class PersuadeAction(_SocialTemplateAction):
-    key = "persuade"
-    name = "Persuade"
+    key: str = "persuade"
+    name: str = "Persuade"
+    icon: str = "handshake"
+    template_name: str = "Persuade"
     description = "Convince through reasoned argument, charm, and social grace."
-    icon = "handshake"
-    template_name = "Persuade"
-    category = "social"
 
 
+@dataclass
 class DeceiveAction(_SocialTemplateAction):
-    key = "deceive"
-    name = "Deceive"
+    key: str = "deceive"
+    name: str = "Deceive"
+    icon: str = "mask"
+    template_name: str = "Deceive"
     description = "Mislead through misdirection, half-truths, or outright lies."
-    icon = "mask"
-    template_name = "Deceive"
-    category = "social"
 
 
+@dataclass
 class FlirtAction(_SocialTemplateAction):
-    key = "flirt"
-    name = "Flirt"
+    key: str = "flirt"
+    name: str = "Flirt"
+    icon: str = "heart"
+    template_name: str = "Flirt"
     description = "Beguile through charm, allure, and romantic suggestion."
-    icon = "heart"
-    template_name = "Flirt"
-    category = "social"
 
 
+@dataclass
 class PerformAction(_SocialTemplateAction):
-    key = "perform"
-    name = "Perform"
+    key: str = "perform"
+    name: str = "Perform"
+    icon: str = "music"
+    template_name: str = "Perform"
     description = "Captivate an audience through music, oration, or storytelling."
-    icon = "music"
-    template_name = "Perform"
-    category = "social"
 
 
+@dataclass
 class EntranceAction(_SocialTemplateAction):
-    key = "entrance"
-    name = "Entrance"
+    key: str = "entrance"
+    name: str = "Entrance"
+    icon: str = "sparkles"
+    template_name: str = "Entrance"
     description = "Command attention through sheer force of personality on entering."
-    icon = "sparkles"
-    template_name = "Entrance"
-    category = "social"
 
-    def execute(self, actor: ObjectDB, context: ActionContext, **kwargs) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         from actions.models import ActionTemplate  # noqa: PLC0415
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
@@ -150,53 +174,53 @@ class EntranceAction(_SocialTemplateAction):
             )
 
 
+@dataclass
 class RestoreSenseAction(_SocialTemplateAction):
-    key = "restore_sense"
-    name = "Restore to Sense"
+    key: str = "restore_sense"
+    name: str = "Restore to Sense"
+    icon: str = "heart-pulse"
+    template_name: str = "Restore to Sense"
     description = "Talk a berserk ally down through force of personality and connection."
-    icon = "heart-pulse"
-    template_name = "Restore to Sense"
-    category = "social"
 
-    def execute(self, actor: ObjectDB, context: ActionContext, **kwargs) -> ActionResult:
+    def dispatch_effects(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        scene_data: SceneDataManager | None = None,
+    ) -> None:
+        """Dispatch the RemoveConditionOnCheckConfig wired to ``restore_sense``.
+
+        The factory seeds a ``RemoveConditionOnCheckConfig`` on an
+        ``ActionEnhancement`` keyed ``base_action_key="restore_sense"``;
+        ``apply_effects`` dispatches it to ``handle_remove_condition_on_check``,
+        which rolls a check against *target* and removes the Berserk condition on
+        success. Called by ``execute()`` (registry/``run()`` path) and by the
+        scene consent resolution.
+        """
         from actions.effects.registry import apply_effects  # noqa: PLC0415
-        from actions.models import ActionEnhancement, ActionTemplate  # noqa: PLC0415
-        from actions.services import start_action_resolution  # noqa: PLC0415
+        from actions.models import ActionEnhancement  # noqa: PLC0415
         from actions.types import (  # noqa: PLC0415
             ActionContext as _ActionContext,
             ActionResult as _ActionResult,
         )
         from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
-        from world.checks.types import ResolutionContext  # noqa: PLC0415
 
-        # Build an ActionContext for the effect dispatch (RemoveConditionOnCheckConfig).
-        sdm = SceneDataManager()
-        sdm.initialize_state_for_object(actor)
-        target = kwargs.get("target")
+        sdm = scene_data
+        if sdm is None:
+            sdm = SceneDataManager()
+            sdm.initialize_state_for_object(actor)
+
         effect_ctx = _ActionContext(
-            action=self,  # type: ignore[arg-type]
+            action=self,
             actor=actor,
             target=target,
-            kwargs=kwargs,
+            kwargs={},
             scene_data=sdm,
             result=_ActionResult(success=True),
         )
 
-        # Dispatch all ActionEnhancements wired to "restore_sense".
-        # The factory seeds a RemoveConditionOnCheckConfig on one of these enhancements;
-        # apply_effects dispatches it to handle_remove_condition_on_check.
-        for enh in ActionEnhancement.objects.filter(base_action_key="restore_sense"):
+        for enh in ActionEnhancement.objects.filter(base_action_key=self.key):
             apply_effects(enh, effect_ctx)
-
-        # Run the standard social template resolution (check + consequence pool).
-        template = ActionTemplate.objects.get(name=self.template_name)
-        resolution_ctx = ResolutionContext(action_context=context)
-        return start_action_resolution(
-            character=actor,
-            template=template,
-            target_difficulty=0,
-            context=resolution_ctx,
-        )
 
 
 # Module-level singletons — registered in actions/registry.py
