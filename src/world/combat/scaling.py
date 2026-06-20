@@ -17,7 +17,6 @@ from decimal import Decimal
 from django.core.exceptions import ObjectDoesNotExist
 from evennia.accounts.models import AccountDB
 
-from world.classes.models import CharacterClassLevel
 from world.combat.constants import OpponentTier, ParticipantStatus
 from world.combat.models import (
     CombatEncounter,
@@ -27,6 +26,7 @@ from world.combat.models import (
     RiskScalingModifier,
     StakesLevelRequirement,
 )
+from world.covenants.mentorship import effective_combat_level
 from world.stories.types import TrustLevel
 
 
@@ -47,43 +47,37 @@ class PartyProfile:
 def compute_party_profile(encounter: CombatEncounter) -> PartyProfile:
     """Return a level-only snapshot of the ACTIVE party for *encounter*.
 
-    Two queries only — no traversal of magic/thread/covenant/relationship
-    models:
+    Read-only — safe to call on GET endpoints.  Bond dissolution (persisting
+    graduation) is a write-side concern handled in ``begin_declaration_phase``.
 
-    1. Collect the character-sheet PKs of every ACTIVE participant.
-    2. Fetch the primary class level for each of those characters.
+    Query strategy (#1165, Task 6):
+    1. Fetch each ACTIVE participant's ``character_sheet`` in one query
+       (``select_related``).
+    2. Call ``effective_combat_level(sheet)`` per participant — this may issue
+       a small number of additional queries per bonded participant (bounded by
+       party size, not a loop-growth problem for normal party sizes).
 
-    Because ``CharacterSheet`` uses a OneToOneField to ``ObjectDB`` as its
-    primary key, ``character_sheet_id == character_id`` on that FK, so the
-    second query's ``character_id__in`` filter directly matches
-    ``CharacterClassLevel.character_id``.
+    ``effective_combat_level`` returns the raw primary level when the
+    participant has no active non-graduated bond, so the common case (no bond)
+    is unchanged from the previous two-query shape.
 
     Returns:
         PartyProfile with ``party_size=0`` and ``avg_level=0.0`` for an
         empty encounter.
     """
-    sheet_ids = list(
+    participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
             status=ParticipantStatus.ACTIVE,
-        ).values_list("character_sheet_id", flat=True)
+        ).select_related("character_sheet")
     )
 
-    levels = list(
-        CharacterClassLevel.objects.filter(
-            character_id__in=sheet_ids,
-            is_primary=True,
-        ).values_list("level", flat=True)
-    )
+    party_size = len(participants)
+    if not participants:
+        return PartyProfile(party_size=0, avg_level=0.0)
 
-    # ``avg_level`` averages only participants who have a primary class level;
-    # ``party_size`` counts all ACTIVE participants. These denominators differ
-    # only for a participant lacking an ``is_primary`` CharacterClassLevel — not
-    # expected in normal play (every PC has a primary class). The skew is bounded
-    # (mis-tunes scaling slightly, never crashes); outlier-aware aggregation is
-    # tracked in #1165.
-    party_size = len(sheet_ids)
-    avg_level = (sum(levels) / len(levels)) if levels else 0.0
+    levels = [effective_combat_level(p.character_sheet) for p in participants]
+    avg_level = sum(levels) / len(levels)
 
     return PartyProfile(party_size=party_size, avg_level=avg_level)
 

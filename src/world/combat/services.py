@@ -1159,6 +1159,44 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     return opp
 
 
+def _dissolve_graduated_bonds(enc: CombatEncounter) -> None:
+    """Dissolve any MentorBond that has graduated for ACTIVE participants in *enc*.
+
+    A bond is "graduated" when the adjusted party's raw primary level is now
+    within the covenant band — the bond is mechanically inactive and should be
+    persisted as dissolved so future reads skip it cleanly.
+
+    Write-safe: called only from ``begin_declaration_phase`` (encounter start).
+    Bulk-fetches bonds for all active participant sheets in one query, then
+    dissolves the graduated ones — no per-participant query loop.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.covenants.mentorship import dissolve_mentor_bond, is_bond_graduated  # noqa: PLC0415
+    from world.covenants.models import MentorBond  # noqa: PLC0415
+
+    sheet_ids = list(
+        CombatParticipant.objects.filter(
+            encounter=enc,
+            status=ParticipantStatus.ACTIVE,
+        ).values_list("character_sheet_id", flat=True)
+    )
+    if not sheet_ids:
+        return
+
+    # One bulk query: all active bonds where any participant is either the
+    # mentor or the sidekick side.
+    active_bonds = list(
+        MentorBond.objects.active()
+        .filter(Q(mentor_sheet_id__in=sheet_ids) | Q(sidekick_sheet_id__in=sheet_ids))
+        .select_related("covenant", "mentor_sheet", "sidekick_sheet")
+    )
+
+    for bond in active_bonds:
+        if is_bond_graduated(bond):
+            dissolve_mentor_bond(bond)
+
+
 @transaction.atomic
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
     """Advance round_number by 1 and set status to DECLARING.
@@ -1223,6 +1261,11 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     if enc.escalation_curve is not None:
         install_escalation_room_triggers(enc)
         apply_escalation_tick(enc)
+
+    # --- Mentor's Vow (#1165): persist graduated bond dissolution at round start ---
+    # Bonds that have graduated (adjusted party leveled into band) are dissolved
+    # here so future reads via effective_combat_level skip them cleanly.
+    _dissolve_graduated_bonds(enc)
 
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
