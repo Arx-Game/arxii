@@ -822,14 +822,23 @@ def _apply_round_tick_damage(
         vitals = target.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
         return
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
     for damage_type, amount in result.damage_dealt:
         if amount <= 0:
             continue
-        vitals.health -= amount
+        effective = (
+            apply_damage_reduction_from_threads(target, amount)
+            if hasattr(target, "threads")
+            else amount
+        )
+        if effective <= 0:
+            continue
+        vitals.health -= effective
         vitals.save(update_fields=["health"])
         process_damage_consequences(
             character_sheet=target.sheet_data,
-            damage_dealt=amount,
+            damage_dealt=effective,
             damage_type=damage_type,
         )
 
