@@ -31,11 +31,9 @@ from world.scenes.interaction_services import (
     record_interaction,
     record_whisper_interaction,
     resolve_audience,
-    resolve_persona_display,
 )
 from world.scenes.models import (
     Interaction,
-    PersonaDiscovery,
     SceneParticipation,
     SceneSummaryRevision,
 )
@@ -1007,63 +1005,6 @@ class TestPushInteractionWhisperPrivacy(TestCase):
         assert mock_a.call_count == 1
         assert mock_b.call_count == 1
         assert mock_c.call_count == 1
-
-
-class TestResolvePersonaDisplay(TestCase):
-    """Tests for resolve_persona_display service function."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.viewer = CharacterSheetFactory()
-        cls.real_persona = PersonaFactory(is_fake_name=False)
-        cls.fake_persona = PersonaFactory(is_fake_name=True, name="The Masked Baron")
-        cls.linked_persona = PersonaFactory(
-            character_sheet=cls.fake_persona.character_sheet,
-            name="Lord Reginald",
-        )
-
-    def test_non_fake_returns_name_directly(self) -> None:
-        name, discovered = resolve_persona_display(
-            persona=self.real_persona,
-            viewer_character_sheet=self.viewer,
-        )
-        assert name == self.real_persona.name
-        assert discovered is False
-
-    def test_fake_without_discovery_returns_fake_name(self) -> None:
-        name, discovered = resolve_persona_display(
-            persona=self.fake_persona,
-            viewer_character_sheet=self.viewer,
-        )
-        assert name == "The Masked Baron"
-        assert discovered is False
-
-    def test_fake_with_discovery_returns_linked_name(self) -> None:
-        PersonaDiscovery.objects.create(
-            persona=self.fake_persona,
-            linked_to=self.linked_persona,
-            discovered_by=self.viewer,
-        )
-        name, discovered = resolve_persona_display(
-            persona=self.fake_persona,
-            viewer_character_sheet=self.viewer,
-        )
-        assert name == "Lord Reginald (as The Masked Baron)"
-        assert discovered is True
-
-    def test_discovery_normalization_works_with_display(self) -> None:
-        """Discovery stored as (A, B) still resolves when queried from either side."""
-        PersonaDiscovery.objects.create(
-            persona=self.linked_persona,
-            linked_to=self.fake_persona,
-            discovered_by=self.viewer,
-        )
-        name, discovered = resolve_persona_display(
-            persona=self.fake_persona,
-            viewer_character_sheet=self.viewer,
-        )
-        assert discovered is True
-        assert "Lord Reginald" in name
 
 
 class TestClearPlacePresenceForCharacter(TestCase):

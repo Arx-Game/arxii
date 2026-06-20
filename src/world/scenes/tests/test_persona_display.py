@@ -108,7 +108,7 @@ class PersonaDisplayApiTests(APITestCase):
         self.client.force_authenticate(user=viewer)
         response = self.client.get(reverse("interaction-list"))
         assert self._persona_name(response, pose.pk) == (
-            f"{sheet.primary_persona.name} (as stag mask)"
+            f"stag mask ({sheet.primary_persona.name})"
         )
 
     def test_a_named_public_face_renders_by_name_to_everyone(self) -> None:

@@ -80,7 +80,7 @@ class LookPersonaDisplayTests(TestCase):
         )
 
         name = self._state(target).get_display_name(looker=self._state(looker))
-        assert name == f"{sheet.primary_persona.name} (as stag mask)"
+        assert name == f"stag mask ({sheet.primary_persona.name})"
 
     def test_a_normal_unmasked_character_renders_their_name(self) -> None:
         target, sheet = self._played(AccountFactory(), fake_active=False)
