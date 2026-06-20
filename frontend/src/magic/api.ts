@@ -3,7 +3,7 @@
  *
  * Covers Soul Tether endpoints, Thread reads, CharacterResonance reads,
  * Thread Hub Summary, Thread mutations (weave/patch/retire/imbue/cross-xp-lock),
- * pull preview/commit, teaching offers, and rooms-by-property.
+ * pull preview/commit, and teaching offers.
  *
  * Uses apiFetch from @/evennia_replacements/api.
  *

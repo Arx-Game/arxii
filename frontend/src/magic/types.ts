@@ -190,14 +190,6 @@ export type PullCommitResponse = components['schemas']['ThreadPullCommitResponse
 
 export type AcceptTeachingOfferRequest = components['schemas']['AcceptTeachingOfferRequest'];
 export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingOfferResponse'];
-
-// ---------------------------------------------------------------------------
-// Room Brief
-//
-// Re-export of the generated shape. Endpoint tracked for frontend removal in #1199.
-// ---------------------------------------------------------------------------
-
-export type RoomBrief = components['schemas']['RoomBrief'];
 export type RelationshipTrack = components['schemas']['RelationshipTrack'];
 
 // ---------------------------------------------------------------------------

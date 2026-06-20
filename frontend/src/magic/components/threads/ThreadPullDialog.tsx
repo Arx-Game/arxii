@@ -2,7 +2,7 @@
  * ThreadPullDialog — multi-thread pull commit surface.
  *
  * Ephemeral mode (no `combat` prop): only ALWAYS_IN_ACTION_KINDS are eligible.
- * Combat mode (`combat` prop set): TRAIT/TECHNIQUE/ROOM threads additionally
+ * Combat mode (`combat` prop set): TRAIT/TECHNIQUE threads additionally
  * eligible when their anchor appears in the involved-ID lists.
  *
  * Live preview: every change debounces a previewPull call (250ms).
@@ -41,15 +41,14 @@ export interface ThreadPullDialogProps {
   open: boolean;
   onClose: () => void;
   /** Combat mode: provided by the combat declaration panel.
-   *  involvedTraitIds / involvedTechniqueIds / involvedObjectIds unlock
-   *  TRAIT/TECHNIQUE/ROOM threads whose anchor PK is in the respective set.
+   *  involvedTraitIds / involvedTechniqueIds unlock TRAIT/TECHNIQUE threads
+   *  whose anchor PK is in the respective set.
    *  Leave undefined for ephemeral (non-combat) pulls. */
   combat?: {
     encounterId: number;
     participantId: number;
     involvedTraitIds: number[];
     involvedTechniqueIds: number[];
-    involvedObjectIds: number[];
   };
 }
 
@@ -60,7 +59,7 @@ export interface ThreadPullDialogProps {
 function isThreadEligible(thread: Thread, combat: ThreadPullDialogProps['combat']): boolean {
   if (ALWAYS_IN_ACTION_KINDS.has(thread.target_kind)) return true;
   if (!combat) return false;
-  // For TRAIT/TECHNIQUE/ROOM eligibility in combat we'd check thread.target_id
+  // For TRAIT/TECHNIQUE eligibility in combat we'd check thread.target_id
   // against the involved lists — target_id is not in the Thread response shape
   // (write-only field), so v1 leaves these disabled until target_id is exposed.
   return false;

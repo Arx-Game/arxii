@@ -28,7 +28,6 @@ TypeScript types for the magic module.
 - `CrossXPLockResponse` — `{ thread_id, unlocked_level, xp_spent }` (generated via `@extend_schema`)
 - `AcceptTeachingOfferRequest` — `{ learner_sheet_id? }` (generated via `@extend_schema`)
 - `AcceptTeachingOfferResponse` — `{ id, unlock_id, xp_spent }` (generated via `@extend_schema`)
-- `RoomBrief` — `{ id, name }` (generated via `@extend_schema`; no location_name or property_ids)
 - `ResonanceBalance` — `{ resonance_id, balance, lifetime_earned, flavor_text }` (generated)
 - `NearXPLockProspect` — `{ thread_id, boundary_level, xp_cost, dev_points_to_boundary }` (generated)
 - `ThreadHubSummary` — response for `GET /api/magic/thread-hub-summary/` (generated)
@@ -326,8 +325,10 @@ Confirmation dialog for retiring a thread. Calls `useRetireThread`.
 ### `components/threads/WeaveThreadWizard.tsx`
 
 Multi-step wizard for weaving a new thread. Step 1: select `TargetKind` (FACET and
-COVENANT_ROLE fully enabled; TRAIT/TECHNIQUE/ROOM/Relationship stubbed "coming soon").
-Step 2: select anchor. Step 3: name + description + confirm. Calls `useWeaveThread`.
+COVENANT_ROLE fully enabled; TRAIT/TECHNIQUE/Relationship stubbed "coming soon"). The
+bare ROOM anchor was removed (#879/#1199) — room-anchored threads now use the dedicated
+SANCTUM slot-based weaving flow, not this generic wizard. Step 2: select anchor.
+Step 3: name + description + confirm. Calls `useWeaveThread`.
 
 ### `components/threads/TeachingOfferCard.tsx`
 
