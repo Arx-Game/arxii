@@ -71,6 +71,7 @@ def connect_positions(
     *,
     is_passable: bool = True,
     gating_challenge: ChallengeInstance | None = None,
+    blocks_flight: bool = False,
 ) -> PositionEdge:
     """Create a traversable edge between two positions, ordered canonically.
 
@@ -84,6 +85,7 @@ def connect_positions(
         position_b=b,
         is_passable=is_passable,
         gating_challenge=gating_challenge,
+        blocks_flight=blocks_flight,
     )
     edge.full_clean()
     edge.save()
@@ -535,9 +537,12 @@ def materialize_aerial_layer(room: ObjectDB) -> None:
         twin[g.pk] = above
         connect_positions(g, above)  # vertical
     # Horizontal: mirror every ground edge (ignore passability/gating).
+    # Edges with blocks_flight=True are NOT mirrored — no aerial passage exists.
     for edge in PositionEdge.objects.filter(position_a__room=room).exclude(
         position_a__kind=PositionKind.AERIAL
     ):
+        if edge.blocks_flight:
+            continue
         a, b = twin.get(edge.position_a_id), twin.get(edge.position_b_id)
         if a is not None and b is not None:
             connect_positions(a, b)

@@ -11,10 +11,12 @@ from django.test import TestCase
 from world.areas.positioning.constants import PositionKind
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import (
+    connect_positions,
     edge_between,
     enter_aerial,
     force_move_to_position,
     leave_aerial,
+    materialize_aerial_layer,
     move_to_position,
     place_in_position,
     position_of,
@@ -107,3 +109,24 @@ class AerialLifecycleTests(TestCase):
 
         leave_aerial(self.char)
         self.assertEqual(position_of(self.char).kind, PositionKind.PRIMARY)
+
+    def test_blocks_flight_edge_is_not_bypassed_by_aerial_layer(self) -> None:
+        """A ground edge with blocks_flight=True must NOT get a freely passable aerial twin."""
+        # setUp already connected courtyard<->balcony; create a fresh pair with anti-air ward.
+        from world.areas.positioning.services import create_position
+
+        warded_a = create_position(self.room, "warded_a", kind=PositionKind.PRIMARY)
+        warded_b = create_position(self.room, "warded_b", kind=PositionKind.PRIMARY)
+        connect_positions(warded_a, warded_b, blocks_flight=True)
+        materialize_aerial_layer(self.room)
+        twin_a = Position.objects.get(
+            room=self.room, kind=PositionKind.AERIAL, elevation_anchor=warded_a
+        )
+        twin_b = Position.objects.get(
+            room=self.room, kind=PositionKind.AERIAL, elevation_anchor=warded_b
+        )
+        aerial_edge = edge_between(twin_a, twin_b)
+        # The aerial twin edge must NOT exist (anti-air ward suppresses it).
+        self.assertIsNone(
+            aerial_edge, "blocks_flight ground edge must NOT produce an aerial twin edge"
+        )
