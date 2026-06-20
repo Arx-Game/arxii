@@ -2474,6 +2474,61 @@ class BattleCovenantRiseRitualFactory(factory.django.DjangoModelFactory):
     )
 
 
+class MentorsVowRitualFactory(factory.django.DjangoModelFactory):
+    """Seed factory for the Mentor's Vow bilateral ritual (#1165).
+
+    SERVICE-dispatched; invokes establish_mentor_bond_via_session. Exactly two
+    participants required (BILATERAL): the initiator (mentor) and one invitee
+    (sidekick). Uses django_get_or_create so repeated calls in tests and seed
+    scripts return the same row.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Mentor's Vow"
+    description = (
+        "A bilateral vow between two covenant members — one within the covenant's "
+        "level band, one outside it — to bridge the gap between their paths."
+    )
+    narrative_prose = (
+        "Two souls stand at the threshold: one a seasoned member of the covenant, "
+        "one who walks a different road. They speak the Vow aloud before the covenant's "
+        "power, binding themselves to each other's journey until the gap is bridged."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.establish_mentor_bond_via_session"
+    flow = None
+    participation_rule = ParticipationRule.BILATERAL
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "target_covenant",
+                    "type": "covenant_picker",
+                    "filter": "initiator_active_memberships",
+                    "required": True,
+                },
+                {
+                    "name": "partner",
+                    "type": "character_search",
+                    "multi": False,
+                    "required": True,
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "role",
+                    "type": "hidden",
+                    "description": "mentor or sidekick — set automatically by the ritual.",
+                    "required": True,
+                },
+            ],
+        }
+    )
+
+
 # =============================================================================
 # Issue #526: Scar-gated MOVED trigger authored content
 # =============================================================================

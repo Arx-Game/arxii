@@ -38,6 +38,7 @@ from world.covenants.models import (
     CovenantRiteParticipant,
     CovenantRole,
     GearArchetypeCompatibility,
+    MentorBond,
     MentorBondConfig,
 )
 from world.covenants.types import CovenantFounder
@@ -1468,3 +1469,47 @@ def get_mentor_bond_config() -> MentorBondConfig:
     DoesNotExist propagates loudly. Mirrors get_flee_config.
     """
     return MentorBondConfig.objects.get(pk=1)
+
+
+@transaction.atomic
+def establish_mentor_bond_via_session(*, session: RitualSession) -> MentorBond:
+    """Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.
+
+    Reads the session-level COVENANT reference to get the target covenant.
+    Discriminates the two ACCEPTED participants by participant_kwargs["role"]
+    ("mentor" vs "sidekick") and delegates to establish_mentor_bond.
+
+    Per spec §4.6: the .filter() calls on session.references and
+    session.participants (related managers) are in-mutator iteration on
+    tightly-scoped per-row sets — acceptable exception to spec §3.9.
+    """
+    from world.covenants.mentorship import establish_mentor_bond  # noqa: PLC0415
+
+    covenant_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if covenant_ref is None or covenant_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+
+    covenant = covenant_ref.ref_covenant
+
+    mentor_sheet: CharacterSheet | None = None
+    sidekick_sheet: CharacterSheet | None = None
+
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        role = p.participant_kwargs.get("role")
+        if role == "mentor":  # noqa: STRING_LITERAL
+            mentor_sheet = p.character_sheet
+        elif role == "sidekick":  # noqa: STRING_LITERAL
+            sidekick_sheet = p.character_sheet
+
+    if mentor_sheet is None or sidekick_sheet is None:
+        raise RequiredReferenceMissingError
+
+    bond: MentorBond = establish_mentor_bond(
+        covenant=covenant,
+        mentor_sheet=mentor_sheet,
+        sidekick_sheet=sidekick_sheet,
+    )
+    return bond
