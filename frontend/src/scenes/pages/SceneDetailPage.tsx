@@ -126,6 +126,7 @@ export function SceneDetailPage() {
         onComposerModeChange={handleComposerModeChange}
         onAddTarget={setPendingTarget}
         onAttachAction={handleActionAttach}
+        canGm={scene?.viewer_can_gm}
       />
 
       {/* Composer + Action Panel */}

@@ -124,6 +124,7 @@ class InteractionViewSet(
         # Deferred: world.combat imports world.scenes at module scope elsewhere;
         # importing CombatRoundAction lazily keeps this view free of an import cycle.
         from world.combat.models import CombatRoundAction  # noqa: PLC0415
+        from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
 
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
@@ -198,6 +199,11 @@ class InteractionViewSet(
                     )
                 ),
                 to_attr="cached_reaction_windows",
+            ),
+            Prefetch(
+                "dramatic_moment_tags",
+                queryset=DramaticMomentTag.objects.select_related("moment_type"),
+                to_attr="cached_dramatic_moment_tags",
             ),
         )
 
@@ -387,6 +393,7 @@ class InteractionViewSet(
         interaction.cached_favorites = []
         interaction.cached_reactions = []
         interaction.cached_action_links = []
+        interaction.cached_dramatic_moment_tags = []
         interaction.cached_endorsements = []
         # ENTRY poses opened a window above; let the serializer query it (no
         # cached attr) so the fresh response includes the reactable strip.

@@ -132,6 +132,38 @@ export async function submitPose(body: SubmitPoseBody): Promise<void> {
   if (!res.ok) throw new Error('Failed to submit pose');
 }
 
+// ---------------------------------------------------------------------------
+// Dramatic-moment types + tags (#1139)
+// ---------------------------------------------------------------------------
+
+export interface DramaticMomentType {
+  id: number;
+  label: string;
+  description?: string;
+  resonance: number;
+  resonance_amount?: number;
+  per_scene_cap?: number;
+}
+
+export async function fetchDramaticMomentTypes(): Promise<DramaticMomentType[]> {
+  const res = await apiFetch('/api/magic/dramatic-moment-types/');
+  if (!res.ok) throw new Error('Failed to load dramatic moment types');
+  return res.json();
+}
+
+export async function postDramaticMomentTag(body: {
+  moment_type: number;
+  interaction?: number;
+  character_sheet?: number;
+  scene?: number;
+}): Promise<void> {
+  const res = await apiFetch('/api/magic/dramatic-moment-tags/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to tag dramatic moment');
+}
+
 export async function reactToWindow(
   windowId: number,
   body: { persona_id: number; choice: string }

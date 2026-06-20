@@ -34,6 +34,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
+  - **Dramatic moment tagging (#545 / #1139):**
+    `DramaticMomentType` (inherits `RenownAwardConfig`; staff-authored catalog —
+    `label`, `resonance` FK, `resonance_amount`, `per_scene_cap`),
+    `DramaticMomentTag` (per-event tag — `moment_type`, `character_sheet`,
+    `scene`, `tagged_by` AccountDB, `interaction` pose anchor with
+    `db_constraint=False` + `interaction_timestamp` denormalized, `tagged_at`)
   - **Audere Majora + legend-deed minting (#953):**
     `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
     `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
@@ -97,6 +103,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Dramatic moment tagging (#1139):
+    `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
+    — validates resonance claim + per-scene cap; atomically creates tag, calls
+    `grant_resonance(source=DRAMATIC_MOMENT)`, and calls `fire_renown_award` for the
+    primary persona (skipped if none)
 - **Key Methods:** `CharacterAura.dominant_affinity`,
   `Thread.target` (populated FK), `Thread.display_name`,
   `ThreadWeavingUnlock.display_name`
@@ -133,6 +144,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
   - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
   - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
+- **API endpoints (dramatic moment tagging — #1139):**
+  - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
+  - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
+  - `GET /api/magic/dramatic-moment-tags/` — list tags; filterable by `character_sheet`/`scene`
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

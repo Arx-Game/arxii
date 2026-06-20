@@ -105,6 +105,45 @@ def _validate_technique_enhancement(
         raise ValidationError(msg)
 
 
+def _action_template_for_key(action_key: str) -> ActionTemplate | None:
+    """Resolve the ActionTemplate a registry social action resolves through.
+
+    The consent path runs the template's check chain, so a targeted social request
+    needs its ``action_template`` set at creation. Registry social singletons carry
+    the template's ``name`` via ``Action.template_name``; action_keys without one
+    (standalone casts, rituals) yield None and leave the request template-less —
+    unchanged behaviour (#1172).
+    """
+    from actions.models import ActionTemplate  # noqa: PLC0415
+    from actions.registry import get_action  # noqa: PLC0415
+
+    action_obj = get_action(action_key)
+    if action_obj is None or not action_obj.template_name:
+        return None
+    return ActionTemplate.objects.filter(name=action_obj.template_name).first()
+
+
+def _dispatch_action_effects(
+    action_request: SceneActionRequest,
+    actor: ObjectDB,
+    target: ObjectDB,
+) -> None:
+    """Fire the request's registry action's inherent target effects (#1172).
+
+    The consent path resolves the template's check chain via ``start_action_resolution``
+    but never reaches the ``Action``'s ``execute()``; social actions with built-in
+    effects (RestoreSense's ``RemoveConditionOnCheckConfig``) dispatch them here so
+    the effect fires on the live player path. No-op for actions without inherent
+    effects and for non-registry action_keys (standalone casts, rituals).
+    """
+    from actions.registry import get_action  # noqa: PLC0415
+
+    action_obj = get_action(action_request.action_key)
+    if action_obj is None:
+        return
+    action_obj.dispatch_effects(actor, target)
+
+
 def create_action_request(  # noqa: PLR0913
     *,
     scene: Scene,
@@ -191,6 +230,7 @@ def create_action_request(  # noqa: PLR0913
         initiator_persona=initiator_persona,
         target_persona=target_persona,
         action_key=action_key,
+        action_template=_action_template_for_key(action_key),
         difficulty_choice=difficulty_choice,
         status=ActionRequestStatus.PENDING,
         technique=technique,
@@ -363,6 +403,11 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             fury_committed=None,
         )
+
+    # Dispatch the action's inherent target effects (e.g. RestoreSense removing a
+    # Berserk condition). The check chain above resolves the action; this is where
+    # data-driven condition effects reach the live player path (#1172).
+    _dispatch_action_effects(action_request, character, target_character)
 
     result_interaction = _create_result_interaction(
         action_request=action_request,

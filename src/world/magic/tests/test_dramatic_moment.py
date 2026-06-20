@@ -44,6 +44,21 @@ class DramaticMomentTagModelTest(TestCase):
         tag = DramaticMomentTagFactory()
         self.assertIn("DramaticMomentTag", str(tag))
 
+    def test_tag_can_anchor_to_interaction(self):
+        from world.scenes.factories import InteractionFactory, SceneFactory
+
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+        tag = DramaticMomentTagFactory(
+            scene=scene,
+            interaction=interaction,
+            interaction_timestamp=interaction.timestamp,
+        )
+        self.assertEqual(tag.interaction_id, interaction.id)
+        self.assertEqual(tag.interaction_timestamp, interaction.timestamp)
+        # Back-relation resolves.
+        self.assertIn(tag, list(interaction.dramatic_moment_tags.all()))
+
 
 class CreateDramaticMomentTagServiceTest(TestCase):
     def setUp(self):
@@ -115,6 +130,22 @@ class CreateDramaticMomentTagServiceTest(TestCase):
                 tagged_by=self.tagger,
                 scene=None,
             )
+
+    def test_persists_interaction_and_denormalized_timestamp(self):
+        from world.magic.services.gain import create_dramatic_moment_tag
+        from world.scenes.factories import InteractionFactory, SceneFactory
+
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+        tag = create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=self.moment_type,
+            tagged_by=self.tagger,
+            scene=scene,
+            interaction=interaction,
+        )
+        self.assertEqual(tag.interaction_id, interaction.id)
+        self.assertEqual(tag.interaction_timestamp, interaction.timestamp)
 
 
 class DramaticMomentCapTest(TestCase):

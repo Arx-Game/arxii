@@ -1420,8 +1420,23 @@ Cross-references:
     `True`; `create_social_consequence_pools()` seeds one `ConsequencePool` per social action
     (6 pools × 3 consequence entries), wired into `create_social_action_templates()`.
 
-  Deferred (follow-ups):
-  - Staff UI for `DramaticMomentType` authoring and tagging workflow.
+  Dramatic-moment tagging UI now also shipped (#1139):
+  - `DramaticMomentTag.interaction` pose-anchor FK (`db_constraint=False` +
+    `interaction_timestamp` denormalized for the partitioned-table composite FK).
+  - `DramaticMomentTagViewSet` (POST create + GET list) at `/api/magic/dramatic-moment-tags/`;
+    gated by `IsSceneGMOrOwnerOrStaff` (scene GMs and owners — not just staff — may tag).
+  - `DramaticMomentTypeViewSet` (GET list) at `/api/magic/dramatic-moment-types/` for the
+    tag-picker dropdown.
+  - Django admin: `DramaticMomentTypeAdmin` (full CRUD — staff author the catalog) +
+    `DramaticMomentTagAdmin` (read-only provenance audit).
+  - Scene context fields: `viewer_can_gm` on the scene serializer (controls GM control
+    visibility); `dramatic_moment_tags` on the interaction serializer (pose badge);
+    `dramatic_moment_count` per participant.
+  - React: per-pose GM "Tag dramatic moment" control + `DramaticMomentTagDialog` + badge.
+
+  Deferred (follow-up issues filed at PR time):
+  - GM nomination of event-scoped dramatic-moment types + approval workflow.
+  - Upvote-ranked scene highlight reel consuming pose-anchored tags.
   - Frontend action panel wiring for the 6 new social action singletons.
   - Scene-perception leaderboard / aura ranking surface.
 - Fashion-to-resonance integration (requires Items & Crafting systems —

@@ -10025,6 +10025,88 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/dramatic-moment-tags/:
+    get:
+      operationId: magic_dramatic_moment_tags_list
+      description: |-
+        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+
+        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
+        GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDramaticMomentTagList'
+          description: ''
+    post:
+      operationId: magic_dramatic_moment_tags_create
+      description: |-
+        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+
+        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
+        GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DramaticMomentTagRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DramaticMomentTag'
+          description: ''
+  /api/magic/dramatic-moment-types/:
+    get:
+      operationId: magic_dramatic_moment_types_list
+      description: Read-only list of authored dramatic-moment types for the tag picker
+        (#1139).
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DramaticMomentType'
+          description: ''
   /api/magic/effect-types/:
     get:
       operationId: magic_effect_types_list
@@ -26328,6 +26410,101 @@ components:
             $ref: '#/components/schemas/DraftDistinctionEntry'
       required:
       - distinctions
+    DramaticMomentTag:
+      type: object
+      description: |-
+        Create + read dramatic-moment tags (#1139).
+
+        Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
+        ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
+        ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        moment_type:
+          type: integer
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+          nullable: true
+          description: Scene context; nullable for resilience to scene cleanup.
+        interaction:
+          type: integer
+          nullable: true
+          description: The pose that earned this moment; nullable for non-pose tags.
+        tagged_by:
+          type: integer
+          readOnly: true
+          description: Account that tagged this moment. PROTECT because provenance
+            must be kept.
+        tagged_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - moment_type
+      - tagged_at
+      - tagged_by
+    DramaticMomentTagRequest:
+      type: object
+      description: |-
+        Create + read dramatic-moment tags (#1139).
+
+        Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
+        ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
+        ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+      properties:
+        moment_type:
+          type: integer
+        character_sheet:
+          type: integer
+          description: The character this sheet belongs to
+        scene:
+          type: integer
+          nullable: true
+          description: Scene context; nullable for resilience to scene cleanup.
+        interaction:
+          type: integer
+          nullable: true
+          description: The pose that earned this moment; nullable for non-pose tags.
+      required:
+      - moment_type
+    DramaticMomentType:
+      type: object
+      description: Read-only catalog of authored dramatic-moment types (for the tag
+        picker).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          description: Display name used as the renown deed title (e.g. 'Grand Entrance').
+          maxLength: 100
+        description:
+          type: string
+        resonance:
+          type: integer
+          description: Resonance granted when this moment type is tagged.
+        resonance_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Flat resonance units granted to the tagged character.
+        per_scene_cap:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Maximum number of times this moment type may be awarded to
+            a given character within a single scene.
+      required:
+      - id
+      - label
+      - resonance
     DrawModeEnum:
       enum:
       - menu
@@ -29291,6 +29468,12 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        dramatic_moment_tags:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
         endorsable_resonances:
           type: array
           items:
@@ -29350,6 +29533,7 @@ components:
       required:
       - action_links
       - content
+      - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
       - entry_endorsed_by_me
@@ -29512,6 +29696,12 @@ components:
           items:
             $ref: '#/components/schemas/InteractionActionLink'
           readOnly: true
+        dramatic_moment_tags:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
         endorsable_resonances:
           type: array
           items:
@@ -29566,6 +29756,7 @@ components:
       required:
       - action_links
       - content
+      - dramatic_moment_tags
       - endorsable_resonances
       - endorsee_sheet_id
       - entry_endorsed_by_me
@@ -32944,6 +33135,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DraftApplication'
+    PaginatedDramaticMomentTagList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DramaticMomentTag'
     PaginatedEncounterListList:
       type: object
       required:
@@ -39799,6 +40013,9 @@ components:
         is_owner:
           type: string
           readOnly: true
+        viewer_can_gm:
+          type: boolean
+          readOnly: true
         date_finished:
           type: string
           format: date-time
@@ -39845,6 +40062,7 @@ components:
       - personas
       - position_adjacency
       - positions
+      - viewer_can_gm
     SceneDetailRequest:
       type: object
       description: Full scene representation with personas
@@ -39982,6 +40200,9 @@ components:
         is_owner:
           type: string
           readOnly: true
+        viewer_can_gm:
+          type: boolean
+          readOnly: true
       required:
       - date_started
       - id
@@ -39989,6 +40210,7 @@ components:
       - location
       - name
       - participants
+      - viewer_can_gm
     SceneSummaryRevision:
       type: object
       properties:

@@ -53,6 +53,7 @@ from world.magic.models import (
     ThreadXPLockedLevel,
     Tradition,
 )
+from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 
 
 @admin.register(Affinity)
@@ -728,4 +729,25 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
         return not SoulTetherConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(DramaticMomentType)
+class DramaticMomentTypeAdmin(admin.ModelAdmin):
+    list_display = ("label", "resonance", "resonance_amount", "per_scene_cap", "magnitude", "risk")
+    search_fields = ("label", "description")
+    list_filter = ("magnitude", "risk")
+    filter_horizontal = ("archetypes",)
+
+
+@admin.register(DramaticMomentTag)
+class DramaticMomentTagAdmin(admin.ModelAdmin):
+    list_display = ("id", "character_sheet", "moment_type", "scene", "tagged_by", "tagged_at")
+    list_filter = ("moment_type",)
+    readonly_fields = tuple(f.name for f in DramaticMomentTag._meta.fields)  # noqa: SLF001
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False

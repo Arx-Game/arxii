@@ -777,8 +777,10 @@ integration test suite.
   check (Composure/Willpower, per `FuryConfig`) decides lucid-vs-Berserk; lost control applies
   a Berserk `ConditionTemplate` (severity by tier, decays over rounds). Audited on
   `Interaction.fury_committed` + the `CommittingDeclaration` mixin (clash + non-clash). Fury is
-  restricted to technique casts. The "Restore to Sense" ally-recovery action is authored +
-  effect-tested but its live player dispatch is deferred (social-action dispatch gap — #1172).
+  restricted to technique casts. The "Restore to Sense" ally-recovery action is authored,
+  effect-tested, and **live-dispatchable** on the scene consent path (#1172): accepting the
+  request fires its `RemoveConditionOnCheckConfig`, removing the target ally's Berserk
+  condition end-to-end.
 - **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
   clash visibility UI is a follow-up.
 
