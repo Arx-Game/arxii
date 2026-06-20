@@ -989,13 +989,25 @@ gated-edge crossing. Builds on the Phase-1 and Blueprint (#1017) positioning bas
   `GATING_FAR_SIDE` consequence on the approach pool executes `force_move_to_position` to
   the far side; gated edges surface as locked entries in the player's move list
 
-**Deferred to follow-up (#520 + reactive-layer):**
+**Built (#1228 — reactive catch + AFK-safe plummet):**
 
-- Reactive fall consumer: `EventName.FELL` seam is open; the capability-based catch
-  (fly/teleport/acrobatics interrupt) and AFK-safe multi-round plummet down the
-  `elevation_anchor` chain with impact consequences await the round/turn framework (#520)
-- Anti-air "blocks-flight" gate flag: a future `PositionEdge` flag preventing flight over
-  certain edges
+- **Reactive fall consumer** — `EventName.FELL` is consumed by a room-owned Evennia trigger
+  (`install_fall_triggers` / `wire_fall_triggers`) that calls `begin_plummet`. Capability-gated
+  catch: any character with a catch capability (`fly`, `teleport`, `telekinesis`, `acrobatics`,
+  or any future authored `CatchCapability` row) gets a `Catch the Faller` challenge; passing ends
+  the plummet immediately. The catch roster is pure data — no code change needed to add a new
+  catch-capable skill. Seed functions `ensure_fall_content()` (in `plummet_content.py`) and
+  `wire_fall_triggers()` (in `factories.py`) are idempotent get-or-create; they double as test
+  setup and staff seed content, mirroring the `ensure_poison_content` pattern.
+- **AFK-safe multi-round plummet** — `begin_plummet` / `advance_plummet` / `end_plummet` in
+  `src/world/areas/positioning/plummet.py`. Each round tick calls `advance_plummet` via the
+  scene-round orchestrator; the plummeting character descends one level down the
+  `elevation_anchor` chain. When `anchor is None` (ground reached), `end_plummet` fires
+  `process_damage_consequences` through the existing survivability pools (graded fall impact,
+  not binary). Tempo is action-driven — no wall-clock advancement.
+- **`PositionEdge.blocks_flight`** flag — `BooleanField(default=False)` on `PositionEdge`;
+  `connect_positions(..., blocks_flight=True)` sets it. Aerial-layer traversal skips edges
+  where the flag is set, enabling anti-air terrain design without capability checks in code.
 
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
