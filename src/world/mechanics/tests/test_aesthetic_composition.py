@@ -159,6 +159,26 @@ class StyleFacetCoexistenceTests(TestCase):
         result = passive_motif_style_bonuses(self.sheet, self.target_r)
         self.assertEqual(result, 7)
 
+    def _resonance_modifier_target(self, resonance):  # noqa: ARG002
+        """Return the ModifierTarget linked to ``resonance`` (cls.target_r)."""
+        return self.target_r
+
+    def test_motif_coherence_bonus_matches_legacy_walk(self) -> None:
+        """motif_coherence_bonus(sheet, resonance_id) == passive_motif_style_bonuses(sheet, target).
+
+        Verifies the extracted helper is a pure refactor of the gated body: same numeric
+        result for a coherent wardrobe, and the value is > 0.
+        """
+        from world.mechanics.services import motif_coherence_bonus, passive_motif_style_bonuses
+
+        self._invalidate()
+        target = self._resonance_modifier_target(self.resonance)
+        self.assertEqual(
+            motif_coherence_bonus(self.sheet, self.resonance.id),
+            passive_motif_style_bonuses(self.sheet, target),
+        )
+        self.assertGreater(motif_coherence_bonus(self.sheet, self.resonance.id), 0)
+
     def test_both_contributions_present_in_equipment_walk_total(self) -> None:
         """equipment_walk_total includes both the facet bonus and the style bonus."""
         from world.mechanics.services import (

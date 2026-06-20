@@ -46,7 +46,12 @@ from world.magic.types.techniques import (
     SoulfrayWarning,
     TechniqueUseResult,
 )
-from world.magic.types.threads import ThreadAxis, ThreadImbueResult, ThreadXPLockProspect
+from world.magic.types.threads import (
+    ThreadAxis,
+    ThreadImbueResult,
+    ThreadSurvivabilitySaves,
+    ThreadXPLockProspect,
+)
 
 __all__ = [
     "AffinityType",
@@ -76,5 +81,6 @@ __all__ = [
     "TechniqueUseResult",
     "ThreadAxis",
     "ThreadImbueResult",
+    "ThreadSurvivabilitySaves",
     "ThreadXPLockProspect",
 ]

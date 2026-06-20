@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -39,7 +40,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadXPLockedLevel,
 )
-from world.magic.types import ThreadXPLockProspect
+from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -619,6 +620,9 @@ THREAD_SURVIVABILITY_DEFAULTS: dict[str, tuple[int, int, int]] = {
     # vital_target: (coefficient, cap, half_saturation)
     VitalBonusTarget.DAMAGE_TAKEN_REDUCTION: (1, 20, 8),
     VitalBonusTarget.MAX_HEALTH: (1, 80, 10),
+    VitalBonusTarget.DEATH_SAVE: (1, 15, 8),
+    VitalBonusTarget.KNOCKOUT_RESIST: (1, 15, 8),
+    VitalBonusTarget.PERMANENT_WOUND_RESIST: (1, 15, 8),
 }
 
 
@@ -640,7 +644,7 @@ def get_thread_survivability_tuning(vital_target: str) -> "ThreadSurvivabilityTu
     return ThreadSurvivabilityTuning.objects.filter(vital_target=vital_target).first()
 
 
-def _soft_cap(score: int, cap: int, half_saturation: int) -> int:
+def _soft_cap(score: Decimal | int, cap: int, half_saturation: int) -> int:
     """round(cap * score / (score + half)) with a 0 floor at score<=0."""
     if score <= 0:
         return 0
@@ -648,18 +652,50 @@ def _soft_cap(score: int, cap: int, half_saturation: int) -> int:
 
 
 def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
-    """Universal soft-capped survivability baseline from thread investment (#1175).
+    """Universal soft-capped survivability baseline from thread investment (#1175),
+    amplified per-thread by the fashion/motif coherence of each thread's own
+    resonance (#1252).
 
-    S = coefficient * Σ max(1, thread.level // 10) over owned (non-retired)
-    threads; baseline = round(cap * S / (S + half_saturation)). Returns 0 when
-    no tuning row exists for the target or the character owns no threads.
+    S = coefficient × Σ depth(t) × coherence_factor(t) over owned (non-retired)
+    threads, where depth(t) = max(1, thread.level // 10) and coherence_factor(t) =
+    min(coherence_max_multiplier, 1 + motif_coherence_bonus(sheet, thread.resonance) /
+    coherence_scale). An uncoordinated wardrobe yields factor 1.0 (no penalty).
+    baseline = round(cap × S / (S + half_saturation)); 0 with no tuning row or
+    no threads.
     """
+    from world.mechanics.services import motif_coherence_bonus  # noqa: PLC0415
+
     tuning = get_thread_survivability_tuning(vital_target)
     if tuning is None:
         return 0
     threads = character.threads._all  # noqa: SLF001 — same handler used by passive_vital_bonuses
-    score = sum(max(1, t.level // 10) for t in threads)
-    return _soft_cap(tuning.coefficient * score, tuning.cap, tuning.half_saturation)
+    sheet = character.sheet_data
+    score = Decimal(0)
+    for t in threads:
+        depth = max(1, t.level // 10)
+        factor = Decimal(1)
+        if tuning.coherence_scale:
+            bonus = motif_coherence_bonus(sheet, t.resonance_id)
+            factor = min(
+                Decimal(str(tuning.coherence_max_multiplier)),
+                Decimal(1) + Decimal(bonus) / Decimal(tuning.coherence_scale),
+            )
+        score += Decimal(depth) * factor
+    scaled = tuning.coefficient * score
+    return _soft_cap(scaled, tuning.cap, tuning.half_saturation)
+
+
+def survivability_save_baselines(character: ObjectDB) -> ThreadSurvivabilitySaves:
+    """Per-tier survivability save modifiers from thread investment (#1250).
+
+    Each is a soft-capped baseline added to the character's rollmod in the
+    matching tier of ``process_damage_consequences``. All 0 for a lone wolf.
+    """
+    return ThreadSurvivabilitySaves(
+        wound=survivability_baseline(character, VitalBonusTarget.PERMANENT_WOUND_RESIST),
+        death=survivability_baseline(character, VitalBonusTarget.DEATH_SAVE),
+        knockout=survivability_baseline(character, VitalBonusTarget.KNOCKOUT_RESIST),
+    )
 
 
 # =============================================================================

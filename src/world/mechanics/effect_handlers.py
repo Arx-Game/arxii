@@ -188,19 +188,32 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
-    vitals.health -= effect.damage_amount
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
+    damage_amount = effect.damage_amount
+    if hasattr(target, "threads"):
+        damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
+    if damage_amount <= 0:
+        return AppliedEffect(
+            effect_type=EffectType.DEAL_DAMAGE,
+            description="Damage fully absorbed by thread survivability",
+            applied=False,
+            skip_reason="Reduced to zero",
+        )
+
+    vitals.health -= damage_amount
     vitals.save(update_fields=["health"])
 
     process_damage_consequences(
         character_sheet=target.sheet_data,
-        damage_dealt=effect.damage_amount,
+        damage_dealt=damage_amount,
         damage_type=effect.damage_type,
     )
 
     damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
     return AppliedEffect(
         effect_type=EffectType.DEAL_DAMAGE,
-        description=f"Dealt {effect.damage_amount} {damage_type_name} damage",
+        description=f"Dealt {damage_amount} {damage_type_name} damage",
         applied=True,
     )
 

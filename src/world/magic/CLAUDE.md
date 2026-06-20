@@ -126,6 +126,11 @@ binding on the character's motif, checks which equipped items carry that style
 `ModifierTarget`. The bonus magnitude and per-resonance cap come from the
 `AestheticAxisConfig` singleton (`world/mechanics`, lazy-created by `get_aesthetic_config()`).
 
+The per-resonance computation lives in `motif_coherence_bonus(sheet, resonance_id) -> int`
+(decoupled from `ModifierTarget`); `passive_motif_style_bonuses` is a thin wrapper that
+gates on `target.target_resonance_id` and delegates to it. The same helper is reused by the
+thread survivability coherence amplifier (see below) — single source of truth, no parallel walk.
+
 Two composition invariants are tested in `mechanics/tests/test_aesthetic_composition.py`:
 
 - **Style × Facet coexistence:** An item carrying both an `ItemStyle` and an `ItemFacet`
@@ -156,14 +161,20 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   always-on passive; tiers 1–3 are paid pulls. `clean()` + CheckConstraints
   enforce payload/effect_kind shape.
 - `ThreadSurvivabilityTuning` - Per-`VitalBonusTarget` tuning row for the
-  universal thread survivability baseline (#1175). One row per target
-  (DR and MAX_HEALTH at launch). Fields: `vital_target` (unique choice),
-  `coefficient` (linear multiplier on investment score S), `cap` (ceiling the
-  baseline asymptotes toward), `half_saturation` (S at which baseline = cap/2).
-  Formula: `round(cap × S / (S + half_saturation))` where
-  `S = coefficient × Σ max(1, thread.level // 10)` over all owned threads.
-  Seeded idempotently via `seed_thread_survivability_tuning()` (called by the
-  integration-test dev seed); inert until rows exist. Staff-tunable in admin.
+  universal thread survivability baseline (#1175). One row per target — five
+  at launch: `MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`, and the three threshold-save
+  vectors `DEATH_SAVE` / `KNOCKOUT_RESIST` / `PERMANENT_WOUND_RESIST` (#1250).
+  Fields: `vital_target` (unique choice), `coefficient` (linear multiplier on
+  investment score S), `cap` (ceiling the baseline asymptotes toward),
+  `half_saturation` (S at which baseline = cap/2), plus the coherence-amplifier
+  knobs (#1252) `coherence_scale` (per-resonance coherence bonus that yields +1.0
+  to a thread's depth multiplier; 0 disables amplification for this target) and
+  `coherence_max_multiplier` (Decimal ceiling on the per-thread coherence factor;
+  1.00 = inert). Formula: `round(cap × S / (S + half_saturation))` where
+  `S = coefficient × Σ depth(t) × coherence_factor(t)` over all owned threads
+  (see the baseline section below). Seeded idempotently via
+  `seed_thread_survivability_tuning()` (called by the integration-test dev seed);
+  inert until rows exist. Staff-tunable in admin.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
   `unlock_gift`, `unlock_track`. `xp_cost` + M2M to `Path` (in-band) +
@@ -204,28 +215,44 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   ThreadWeavingUnlock. Mirrors `CodexTeachingOffer` shape (pitch, gold_cost,
   banked_ap). Path multiplier computed at acceptance time, not stored.
 
-**Universal survivability baseline (services/threads.py, #1175):**
+**Universal survivability baseline (services/threads.py, #1175 / #1250 / #1251 / #1252):**
 
 A character's breadth × depth of thread investment contributes a passive survivability
-bonus to both max-health and damage reduction, independent of authored `VITAL_BONUS`
-pull-effects. Three service functions implement this:
+bonus across every vector likely to kill them — max-health, damage reduction, and the
+death/knockout/permanent-wound threshold saves — independent of authored `VITAL_BONUS`
+pull-effects. The baseline is amplified per-thread by the fashion/motif coherence of each
+thread's own resonance (dress the part for the resonance you invested in → harder to kill).
 
-- `seed_thread_survivability_tuning()` — idempotently creates the two default
-  `ThreadSurvivabilityTuning` rows (DR: coeff=1, cap=20, half=8;
-  MAX_HEALTH: coeff=1, cap=80, half=10). Called by the dev seed.
+- `seed_thread_survivability_tuning()` — idempotently creates the five default
+  `ThreadSurvivabilityTuning` rows (DR: coeff=1, cap=20, half=8; MAX_HEALTH: coeff=1,
+  cap=80, half=10; DEATH_SAVE / KNOCKOUT_RESIST / PERMANENT_WOUND_RESIST: coeff=1,
+  cap=15, half=8). Called by the dev seed.
 - `get_thread_survivability_tuning(vital_target) -> ThreadSurvivabilityTuning | None` —
   fetches the tuning row for a given `VitalBonusTarget`; returns `None` if not yet seeded
   (baseline is 0 when absent).
-- `survivability_baseline(character, vital_target) -> int` — computes the baseline
-  for a character: `round(cap × S / (S + half_saturation))` where
-  `S = coefficient × Σ max(1, thread.level // 10)` over all owned threads.
+- `survivability_baseline(character, vital_target) -> int` — `round(cap × S / (S + half))`
+  where `S = coefficient × Σ depth(t) × coherence_factor(t)` over owned (non-retired)
+  threads, `depth(t) = max(1, thread.level // 10)`, and
+  `coherence_factor(t) = min(coherence_max_multiplier, 1 + motif_coherence_bonus(sheet,
+  thread.resonance) / coherence_scale)` (factor 1.0 when `coherence_scale` is 0). An
+  uncoordinated wardrobe yields factor 1.0 — no penalty (dilution-only rule); a lone wolf
+  (no threads) gets 0.
+- `survivability_save_baselines(character) -> ThreadSurvivabilitySaves` — frozen dataclass
+  (`wound`/`death`/`knockout`) bundling the three threshold-save baselines.
 
-The baseline is injected at two call sites:
+The baseline is injected at these call sites:
 
-- `apply_damage_reduction_from_threads(character, damage_amount) -> int` — subtracts
-  the DR baseline before returning the adjusted damage amount.
+- `apply_damage_reduction_from_threads(character, damage_amount) -> int` — subtracts the
+  DR baseline. Called from combat (`apply_damage_to_participant`) AND from the non-combat
+  damage seams that previously bypassed it: `_deal_damage` (mechanics effect-handler;
+  traps + consequence damage) and `_apply_round_tick_damage` (condition DoT) (#1251).
 - `recompute_max_health_with_threads(character_sheet) -> int` — adds the MAX_HEALTH
   baseline to the base max-health figure. Called at weave and imbue time.
+- `process_damage_consequences` (`world/vitals/services.py`) adds the matching save
+  baseline to each tier's roll `extra_modifiers` (wound←PERMANENT_WOUND_RESIST,
+  death←DEATH_SAVE, knockout←KNOCKOUT_RESIST) (#1250). Because all damage — combat, DoT,
+  and traps — funnels its threshold rolls through this one function, hazard/DoT saves are
+  covered for free.
 
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.

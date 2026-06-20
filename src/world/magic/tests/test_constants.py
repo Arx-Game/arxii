@@ -42,10 +42,16 @@ class EffectKindTests(SimpleTestCase):
 
 
 class VitalBonusTargetTests(SimpleTestCase):
-    def test_two_launch_targets(self):
+    def test_vital_bonus_targets(self):
         self.assertEqual(
             set(VitalBonusTarget.values),
-            {"MAX_HEALTH", "DAMAGE_TAKEN_REDUCTION"},
+            {
+                "MAX_HEALTH",
+                "DAMAGE_TAKEN_REDUCTION",
+                "DEATH_SAVE",
+                "KNOCKOUT_RESIST",
+                "PERMANENT_WOUND_RESIST",
+            },
         )
 
 

@@ -517,6 +517,10 @@ def process_damage_consequences(
     if is_dead(character_sheet):
         return DamageConsequenceResult(message="Character is dead")
 
+    from world.magic.services import survivability_save_baselines  # noqa: PLC0415
+
+    saves = survivability_save_baselines(character_sheet.character)
+
     result = DamageConsequenceResult()
 
     # Use clamped health_percentage for knockout (0-20% range).
@@ -537,7 +541,7 @@ def process_damage_consequences(
             wound_check_type=_ensure_endurance_check_type(),
             wound_difficulty=wound_difficulty,
             wound_pool=wound_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + saves.wound,
             combat_interaction_factory=combat_interaction_factory,
         )
 
@@ -551,7 +555,7 @@ def process_damage_consequences(
             death_check_type=_ensure_death_check_type(),
             death_difficulty=death_difficulty,
             death_pool=death_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + saves.death,
             combat_interaction_factory=combat_interaction_factory,
         ):
             return result
@@ -568,7 +572,7 @@ def process_damage_consequences(
             ko_check_type=_ensure_endurance_check_type(),
             knockout_difficulty=knockout_difficulty,
             knockout_pool=knockout_pool,
-            extra_modifiers=extra_modifiers,
+            extra_modifiers=extra_modifiers + saves.knockout,
             combat_interaction_factory=combat_interaction_factory,
         )
 
@@ -818,14 +822,23 @@ def _apply_round_tick_damage(
         vitals = target.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
         return
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
     for damage_type, amount in result.damage_dealt:
         if amount <= 0:
             continue
-        vitals.health -= amount
+        effective = (
+            apply_damage_reduction_from_threads(target, amount)
+            if hasattr(target, "threads")
+            else amount
+        )
+        if effective <= 0:
+            continue
+        vitals.health -= effective
         vitals.save(update_fields=["health"])
         process_damage_consequences(
             character_sheet=target.sheet_data,
-            damage_dealt=amount,
+            damage_dealt=effective,
             damage_type=damage_type,
         )
 

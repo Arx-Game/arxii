@@ -7,6 +7,7 @@ ThreadXPLockedLevel is the XP-locked boundary price list.
 ThreadPullEffect is the authored pull-effect template.
 """
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -290,6 +291,19 @@ class ThreadSurvivabilityTuning(SharedMemoryModel):
     )
     half_saturation = models.PositiveSmallIntegerField(
         help_text="Investment score S at which the baseline reaches half of cap.",
+    )
+    coherence_scale = models.PositiveSmallIntegerField(
+        default=50,
+        help_text=(
+            "Per-resonance coherence bonus that yields +1.0 to a thread's depth "
+            "multiplier. 0 disables the fashion/motif amplifier for this target."
+        ),
+    )
+    coherence_max_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("2.00"),
+        help_text="Ceiling on the per-thread coherence multiplier (1.00 = inert).",
     )
 
     def __str__(self) -> str:

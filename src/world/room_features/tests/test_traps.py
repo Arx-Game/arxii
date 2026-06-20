@@ -9,6 +9,8 @@ consequence (the entrant spots and avoids it); a failure-tier roll fires the
 authored damage. Disarm routes the same pool through ``disarm_check_type``.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
@@ -22,7 +24,14 @@ from world.checks.factories import (
     ConsequenceFactory,
 )
 from world.checks.test_helpers import force_check_outcome
+from world.checks.types import ResolutionContext
 from world.conditions.factories import DamageTypeFactory
+from world.magic.factories import ResonanceFactory, ThreadFactory
+from world.magic.services import (
+    apply_damage_reduction_from_threads,
+    seed_thread_survivability_tuning,
+)
+from world.mechanics.effect_handlers import apply_effect
 from world.room_features.factories import TrapFactory
 from world.room_features.trap_services import check_room_traps_on_entry
 from world.traits.factories import CheckOutcomeFactory
@@ -150,3 +159,63 @@ class TrapMoveIntegrationTest(_TrapSceneMixin, TestCase):
             self.character.move_to(self.room, quiet=True)
 
         assert self._health() == 70
+
+
+class DealDamageThreadReductionTest(TestCase):
+    """Thread-derived DR reduces _deal_damage (trap/effect-handler path) (#1251)."""
+
+    def setUp(self) -> None:
+        seed_thread_survivability_tuning()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.vitals = CharacterVitalsFactory(character_sheet=self.sheet, health=100, max_health=100)
+        # Invest threads so the character has non-zero DR.
+        ThreadFactory(owner=self.sheet, resonance=ResonanceFactory(), level=10)
+        ThreadFactory(owner=self.sheet, resonance=ResonanceFactory(), level=10)
+
+    def _health(self) -> int:
+        self.vitals.refresh_from_db()
+        return self.vitals.health
+
+    def test_deal_damage_reduced_by_threads(self) -> None:
+        """A thread-invested character takes less damage than the raw authored amount."""
+        damage_type = DamageTypeFactory(name="trap-fire")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.DEAL_DAMAGE,
+            damage_amount=10,
+            damage_type=damage_type,
+            target=EffectTarget.SELF,
+        )
+        context = ResolutionContext(character=self.character)
+
+        with patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True):
+            result = apply_effect(effect, context)
+
+        dr = apply_damage_reduction_from_threads(self.character, 10)
+        assert result.applied is True
+        self.assertEqual(self._health(), 100 - dr)
+        self.assertLess(dr, 10)  # threads actually reduced it
+
+    def test_deal_damage_unchanged_without_threads(self) -> None:
+        """A character without threads takes the full authored damage (baseline 0, no change)."""
+        sheet_no_threads = CharacterSheetFactory()
+        character_no_threads = sheet_no_threads.character
+        vitals_no_threads = CharacterVitalsFactory(
+            character_sheet=sheet_no_threads, health=100, max_health=100
+        )
+        damage_type = DamageTypeFactory(name="trap-ice")
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.DEAL_DAMAGE,
+            damage_amount=15,
+            damage_type=damage_type,
+            target=EffectTarget.SELF,
+        )
+        context = ResolutionContext(character=character_no_threads)
+
+        with patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True):
+            apply_effect(effect, context)
+
+        vitals_no_threads.refresh_from_db()
+        self.assertEqual(vitals_no_threads.health, 85)  # full 15 deducted
