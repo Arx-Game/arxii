@@ -7,7 +7,11 @@ adjacency_offset=1.
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.classes.factories import (
+    CharacterClassFactory,
+    CharacterClassLevelFactory,
+    ClassStageHealthRateFactory,
+)
 from world.covenants.constants import MentorBondAdjusted
 from world.covenants.factories import CovenantFactory, MentorBondFactory, seed_mentor_bond_defaults
 from world.covenants.mentorship import (
@@ -272,3 +276,71 @@ class DissolvedBondTests(TestCase):
         # Should fall back to raw (1)
         self.assertEqual(effective_combat_level(sidekick_sheet), 1)
         self.assertIsNone(active_bond_adjusting(sidekick_sheet))
+
+
+class BondLifecycleHealthRecomputeTests(TestCase):
+    """establish_mentor_bond and dissolve_mentor_bond recompute health for both parties (#1256)."""
+
+    def setUp(self):
+        seed_mentor_bond_defaults()
+        self.covenant = CovenantFactory(level=4)  # band [2, 6]
+        self.char_class = CharacterClassFactory()
+        ClassStageHealthRateFactory(character_class=self.char_class, health_per_level=10)
+
+    def _make_sheet_with_vitals(self, level: int):
+        """Create a sheet with a primary class level and vitals (base_max_health=None)."""
+        from world.vitals.factories import CharacterVitalsFactory
+
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=sheet.character,
+            character_class=self.char_class,
+            level=level,
+            is_primary=True,
+        )
+        CharacterVitalsFactory(
+            character_sheet=sheet, base_max_health=None, health=10, max_health=10
+        )
+        return sheet
+
+    def test_establishing_bond_recomputes_sidekick_health(self):
+        """Forming a sidekick bond raises the sidekick's effective level → more health."""
+        from world.covenants.mentorship import establish_mentor_bond
+        from world.vitals.models import CharacterVitals
+
+        # mentor raw 4 (in band [2,6]), sidekick raw 1 (out of band) → adjusted_party=SIDEKICK
+        mentor_sheet = self._make_sheet_with_vitals(4)
+        sidekick_sheet = self._make_sheet_with_vitals(1)
+
+        before = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+
+        establish_mentor_bond(
+            covenant=self.covenant,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_sheet,
+        )
+
+        after = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+        # sidekick elevated from raw 1 to effective 3 (= 4-1 adjacency), so health grows.
+        self.assertGreater(after, before)
+
+    def test_dissolving_bond_recomputes_health(self):
+        """Dissolving a bond reverts the sidekick's elevated health back toward the raw level."""
+        from world.covenants.mentorship import dissolve_mentor_bond, establish_mentor_bond
+        from world.vitals.models import CharacterVitals
+
+        mentor_sheet = self._make_sheet_with_vitals(4)
+        sidekick_sheet = self._make_sheet_with_vitals(1)
+
+        bond = establish_mentor_bond(
+            covenant=self.covenant,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_sheet,
+        )
+        after_establish = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+
+        dissolve_mentor_bond(bond)
+
+        after_dissolve = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
+        # After dissolve, effective level drops back to raw 1 → health decreases.
+        self.assertLess(after_dissolve, after_establish)

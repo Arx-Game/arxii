@@ -284,18 +284,27 @@ def establish_mentor_bond(
             )
             raise MentorBondError(msg)
 
-    return MentorBond.objects.create(
+    bond = MentorBond.objects.create(
         covenant=covenant,
         mentor_sheet=mentor_sheet,
         sidekick_sheet=sidekick_sheet,
         adjusted_party=adjusted_party,
     )
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(mentor_sheet)
+    recompute_max_health_with_threads(sidekick_sheet)
+    return bond
 
 
 def dissolve_mentor_bond(bond: MentorBond) -> None:
     """Dissolve an active MentorBond by setting dissolved_at to now."""
     bond.dissolved_at = timezone.now()
     bond.save(update_fields=["dissolved_at"])
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+
+    recompute_max_health_with_threads(bond.mentor_sheet)
+    recompute_max_health_with_threads(bond.sidekick_sheet)
 
 
 def assert_membership_level_allowed(
