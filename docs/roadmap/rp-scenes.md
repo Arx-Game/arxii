@@ -51,7 +51,7 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **Frontend:** ActionPanel, ConsentPrompt, PersonaContextMenu components
 - **Constants:** SceneActionRequestStatus, SceneActionType
 
-### Multi-Target Action Consent (#572 follow-ups) — DONE (#1177, #1178)
+### Multi-Target Action Consent (#572 follow-ups) — DONE (#1177, #1178, #1259)
 
 Two follow-ups from the #572 multi-target dispatch foundation:
 
@@ -70,6 +70,13 @@ Two follow-ups from the #572 multi-target dispatch foundation:
     every 5 s alongside the primary-request queue; renders amber consent cards for pending
     additional-target rows; Accept/Deny dispatches to
     `POST /api/action-requests/{id}/respond/` with `target_persona_id`.
+- **Additional-target combat-risk parity (#1259):** `SceneActionTargetSerializer` now
+  includes `combat_risk_level` (computed from the row's own target persona). `ConsentPrompt`
+  renders the combat-risk warning on additional-target cards, matching primary-target
+  behaviour. Per-target *difficulty* was deliberately **not** added — difficulty is
+  uniform cast-level, declared once by the initiator at dispatch via
+  `SceneActionRequest.difficulty_choice`. Removal of the now-vestigial primary-target
+  difficulty buttons in `ConsentPrompt` is tracked as a follow-up.
 
 ### Scene System (core)
 - **Models:** Scene (privacy_mode, summary fields), SceneParticipation, SceneSummaryRevision
