@@ -77,9 +77,10 @@ class ClashModelTests(TestCase):
     def setUp(self) -> None:
         from actions.models import ConsequencePool
         from world.combat.constants import OpponentTier
-        from world.combat.models import CombatEncounter, CombatOpponent
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatOpponent
 
-        self.encounter = CombatEncounter.objects.create()
+        self.encounter = CombatEncounterFactory()
         self.opponent = CombatOpponent.objects.create(
             encounter=self.encounter,
             tier=OpponentTier.MOOK,
@@ -233,9 +234,10 @@ class ClashRoundModelTests(TestCase):
     def setUp(self) -> None:
         from actions.models import ConsequencePool
         from world.combat.constants import OpponentTier
-        from world.combat.models import CombatEncounter, CombatOpponent
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatOpponent
 
-        self.encounter = CombatEncounter.objects.create()
+        self.encounter = CombatEncounterFactory()
         self.opponent = CombatOpponent.objects.create(
             encounter=self.encounter,
             tier=OpponentTier.MOOK,
@@ -340,10 +342,11 @@ class ClashContributionModelTests(TestCase):
         from actions.models import ConsequencePool
         from world.character_sheets.factories import CharacterSheetFactory
         from world.combat.constants import OpponentTier
-        from world.combat.models import Clash, ClashRound, CombatEncounter, CombatOpponent
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import Clash, ClashRound, CombatOpponent
         from world.traits.factories import CheckOutcomeFactory
 
-        self.encounter = CombatEncounter.objects.create()
+        self.encounter = CombatEncounterFactory()
         self.opponent = CombatOpponent.objects.create(
             encounter=self.encounter,
             tier=OpponentTier.MOOK,

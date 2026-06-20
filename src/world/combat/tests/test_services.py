@@ -861,8 +861,3 @@ class SceneParticipationOnCombatEntryTest(TestCase):
         self.assertTrue(
             SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
         )
-
-    def test_add_participant_without_scene_is_safe(self) -> None:
-        # Guard: encounter with no scene must not raise (transitional / NPC paths).
-        enc = CombatEncounterFactory(scene=None, room=self.room)
-        add_participant(enc, self.character_sheet)  # no exception

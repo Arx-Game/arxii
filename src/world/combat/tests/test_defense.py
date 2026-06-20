@@ -284,17 +284,3 @@ class DefensiveFashionWiringTests(TestCase):
             perform_check_fn=spy,
         )
         self.assertEqual(captured["extra_modifiers"], FASHION_MATCH_BASE)
-
-    def test_defense_without_scene_has_no_fashion(self) -> None:
-        """With no scene on the encounter, no fashion bonus reaches the roll."""
-        self.encounter.scene = None
-        self.encounter.save(update_fields=["scene"])
-
-        spy, captured = self._spy()
-        resolve_npc_attack(
-            self.npc_action,
-            self.participant,
-            self.check_type,
-            perform_check_fn=spy,
-        )
-        self.assertEqual(captured["extra_modifiers"], 0)
