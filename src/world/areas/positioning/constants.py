@@ -11,3 +11,30 @@ class PositionKind(models.TextChoices):
 
 
 AERIAL_PROPERTY_NAME = "aerial"
+
+
+# Plummet content identity keys (#1228). The fall DamageType, the Falling
+# ConditionCategory, and the staged Plummeting ConditionTemplate are seeded
+# idempotently by ensure_fall_content(); these names locate those rows.
+FALL_DAMAGE_TYPE_NAME: str = "Fall"
+PLUMMETING_CONDITION_NAME: str = "Plummeting"
+FALLING_CATEGORY_NAME: str = "Falling"
+
+
+# "Catch the Faller" challenge content identity keys (#1228, Task 4). The
+# capability-gated catch challenge, its shared target Property, the four seed
+# catch CapabilityType rows, and the reused reflexes CheckType are all seeded
+# idempotently by ensure_catch_content() (called from ensure_fall_content());
+# these names locate those rows. Adding a new catch capability later is pure
+# data: one CapabilityType + Application(target_property=the catch property) +
+# ChallengeApproach row, with zero engine code.
+CATCH_THE_FALLER_NAME: str = "Catch the Faller"
+CATCHABLE_PROPERTY_NAME: str = "catchable"
+CATCH_CHECK_TYPE_NAME: str = "Reflexes"
+
+# Seed catch capabilities. Named only — capabilities are pure data. The whole
+# point of the design is that this tuple is illustrative, not exhaustive.
+FLY_CAPABILITY_NAME: str = "fly"
+TELEPORT_CAPABILITY_NAME: str = "teleport"
+TELEKINESIS_CAPABILITY_NAME: str = "telekinesis"
+ACROBATICS_CAPABILITY_NAME: str = "acrobatics"

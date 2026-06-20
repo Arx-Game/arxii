@@ -248,3 +248,62 @@ def tavern_blueprint() -> PositionBlueprint:
     connect_blueprint_positions(hearth, bar)
     connect_blueprint_positions(bar, doorway)
     return bp
+
+
+# ---------------------------------------------------------------------------
+# FELL → plummet trigger seed (#1228, Task 5)
+# ---------------------------------------------------------------------------
+
+# Sentinel resolved by the flows pipeline to the live event payload at dispatch
+# time (FlowExecution variable_mapping seeds "payload"; "@payload" is the
+# @variable reference). Mirrors world.combat.factories.
+_PAYLOAD_PARAM = "@payload"
+
+
+def _build_plummet_flow() -> object:
+    """Build the FlowDefinition with one CALL_SERVICE_FUNCTION step (#1228).
+
+    The step calls ``begin_plummet_handler`` with the FELL event payload.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="fall_to_plummet")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.areas.positioning.plummet.begin_plummet_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class FallToPlummetTriggerDefinitionFactory(factory.django.DjangoModelFactory):
+    """TriggerDefinition for the FELL → plummet consumer (#1228).
+
+    Installed on rooms by ``install_fall_triggers``; dispatches the FELL event
+    to ``begin_plummet_handler``, which starts the plummet.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "fall_to_plummet"
+    event_name = "fell"  # EventName.FELL value
+    flow_definition = factory.LazyFunction(_build_plummet_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+def wire_fall_triggers() -> None:
+    """Seed the FELL → plummet TriggerDefinition (idempotent).
+
+    Creates (get_or_create) the ``fall_to_plummet`` FlowDefinition (one
+    CALL_SERVICE_FUNCTION step -> begin_plummet_handler) and the
+    ``fall_to_plummet`` TriggerDefinition. Doubles as integration-test setup and
+    staff seed content. Safe to call repeatedly.
+    """
+    FallToPlummetTriggerDefinitionFactory()

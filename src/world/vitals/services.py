@@ -946,3 +946,8 @@ def tick_round_for_targets(
             advance_bleed_out(sheet)
         # Non-cast over-capacity exhaustion collapse (acute tier, #520 Phase 5).
         tick_fatigue_collapse_for_targets(target_list)
+        # Action-driven plummet descent + impact (#1228). Function-local import
+        # avoids a circular import (positioning -> vitals).
+        from world.areas.positioning.plummet import advance_plummet  # noqa: PLC0415
+
+        advance_plummet(target_list)
