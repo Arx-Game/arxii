@@ -858,3 +858,66 @@ class MultiTargetE2ETests(TestCase):
         self.assertEqual(pc_a_row.status, ActionRequestStatus.RESOLVED)
         pc_b_row.refresh_from_db()
         self.assertEqual(pc_b_row.status, ActionRequestStatus.DENIED)
+
+
+class TestPerTargetResolverIntegration(TestCase):
+    """The resolver registry fires once per accepted additional target (#1178)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        self.award_kudos_patcher.stop()
+
+    def _make_request(self, action_key: str) -> "SceneActionRequest":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key=action_key,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resolver_fires_for_accepted_additional_target(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        captured: list[tuple[int, object]] = []
+
+        def fake_resolver(request, outcome):
+            captured.append((request.pk, outcome))
+
+        register_resolver("test_target_resolver", fake_resolver)
+        self.addCleanup(lambda: _RESOLVER_REGISTRY.pop("test_target_resolver", None))
+
+        request = self._make_request("test_target_resolver")
+        accepted = SceneActionTargetFactory(action_request=request)
+        denied = SceneActionTargetFactory(action_request=request)
+
+        result = respond_to_action_target(action_target=accepted, decision=ConsentDecision.ACCEPT)
+        respond_to_action_target(action_target=denied, decision=ConsentDecision.DENY)
+
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][0], request.pk)
+        self.assertIs(captured[0][1], result)  # resolver gets THIS target's result
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_resolver_registered_is_noop(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request("unregistered_target_action")
+        row = SceneActionTargetFactory(action_request=request)
+
+        result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+        self.assertIsNotNone(result)  # must not raise

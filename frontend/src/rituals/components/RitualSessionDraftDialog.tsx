@@ -41,6 +41,9 @@ export interface RitualSessionDraftDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (session: RitualSessionDraft) => void;
+  /** Session-level references to include in the draft POST body (e.g. a COVENANT reference
+   *  for induction rituals). Passed directly as `session_references`. */
+  sessionReferences?: Array<Record<string, unknown>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +189,7 @@ export function RitualSessionDraftDialog({
   open,
   onOpenChange,
   onSuccess,
+  sessionReferences,
 }: RitualSessionDraftDialogProps) {
   const schema = ritual.input_schema as RitualInputSchema | null;
 
@@ -243,6 +247,7 @@ export function RitualSessionDraftDialog({
         proposed_terms: proposedTerms,
         invitee_ids: invitees.map((p) => p.id),
         session_kwargs: Object.keys(session_kwargs).length > 0 ? session_kwargs : undefined,
+        session_references: sessionReferences,
       },
       {
         onSuccess: (session) => {

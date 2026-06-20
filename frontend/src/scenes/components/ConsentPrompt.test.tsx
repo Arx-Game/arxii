@@ -7,10 +7,12 @@ import type { ActionRequest } from '../actionTypes';
 
 vi.mock('../actionQueries', () => ({
   fetchPendingRequests: vi.fn(),
+  fetchPendingTargets: vi.fn(),
   respondToRequest: vi.fn(),
 }));
 
-import { fetchPendingRequests, respondToRequest } from '../actionQueries';
+import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
+import type { PendingActionTarget } from '../actionTypes';
 import { ConsentPrompt } from './ConsentPrompt';
 
 function createWrapper() {
@@ -47,6 +49,7 @@ const MOCK_REQUEST_WITH_TECHNIQUE: ActionRequest = {
 describe('ConsentPrompt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [] });
   });
 
   it('shows nothing when no pending requests', async () => {
@@ -244,5 +247,68 @@ describe('ConsentPrompt', () => {
       expect(screen.getByText(/Darth Maul/)).toBeInTheDocument();
     });
     expect(screen.queryByText(/committing/i)).not.toBeInTheDocument();
+  });
+
+  const MOCK_TARGET: PendingActionTarget = {
+    action_target_id: 50,
+    action_request_id: 12,
+    target_persona_id: 99,
+    status: 'pending',
+    initiator_persona: 3,
+    initiator_name: 'Morgan',
+    scene: 42,
+    action_key: 'Hex',
+    action_template: 1,
+    technique: null,
+    technique_name: null,
+    pose_text: 'Morgan raises a hand.',
+    strain_commitment: 0,
+    created_at: '2026-03-22T12:10:00Z',
+  };
+
+  it('renders a pending additional-target prompt', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getByText('Morgan')).toBeInTheDocument());
+    expect(screen.getByText('Hex')).toBeInTheDocument();
+  });
+
+  it('accepting a target calls respondToRequest with target_persona_id and no difficulty', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText('Accept')).toBeInTheDocument());
+    await user.click(screen.getByText('Accept'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+        accept: true,
+        target_persona_id: 99,
+      })
+    );
+  });
+
+  it('denying a target calls respondToRequest with accept:false + target_persona_id', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText('Deny')).toBeInTheDocument());
+    await user.click(screen.getByText('Deny'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+        accept: false,
+        target_persona_id: 99,
+      })
+    );
   });
 });

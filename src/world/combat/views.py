@@ -17,12 +17,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import ClashStatus, EncounterStatus, OpponentTier, ParticipantStatus
-from world.combat.filters import CombatEncounterFilter
+from world.combat.constants import (
+    ClashStatus,
+    DuelChallengeStatus,
+    EncounterStatus,
+    OpponentTier,
+    ParticipantStatus,
+)
+from world.combat.filters import CombatEncounterFilter, DuelChallengeFilter
 from world.combat.models import (
     Clash,
     CombatEncounter,
@@ -30,6 +36,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
     ComboDefinition,
+    DuelChallenge,
     ThreatPool,
 )
 from world.combat.permissions import (
@@ -42,6 +49,7 @@ from world.combat.serializers import (
     AddOpponentSerializer,
     AddParticipantSerializer,
     CoverSerializer,
+    DuelChallengeSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
     JoinEncounterSerializer,
@@ -82,6 +90,36 @@ _ERR_DECLARE_FAILED = "Failed to declare action."
 _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
 _ERR_ALREADY_COMPLETED = "Encounter is already completed."
 _ERR_COMBO_UPGRADE = "Cannot upgrade to the requested combo."
+
+
+class DuelChallengeViewSet(ReadOnlyModelViewSet):
+    """Read-only inbox of the requesting player's PENDING duel challenges (#1180).
+
+    Lists every PENDING ``DuelChallenge`` where the caller plays either the
+    challenger or the challenged character, so the web UI can render the
+    incoming-challenge prompt (and surface a player's outgoing challenges).
+    ``?role=incoming|outgoing`` narrows to one side. Scoped to the caller's
+    played characters, so it never leaks other players' challenges.
+    """
+
+    serializer_class = DuelChallengeSerializer
+    queryset = DuelChallenge.objects.none()
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = DuelChallengeFilter
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[DuelChallenge]:
+        user = self.request.user
+        played_ids = getattr(user, "played_character_sheet_ids", frozenset())  # noqa: GETATTR_LITERAL
+        if not played_ids:
+            return DuelChallenge.objects.none()
+        return (
+            DuelChallenge.objects.filter(status=DuelChallengeStatus.PENDING)
+            .filter(Q(challenger_sheet_id__in=played_ids) | Q(challenged_sheet_id__in=played_ids))
+            .select_related("challenger_sheet__character", "challenged_sheet__character")
+            .order_by("-created_at")
+        )
 
 
 class CombatEncounterViewSet(ModelViewSet):

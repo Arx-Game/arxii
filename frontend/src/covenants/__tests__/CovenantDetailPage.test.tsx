@@ -121,6 +121,7 @@ vi.mock('react-redux', async (importOriginal) => {
 });
 
 import { useCovenantDetail, useCovenantMembers, useCovenantRanks } from '@/covenants/queries';
+import { useRituals } from '@/rituals/queries';
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -214,6 +215,21 @@ function mockMembers(members: CharacterCovenantRole[], isLoading = false) {
 function mockRanks(ranks: Array<{ id: number; name: string; tier: number }>) {
   vi.mocked(useCovenantRanks).mockReturnValue({
     data: { count: ranks.length, next: null, previous: null, results: ranks },
+  } as never);
+}
+
+const INDUCTION_RITUAL = {
+  id: 99,
+  name: 'Covenant Induction',
+  participation_rule: 'INDUCTION',
+  input_schema: null,
+  narrative_prose: null,
+};
+
+function mockRitualsWithInduction() {
+  vi.mocked(useRituals).mockReturnValue({
+    data: { count: 1, next: null, previous: null, results: [INDUCTION_RITUAL] },
+    isLoading: false,
   } as never);
 }
 
@@ -433,5 +449,37 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
 
     expect(screen.queryByTestId('assign-rank-select')).not.toBeInTheDocument();
+  });
+
+  it('hides the Induct CTA when can_invite is false (even as active member)', () => {
+    mockDetail(makeCovenant());
+    mockRitualsWithInduction();
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        viewer_capabilities: { can_invite: false, can_kick: false, can_manage_ranks: false },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('induct-member-button')).not.toBeInTheDocument();
+  });
+
+  it('shows the Induct CTA when can_invite is true and an induction ritual is present', () => {
+    mockDetail(makeCovenant());
+    mockRitualsWithInduction();
+    mockMembers([
+      makeMembership({
+        id: 100,
+        character_sheet: OWN_SHEET_ID,
+        viewer_capabilities: { can_invite: true, can_kick: false, can_manage_ranks: false },
+      }),
+    ]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('induct-member-button')).toBeInTheDocument();
   });
 });

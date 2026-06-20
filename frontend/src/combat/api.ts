@@ -23,6 +23,12 @@ import type {
 export type ConsequenceOutcome = components['schemas']['ConsequenceOutcome'];
 export type ConsequenceOutcomeModifier = components['schemas']['ConsequenceOutcomeModifier'];
 
+/** One row in the duel-challenge inbox (GET /api/combat/duel-challenges/). */
+export type DuelChallenge = components['schemas']['DuelChallenge'];
+
+/** Direction of a duel challenge relative to the requesting player. */
+export type DuelChallengeRole = 'incoming' | 'outgoing';
+
 /**
  * A single row in the outcome_display roulette wheel.
  * The backend serializes OutcomeDisplay dataclass as plain dicts.
@@ -61,6 +67,25 @@ export async function fetchEncountersForScene(sceneId: number): Promise<Encounte
   const res = await apiFetch(`/api/combat/?scene=${sceneId}`);
   if (!res.ok) throw new Error('Failed to load encounters for scene');
   const data = (await res.json()) as { results?: EncounterListItem[]; count?: number };
+  return data.results ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Duel-challenge inbox
+// ---------------------------------------------------------------------------
+
+/**
+ * List the requesting player's PENDING duel challenges.
+ * GET /api/combat/duel-challenges/[?role=incoming|outgoing]
+ *
+ * Scoped server-side to the caller's played characters. Returns the results
+ * array from the paginated response.
+ */
+export async function fetchDuelChallengeInbox(role?: DuelChallengeRole): Promise<DuelChallenge[]> {
+  const url = role ? `/api/combat/duel-challenges/?role=${role}` : '/api/combat/duel-challenges/';
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load duel challenges');
+  const data = (await res.json()) as { results?: DuelChallenge[]; count?: number };
   return data.results ?? [];
 }
 

@@ -29,7 +29,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `ROOM` removed; SANCTUM is the leveled room anchor, cap = sanctum level × 10,
     in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
-    `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
+    `Ritual` (`service_function_path` dispatches the ritual at fire time;
+    `draft_validator_path` — new CharField, blank — is called inside `draft_session`
+    before the session row is created, letting domain code gate who may initiate the
+    ritual without coupling magic to any specific domain),
+    `RitualComponentRequirement`, `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
     `ThreadSurvivabilityTuning` (per-`VitalBonusTarget` tuning row for the
@@ -144,7 +148,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
   mechanics (Property via Ritual site_property),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
-  flows (Ritual FLOW dispatch via FlowDefinition)
+  flows (Ritual FLOW dispatch via FlowDefinition),
+  covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
 - **API endpoints (Spec A §4.5):**
   - `GET/POST/DELETE /api/magic/threads/`,
     `GET /api/magic/threads/{id}/` — list/create/soft-retire owned threads;
@@ -485,22 +490,39 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
 ### Scenes
-Roleplay session recording with participant tracking and message logging.
+Roleplay session recording with participant tracking, interaction logging, persona-based identity, and social action consent flow.
 
-- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
-- **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
-- **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`, `SceneCastPullDeclaration`
+- **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
+- **Key Functions:**
+  - `create_action_request(scene, initiator_persona, target_persona, action_key, ...)` — dispatches a request; NPC additional targets auto-accept immediately.
+  - `respond_to_action_request(action_request, decision)` — primary-target consent + resolution.
+  - `respond_to_action_target(action_target, decision)` — per-additional-target consent + resolution (never touches siblings).
+  - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
   - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
     `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
-  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
-    encounter read gate all consume these two forms.
-- **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
-- **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
+  - `Interaction.objects.visible_to(account, persona_ids=..., since=...)` — queryset; the
+    pose-level read tiers (room-heard public, pinned party, present/participated, GM-of-scene;
+    very-private excluded except for the party). Consumed by `InteractionViewSet.get_queryset`
+    and `SceneViewSet.highlight_reel`.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
+    encounter read gate, and the interaction/reel read gates all consume these forms.
+- **Highlight reel (#1241):** `GET /api/scenes/{id}/highlight-reel/` — a fully-sealed featured
+  moment + ranked index (ids only), ranked by `InteractionReaction` counts (a queryset-level
+  `Count` annotation, no denormalized column), GM-tagged poses headline. Filtered through
+  `Interaction.objects.visible_to`. Frontend: `HighlightReel` (`frontend/src/scenes/components/`).
+- **API Endpoints:** `GET/POST /api/action-requests/`, `POST /api/action-requests/{id}/respond/`,
+  `GET /api/action-targets/` (read-only; filterable by `scene` + `status`; surfaces pending
+  additional-target consent rows for the authenticated player's personas).
+- **Frontend:** `ConsentPrompt` polls both `GET /api/action-requests/?scene={id}&status=pending`
+  and `GET /api/action-targets/?scene={id}&status=pending` every 5 s and renders amber consent cards for
+  each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
-  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`)
+  flows (auto-logging via message_location), combat (encounter read gate via `Scene.objects.viewable_by`),
+  actions (resolver registry via `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories
@@ -904,10 +926,8 @@ crafting framework and check-driven facet/style attachment.
 - **Details:** [items.md](items.md)
 
 ### Covenants
-Magically-empowered group oaths with roles, gear compatibility, and a per-covenant
-rank ladder. Spec D PR1 shipped the role-assignment and gear-compatibility data
-layer; #985 wired per-role bonus authoring and the combat seams; #1027 added
-`CovenantRank` (administrative authority, orthogonal to `CovenantRole` power).
+Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
+ladder, and a Mentor's Vow bond system for level-mismatched parties (#1165).
 
 **Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
 Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
@@ -916,18 +936,25 @@ These two axes are orthogonal — never re-merge them.
 - **Models:**
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
-    boolean, `rank` FK → `CovenantRank` (added #1027).
+    boolean, `rank` FK → `CovenantRank`.
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
-  - `CovenantRoleBonus` (#985) — authored config: one row per
+  - `CovenantRoleBonus` — authored config: one row per
     `(CovenantRole, ModifierTarget)` with `bonus_per_level` SmallInt.
     `role_base_bonus_for_target(role, target, char_level)` returns
     `char_level × bonus_per_level`; no row → 0. Admin-registered.
-  - `CovenantRank` (#1027) — per-covenant administrative authority tier.
-    Fields: `covenant` FK (CASCADE, `related_name="ranks"`), `name` (max 60,
-    player-chosen), `tier` (PositiveInt; 1 = top authority), `description`,
-    `can_invite` bool, `can_kick` bool, `can_manage_ranks` bool. Unique
-    `(covenant, tier)` and `(covenant, name)`. Ordered by `["covenant", "tier"]`.
+  - `CovenantRank` — per-covenant administrative authority tier.
+    Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
+    `can_invite`, `can_kick`, `can_manage_ranks`. Unique `(covenant, tier)` and
+    `(covenant, name)`.
+  - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
+    `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
+    Staff-tunable in Django admin.
+  - **`MentorBond`** (#1165) — per-pair bond record. `covenant`, `mentor_sheet`,
+    `sidekick_sheet`, `adjusted_party` (`MentorBondAdjusted.MENTOR`/`SIDEKICK`),
+    `formed_at`, `dissolved_at` (null = active). Partial unique on
+    `(covenant, sidekick_sheet)` when active; dissolved bonds are retained as audit
+    trail. Custom manager: `.active()` → `dissolved_at__isnull=True`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
     `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
@@ -935,46 +962,89 @@ These two axes are orthogonal — never re-merge them.
 - **Key Services:**
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
-  - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
-    and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
+  - `kick_member(*, target, actor) -> None` — raises
     `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
-  - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
+  - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
-    `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
-    `char_level × bonus_per_level`; 0 if no row (#985)
-  - **Rank management (#1027)** — all require `actor.rank.can_manage_ranks=True`:
+    `world.mechanics.services`)
+  - **Rank management** — all require `actor.rank.can_manage_ranks=True`:
     `create_rank`, `rename_rank`, `set_rank_capabilities`, `reorder_ranks`,
     `delete_rank`, `assign_rank`, `transfer_top`. Lock-out invariant:
     `LastManagerRankError` if an op would leave zero active managers.
-- **Combat seams (#985, #1174):** `apply_equipped_armor_soak` splits worn armor into
+  - **Induction draft gate (#1231):**
+    - `can_invite_to_covenant(covenant, *, character_sheet=None, account=None) -> bool`
+      — canonical predicate: True iff the character's active rank in that covenant
+      has `can_invite=True`. Accepts either a `character_sheet` or an `account` (resolves
+      the active sheet from the account's puppeted character). Returns False when the
+      character is not a member or holds no rank.
+    - `assert_initiator_can_induct(*, session: RitualSession) -> None`
+      — draft-time validator dispatched via `Ritual.draft_validator_path` from
+      `draft_session`. Reads the COVENANT `RitualSessionReference` from the session,
+      calls `can_invite_to_covenant`, and raises `NotAuthorizedToInviteError` when
+      the initiator's rank lacks `can_invite`. Wired on the Covenant Induction ritual
+      factory as `draft_validator_path = "world.covenants.services.assert_initiator_can_induct"`.
+  - **Mentor's Vow services** (`world.covenants.mentorship`, #1165):
+    - `effective_combat_level(sheet) -> int` — bond-adjusted combat level used by
+      `compute_party_profile`; returns the raw primary level when no active
+      non-graduated bond applies.
+    - `bond_adjusted_level(sheet) -> int | None` — adjusted level or None.
+    - `active_bond_adjusting(sheet) -> MentorBond | None` — the active non-graduated
+      bond where sheet is the adjusted party; None if absent.
+    - `establish_mentor_bond(*, covenant, mentor_sheet, sidekick_sheet) -> MentorBond`
+    - `dissolve_mentor_bond(bond) -> None`
+    - `is_bond_graduated(bond) -> bool` — True when adjusted party is now in band.
+    - `assert_membership_level_allowed(*, covenant, character_sheet) -> None` — **Vow gate**:
+      raises `VowGateError` if character is out-of-band and has no active bond in this
+      covenant. Called by `add_member`; `create_covenant` is ungated.
+    - `establish_mentor_bond_via_session(*, session) -> MentorBond` — service function
+      wired to `MentorsVowRitualFactory` (consensual BILATERAL_SERVICE ritual).
+- **Combat seams (#985, #1174, #1165):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
   `equipment_walk_total_unblended` (facet + `covenant_role_base_total` +
   covenant-level + mantle + motif-style). `_weapon_augmented_budget` adds
   `_combat_target_bonus(sheet, WEAPON_DAMAGE_TARGET_NAME)` to technique budget
-  via `get_modifier_total` → `covenant_role_bonus`.
+  via `get_modifier_total` → `covenant_role_bonus`. In combat,
+  `_combat_target_bonus(sheet)` passes `bond_adjusted_level(sheet)` as `level_override`
+  so role bonuses reflect the bond-adjusted level (not raw). Encounter scaling:
+  `compute_party_profile` calls `effective_combat_level` per ACTIVE participant before
+  averaging — outlier distortion is absorbed in the bond math; graduated bonds dissolve
+  at `begin_declaration_phase`.
+- **Enums:** `MentorBondAdjusted` (`MENTOR`/`SIDEKICK` — which party is adjusted)
 - **Exceptions:** `world.covenants.exceptions` —
-  `CovenantRoleNeverHeldError` (Thread weave gate);
-  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`,
-  `CannotKickSelfError` (kick service);
+  `CovenantRoleNeverHeldError`, `CannotKickEqualOrHigherRankError`,
+  `NotAuthorizedToKickError`, `CannotKickSelfError`,
   `NotAuthorizedToManageRanksError`, `LastManagerRankError`,
   `CrossCovenantRankError`, `IncompleteRankReorderError`,
-  `CannotTransferToDepartedMemberError` (rank management, #1027)
+  `CannotTransferToDepartedMemberError` (rank management, #1027),
+  `NotAuthorizedToInviteError` (induction draft gate, #1231),
+  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate)
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
     currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+    (includes `can_invite` bool for the "Induct New Member" CTA)
   - `GET|POST /api/covenants/ranks/` — list / create ranks (#1027)
   - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
   - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
   - `POST /api/covenants/ranks/{pk}/assign-member/` — assign member to rank
   - `POST /api/covenants/ranks/{pk}/transfer-top/` — move top rank to member
 - **Permission classes:** `CanKickFromCovenant` (rank.can_kick + tier precedence),
-  `CanInviteToCovenant` (rank.can_invite), `CanManageCovenantRanks` (rank.can_manage_ranks)
-- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
-  mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
-  `ItemTemplate`), combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`)
+  `CanInviteToCovenant` (unattached seam — delegates to `can_invite_to_covenant` with
+  `account=`; NOT currently wired to any ViewSet; induction-draft authorization is
+  enforced by `assert_initiator_can_induct` via `Ritual.draft_validator_path`),
+  `CanManageCovenantRanks` (rank.can_manage_ranks)
+- **Frontend:** The covenant detail page's "Induct New Member" CTA is rendered only when
+  `viewer_capabilities.can_invite` is true (read from the first member row of the
+  `character-roles` endpoint). The induction `RitualSessionDraftDialog` sets the
+  COVENANT reference so `assert_initiator_can_induct` can validate rank at draft time.
+- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
+  `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate),
+  mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`),
+  items (`gear_archetype` on `ItemTemplate`),
+  combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`)
 - **Source:** `src/world/covenants/`
+- **Details:** [covenants.md](covenants.md)
 
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.

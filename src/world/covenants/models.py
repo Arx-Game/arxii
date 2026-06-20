@@ -15,7 +15,15 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.covenants.constants import BattleBinding, CovenantType, RoleArchetype
+from world.covenants.constants import (
+    MENTOR_BOND_ADJACENCY_OFFSET,
+    MENTOR_BOND_BAND_WIDTH,
+    MENTOR_BOND_MAX_SIDEKICKS,
+    BattleBinding,
+    CovenantType,
+    MentorBondAdjusted,
+    RoleArchetype,
+)
 from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
@@ -23,6 +31,7 @@ if TYPE_CHECKING:
     from world.covenants.handlers import CovenantMembershipHandler
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
 COVENANT_ROLE_MODEL = "covenants.CovenantRole"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
@@ -721,3 +730,122 @@ class CovenantRiteParticipant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} in rite #{self.instance_id} ({self.granted_condition})"
+
+
+# =============================================================================
+# MentorBondConfig — singleton config for Mentor's Vow scaling (#1165)
+# =============================================================================
+
+
+class MentorBondConfig(SharedMemoryModel):
+    """Singleton (pk=1): global parameters for Mentor's Vow bond scaling (#1165).
+
+    Seeded by seed_mentor_bond_defaults() in factories.py. Services use get(pk=1)
+    and let DoesNotExist propagate loudly. Updated via Django admin.
+
+    Fields:
+    - band_width: level-range half-width for eligible mentor/sidekick pairs.
+    - adjacency_offset: additional level offset applied when computing adjacency.
+    - max_sidekicks_per_mentor: cap on sidekick count; null means unlimited.
+    """
+
+    band_width = models.PositiveSmallIntegerField(
+        default=MENTOR_BOND_BAND_WIDTH,
+        help_text="Level-range half-width for eligible mentor/sidekick pairs.",
+    )
+    adjacency_offset = models.PositiveSmallIntegerField(
+        default=MENTOR_BOND_ADJACENCY_OFFSET,
+        help_text="Additional level offset applied when computing adjacency.",
+    )
+    max_sidekicks_per_mentor = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=MENTOR_BOND_MAX_SIDEKICKS,
+        help_text="Cap on sidekick count per mentor; null means unlimited.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="mentor_bond_config_updates",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"MentorBondConfig(pk={self.pk})"
+
+
+# =============================================================================
+# MentorBond — per-pair bond record for Mentor's Vow (#1165)
+# =============================================================================
+
+
+class MentorBondQuerySet(models.QuerySet):
+    """Custom queryset for MentorBond."""
+
+    def active(self) -> MentorBondQuerySet:
+        """Return only bonds where dissolved_at IS NULL (i.e. currently active)."""
+        return self.filter(dissolved_at__isnull=True)
+
+
+class MentorBond(SharedMemoryModel):
+    """A single Mentor's Vow bond between a mentor and a sidekick within a covenant (#1165).
+
+    Active = dissolved_at IS NULL. Dissolving sets dissolved_at to a timestamp.
+    The partial unique constraint ``unique_active_sidekick_bond`` allows at most
+    one active bond per (covenant, sidekick_sheet) pair; historical dissolved bonds
+    are unconstrained and serve as an audit trail.
+
+    adjusted_party records which party the encounter-scaling adjustment is applied
+    to (MENTOR or SIDEKICK) for any given bond.
+    """
+
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds",
+    )
+    mentor_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds_as_mentor",
+    )
+    sidekick_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mentor_bonds_as_sidekick",
+    )
+    adjusted_party = models.CharField(
+        max_length=20,
+        choices=MentorBondAdjusted.choices,
+        default=MentorBondAdjusted.SIDEKICK,
+        help_text="Which party the encounter-scaling adjustment is applied to.",
+    )
+    formed_at = models.DateTimeField(auto_now_add=True)
+    dissolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the bond is dissolved; null means currently active.",
+    )
+
+    objects = MentorBondQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-formed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant", "sidekick_sheet"],
+                condition=models.Q(dissolved_at__isnull=True),
+                name="unique_active_sidekick_bond",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        state = "active" if self.dissolved_at is None else "dissolved"
+        return (
+            f"MentorBond({self.mentor_sheet} → {self.sidekick_sheet} in {self.covenant}, {state})"
+        )

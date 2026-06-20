@@ -8,6 +8,7 @@ import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
 import { RoomPositionsPanel } from '../components/RoomPositionsPanel';
+import { HighlightReel } from '../components/HighlightReel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
@@ -125,6 +126,7 @@ export function SceneDetailPage() {
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         <PlaceBar sceneId={id} />
         <RoomPositionsPanel sceneId={id} />
+        <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
       </div>
 
       {/* Main interaction area with threading */}

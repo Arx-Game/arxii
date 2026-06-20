@@ -79,6 +79,9 @@ class Ritual(SharedMemoryModel):
         choices=RitualExecutionKind.choices,
     )
     service_function_path = models.CharField(max_length=255, blank=True)
+    draft_validator_path = models.CharField(max_length=255, blank=True)
+    """Optional dotted path to a ``validator(*, session)`` callable run at draft
+    time (mirrors service_function_path's fire dispatch). Blank = no validation."""
     flow = models.ForeignKey(
         "flows.FlowDefinition",
         on_delete=models.PROTECT,

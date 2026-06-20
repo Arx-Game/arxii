@@ -108,6 +108,14 @@ Enforcement happens in `_target_spec_for_action()`: for any social `ActionTempla
 `_social_consent_exclusions` is called with the template's `consent_category` and the
 result is wired into `TargetFilters.excluded_persona_ids`.
 
+**Read-side exposure for registry actions (#1181).** Registry actions like `challenge`
+carry no `ActionTemplate`, so they never appear in the available-actions list and get no
+computed `TargetSpec`. For these, `PersonaSerializer.allow_social_actions` surfaces the
+target's master switch (mirroring `_tenure_blocks_actor` with `category=None`, which is
+gated only by `allow_social_actions`) so the scene UI can hide the affordance for opted-out
+targets. The backend still enforces the full gate at dispatch — the serializer field is a
+UX hint, not the authority.
+
 ---
 
 ## API Endpoints (`/api/consent/`)

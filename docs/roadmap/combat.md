@@ -146,15 +146,32 @@ an NPC at a bar) where concrete NPC objects aren't needed.
   when `max_health` is omitted (explicit values always win); read-only
   `GET /api/combat/{id}/opponent-defaults/?tier=…` previews the computed block + a non-blocking
   stakes verdict; `AddOpponentSerializer` enforces the stakes gate on create.
-- **Deferred (follow-ups):** React GM encounter-builder page; outlier-aware scaling +
-  sidekick/mentor roles for level-mismatched parties (**#1165**); stakes→reward-severity
+- **DONE (#1165) — outlier-aware scaling + Mentor's Vow:**
+  `compute_party_profile` now calls `effective_combat_level(sheet)` per ACTIVE
+  participant. `effective_combat_level` (in `world/covenants/mentorship.py`) returns
+  the raw primary level normally, but when the sheet is party to an active, non-graduated
+  **Mentor's Vow bond** (`MentorBond`), it returns a bond-adjusted level: a low-level
+  sidekick is pulled up to just below their mentor's level; a high-level mentor is
+  pulled down to just above their sidekick's level — both clamped to the covenant
+  band `[covenant.level ± band_width]`. The party average and scaling formula are
+  computed on the adjusted values, so a mentor/sidekick pair no longer distorts the
+  encounter budget. The bond is created via a consensual BILATERAL_SERVICE ritual
+  (`MentorsVowRitualFactory`). Graduation (adjusted party's real level re-enters the
+  band) dissolves the bond at `begin_declaration_phase`. The #566 invariant —
+  difficulty keys off level and party size only, never threads/relationships/covenants/
+  facets/fashion — is preserved and test-covered. In-combat role bonuses also read the
+  bond-adjusted level (`level_override` via `bond_adjusted_level`) so a suppressed
+  mentor's bonus shrinks and an elevated sidekick's grows.
+- **Deferred (follow-ups):** React GM encounter-builder page; stakes→reward-severity
   routing; rich per-phase boss authoring beyond auto-generated default phases.
 
 ### Health Pool and Damage
 Health is separate from fatigue — fatigue degrades effectiveness, health degrades survival.
 
-**Health pool sources:** Stamina (slight contribution) + Path level (large) + covenant role
-armor bonuses + woven magical thread protection. Magical power is the dominant factor.
+**Health pool sources (current):** `max_health = base_max_health + thread_addend` — the
+thread addend is the sum of active VITAL_BONUS tier-0 ThreadPullEffect contributions
+(`recompute_max_health_with_threads`). Path level does not currently drive max_health.
+Path-level-driven health scaling is tracked in **#1256**.
 
 **Thread survivability engine (SHIPPED — #1175, #1250, #1251, #1252):** Thread investment
 contributes a universal passive survivability bonus across every vector likely to kill a
@@ -575,11 +592,31 @@ clamps soulfray below any death-risk stage, and never fires a `character_loss` c
 `withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
 (+ yield / acknowledge controls), reusing the existing combat round UI + dispatch.
 
+### Duels — Phase 2 (SHIPPED — 2026-06-20)
+
+**Status: SHIPPED**
+**Issues:** #1180 (inbox + prompt), #1181 (outgoing affordance), #1182 (crediting/threading fixes).
+
+- **Incoming-challenge inbox (#1180):** `GET /api/combat/duel-challenges/` —
+  `DuelChallengeViewSet` (read-only, filters/pagination/permissions) returns the caller's
+  PENDING challenges (`?role=incoming|outgoing`), scoped to played characters via
+  `played_character_sheet_ids`, reusing `DuelChallengeSerializer`. The frontend
+  `useDuelChallengeInbox` hook feeds `CombatScenePage`, replacing the
+  `hasPendingIncomingChallenge={false}` stub. Accept/decline/withdraw now accept an optional
+  `challenge_id` kwarg so the UI targets a specific challenge when a PC has several pending.
+- **Outgoing affordance (#1181):** a "Challenge to a duel" item on `PersonaContextMenu`,
+  dispatching the `challenge` registry action with the target persona id. `ChallengeAction`
+  resolves a Persona pk → character ObjectDB (web path; telnet/tests still pass ObjectDB).
+  `PersonaSerializer.allow_social_actions` mirrors the consent gate (`_tenure_blocks_actor`
+  with `category=None`) so the affordance hides for opted-out targets and for self; the
+  backend still enforces the full gate at dispatch.
+- **Crediting / threading fixes (#1182):** `_increment_completion_counters` credits a DUEL
+  win only to `encounter.duel_winner` (loss to the other duelist; abandoned duel credits
+  neither) instead of every ACTIVE participant; `commit_to_clash` threads
+  `lethal=clash.encounter.is_lethal` into `use_technique` so the non-lethal cap holds on the
+  clash path (latent today — PvP mirror surfaces never form a clash).
+
 **Still open (tracked):**
-- `GET /api/combat/duel-challenges/` inbox endpoint — the incoming-challenge accept/decline
-  prompt is wired but stubbed off until it (or a WebSocket push) ships.
-- Outgoing "challenge a co-located character" scene-UI affordance (the `challenge` action is
-  wired; only the convenience UI entry point is deferred).
 - Sheet-driven symmetric NPC duellist (the lethal variant reuses the threat-pool opponent).
 
 ### Unified Combat UI (SHIPPED — 2026-05-24)

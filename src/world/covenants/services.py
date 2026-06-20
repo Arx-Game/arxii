@@ -22,6 +22,7 @@ from world.covenants.exceptions import (
     InsufficientFoundersError,
     LastManagerRankError,
     NoActiveBattleError,
+    NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
@@ -38,12 +39,15 @@ from world.covenants.models import (
     CovenantRiteParticipant,
     CovenantRole,
     GearArchetypeCompatibility,
+    MentorBond,
+    MentorBondConfig,
 )
 from world.covenants.types import CovenantFounder
 from world.magic.constants import ParticipantState, ReferenceKind
 from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatEncounter
@@ -241,7 +245,13 @@ def add_member(
     highest tier number — lowest authority). The active-uniqueness DB constraint
     enforces "at most one active role per (character, covenant)"; the
     IntegrityError on conflict is the contract.
+
+    Raises VowGateError when the character's level is outside the covenant band
+    and they hold no active Mentor's Vow bond in this covenant.
     """
+    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+    assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
     rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
@@ -252,6 +262,33 @@ def add_member(
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
     return row
+
+
+def can_invite_to_covenant(
+    covenant: Covenant,
+    *,
+    character_sheet: CharacterSheet | None = None,
+    account: AccountDB | None = None,
+) -> bool:
+    """Return True if an active member with a can_invite rank grants invite authority.
+
+    Character-scoped (character_sheet=) for the ritual-draft gate; account-scoped
+    (account=) for the CanInviteToCovenant DRF permission. The rank__can_invite +
+    active-membership core is shared so the can_invite flag has a single home.
+    """
+    qs = CharacterCovenantRole.objects.filter(
+        covenant=covenant,
+        left_at__isnull=True,
+        rank__can_invite=True,
+    )
+    if character_sheet is not None:
+        qs = qs.filter(character_sheet=character_sheet)
+    if account is not None:
+        qs = qs.filter(
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            character_sheet__roster_entry__tenures__player_data__account=account,
+        )
+    return qs.exists()
 
 
 @transaction.atomic
@@ -1287,6 +1324,22 @@ def promote_to_subrole(
     return new_membership
 
 
+def assert_initiator_can_induct(*, session: RitualSession) -> None:
+    """Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite
+    rank in the target covenant. Dispatched via Ritual.draft_validator_path from
+    draft_session. Reads the session-level COVENANT reference exactly like
+    induct_member_via_session (the fire handler) does.
+    """
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if target_ref is None or target_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+    if not can_invite_to_covenant(target_ref.ref_covenant, character_sheet=session.initiator):
+        raise NotAuthorizedToInviteError
+
+
 @transaction.atomic
 def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRole:
     """Dispatched on INDUCTION fire. Unpacks the session into add_member args.
@@ -1451,3 +1504,57 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     )
 
     return instance
+
+
+def get_mentor_bond_config() -> MentorBondConfig:
+    """Return the seeded MentorBondConfig singleton (#1165).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    fabricated row would silently break bond-scaling resolution.
+    DoesNotExist propagates loudly. Mirrors get_flee_config.
+    """
+    return MentorBondConfig.objects.get(pk=1)
+
+
+@transaction.atomic
+def establish_mentor_bond_via_session(*, session: RitualSession) -> MentorBond:
+    """Dispatched on Mentor's Vow BILATERAL fire. Wraps establish_mentor_bond.
+
+    Reads the session-level COVENANT reference to get the target covenant.
+    Discriminates the two ACCEPTED participants by participant_kwargs["role"]
+    ("mentor" vs "sidekick") and delegates to establish_mentor_bond.
+
+    Per spec §4.6: the .filter() calls on session.references and
+    session.participants (related managers) are in-mutator iteration on
+    tightly-scoped per-row sets — acceptable exception to spec §3.9.
+    """
+    from world.covenants.mentorship import establish_mentor_bond  # noqa: PLC0415
+
+    covenant_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if covenant_ref is None or covenant_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+
+    covenant = covenant_ref.ref_covenant
+
+    mentor_sheet: CharacterSheet | None = None
+    sidekick_sheet: CharacterSheet | None = None
+
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        role = p.participant_kwargs.get("role")
+        if role == "mentor":  # noqa: STRING_LITERAL
+            mentor_sheet = p.character_sheet
+        elif role == "sidekick":  # noqa: STRING_LITERAL
+            sidekick_sheet = p.character_sheet
+
+    if mentor_sheet is None or sidekick_sheet is None:
+        raise RequiredReferenceMissingError
+
+    bond: MentorBond = establish_mentor_bond(
+        covenant=covenant,
+        mentor_sheet=mentor_sheet,
+        sidekick_sheet=sidekick_sheet,
+    )
+    return bond

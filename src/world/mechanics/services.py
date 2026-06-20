@@ -168,6 +168,7 @@ def get_modifier_total(
     modifier_target: ModifierTarget,
     *,
     perceiving_society: object | None = None,
+    level_override: int | None = None,
 ) -> int:
     """Get total modifier value for a target.
 
@@ -182,36 +183,50 @@ def get_modifier_total(
     (the default), fashion contributes nothing and behavior is identical to before —
     all existing society-blind callers are 100% unaffected.
 
+    When ``level_override`` is provided, the covenant-role bonus uses that level instead
+    of ``character.current_level``. Only the combat path supplies this (bond-adjusted
+    level for mentor/sidekick pairs, #1165). All non-combat callers omit it → unchanged.
+
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
         perceiving_society: Optional Society instance. When supplied, the outfit-vs-fashion
             bonus for that society is included in the total. Defaults to None (no fashion
             contribution).
+        level_override: Optional integer. When supplied, overrides sheet.current_level for
+            the covenant-role bonus calculation. Defaults to None (use current_level).
 
     Returns:
         Total modifier value (eager + equipment + optional fashion contributions,
         amplification/immunity applied to the eager portion)
     """
     eager_total = get_modifier_breakdown(character, modifier_target).total
-    equipment_total = equipment_walk_total(character, modifier_target)
+    equipment_total = equipment_walk_total(
+        character, modifier_target, level_override=level_override
+    )
     fashion_total = 0
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
     return eager_total + equipment_total + fashion_total
 
 
-def equipment_walk_total(character: object, target: ModifierTarget) -> int:
+def equipment_walk_total(
+    character: object, target: ModifierTarget, level_override: int | None = None
+) -> int:
     """Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).
 
     Returns 0 unless target.category is equipment-relevant. The eager CharacterModifier
     total is NOT included here — callers add that separately (avoids double counting).
+
+    When ``level_override`` is provided, the covenant-role bonus uses that level instead
+    of ``character.current_level``. Only the combat path supplies this (bond-adjusted
+    level for mentor/sidekick pairs, #1165). All other components are unaffected.
     """
     if target.category.name not in EQUIPMENT_RELEVANT_CATEGORIES:
         return 0
     return (
         passive_facet_bonuses(character, target)
-        + covenant_role_bonus(character, target)
+        + covenant_role_bonus(character, target, level_override=level_override)
         + covenant_level_bonus(character, target)
         + passive_mantle_bonuses(character, target)
         + passive_motif_style_bonuses(character, target)
@@ -531,7 +546,9 @@ def _facet_effect_contribution(
 # =============================================================================
 
 
-def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
+def covenant_role_bonus(
+    sheet: object, target: ModifierTarget, level_override: int | None = None
+) -> int:
     """Sum covenant-role contributions across equipped items, gated on engagement.
 
     Per spec 2026-05-09 §3.6: role bonuses apply only when the character is
@@ -546,9 +563,15 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     At low character levels an incompatible item may fully suppress the role bonus;
     at high levels role_bonus dominates and the incompatibility cost shrinks.
 
+    When ``level_override`` is provided, it replaces ``sheet.current_level`` for the
+    role bonus calculation. Only the combat path supplies this (bond-adjusted level
+    for mentor/sidekick pairs, #1165). All non-combat callers omit it → unchanged.
+
     Args:
         sheet: CharacterSheet instance.
         target: The ModifierTarget to aggregate bonuses for.
+        level_override: Optional integer. When supplied, overrides sheet.current_level
+            for the role bonus scaling. Defaults to None (use current_level).
 
     Returns:
         Integer total of all engaged-covenant-role contributions across equipped items.
@@ -566,9 +589,10 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     if not engaged_roles:
         return 0
 
+    character_level = level_override if level_override is not None else sheet.current_level
     total = 0
     for role in engaged_roles:
-        role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+        role_bonus = role_base_bonus_for_target(role, target, character_level)
         for equipped in char.equipped_items:
             item = equipped.item_instance
             gear_stat = item_mundane_stat_for_target(item, target)

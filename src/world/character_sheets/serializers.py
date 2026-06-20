@@ -117,37 +117,62 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
 
-def _build_identity(sheet: CharacterSheet) -> IdentitySection:
-    """Build the identity section dict from a CharacterSheet."""
-    character = sheet.character
-    family = sheet.family
+def _build_identity(
+    sheet: CharacterSheet,
+    *,
+    display_name: str | None = None,
+    reveal_identity: bool = True,
+) -> IdentitySection:
+    """Build the identity section (#1109-aware).
 
+    ``display_name`` is the name resolved for the viewer (the presented persona / sdesc / reveal);
+    defaults to the character's key. When ``reveal_identity`` is False — a non-privileged viewer
+    of a character presenting an anonymous face — only the presented name and the physically
+    observable traits (age, gender, pronouns, species) are returned; every identifying / lore
+    field (real fullname, concept, quote, family, heritage, tarot, origin, path) is withheld.
+    """
+    character = sheet.character
+    name = display_name if display_name is not None else character.db_key
+
+    pronouns = PronounsData(
+        subject=sheet.pronoun_subject,
+        object=sheet.pronoun_object,
+        possessive=sheet.pronoun_possessive,
+    )
+
+    if not reveal_identity:
+        return IdentitySection(
+            name=name,
+            fullname=name,
+            concept="",
+            quote="",
+            age=sheet.age,
+            gender=_id_name_or_null(sheet.gender, name_field="display_name"),
+            pronouns=pronouns,
+            species=_id_name_or_null(sheet.species),
+            heritage=None,
+            family=None,
+            tarot_card=None,
+            origin=None,
+            path=None,
+        )
+
+    family = sheet.family
     # Compose fullname: "FirstName FamilyName" or just the db_key.
-    if family is not None:
-        fullname = f"{character.db_key} {family.name}"
-    else:
-        fullname = character.db_key
+    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
 
     # Latest path from prefetched path_history (ordered by -selected_at).
     path_history: list = character.cached_path_history
-    if path_history:
-        latest_path = path_history[0].path
-        path_value: IdNameRef | None = _id_name(latest_path)
-    else:
-        path_value = None
+    path_value: IdNameRef | None = _id_name(path_history[0].path) if path_history else None
 
     return IdentitySection(
-        name=character.db_key,
+        name=name,
         fullname=fullname,
         concept=sheet.concept,
         quote=sheet.quote,
         age=sheet.age,
         gender=_id_name_or_null(sheet.gender, name_field="display_name"),
-        pronouns=PronounsData(
-            subject=sheet.pronoun_subject,
-            object=sheet.pronoun_object,
-            possessive=sheet.pronoun_possessive,
-        ),
+        pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
         heritage=_id_name_or_null(sheet.heritage),
         family=_id_name_or_null(family),
@@ -184,6 +209,54 @@ def _resolve_active_persona(sheet: CharacterSheet) -> Persona | None:
     if active_id is not None:
         return next((p for p in personas if p.pk == active_id), None)
     return next((p for p in personas if p.persona_type == PersonaType.PRIMARY), None)
+
+
+def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
+    """Staff, or the viewer's account currently plays this character (#1109).
+
+    Query-free: reads the prefetched ``cached_tenures`` (via ``current_tenure``).
+    """
+    if user is None or not user.is_authenticated:
+        return False
+    if user.is_staff:
+        return True
+    roster_entry = sheet.roster_entry
+    if roster_entry is None:
+        return False
+    current = roster_entry.current_tenure
+    return current is not None and current.player_data.account_id == user.pk
+
+
+def _resolve_presented_identity(
+    sheet: CharacterSheet, active: Persona | None, user: Any, privileged: bool
+) -> tuple[str, bool]:
+    """``(display_name, reveal_identity)`` for the presented face, per viewer (#1109).
+
+    ``reveal_identity`` gates the character's real name / bio. It is shown to the owner / staff,
+    for the PRIMARY public face, and to a viewer who has discovered an anonymous face's link. A
+    named alt (hidden link) or an undiscovered mask keeps the character's primary identity hidden.
+    The discovery lookup happens only in the anonymous-and-non-privileged branch (one query).
+    """
+    if active is None:
+        return sheet.character.db_key, True
+    if privileged:
+        return active.name, True
+    if not active.is_fake_name:
+        # Named face: render its own name; reveal the character bio only for the PRIMARY (the
+        # main public identity). A named ESTABLISHED alt keeps its link to the primary hidden.
+        return active.name, active.persona_type == PersonaType.PRIMARY
+
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.persona_display import resolve_display_for_viewer  # noqa: PLC0415
+
+    viewer_sheet_ids: set[int] = set()
+    if user is not None and user.is_authenticated:
+        viewer_sheet_ids = set(
+            RosterEntry.objects.for_account(user).values_list("character_sheet_id", flat=True)
+        )
+    return resolve_display_for_viewer(
+        active, viewer_persona_ids=set(), viewer_sheet_ids=viewer_sheet_ids
+    )
 
 
 def _build_appearance(sheet: CharacterSheet) -> AppearanceSection:
@@ -567,16 +640,43 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_personas(sheet: CharacterSheet) -> list[PersonaEntry]:
-    """Build the personas section from prefetched Persona data."""
+def _build_personas(
+    sheet: CharacterSheet,
+    *,
+    privileged: bool = True,
+    active: Persona | None = None,
+    active_display_name: str | None = None,
+    active_revealed: bool = True,
+) -> list[PersonaEntry]:
+    """Build the personas section (#1109-aware).
+
+    The full list links every face of the character — a de-anonymization vector — so only the
+    owner / staff get it. A non-privileged viewer sees only the *presented* (active) persona,
+    rendered with the name already resolved for them; a not-revealed face (anonymous-undiscovered
+    or a hidden-link alt) exposes just that name, with no description or thumbnail.
+    """
+    if privileged:
+        return [
+            PersonaEntry(
+                id=persona.pk,
+                name=persona.name,
+                description=persona.description,
+                thumbnail=persona.thumbnail.cloudinary_url if persona.thumbnail else None,
+            )
+            for persona in sheet.cached_personas
+        ]
+
+    if active is None:
+        return []
     return [
         PersonaEntry(
-            id=persona.pk,
-            name=persona.name,
-            description=persona.description,
-            thumbnail=persona.thumbnail.cloudinary_url if persona.thumbnail else None,
+            id=active.pk,
+            name=active_display_name if active_display_name is not None else active.name,
+            description=active.description if active_revealed else "",
+            thumbnail=(active.thumbnail.cloudinary_url if active.thumbnail else None)
+            if active_revealed
+            else None,
         )
-        for persona in sheet.cached_personas
     ]
 
 
@@ -700,10 +800,21 @@ class CharacterSheetSerializer(serializers.Serializer):
         roster_entry = sheet.roster_entry
         user = request.user if request else None
 
+        # Per-viewer identity gating (#1109): close the de-anonymization leaks. Only the owner /
+        # staff see the full secret alt list (which would link every face); a non-privileged
+        # viewer of a character presenting a NON-PRIMARY face (an anonymous mask, or a named
+        # alt with a hidden link) never sees the character's real name / bio. "Privileged" =
+        # staff, or the viewer's account currently plays this character (query-free, prefetched).
+        privileged = _viewer_is_privileged(sheet, user)
+        active = _resolve_active_persona(sheet)
+        display_name, reveal_identity = _resolve_presented_identity(sheet, active, user, privileged)
+
         return {
             "id": sheet.pk,
             "can_edit": can_edit_character_sheet(user, roster_entry) if user else False,
-            "identity": _build_identity(sheet),
+            "identity": _build_identity(
+                sheet, display_name=display_name, reveal_identity=reveal_identity
+            ),
             "appearance": _build_appearance(sheet),
             "stats": _build_stats(sheet),
             "skills": _build_skills(sheet),
@@ -712,7 +823,13 @@ class CharacterSheetSerializer(serializers.Serializer):
             "magic": _build_magic(sheet),
             "story": _build_story(sheet),
             "goals": _build_goals(sheet),
-            "personas": _build_personas(sheet),
+            "personas": _build_personas(
+                sheet,
+                privileged=privileged,
+                active=active,
+                active_display_name=display_name,
+                active_revealed=reveal_identity,
+            ),
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
             "current_residence": _build_current_residence(sheet),
