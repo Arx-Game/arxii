@@ -16,6 +16,7 @@ vi.mock('../../hooks/useItemFacets', () => ({
   useItemFacets: vi.fn(),
   useCraftAttachFacet: vi.fn(),
   useRemoveItemFacet: vi.fn(),
+  useCraftingQuote: vi.fn(),
 }));
 
 vi.mock('@/character-creation/queries', () => ({
@@ -109,6 +110,14 @@ function setupDefaultMocks() {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof characterCreationQueries.useFacets>);
+
+  // No quote loaded by default (no facet selected yet).
+  vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
 }
 
 const ITEM_INSTANCE_ID = 42;
@@ -297,5 +306,166 @@ describe('AttachFacetDialog', () => {
 
     // Suppress unused variable warning — mutate is set up but not clicked here.
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // CraftingQuotePanel: cost line renders from mocked quote
+  // -------------------------------------------------------------------------
+  it('renders cost line and quality cap from a loaded quote', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: true,
+        costs: {
+          action_points: 2,
+          action_points_have: 5,
+          anima: 10,
+          anima_have: 8,
+          materials: [{ item_template_id: 1, name: 'Spider Silk', quantity_required: 3, have: 5 }],
+        },
+        max_quality_tier: { id: 3, name: 'Excellent', color_hex: '#gold', sort_order: 3 },
+        failure_risk: [{ outcome_name: 'Botch', cost_consumption: 'partial', label: null }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    // Select Spider to trigger panel visibility.
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    const panel = screen.getByTestId('crafting-quote-panel');
+    expect(panel).toBeInTheDocument();
+
+    // Cost line: AP have/need and cap tier name.
+    expect(panel).toHaveTextContent('5/2 AP');
+    expect(panel).toHaveTextContent('Excellent');
+  });
+
+  it('renders cost/cap/risk panel after facet selection', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: true,
+        costs: {
+          action_points: 2,
+          action_points_have: 5,
+          anima: 10,
+          anima_have: 8,
+          materials: [{ item_template_id: 1, name: 'Spider Silk', quantity_required: 3, have: 5 }],
+        },
+        max_quality_tier: { id: 3, name: 'Excellent', color_hex: '#gold', sort_order: 3 },
+        failure_risk: [{ outcome_name: 'Botch', cost_consumption: 'partial', label: null }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    const panel = screen.getByTestId('crafting-quote-panel');
+    expect(panel).toBeInTheDocument();
+
+    // Cost line
+    expect(panel).toHaveTextContent('5/2 AP');
+    expect(panel).toHaveTextContent('8/10 Anima');
+    expect(panel).toHaveTextContent('5/3 Spider Silk');
+
+    // Cap line
+    expect(panel).toHaveTextContent('Excellent');
+
+    // Risk line — 'partial' maps to 'some materials/effort lost'
+    expect(panel).toHaveTextContent('some materials/effort lost');
+  });
+
+  // -------------------------------------------------------------------------
+  // CraftingQuotePanel: submit disabled when affordable=false
+  // -------------------------------------------------------------------------
+  it('disables submit and shows "Can\'t afford" when quote.affordable is false', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: false,
+        costs: {
+          action_points: 5,
+          action_points_have: 2,
+          anima: 0,
+          anima_have: 0,
+          materials: [],
+        },
+        max_quality_tier: null,
+        failure_risk: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    const attachBtn = screen.getByRole('button', { name: /can't afford/i });
+    expect(attachBtn).toBeDisabled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Success toast includes consequence_label when present
+  // -------------------------------------------------------------------------
+  it('includes consequence_label in success toast when craft result provides it', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const mutate = makeCraftMock();
+    makeRemoveMock();
+
+    mutate.mockImplementation(
+      (
+        _vars: unknown,
+        callbacks: { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void }
+      ) => {
+        callbacks?.onSuccess?.({
+          attached: true,
+          outcome_name: 'Success',
+          quality_tier: { id: 2, name: 'Fine', color_hex: '#888', sort_order: 2 },
+          item_facet: { id: 99, item_instance: ITEM_INSTANCE_ID, facet: 7 },
+          consumed: { action_points: 2, anima: 10 },
+          consequence_label: 'Lost 2 AP and 10 Anima',
+        });
+      }
+    );
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+    await user.click(screen.getByRole('button', { name: /attach/i }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Lost 2 AP and 10 Anima'));
+    });
   });
 });

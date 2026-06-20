@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import sys
 
 TARGET_APPS = [
@@ -32,6 +33,7 @@ TARGET_APPS = [
     "world.conditions",
     "world.covenants",
     "world.goals",
+    "world.items",
     "world.locations",
     "world.magic",
     "world.mechanics",
@@ -136,7 +138,18 @@ def introspect_app(app_label: str) -> dict | None:
         for name, obj in inspect.getmembers(services_mod, inspect.isfunction):
             if name.startswith("_"):
                 continue
-            sig = inspect.signature(obj)
+            # Skip helpers imported into the services module (e.g. dataclasses.field,
+            # typing.cast) — document only functions defined in project source, not
+            # stdlib/third-party callables that happen to be importable here.
+            func_mod = sys.modules.get(obj.__module__)
+            # getattr-with-default: func_mod may be None or a module without __file__.
+            func_file = getattr(func_mod, "__file__", "") or ""  # noqa: GETATTR_LITERAL
+            if "site-packages" in func_file or "/lib/python" in func_file:
+                continue
+            # Render the signature deterministically: repr() of a sentinel-object
+            # default (``object()`` / ``dataclasses._MISSING_TYPE``) embeds a
+            # per-process memory address; strip it so regeneration is reproducible.
+            sig = re.sub(r" at 0x[0-9a-fA-F]+", "", str(inspect.signature(obj)))
             doc = (inspect.getdoc(obj) or "").split("\n")[0]
             result["service_functions"].append(f"{name}{sig}" + (f" — {doc}" if doc else ""))
     except (ImportError, ModuleNotFoundError):
@@ -191,4 +204,7 @@ def write_model_map(output_path: Path | None = None) -> None:
 
 if __name__ == "__main__":
     _ensure_django_setup()
-    print(_generate_content())
+    # Content already ends with a single newline; use end="" so the `> file`
+    # redirect doesn't append a second one (which end-of-file-fixer would strip,
+    # churning the committed doc on every regeneration).
+    print(_generate_content(), end="")

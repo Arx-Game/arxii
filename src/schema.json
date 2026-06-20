@@ -8639,6 +8639,35 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/items/item-facets/quote/:
+    get:
+      operationId: items_item_facets_quote_retrieve
+      description: Return a read-only cost+quality quote for attaching a facet (no
+        mutation).
+      parameters:
+      - in: query
+        name: facet
+        schema:
+          type: integer
+        description: Facet pk that would be attached.
+        required: true
+      - in: query
+        name: item_instance
+        schema:
+          type: integer
+        description: ItemInstance pk to quote the crafting cost for.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CraftingQuote'
+          description: ''
   /api/items/item-styles/:
     post:
       operationId: items_item_styles_create
@@ -8659,6 +8688,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StyleCraftResult'
+          description: ''
+  /api/items/item-styles/quote/:
+    get:
+      operationId: items_item_styles_quote_retrieve
+      description: Return a read-only cost+quality quote for attaching a style (no
+        mutation).
+      parameters:
+      - in: query
+        name: item_instance
+        schema:
+          type: integer
+        description: ItemInstance pk to quote the crafting cost for.
+        required: true
+      - in: query
+        name: style
+        schema:
+          type: integer
+        description: Style pk that would be attached.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CraftingQuote'
           description: ''
   /api/items/outfit-slots/:
     get:
@@ -25418,6 +25476,83 @@ components:
       description: |-
         * `durance` - Covenant of the Durance
         * `battle` - Covenant of Battle
+    CraftingQuote:
+      type: object
+      description: 'Read-only quote: costs, affordability, max quality tier, failure
+        risks.'
+      properties:
+        costs:
+          $ref: '#/components/schemas/CraftingQuoteCost'
+        affordable:
+          type: boolean
+        max_quality_tier:
+          allOf:
+          - $ref: '#/components/schemas/QualityTier'
+          nullable: true
+        failure_risk:
+          type: array
+          items:
+            $ref: '#/components/schemas/CraftingQuoteRisk'
+      required:
+      - affordable
+      - costs
+      - failure_risk
+      - max_quality_tier
+    CraftingQuoteCost:
+      type: object
+      description: Resource cost breakdown within a crafting quote.
+      properties:
+        action_points:
+          type: integer
+        action_points_have:
+          type: integer
+        anima:
+          type: integer
+        anima_have:
+          type: integer
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/CraftingQuoteMaterial'
+      required:
+      - action_points
+      - action_points_have
+      - anima
+      - anima_have
+      - materials
+    CraftingQuoteMaterial:
+      type: object
+      description: One material requirement row within a crafting quote.
+      properties:
+        item_template_id:
+          type: integer
+        name:
+          type: string
+        quantity_required:
+          type: integer
+        have:
+          type: integer
+      required:
+      - have
+      - item_template_id
+      - name
+      - quantity_required
+    CraftingQuoteRisk:
+      type: object
+      description: A single failure-risk row within a crafting quote.
+      properties:
+        outcome_name:
+          type: string
+          nullable: true
+        cost_consumption:
+          type: string
+        label:
+          type: string
+          nullable: true
+      required:
+      - cost_consumption
+      - label
+      - outcome_name
     CreateBulletinPostInput:
       type: object
       description: |-
@@ -27667,8 +27802,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/ItemFacetRead'
           nullable: true
+        consumed:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        consequence_label:
+          type: string
+          nullable: true
       required:
       - attached
+      - consequence_label
+      - consumed
       - item_facet
       - outcome_name
       - quality_tier
@@ -41715,8 +41859,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/ItemStyleRead'
           nullable: true
+        consumed:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        consequence_label:
+          type: string
+          nullable: true
       required:
       - attached
+      - consequence_label
+      - consumed
       - item_style
       - outcome_name
       - quality_tier
