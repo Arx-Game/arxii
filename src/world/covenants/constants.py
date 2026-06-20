@@ -42,3 +42,15 @@ class BattleBinding(models.TextChoices):
 # Default rank names created during covenant formation.
 DEFAULT_FOUNDER_RANK_NAME = "Founder"
 DEFAULT_MEMBER_RANK_NAME = "Member"
+
+
+class MentorBondAdjusted(models.TextChoices):
+    """Which party of a Mentor's Vow the bond reshapes."""
+
+    MENTOR = "mentor", "Mentor"
+    SIDEKICK = "sidekick", "Sidekick"
+
+
+MENTOR_BOND_BAND_WIDTH = 2
+MENTOR_BOND_ADJACENCY_OFFSET = 1
+MENTOR_BOND_MAX_SIDEKICKS: int | None = None

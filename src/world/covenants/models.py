@@ -15,7 +15,14 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.covenants.constants import BattleBinding, CovenantType, RoleArchetype
+from world.covenants.constants import (
+    MENTOR_BOND_ADJACENCY_OFFSET,
+    MENTOR_BOND_BAND_WIDTH,
+    MENTOR_BOND_MAX_SIDEKICKS,
+    BattleBinding,
+    CovenantType,
+    RoleArchetype,
+)
 from world.items.constants import GearArchetype
 
 if TYPE_CHECKING:
@@ -23,6 +30,7 @@ if TYPE_CHECKING:
     from world.covenants.handlers import CovenantMembershipHandler
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
 COVENANT_ROLE_MODEL = "covenants.CovenantRole"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
@@ -721,3 +729,50 @@ class CovenantRiteParticipant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} in rite #{self.instance_id} ({self.granted_condition})"
+
+
+# =============================================================================
+# MentorBondConfig — singleton config for Mentor's Vow scaling (#1165)
+# =============================================================================
+
+
+class MentorBondConfig(SharedMemoryModel):
+    """Singleton (pk=1): global parameters for Mentor's Vow bond scaling (#1165).
+
+    Seeded by seed_mentor_bond_defaults() in factories.py. Services use get(pk=1)
+    and let DoesNotExist propagate loudly. Updated via Django admin.
+
+    Fields:
+    - band_width: level-range half-width for eligible mentor/sidekick pairs.
+    - adjacency_offset: additional level offset applied when computing adjacency.
+    - max_sidekicks_per_mentor: cap on sidekick count; null means unlimited.
+    """
+
+    band_width = models.PositiveSmallIntegerField(
+        default=MENTOR_BOND_BAND_WIDTH,
+        help_text="Level-range half-width for eligible mentor/sidekick pairs.",
+    )
+    adjacency_offset = models.PositiveSmallIntegerField(
+        default=MENTOR_BOND_ADJACENCY_OFFSET,
+        help_text="Additional level offset applied when computing adjacency.",
+    )
+    max_sidekicks_per_mentor = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        default=MENTOR_BOND_MAX_SIDEKICKS,
+        help_text="Cap on sidekick count per mentor; null means unlimited.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="mentor_bond_config_updates",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"MentorBondConfig(pk={self.pk})"

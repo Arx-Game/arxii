@@ -38,6 +38,7 @@ from world.covenants.models import (
     CovenantRiteParticipant,
     CovenantRole,
     GearArchetypeCompatibility,
+    MentorBondConfig,
 )
 from world.covenants.types import CovenantFounder
 from world.magic.constants import ParticipantState, ReferenceKind
@@ -1451,3 +1452,13 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     )
 
     return instance
+
+
+def get_mentor_bond_config() -> MentorBondConfig:
+    """Return the seeded MentorBondConfig singleton (#1165).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    fabricated row would silently break bond-scaling resolution.
+    DoesNotExist propagates loudly. Mirrors get_flee_config.
+    """
+    return MentorBondConfig.objects.get(pk=1)

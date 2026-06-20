@@ -6,7 +6,13 @@ import factory
 from factory import django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import (
+    MENTOR_BOND_ADJACENCY_OFFSET,
+    MENTOR_BOND_BAND_WIDTH,
+    MENTOR_BOND_MAX_SIDEKICKS,
+    CovenantType,
+    RoleArchetype,
+)
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -18,6 +24,7 @@ from world.covenants.models import (
     CovenantRole,
     CovenantRoleBonus,
     GearArchetypeCompatibility,
+    MentorBondConfig,
 )
 from world.items.constants import GearArchetype
 
@@ -614,6 +621,26 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
     )
 
     return role, [cap_ember, cap_keening]
+
+
+def seed_mentor_bond_defaults() -> MentorBondConfig:
+    """Seed the MentorBondConfig pk=1 singleton with authored defaults (#1165).
+
+    Idempotent: uses update_or_create so re-running resets to the authored defaults,
+    overwriting any staff edits. This is intentional for pre-launch seeding from
+    authored constants; do not call it where staff tuning must survive.
+
+    Returns the MentorBondConfig singleton.
+    """
+    config, _ = MentorBondConfig.objects.update_or_create(
+        pk=1,
+        defaults={
+            "band_width": MENTOR_BOND_BAND_WIDTH,
+            "adjacency_offset": MENTOR_BOND_ADJACENCY_OFFSET,
+            "max_sidekicks_per_mentor": MENTOR_BOND_MAX_SIDEKICKS,
+        },
+    )
+    return config
 
 
 def make_engaged_member(
