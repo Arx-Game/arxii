@@ -495,8 +495,16 @@ Roleplay session recording with participant tracking and message logging.
     anonymous=public. Use in `get_queryset()` / filter chains.
   - `scene.is_viewable_by(account)` — per-instance predicate; same semantics; uses
     `participations_cached` (zero queries for identity-mapped scenes). Use in object-permission checks.
-  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, and the combat
-    encounter read gate all consume these two forms.
+  - `Interaction.objects.visible_to(account, persona_ids=..., since=...)` — queryset; the
+    pose-level read tiers (room-heard public, pinned party, present/participated, GM-of-scene;
+    very-private excluded except for the party). Consumed by `InteractionViewSet.get_queryset`
+    and `SceneViewSet.highlight_reel`.
+  - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
+    encounter read gate, and the interaction/reel read gates all consume these forms.
+- **Highlight reel (#1241):** `GET /api/scenes/{id}/highlight-reel/` — a fully-sealed featured
+  moment + ranked index (ids only), ranked by `InteractionReaction` counts (a queryset-level
+  `Count` annotation, no denormalized column), GM-tagged poses headline. Filtered through
+  `Interaction.objects.visible_to`. Frontend: `HighlightReel` (`frontend/src/scenes/components/`).
 - **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
 - **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
