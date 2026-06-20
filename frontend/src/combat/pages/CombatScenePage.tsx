@@ -35,7 +35,7 @@ import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
-import { useEncounterForScene } from '@/combat/queries';
+import { useEncounterForScene, useDuelChallengeInbox, combatKeys } from '@/combat/queries';
 import { CombatTurnPanel } from '@/combat/CombatTurnPanel';
 import { DeepLinkModalHost } from '@/combat/modals/DeepLinkModalHost';
 import { DuelChallengeControls } from '@/combat/duels/DuelChallengeControls';
@@ -73,6 +73,18 @@ export function CombatScenePage() {
   const characterId = activeEntry?.character_id ?? 0;
   const characterSheetId = activeEntry?.character_id ?? 0; // same pk — see MyRosterEntry type
   const personaId = activeEntry?.primary_persona_id ?? null;
+
+  // Incoming duel-challenge prompt (#1180). The inbox is scoped server-side to the
+  // account's played characters; pick the row whose challenged character is the
+  // active one. challenged.id is a CharacterSheet pk, which equals characterId.
+  const { data: incomingChallenges = [] } = useDuelChallengeInbox({
+    enabled: characterId > 0,
+    role: 'incoming',
+  });
+  const incomingChallenge = useMemo(
+    () => incomingChallenges.find((c) => c.challenged.id === characterId) ?? null,
+    [incomingChallenges, characterId]
+  );
 
   // Detached action IDs for the chip strip
   const [detachedActionIds, setDetachedActionIds] = useState<number[]>([]);
@@ -140,6 +152,15 @@ export function CombatScenePage() {
   const handleComposerModeChange = useCallback((mode: ComposerMode) => {
     setComposerMode(mode);
   }, []);
+
+  // After accepting/declining a duel challenge, refresh the inbox and the scene's
+  // active-encounter list (accept creates the encounter that should now appear).
+  const handleChallengeResolved = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }).catch(() => {});
+    queryClient
+      .invalidateQueries({ queryKey: combatKeys.encountersForScene(sceneIdNum) })
+      .catch(() => {});
+  }, [queryClient, sceneIdNum]);
 
   // ---------------------------------------------------------------------------
   // No-active-encounter empty state
@@ -227,17 +248,16 @@ export function CombatScenePage() {
             />
           ) : (
             <div className="flex flex-col gap-3">
-              {/* Duel challenge accept/decline prompt — shown when there is no active encounter
-                  yet but a pending duel challenge exists.
-                  Backend gap (#568): no /api/combat/duel-challenges/ list endpoint exists yet;
-                  hasPendingIncomingChallenge is always false until that endpoint ships and
-                  a hook populates this prop. The dispatch path (accept / decline) is wired
-                  and functional; only the availability signal is missing. */}
-              {isActive && characterId > 0 && (
+              {/* Duel challenge accept/decline prompt — shown when there is no active
+                  encounter yet but a pending incoming challenge exists for this character.
+                  Driven by the GET /api/combat/duel-challenges/ inbox (#1180). */}
+              {isActive && characterId > 0 && incomingChallenge && (
                 <DuelChallengeControls
                   characterId={characterId}
-                  hasPendingIncomingChallenge={false}
-                  challengerName={null}
+                  hasPendingIncomingChallenge={true}
+                  challengerName={incomingChallenge.challenger.name}
+                  challengeId={incomingChallenge.id}
+                  onResolved={handleChallengeResolved}
                 />
               )}
               <div

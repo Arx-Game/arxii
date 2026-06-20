@@ -42,12 +42,15 @@ vi.mock('@/combat/queries', () => ({
   useAvailableCombos: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useUpgradeCombo: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
   useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  useDuelChallengeInbox: vi.fn().mockReturnValue({ data: [] }),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
     encountersForScene: (id: number) => ['combat', 'encounters-for-scene', id],
     combos: (id: number) => ['combat', 'combos', id],
     availableActions: (id: number) => ['combat', 'available-actions', id],
+    duelChallengesAll: () => ['combat', 'duel-challenges'],
+    duelChallenges: (role?: string) => ['combat', 'duel-challenges', role ?? 'all'],
   },
 }));
 
@@ -279,6 +282,46 @@ describe('CombatScenePage — empty state', () => {
 
     expect(screen.getByTestId('combat-encounter-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('combat-turn-panel-stub')).not.toBeInTheDocument();
+  });
+});
+
+describe('CombatScenePage — incoming duel challenge (#1180)', () => {
+  function challengeRow(challengedId: number) {
+    return {
+      id: 55,
+      challenger: { id: 20, name: 'Rival Knight' },
+      challenged: { id: challengedId, name: 'Aerande' },
+      status: 'pending',
+      created_at: '2026-06-20T00:00:00Z',
+      resolved_at: null,
+      resulting_encounter: null,
+    };
+  }
+
+  it('renders the accept/decline prompt when the inbox has a matching incoming challenge', async () => {
+    mockedUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    (combatQueries.useDuelChallengeInbox as ReturnType<typeof vi.fn>).mockReturnValue({
+      // challenged.id 10 matches the active character_id from the roster mock.
+      data: [challengeRow(10)],
+    });
+
+    render(<CombatScenePage />, { wrapper: createWrapper() });
+
+    const prompt = await screen.findByTestId('duel-challenge-prompt');
+    expect(prompt).toHaveTextContent('Rival Knight');
+  });
+
+  it('does not render the prompt when no inbox challenge targets this character', () => {
+    mockedUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    (combatQueries.useDuelChallengeInbox as ReturnType<typeof vi.fn>).mockReturnValue({
+      // challenged.id 999 does not match the active character_id (10).
+      data: [challengeRow(999)],
+    });
+
+    render(<CombatScenePage />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('duel-challenge-prompt')).not.toBeInTheDocument();
+    expect(screen.getByTestId('combat-no-encounter')).toBeInTheDocument();
   });
 });
 
