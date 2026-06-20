@@ -294,6 +294,19 @@ export interface AlterationScratchPayload {
 export type AlterationResolvePayload = AlterationLibraryPickPayload | AlterationScratchPayload;
 
 // ---------------------------------------------------------------------------
+// Entry-flourish offers, #1140
+// ---------------------------------------------------------------------------
+
+export type PendingEntryFlourishOffer = components['schemas']['PendingEntryFlourishOffer'];
+export type PaginatedPendingEntryFlourishOfferList =
+  components['schemas']['PaginatedPendingEntryFlourishOfferList'];
+
+// Body for POST /api/magic/entry-flourish/respond/ + result.
+// Generated via @extend_schema on EntryFlourishRespondView (#1140).
+export type EntryFlourishRespondRequest = components['schemas']['EntryFlourishRespondRequest'];
+export type EntryFlourishResult = components['schemas']['EntryFlourishResult'];
+
+// ---------------------------------------------------------------------------
 // Audere offers, #873
 // ---------------------------------------------------------------------------
 

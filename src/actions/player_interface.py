@@ -1065,12 +1065,19 @@ def _tenure_persona_ids(tenure: object) -> set[int]:
         return set()
 
 
-def _tenure_blocks_actor(tenure: object, actor_tenure: object | None) -> bool:
-    """Return True if *tenure*'s consent preference excludes *actor_tenure*.
+def _tenure_blocks_actor(
+    tenure: object, actor_tenure: object | None, category: object | None
+) -> bool:
+    """True if *tenure*'s consent excludes *actor_tenure* for *category*.
 
     False when no preference row exists (default: allow).
     """
-    from world.consent.models import SocialConsentPreference  # noqa: PLC0415
+    from world.consent.constants import ConsentMode  # noqa: PLC0415
+    from world.consent.models import (  # noqa: PLC0415
+        SocialConsentCategoryRule,
+        SocialConsentPreference,
+        SocialConsentWhitelist,
+    )
 
     try:
         pref = tenure.social_consent_preference  # type: ignore[union-attr]
@@ -1080,22 +1087,26 @@ def _tenure_blocks_actor(tenure: object, actor_tenure: object | None) -> bool:
     if not pref.allow_social_actions:
         return True
 
-    if pref.require_whitelist and actor_tenure is not None:
-        from world.consent.models import SocialConsentWhitelist  # noqa: PLC0415
+    if category is None:
+        return False  # uncategorized → master switch only
 
-        return not SocialConsentWhitelist.objects.filter(
-            owner_tenure=tenure,
-            allowed_tenure=actor_tenure,
-        ).exists()
+    rule = SocialConsentCategoryRule.objects.filter(preference=pref, category=category).first()
+    if rule is None or rule.mode == ConsentMode.EVERYONE:
+        return False
 
-    return False
+    if actor_tenure is None:
+        return True  # allowlist mode, unknown actor → block
+    return not SocialConsentWhitelist.objects.filter(
+        owner_tenure=tenure, allowed_tenure=actor_tenure, category=category
+    ).exists()
 
 
-def _social_consent_exclusions(character: ObjectDB) -> frozenset[int]:
+def _social_consent_exclusions(character: ObjectDB, category: object | None) -> frozenset[int]:
     """Return persona IDs of characters that don't consent to social actions from *character*.
 
     Checks SocialConsentPreference for all tenures participating in the character's
     current scene. Returns a frozenset of Persona PKs to exclude from the target picker.
+    *category* is threaded into :func:`_tenure_blocks_actor` for per-category enforcement.
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
     from world.scenes.models import Scene, SceneParticipation  # noqa: PLC0415
@@ -1105,9 +1116,7 @@ def _social_consent_exclusions(character: ObjectDB) -> frozenset[int]:
         return frozenset()
 
     scene = (
-        Scene.objects.filter(location=location, end_time__isnull=True)
-        .order_by("-start_time")
-        .first()
+        Scene.objects.filter(location=location, is_active=True).order_by("-date_started").first()
     )
     if scene is None:
         return frozenset()
@@ -1134,7 +1143,7 @@ def _social_consent_exclusions(character: ObjectDB) -> frozenset[int]:
             )
         )
         for tenure in tenures:
-            if _tenure_blocks_actor(tenure, actor_tenure):
+            if _tenure_blocks_actor(tenure, actor_tenure, category):
                 excluded.update(_tenure_persona_ids(tenure))
 
     return frozenset(excluded)
@@ -1163,7 +1172,11 @@ def _target_spec_for_action(
 
     template = action.action_template
     if template is not None and _template_is_social(template):
-        excluded = _social_consent_exclusions(character) if character is not None else frozenset()
+        excluded = (
+            _social_consent_exclusions(character, template.consent_category)
+            if character is not None
+            else frozenset()
+        )
         return TargetSpec(
             kind=TargetKind.PERSONA,
             cardinality=TargetType.SINGLE,

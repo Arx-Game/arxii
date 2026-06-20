@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0042_dramaticmomenttag_interaction_and_more"),
+        ("magic", "0043_pendingentryflourishoffer_and_more"),
     ]
 
     operations = [

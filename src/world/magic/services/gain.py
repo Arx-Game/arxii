@@ -650,6 +650,13 @@ def create_entry_flourish(
     from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
+    if scene is not None:
+        existing = EntryFlourishRecord.objects.filter(
+            character_sheet=character_sheet, scene=scene
+        ).first()
+        if existing is not None:
+            return existing  # already flourished this scene — skip gracefully
+
     if not CharacterResonance.objects.filter(
         character_sheet=character_sheet, resonance=resonance
     ).exists():

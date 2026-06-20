@@ -40,18 +40,6 @@ class QualityTierForScoreTests(TestCase):
         self.assertEqual(QualityTier.for_score(9999), self.master)
 
 
-class FacetCraftingConfigTests(TestCase):
-    def test_get_is_lazy_singleton(self) -> None:
-        from world.items.services.crafting import get_facet_crafting_config
-
-        cfg1 = get_facet_crafting_config()
-        cfg2 = get_facet_crafting_config()
-        self.assertEqual(cfg1.pk, 1)
-        self.assertEqual(cfg1.pk, cfg2.pk)
-        self.assertIsNone(cfg1.check_type)
-        self.assertGreaterEqual(cfg1.min_success_level, 1)
-
-
 class ComputeQualityScoreTests(TestCase):
     def _result(self, *, total_points: int, success_level: int):
         from types import SimpleNamespace
@@ -98,14 +86,21 @@ class AssertFacetAttachableTests(TestCase):
 
 
 class WireEnchantingTests(TestCase):
-    def test_wires_trait_checktype_and_config(self) -> None:
+    def test_wires_trait_checktype_and_recipes(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftingRecipe
         from world.items.factories import wire_enchanting_crafting
-        from world.items.services.crafting import get_facet_crafting_config
 
-        cfg = wire_enchanting_crafting(base_difficulty=10)
-        self.assertEqual(cfg.pk, 1)
-        self.assertIsNotNone(cfg.check_type)
-        self.assertEqual(get_facet_crafting_config().check_type, cfg.check_type)
+        recipe = wire_enchanting_crafting(base_difficulty=10)
+        self.assertEqual(recipe.kind, CraftingRecipeKind.FACET_ATTACH)
+        self.assertIsNotNone(recipe.check_type)
+        self.assertEqual(recipe.base_difficulty, 10)
+        # Both recipe kinds are wired and share the Enchanting check.
+        style_recipe = CraftingRecipe.objects.get(kind=CraftingRecipeKind.STYLE_ATTACH)
+        self.assertEqual(style_recipe.check_type, recipe.check_type)
+        # Skill caps + consequence pool are seeded for integration tests.
+        self.assertTrue(recipe.skill_caps.exists())
+        self.assertTrue(recipe.consequence_rows.exists())
 
 
 class CraftAttachFacetTests(TestCase):
@@ -114,8 +109,8 @@ class CraftAttachFacetTests(TestCase):
         from world.magic.factories import FacetFactory
         from world.traits.models import Trait
 
-        self.config = wire_enchanting_crafting(base_difficulty=0)
-        QualityTierFactory(name="Common", numeric_min=0, numeric_max=9999, sort_order=0)
+        # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder.
+        self.recipe = wire_enchanting_crafting(base_difficulty=0)
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         CharacterTraitValueFactory(
@@ -124,7 +119,7 @@ class CraftAttachFacetTests(TestCase):
             value=50,
         )
         template = ItemTemplateFactory(facet_capacity=3)
-        self.item = ItemInstanceFactory(template=template)
+        self.item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
         self.facet = FacetFactory()
 
     def test_success_attaches_with_resolved_tier(self) -> None:
@@ -187,8 +182,8 @@ class CraftAttachFacetTests(TestCase):
         from world.items.exceptions import CraftingNotConfigured
         from world.items.services.crafting import craft_attach_facet
 
-        self.config.check_type = None
-        self.config.save()
+        self.recipe.check_type = None
+        self.recipe.save()
         with self.assertRaises(CraftingNotConfigured):
             craft_attach_facet(
                 crafter_account=self.account,

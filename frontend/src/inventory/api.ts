@@ -27,6 +27,7 @@ import type {
 type ItemFacetRead = components['schemas']['ItemFacetRead'];
 type QualityTier = components['schemas']['QualityTier'];
 type FacetCraftResult = components['schemas']['FacetCraftResult'];
+export type CraftingQuote = components['schemas']['CraftingQuote'];
 
 const BASE_URL = '/api/items';
 
@@ -240,5 +241,16 @@ export async function removeItemFacet(id: number): Promise<void> {
 export async function getQualityTiers(): Promise<QualityTier[]> {
   const res = await apiFetch(`${BASE_URL}/quality-tiers/`);
   if (!res.ok) throw new Error(await readError(res, 'Failed to load quality tiers'));
+  return res.json();
+}
+
+export async function getCraftingQuote(
+  itemInstanceId: number,
+  facetId: number
+): Promise<CraftingQuote> {
+  const res = await apiFetch(
+    `${BASE_URL}/item-facets/quote/?item_instance=${itemInstanceId}&facet=${facetId}`
+  );
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load crafting quote'));
   return res.json();
 }

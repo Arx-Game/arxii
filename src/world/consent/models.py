@@ -11,6 +11,8 @@ between players - consent belongs to the player's tenure, not the character.
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.consent.constants import ConsentMode
 from world.roster.models import RosterTenure
 
 
@@ -145,12 +147,44 @@ class VisibilityMixin(models.Model):
         return False
 
 
+class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
+    """A data-driven kind of social action for consent purposes (#1141).
+
+    Seeded rows (Romantic, Hostile, Manipulative, General). Staff add more
+    without code changes. ActionTemplates are tagged with a category; players
+    set per-category consent rules.
+    """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
+    key = models.SlugField(
+        max_length=50,
+        unique=True,
+        help_text="Stable slug (e.g. 'romantic', 'hostile').",
+    )
+    name = models.CharField(max_length=100, help_text="Player-facing label.")
+    description = models.TextField(blank=True, help_text="What this category covers.")
+    display_order = models.PositiveIntegerField(
+        default=0, help_text="Sort order in the consent UI."
+    )
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        verbose_name = "Social Consent Category"
+        verbose_name_plural = "Social Consent Categories"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class SocialConsentPreference(SharedMemoryModel):
-    """Per-tenure opt-out/whitelist for social action targeting (#544).
+    """Per-tenure opt-out for social action targeting (#544, #1141).
 
     One row per RosterTenure (unique). Default: all social actions allowed.
-    If require_whitelist=True, only tenures in SocialConsentWhitelist may
-    target this character with social actions.
+    Per-category rules are stored in SocialConsentCategoryRule.
     """
 
     tenure = models.OneToOneField(
@@ -163,13 +197,6 @@ class SocialConsentPreference(SharedMemoryModel):
         default=True,
         help_text="If False, this character never appears as a valid social action target.",
     )
-    require_whitelist = models.BooleanField(
-        default=False,
-        help_text=(
-            "If True, only tenures in SocialConsentWhitelist may target this character. "
-            "Only meaningful when allow_social_actions=True."
-        ),
-    )
 
     class Meta:
         verbose_name = "Social Consent Preference"
@@ -179,10 +206,43 @@ class SocialConsentPreference(SharedMemoryModel):
         return f"SocialConsentPreference({self.tenure_id})"
 
 
-class SocialConsentWhitelist(SharedMemoryModel):
-    """Explicit whitelist entry: allowed_tenure may target owner_tenure socially (#544).
+class SocialConsentCategoryRule(SharedMemoryModel):
+    """Per-category targeting mode for a tenure's consent preference (#1141).
 
-    Only consulted when owner_tenure.social_consent_preference.require_whitelist=True.
+    Absent row for a category == EVERYONE (default-allow).
+    """
+
+    preference = models.ForeignKey(
+        SocialConsentPreference,
+        on_delete=models.CASCADE,
+        related_name="category_rules",
+    )
+    category = models.ForeignKey(
+        SocialConsentCategory,
+        on_delete=models.CASCADE,
+        related_name="rules",
+    )
+    mode = models.CharField(
+        max_length=20,
+        choices=ConsentMode.choices,
+        default=ConsentMode.EVERYONE,
+        help_text="EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).",
+    )
+
+    class Meta:
+        unique_together = ["preference", "category"]
+        verbose_name = "Social Consent Category Rule"
+        verbose_name_plural = "Social Consent Category Rules"
+
+    def __str__(self) -> str:
+        return f"{self.preference.tenure_id}:{self.category.key}={self.mode}"
+
+
+class SocialConsentWhitelist(SharedMemoryModel):
+    """Explicit whitelist entry: allowed_tenure may target owner_tenure socially (#544, #1141).
+
+    Scoped per category; consulted when the owner's SocialConsentCategoryRule
+    for a category is ALLOWLIST.
     """
 
     owner_tenure = models.ForeignKey(
@@ -197,12 +257,21 @@ class SocialConsentWhitelist(SharedMemoryModel):
         related_name="social_consent_whitelist_allowed",
         help_text="Tenure permitted to target owner_tenure with social actions.",
     )
+    category = models.ForeignKey(
+        SocialConsentCategory,
+        on_delete=models.CASCADE,
+        related_name="whitelist_entries",
+        help_text="Allowlist is scoped per category.",
+    )
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["owner_tenure", "allowed_tenure"]
+        unique_together = ["owner_tenure", "allowed_tenure", "category"]
         verbose_name = "Social Consent Whitelist Entry"
         verbose_name_plural = "Social Consent Whitelist Entries"
 
     def __str__(self) -> str:
-        return f"SocialConsentWhitelist({self.owner_tenure_id} ← {self.allowed_tenure_id})"
+        return (
+            f"SocialConsentWhitelist({self.owner_tenure_id} ← "
+            f"{self.allowed_tenure_id} [{self.category_id}])"
+        )

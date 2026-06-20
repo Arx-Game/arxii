@@ -19,12 +19,12 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
-from world.scenes.models import PersonaDiscovery
+from world.scenes.models import Persona, PersonaDiscovery
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from world.scenes.models import Persona
+    from evennia.accounts.models import AccountDB
 
 # Apparent gender for the anonymous-face short description (#1109): from the character's real
 # gender; non-binary / unset render as "person". (A slice-3 disguise that conceals gender will
@@ -83,3 +83,54 @@ def build_persona_display_map(
         else:
             display[persona.pk] = (compose_sdesc(persona), False)
     return display
+
+
+def resolve_display_for_viewer(
+    persona: Persona,
+    *,
+    viewer_persona_ids: set[int],
+    viewer_sheet_ids: set[int],
+) -> tuple[str, bool]:
+    """Resolve one persona's ``(display_name, is_discovered)`` for one viewer (#1109).
+
+    The single-target form of ``build_persona_display_map`` — for the look / room-contents
+    paths, which resolve one character at a time. Own faces and named-public faces render real;
+    a discovered anonymous face reveals; otherwise the composed sdesc. One discovery query, and
+    only for an anonymous, non-owned face.
+    """
+    if persona.pk in viewer_persona_ids or not persona.is_fake_name:
+        return persona.name, False
+    if viewer_sheet_ids:
+        discovery = (
+            PersonaDiscovery.objects.filter(
+                Q(persona_id=persona.pk) | Q(linked_to_id=persona.pk),
+                discovered_by_id__in=viewer_sheet_ids,
+            )
+            .select_related("persona", "linked_to")
+            .first()
+        )
+        if discovery is not None:
+            linked = (
+                discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
+            )
+            return f"{linked.name} (as {persona.name})", True
+    return compose_sdesc(persona), False
+
+
+def viewer_context_for_account(account: AccountDB) -> tuple[set[int], set[int]]:
+    """The viewer's ``(owned_persona_ids, owned_sheet_ids)`` for a look (no request) (#1109).
+
+    Owned = personas on the character sheets the account *currently* plays. Both sets feed
+    ``resolve_display_for_viewer`` — owned for self-ownership, sheets for the discovery lookup.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    sheet_ids = set(
+        RosterEntry.objects.for_account(account).values_list("character_sheet_id", flat=True)
+    )
+    if not sheet_ids:
+        return set(), set()
+    persona_ids = set(
+        Persona.objects.filter(character_sheet_id__in=sheet_ids).values_list("id", flat=True)
+    )
+    return persona_ids, sheet_ids

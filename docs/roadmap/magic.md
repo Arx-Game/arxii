@@ -574,10 +574,19 @@ What was built:
   numeric score (`compute_quality_score`) resolved to a `QualityTier` via
   `QualityTier.for_score` (reusing the existing `numeric_min/numeric_max` ranges).
   Players choose only *which* facet; the server rolls the tier.
-- **`FacetCraftingConfig` singleton** (`check_type` FK + `base_difficulty` +
-  `success_level_step` + `min_success_level`); lazy `get_facet_crafting_config()`.
-  Seeded by `wire_enchanting_crafting()` (Enchanting SKILL trait + CheckType + config) —
-  a FactoryBoy chain doubling as integration-test setUp and seed data.
+- **Generic `CraftingRecipe` framework (#1031).** The old `FacetCraftingConfig`
+  singleton was replaced by per-kind `CraftingRecipe` rows (`kind` =
+  `FACET_ATTACH`/`STYLE_ATTACH`; `check_type` FK + `base_difficulty` +
+  `success_level_step` + `min_success_level` + `skill_trait` + AP/anima costs +
+  `default_cost_consumption`), each with a `CraftingSkillCap` ladder (skill-gated
+  quality clamp), `CraftingMaterialRequirement` rows, and a `CraftingRecipeConsequence`
+  pool. The transactional orchestrator `run_crafting_recipe`
+  (`world.items.crafting.services`) ties pre-validate → affordability → roll →
+  consequence selection → cost consumption → skill-capped tier → attach; the
+  `craft_attach_facet`/`craft_attach_style` wrappers are thin consumers of it.
+  Seeded by `wire_enchanting_crafting()` (Enchanting SKILL trait + CheckType + both
+  recipes + a cap ladder + a small consequence pool) — a FactoryBoy chain doubling as
+  integration-test setUp and seed data.
 - **Endpoint contract change.** `POST /api/items/item-facets/` now takes
   `{item_instance, facet}` (no client-chosen tier) and returns a `FacetCraftResult`
   (rolled outcome + resolved tier + the row); 201 on attach, 200 on a failed roll.
@@ -596,9 +605,15 @@ What was built:
 - **E2E:** `integration_tests/test_crafting_facet_pull.py` chains craft → wear → pull on
   a FACET thread — the crafted facet is what satisfies the worn-items gate at pull time.
 
-Deferred (follow-ups): crafter-skill-gated quality caps + material/effort cost;
-per-facet difficulty override; grid-card facet chips; a marketplace / sale-pricing
-mechanic; a telnet crafting action.
+Delivered in #1031 (Spec D PR2 continuation): crafter-skill-gated quality caps
+(`CraftingSkillCap` ladder + `resolve_capped_tier`), multi-vector material/AP/anima
+cost with graded `CostConsumption` (NONE/PARTIAL/FULL per consequence), and the
+generic `CraftingRecipe` / handler-registry framework covering both facet and style
+attachment.
+
+Remaining deferred (follow-ups): per-facet difficulty override; grid-card facet chips;
+a marketplace / sale-pricing mechanic; a telnet crafting action; crafting-station
+durability and repair economy (#1234).
 
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
@@ -1424,6 +1439,42 @@ Cross-references:
   - Upvote-ranked scene highlight reel consuming pose-anchored tags.
   - Frontend action panel wiring for the 6 new social action singletons.
   - Scene-perception leaderboard / aura ranking surface.
+
+- **Entry-flourish player-declaration (#1140) — SHIPPED:**
+  Follow-up to #544/#545: instead of auto-granting resonance on Entrance success, the
+  entrant is presented a picker so they choose which claimed resonance to broadcast.
+
+  What was built:
+  - `PendingEntryFlourishOffer` model (`entry_flourish.py`) — poll-able offer, one per
+    character (UniqueConstraint on `character_sheet`), nullable `scene` FK. Re-exported
+    in `world/magic/models/__init__.py`.
+  - `EntryFlourishRecord` (`models/endorsement.py`) gained a partial UniqueConstraint
+    `(character_sheet, scene) WHERE scene IS NOT NULL` for per-scene idempotency.
+  - `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) —
+    called on Entrance action success; skips if already flourished this scene or
+    no claimed resonances.
+  - `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult`
+    (`entry_flourish.py`) — two-phase resolve mirroring `resolve_audere_offer`.
+  - `create_entry_flourish` (`services/gain.py`) now skips gracefully on a duplicate
+    `(sheet, scene)` and uses `GainSource.ENTRY_FLOURISH`.
+  - `EntranceAction` (`actions/definitions/social.py`) calls
+    `maybe_create_entry_flourish_offer` on success; the dead `resonance_id`-kwarg path
+    and `_fire_entry_flourish` were removed.
+  - `ResonanceGainConfig.entry_flourish_grant` default updated to 10 (was 4 in #544).
+  - REST: `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` +
+    `POST /api/magic/entry-flourish/respond/` (`{offer_id, resonance_id}`).
+  - Exceptions: `EntryFlourishOfferError` / `NotFoundError` / `StaleError`
+    (`exceptions.py`; carry `user_message`).
+  - Frontend: `EntryFlourishOfferGate` + `EntryFlourishOfferDialog`
+    (`frontend/src/magic/components/`), mounted in `SceneDetailPage`; hooks
+    `usePendingEntryFlourishOffers` / `useRespondToEntryFlourish` in
+    `frontend/src/magic/queries.ts`.
+
+  Design note: the #904 reaction-window framework was evaluated and rejected —
+  `react_to_window` hard-blocks self-reaction (peer-only). Entry flourish (actor
+  self-grant) and scene-entry endorsement (peer grant) are the two complementary
+  halves of the entrance moment.
+
 - Fashion-to-resonance integration (requires Items & Crafting systems —
   designed in `docs/architecture/items-fashion-mantles.md`,
   implementation phased across 4 PRs)

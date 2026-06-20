@@ -1,1 +1,1 @@
-0003_socialconsentpreference_socialconsentwhitelist
+0004_social_consent_categories
