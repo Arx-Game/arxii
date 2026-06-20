@@ -293,8 +293,23 @@ condition, and (c) instantiates the seeded **"Catch the Faller"** `ChallengeInst
 bound to the faller via `target_object`. It is idempotent — a no-op when the faller
 already carries the Plummeting condition. The trigger definition is seeded by
 `wire_fall_triggers()` (positioning factories); `install_fall_triggers(room)` installs
-it (called from `maybe_emit_fall`). The per-round descent (Task 6) and catch resolution
-(Task 7) are subsequent #1228 tasks.
+it (called from `maybe_emit_fall`). The catch resolution (Task 7) is a subsequent #1228 task.
+
+**Per-round descent + impact (`plummet.py`, #1228, Task 6).** `advance_plummet(targets)`
+is wired into the END-OF-ROUND block of `tick_round_for_targets` (`world/vitals/services.py`),
+beside `advance_bleed_out` / `tick_fatigue_collapse_for_targets`. For each target carrying
+the Plummeting condition it walks one `elevation_anchor` level down via `force_move_to_position`
+and accumulates depth on the `Plummeting` `ConditionInstance.severity` (one per round — the
+standard severity→consequence scaling). The round the target lands on solid ground (the new
+position's `elevation_anchor is None`) `_apply_fall_impact` fires: `damage = severity *
+settings.FALL_IMPACT_PER_LEVEL` (env-backed config, default 5) routed through
+`process_damage_consequences` with the `Fall` `DamageType` (null pools → config-default
+survivability). `end_plummet(faller, *, caught=False)` then removes the Plummeting condition
+and deactivates the bound catch `ChallengeInstance` (`caught=True` is the Task-7 catch path,
+no impact). The descent is **AFK-safe**: empty `tick_round_for_targets` targets ⇒ no tick ⇒
+no descent. `_danger_persists` (`world/scenes/round_services.py`) keeps a DANGER round ticking
+while any participant is Bleeding-Out **or** Plummeting, so the round auto-ends once the fall
+resolves.
 
 **Plummet + catch content seed (`world/areas/positioning/plummet_content.py`).**
 `ensure_fall_content()` idempotently seeds all plummet + catch content (it calls
@@ -334,9 +349,10 @@ entries in the player's move list until the gating challenge is resolved.
   mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
 - **Reactive fall catch + multi-round plummet:** `EventName.FELL` is now consumed —
   `begin_plummet` (`plummet.py`) starts the DANGER round, applies `Plummeting`, and binds
-  the catch challenge to the faller (#1228, Task 5). Still deferred within the #1228 series:
-  the per-round descent down the `elevation_anchor` chain with impact consequences (Task 6)
-  and the catch resolution (Task 7).
+  the catch challenge to the faller (#1228, Task 5); `advance_plummet` walks the descent down
+  the `elevation_anchor` chain with impact consequences in the round tick (#1228, Task 6).
+  Still deferred within the #1228 series: the bystander catch resolution that calls
+  `end_plummet(caught=True)` mid-descent (Task 7).
 - **Anti-air "blocks-flight" gate flag:** a future `PositionEdge` flag (or Property tag)
   that prevents `enter_aerial` from crossing above a blocked node.
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)

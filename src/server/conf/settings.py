@@ -188,6 +188,12 @@ GITHUB_ISSUE_TOKEN = env("GITHUB_ISSUE_TOKEN", default=env("GH_TOKEN", default="
 # before the daily cleanup hard-deletes it (#1025).
 ITEM_SOFT_DELETE_GRACE_DAYS = env.int("ITEM_SOFT_DELETE_GRACE_DAYS", default=30)
 
+# Fall-impact magnitude per elevation level descended during a plummet (#1228).
+# The Plummeting ConditionInstance's severity accumulates one per round of
+# descent; at impact, damage = severity * this value, routed through the
+# standard survivability pipeline (process_damage_consequences).
+FALL_IMPACT_PER_LEVEL = env.int("FALL_IMPACT_PER_LEVEL", default=5)
+
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",

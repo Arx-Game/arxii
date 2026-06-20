@@ -104,7 +104,13 @@ def advance_scene_round_for_action(scene_round: SceneRound) -> SceneRound:
 
 
 def _danger_persists(scene_round: SceneRound) -> bool:
-    """True if any ACTIVE participant still has a Bleeding-Out condition."""
+    """True while any ACTIVE participant still carries a danger-keeping condition.
+
+    A DANGER round persists (keeps ticking) while a participant is Bleeding-Out or
+    Plummeting (#1228) — the descent must keep advancing until the fall resolves
+    (impact removes the Plummeting condition), then the round auto-ends.
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
@@ -116,7 +122,8 @@ def _danger_persists(scene_round: SceneRound) -> bool:
     if not char_ids:
         return False
     return ConditionInstance.objects.filter(
-        target_id__in=char_ids, condition__name=BLEED_OUT_CONDITION_NAME
+        target_id__in=char_ids,
+        condition__name__in=[BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME],
     ).exists()
 
 
