@@ -720,7 +720,10 @@ def recompute_max_health(
         vitals = character_sheet.vitals
     except ObjectDoesNotExist:
         return 0
-    new_max = max(vitals.base_max_health + thread_addend, 0)
+    base = vitals.base_max_health
+    if base is None:
+        base = derive_base_max_health(character_sheet)
+    new_max = max(base + thread_addend, 0)
     update_fields: list[str] = []
     if vitals.max_health != new_max:
         vitals.max_health = new_max

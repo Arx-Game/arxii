@@ -27,6 +27,7 @@ from world.vitals.services import (
     calculate_wound_difficulty,
     derive_base_max_health,
     process_damage_consequences,
+    recompute_max_health,
 )
 
 
@@ -327,3 +328,98 @@ class DeriveBaseMaxHealthTest(TestCase):
 
         # class_term = 0 (no primary class), stamina_term = 6*3 = 18, covenant_term = 0
         self.assertEqual(derive_base_max_health(sheet), 18)
+
+
+class RecomputeMaxHealthTest(TestCase):
+    """Tests for recompute_max_health — derived base vs explicit override + clamp-not-injure."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.vitals.services import get_vitals_consequence_config
+
+        cls.character = CharacterFactory(db_key="RecomputeHealthChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character, primary_persona=False)
+
+        # Primary class at level 4: effective_combat_level returns 4.
+        cls.char_class = CharacterClassLevelFactory(
+            character=cls.character,
+            level=4,
+            is_primary=True,
+        ).character_class
+
+        # PROSPECT (L1-L2) = 10/lvl, POTENTIAL (L3-L5) = 15/lvl → class_term = 20+30 = 50
+        ClassStageHealthRateFactory(
+            character_class=cls.char_class,
+            stage=PathStage.PROSPECT,
+            health_per_level=10,
+        )
+        ClassStageHealthRateFactory(
+            character_class=cls.char_class,
+            stage=PathStage.POTENTIAL,
+            health_per_level=15,
+        )
+
+        # Stamina = 6, weight = 3 → stamina_term = 18
+        setup_stat(cls.character, PrimaryStat.STAMINA, 6)
+
+        cfg = get_vitals_consequence_config()
+        cfg.stamina_to_health_weight = 3
+        cfg.save(update_fields=["stamina_to_health_weight"])
+        # derive_base_max_health(cls.sheet) == 68 (50 class + 18 stamina + 0 covenant)
+
+    def setUp(self) -> None:
+        # Create a fresh vitals row for each test so mutations don't bleed across tests.
+        self.vitals = CharacterVitalsFactory(
+            character_sheet=self.sheet,
+            base_max_health=None,
+            max_health=0,
+            health=0,
+        )
+
+    def tearDown(self) -> None:
+        self.vitals.delete()
+
+    def test_recompute_uses_derived_base_when_override_null(self) -> None:
+        """When base_max_health is None, derive_base_max_health(sheet) supplies the base.
+
+        derive_base_max_health returns 68; with thread_addend=5 → max_health == 73.
+        """
+        result = recompute_max_health(self.sheet, thread_addend=5)
+        self.assertEqual(result, 73)
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.max_health, 73)
+
+    def test_recompute_uses_override_when_set(self) -> None:
+        """When base_max_health is set, that value is used directly."""
+        self.vitals.base_max_health = 100
+        self.vitals.save(update_fields=["base_max_health"])
+
+        result = recompute_max_health(self.sheet, thread_addend=10)
+        self.assertEqual(result, 110)
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.max_health, 110)
+
+    def test_recompute_clamp_not_injure_preserved(self) -> None:
+        """Clamp-not-injure: current health above new max is clamped down; below is untouched.
+
+        base_max_health=None → derived=68; thread_addend=0 → new_max=68.
+        Set current health to 80 (above new max) → clamped to 68.
+        Then call again with derived base unchanged → health=40 (below max) → stays 40.
+        """
+        # Health above new max → clamped down.
+        self.vitals.health = 80
+        self.vitals.max_health = 80
+        self.vitals.save(update_fields=["health", "max_health"])
+
+        recompute_max_health(self.sheet, thread_addend=0)
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.max_health, 68)
+        self.assertEqual(self.vitals.health, 68)
+
+        # Health below new max → not healed up.
+        self.vitals.health = 40
+        self.vitals.save(update_fields=["health"])
+
+        recompute_max_health(self.sheet, thread_addend=0)
+        self.vitals.refresh_from_db()
+        self.assertEqual(self.vitals.health, 40)
