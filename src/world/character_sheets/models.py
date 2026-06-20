@@ -36,6 +36,7 @@ from world.character_sheets.types import (
     ActivityState,
     LifecycleState,
     MaritalStatus,
+    SheetVisibility,
 )
 
 
@@ -316,6 +317,35 @@ class CharacterSheet(SharedMemoryModel):
         help_text="Social standing/rank (1=highest, 20=lowest)",
     )
     rollmod = models.SmallIntegerField(default=0)
+
+    # Privacy tiers (#1271) — player-controlled visibility for the mechanical sheet
+    # sections. Default SELF preserves the #1269 "private by default" behaviour; a player
+    # can open a section to FRIENDS (their allow list) or PUBLIC. Bio/story tiers are a
+    # follow-up (they interact with the presented-identity gating).
+    stats_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's stats.",
+    )
+    skills_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's skills.",
+    )
+    magic_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's magic.",
+    )
+    goals_visibility = models.CharField(
+        max_length=10,
+        choices=SheetVisibility.choices,
+        default=SheetVisibility.SELF,
+        help_text="Who can see this character's goals.",
+    )
 
     # #981 — the persona (face) this character is currently presenting as. NULL
     # means "on their PRIMARY persona" (the resolver defaults to it), so a fresh

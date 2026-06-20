@@ -12,6 +12,18 @@ CharacterSheet is the single anchor for all character-related data.
 
 The **narrative bio** (concept, real_concept, quote, personality, background, obituary) was sliced out into a separate **`Profile`** model (#1270) so a cover identity can present its own bio. The sheet owns one `true_profile` (its real bio), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, with a `save()` cascade), so existing reads/writes are unchanged — bio just lives on the profile now. Lineage FKs (family/heritage/tarot/origin) and the cover-bio *display* + authoring flow are follow-up slices.
 
+## Privacy Tiers (#1271)
+
+Each mechanical sheet section carries a player-controlled visibility tier
+(`SheetVisibility`: `SELF` / `FRIENDS` / `PUBLIC`) — `stats_visibility`, `skills_visibility`,
+`magic_visibility`, `goals_visibility` on `CharacterSheet`, defaulting to `SELF` (the #1109
+"private by default" behaviour). The profile serializer resolves the viewer's openness once
+(`_viewer_access_level`: staff/owner = SELF, on the owner's `PlayerAllowList` = FRIENDS, else
+PUBLIC) and shows each section when access meets its tier (`SHEET_VISIBILITY_RANK`). The FRIENDS
+allow-list lookup runs only when a section is actually FRIENDS-gated, so the all-default case adds
+no query. Bio/story tiers (entangled with the presented-identity gating) and the player-facing
+tier-setting UI are follow-ups.
+
 ## Related Models
 
 All character-related models FK back to CharacterSheet:
