@@ -3,8 +3,18 @@ from django.contrib import admin
 from world.character_sheets.models import (
     CharacterSheet,
     Gender,
+    Profile,
     Pronouns,
 )
+
+
+@admin.register(Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    """Admin for the narrative bio Profile (#1270)."""
+
+    list_display = ["__str__", "concept"]
+    search_fields = ["concept", "real_concept"]
+    fields = ("concept", "real_concept", "quote", "personality", "background", "obituary")
 
 
 @admin.register(Gender)
@@ -44,8 +54,9 @@ class CharacterSheetAdmin(admin.ModelAdmin):
         "lifecycle_state",
         "is_oc",
     ]
-    search_fields = ["character__db_key", "concept", "family"]
+    search_fields = ["character__db_key", "true_profile__concept", "family"]
     readonly_fields = ["created_date", "updated_date", "decay_tier_display"]
+    raw_id_fields = ["true_profile"]
 
     @admin.display(description="Decay tier (computed)")
     def decay_tier_display(self, obj: CharacterSheet) -> str:
@@ -67,8 +78,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
             "Identity & Social",
             {
                 "fields": (
-                    "concept",
-                    "real_concept",
+                    "true_profile",
                     "family",
                     "tarot_card",
                     "tarot_reversed",
@@ -76,18 +86,14 @@ class CharacterSheetAdmin(admin.ModelAdmin):
                     "social_rank",
                     "marital_status",
                 ),
+                "description": "Narrative bio (concept/quote/background/…) lives on the linked "
+                "Profile (#1270) — edit it there.",
             },
         ),
         (
             "Descriptions",
             {
-                "fields": (
-                    "quote",
-                    "personality",
-                    "background",
-                    "additional_desc",
-                    "obituary",
-                ),
+                "fields": ("additional_desc",),
                 "classes": ["collapse"],
             },
         ),

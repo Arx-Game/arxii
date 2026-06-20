@@ -113,6 +113,7 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "family",
     "tarot_card",
     "origin_realm",
+    "true_profile",  # #1270 — concept/quote now read through the profile
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -600,7 +601,7 @@ def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
     )
 
 
-_STORY_SELECT_RELATED: tuple[str, ...] = ()
+_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background/personality
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 

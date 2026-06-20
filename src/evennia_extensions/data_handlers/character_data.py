@@ -42,11 +42,17 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         self._personas_cache = None
 
     def _get_sheet(self):
-        """Get or create the character sheet, with caching."""
+        """Get or create the character sheet, with caching.
+
+        Pulls ``true_profile`` in the same query (#1270) so bio reads (concept/quote/
+        background, exposed as forwarding properties) don't add a per-character query.
+        """
         if self._sheet_cache is None:
             from world.character_sheets.models import CharacterSheet
 
-            self._sheet_cache, _created = CharacterSheet.objects.get_or_create(
+            self._sheet_cache, _created = CharacterSheet.objects.select_related(
+                "true_profile"
+            ).get_or_create(
                 character=self.obj,
             )
         return self._sheet_cache

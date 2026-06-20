@@ -8,12 +8,15 @@ CharacterSheet is the single anchor for all character-related data.
 
 ## The Model
 
-`CharacterSheet` is OneToOne to ObjectDB (`primary_key=True` — shares pk), holding demographics/appearance/biographical fields. Every playable character has one.
+`CharacterSheet` is OneToOne to ObjectDB (`primary_key=True` — shares pk), holding demographics/appearance fields. Every playable character has one.
+
+The **narrative bio** (concept, real_concept, quote, personality, background, obituary) was sliced out into a separate **`Profile`** model (#1270) so a cover identity can present its own bio. The sheet owns one `true_profile` (its real bio), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, with a `save()` cascade), so existing reads/writes are unchanged — bio just lives on the profile now. Lineage FKs (family/heritage/tarot/origin) and the cover-bio *display* + authoring flow are follow-up slices.
 
 ## Related Models
 
 All character-related models FK back to CharacterSheet:
 
+- **`Profile`** (#1270) — the narrative bio surface a persona presents. `CharacterSheet.true_profile` (OneToOne) is the real bio; `Persona.profile` (FK) is the bio that face presents (PRIMARY → the sheet's `true_profile`; a cover persona may own its own). Null `Persona.profile` falls back to the sheet's `true_profile`.
 - **`Persona`** (scenes) — IC identity of a character. FK via `character_sheet`. A character can have multiple personas (PRIMARY, ESTABLISHED, TEMPORARY). The unique PRIMARY persona per sheet is accessed via `sheet.primary_persona`.
 - **`RosterEntry`** (roster) — tracks which character is being played and by whom. OneToOne to CharacterSheet.
 - **`CharacterVitals`** (vitals) — health/status tracking. OneToOne to CharacterSheet.
@@ -78,7 +81,8 @@ from world.character_sheets.types import Gender as GenderChoices
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `heritage`, `origin_realm`, `species`, `concept`, `family`, `tarot_card`, `tarot_reversed`, `social_rank`, `marital_status`, description text fields |
+| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `heritage`, `origin_realm`, `species`, `family`, `tarot_card`, `tarot_reversed`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) is read/written through forwarding properties → `true_profile` (#1270). |
+| `Profile` | The narrative bio a persona presents (#1270) | `concept`, `real_concept`, `quote`, `personality`, `background`, `obituary`. Referenced by `CharacterSheet.true_profile` and `Persona.profile`. |
 | `CharacterSheetValue` | Links characters to characteristic values | `character_sheet` (FK), `characteristic_value` (FK) |
 
 ---

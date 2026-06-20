@@ -258,18 +258,27 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     if draft.selected_area and draft.selected_area.realm:
         sheet.origin_realm = draft.selected_area.realm
 
-    # Set descriptive text from draft_data
+    # Set descriptive text from draft_data. additional_desc is appearance text (stays on
+    # the sheet); the narrative bio lives on true_profile now (#1270).
     draft_data = draft.draft_data
     if draft_data.get("description"):
         sheet.additional_desc = draft_data["description"]
+
+    profile = sheet.true_profile
+    if profile is None:
+        from world.character_sheets.models import Profile  # noqa: PLC0415
+
+        profile = Profile.objects.create()
+        sheet.true_profile = profile
     if draft_data.get("background"):
-        sheet.background = draft_data["background"]
+        profile.background = draft_data["background"]
     if draft_data.get("personality"):
-        sheet.personality = draft_data["personality"]
+        profile.personality = draft_data["personality"]
     if draft_data.get("concept"):
-        sheet.concept = draft_data["concept"]
+        profile.concept = draft_data["concept"]
     if draft_data.get("quote"):
-        sheet.quote = draft_data["quote"]
+        profile.quote = draft_data["quote"]
+    profile.save()
 
     # Set physical characteristics from draft
     if draft.height_inches:
