@@ -10094,6 +10094,89 @@ paths:
               schema:
                 $ref: '#/components/schemas/EffectType'
           description: ''
+  /api/magic/entry-flourish/pending/:
+    get:
+      operationId: magic_entry_flourish_pending_list
+      description: |-
+        Read-only inbox of pending entry-flourish offers (#1140).
+
+        GET /api/magic/entry-flourish/pending/
+        GET /api/magic/entry-flourish/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPendingEntryFlourishOfferList'
+          description: ''
+  /api/magic/entry-flourish/pending/{id}/:
+    get:
+      operationId: magic_entry_flourish_pending_retrieve
+      description: |-
+        Read-only inbox of pending entry-flourish offers (#1140).
+
+        GET /api/magic/entry-flourish/pending/
+        GET /api/magic/entry-flourish/pending/{id}/
+
+        Scoped to the authenticated user's character sheets (active tenures).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingEntryFlourishOffer'
+          description: ''
+  /api/magic/entry-flourish/respond/:
+    post:
+      operationId: magic_entry_flourish_respond_create
+      description: Validate ownership + dispatch resolve_entry_flourish_offer; return
+        the result.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryFlourishRespondRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryFlourishResult'
+          description: ''
   /api/magic/facets/:
     get:
       operationId: magic_facets_list
@@ -26758,6 +26841,35 @@ components:
         * `party_combat` - Party Combat
         * `open_encounter` - Open Encounter
         * `duel` - Duel
+    EntryFlourishRespondRequest:
+      type: object
+      description: Write serializer for the player's entry-flourish resonance pick.
+      properties:
+        offer_id:
+          type: integer
+        resonance_id:
+          type: integer
+      required:
+      - offer_id
+      - resonance_id
+    EntryFlourishResult:
+      type: object
+      description: Read serializer for EntryFlourishResult (entry_flourish.py dataclass).
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        granted_amount:
+          type: integer
+        scene_id:
+          type: integer
+          nullable: true
+      required:
+      - granted_amount
+      - resonance_id
+      - resonance_name
+      - scene_id
     EpisodeCreate:
       type: object
       description: Serializer for creating episodes
@@ -34062,6 +34174,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PendingAudereOffer'
+    PaginatedPendingEntryFlourishOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingEntryFlourishOffer'
     PaginatedPendingStageAdvanceOfferList:
       type: object
       required:
@@ -37086,6 +37221,30 @@ components:
       - id
       - intensity_bonus
       - soulfray_stage_order
+    PendingEntryFlourishOffer:
+      type: object
+      description: Player-facing view of a pending entry-flourish offer (#1140). Read-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_sheet_id:
+          type: integer
+          description: The character this sheet belongs to
+          readOnly: true
+        scene_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - character_sheet_id
+      - created_at
+      - id
+      - scene_id
     PendingStageAdvanceOffer:
       type: object
       description: |-

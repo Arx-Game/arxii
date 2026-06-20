@@ -6462,6 +6462,71 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/entry-flourish/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending entry-flourish offers (#1140).
+     *
+     *     GET /api/magic/entry-flourish/pending/
+     *     GET /api/magic/entry-flourish/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_entry_flourish_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/entry-flourish/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending entry-flourish offers (#1140).
+     *
+     *     GET /api/magic/entry-flourish/pending/
+     *     GET /api/magic/entry-flourish/pending/{id}/
+     *
+     *     Scoped to the authenticated user's character sheets (active tenures).
+     */
+    get: operations['magic_entry_flourish_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/entry-flourish/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate ownership + dispatch resolve_entry_flourish_offer; return the result. */
+    post: operations['magic_entry_flourish_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/facets/': {
     parameters: {
       query?: never;
@@ -15145,6 +15210,18 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
+    /** @description Write serializer for the player's entry-flourish resonance pick. */
+    EntryFlourishRespondRequest: {
+      offer_id: number;
+      resonance_id: number;
+    };
+    /** @description Read serializer for EntryFlourishResult (entry_flourish.py dataclass). */
+    EntryFlourishResult: {
+      resonance_id: number;
+      resonance_name: string;
+      granted_amount: number;
+      scene_id: number | null;
+    };
     /** @description Serializer for creating episodes */
     EpisodeCreate: {
       chapter: number;
@@ -18934,6 +19011,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingAudereOffer'][];
     };
+    PaginatedPendingEntryFlourishOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PendingEntryFlourishOffer'][];
+    };
     PaginatedPendingStageAdvanceOfferList: {
       /** @example 123 */
       count: number;
@@ -20741,6 +20833,15 @@ export interface components {
       readonly anima_pool_bonus: number;
       /** @description Live corruption advisory; empty string when no stage-3+ corruption. */
       readonly advisory_text: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Player-facing view of a pending entry-flourish offer (#1140). Read-only. */
+    PendingEntryFlourishOffer: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet_id: number;
+      readonly scene_id: number | null;
       /** Format: date-time */
       readonly created_at: string;
     };
@@ -32689,6 +32790,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EffectType'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingEntryFlourishOfferList'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingEntryFlourishOffer'];
+        };
+      };
+    };
+  };
+  magic_entry_flourish_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EntryFlourishRespondRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EntryFlourishResult'];
         };
       };
     };
