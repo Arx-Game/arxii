@@ -1206,6 +1206,73 @@ def _consent_excluded_persona_ids(
     return excluded
 
 
+def _block_excludes(
+    block: object,
+    actor_player_id: int,
+    actor_persona_id: int | None,
+    persona_ids: set[int],
+) -> set[int]:
+    """Persona ids a single block removes from the actor's target picker (#1278).
+
+    Either direction. A persona-scoped block applies only while the actor presents the relevant
+    face; ``account_level`` covers all of the blocker's faces. Only the exact blocked/blocker
+    faces are excluded — never the rest of the player's roster (anti-derivation).
+    """
+    if block.owner_id == actor_player_id:  # actor is the blocker
+        if not block.account_level and block.blocker_persona_id not in (None, actor_persona_id):
+            return set()
+        if block.blocked_persona_id is None:
+            return set(persona_ids)
+        return {block.blocked_persona_id} if block.blocked_persona_id in persona_ids else set()
+    # actor is the blocked
+    if block.account_level:
+        return set(persona_ids)
+    if block.blocker_persona_id in persona_ids and block.blocked_persona_id in (
+        None,
+        actor_persona_id,
+    ):
+        return {block.blocker_persona_id}
+    return set()
+
+
+def _block_excluded_persona_ids(
+    actor_tenure: object | None,
+    actor_persona_id: int | None,
+    tenures: list,
+) -> set[int]:
+    """Persona ids in the scene the actor cannot target due to an active block (#1278).
+
+    Loads the actor's active blocks once, then matches each participant tenure's personas in
+    Python — no per-candidate query. Mutual; the per-block decision is ``_block_excludes``.
+    """
+    if actor_tenure is None:
+        return set()
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.scenes.models import Block  # noqa: PLC0415
+
+    actor_player_id = actor_tenure.player_data_id
+    blocks = list(
+        Block.objects.filter(
+            Q(pending_removal_at__isnull=True) | Q(pending_removal_at__gt=timezone.now())
+        ).filter(Q(owner_id=actor_player_id) | Q(blocked_player_id=actor_player_id))
+    )
+    if not blocks:
+        return set()
+
+    excluded: set[int] = set()
+    for tenure in tenures:
+        other_player_id = tenure.player_data_id
+        if other_player_id == actor_player_id:
+            continue
+        persona_ids = _tenure_persona_ids(tenure)
+        for block in blocks:
+            if {block.owner_id, block.blocked_player_id} == {actor_player_id, other_player_id}:
+                excluded |= _block_excludes(block, actor_player_id, actor_persona_id, persona_ids)
+    return excluded
+
+
 def _social_consent_exclusions(character: ObjectDB, category: object | None) -> frozenset[int]:
     """Return persona IDs of characters that don't consent to social actions from *character*.
 
@@ -1256,7 +1323,22 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
         return frozenset()
     tenure_ids = [tenure.pk for tenure in tenures]
 
-    return frozenset(_consent_excluded_persona_ids(tenures, tenure_ids, category, actor_tenure))
+    consent_excluded = _consent_excluded_persona_ids(tenures, tenure_ids, category, actor_tenure)
+
+    # #1278 — a coded block also removes the blocked persona from the actor's target picker.
+    actor_persona_id: int | None = None
+    if actor_sheet is not None:
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        active_id = actor_sheet.active_persona_id
+        if active_id is not None:
+            actor_persona_id = active_id
+        else:
+            primary = actor_sheet.personas.filter(persona_type=PersonaType.PRIMARY).first()
+            actor_persona_id = primary.pk if primary is not None else None
+    block_excluded = _block_excluded_persona_ids(actor_tenure, actor_persona_id, tenures)
+
+    return frozenset(consent_excluded | block_excluded)
 
 
 def _target_spec_for_action(

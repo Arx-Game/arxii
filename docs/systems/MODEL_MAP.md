@@ -285,6 +285,7 @@
   - approved_tenures <- roster.RosterTenure
   - blocks_made <- scenes.Block
   - blocks_received <- scenes.Block
+  - mutes_made <- scenes.Mute
   - media <- evennia_extensions.PlayerMedia
   - allow_list <- evennia_extensions.PlayerAllowList
   - allowed_by <- evennia_extensions.PlayerAllowList
@@ -3410,6 +3411,7 @@
   - discoveries_as_linked <- scenes.PersonaDiscovery
   - blocks_from <- scenes.Block
   - blocks_against <- scenes.Block
+  - muted_by <- scenes.Mute
   - interactions_written <- scenes.Interaction
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
@@ -3471,6 +3473,11 @@
   - blocked_player -> evennia_extensions.PlayerData [FK]
   - blocker_persona -> scenes.Persona [FK] (nullable)
   - blocked_persona -> scenes.Persona [FK] (nullable)
+
+### Mute
+**Foreign Keys:**
+  - owner -> evennia_extensions.PlayerData [FK]
+  - muted_persona -> scenes.Persona [FK]
 
 ### Interaction
 **Foreign Keys:**

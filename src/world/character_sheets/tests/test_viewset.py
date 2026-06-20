@@ -1886,9 +1886,10 @@ class TestCharacterSheetQueryCount(TestCase):
         21.    personas + thumbnails (via Prefetch select_related)
         22.    persona trait_descriptors (nested Prefetch — appearance overlay)
         23-25. Session management (savepoint, update, release)
+        26.    block gate — one indexed exists() check (#1278, get_object)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(25):
+        with self.assertNumQueries(26):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
