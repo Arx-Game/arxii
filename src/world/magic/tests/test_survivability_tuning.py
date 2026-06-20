@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -210,3 +212,16 @@ class SurvivabilitySaveBaselinesTests(TestCase):
             survivability_baseline(char, VitalBonusTarget.PERMANENT_WOUND_RESIST),
         )
         self.assertGreater(saves.death, 0)  # invested character benefits
+
+
+# =============================================================================
+# Coherence-amplifier tuning columns (#1252)
+# =============================================================================
+
+
+class CoherenceAmplifierDefaultsTests(TestCase):
+    def test_tuning_has_amplifier_defaults(self) -> None:
+        seed_thread_survivability_tuning()
+        row = get_thread_survivability_tuning(VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
+        self.assertEqual(row.coherence_scale, 50)
+        self.assertEqual(row.coherence_max_multiplier, Decimal("2.00"))
