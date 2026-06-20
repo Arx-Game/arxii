@@ -5,7 +5,11 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
+from world.classes.factories import CharacterClassLevelFactory, ClassStageHealthRateFactory
+from world.classes.models import PathStage
 from world.conditions.factories import UnconsciousConditionFactory
+from world.fatigue.tests import setup_stat
+from world.traits.constants import PrimaryStat
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
@@ -21,6 +25,7 @@ from world.vitals.services import (
     calculate_death_difficulty,
     calculate_knockout_difficulty,
     calculate_wound_difficulty,
+    derive_base_max_health,
     process_damage_consequences,
 )
 
@@ -264,3 +269,61 @@ class MaybeDangerRoundOnBleedOutTest(TestCase):
         )
         _maybe_danger_round_on_bleed_out(sheet)
         assert not SceneRound.objects.filter(room=self.room).exists()
+
+
+class DeriveBaseMaxHealthTest(TestCase):
+    """Tests for derive_base_max_health — class stage-rate + stamina + covenant terms."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.vitals.services import get_vitals_consequence_config
+
+        cls.character = CharacterFactory(db_key="HealthDeriveChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character, primary_persona=False)
+
+        # Primary class at level 4 so effective_combat_level returns 4.
+        cls.char_class = CharacterClassLevelFactory(
+            character=cls.character,
+            level=4,
+            is_primary=True,
+        ).character_class
+
+        # Stage health rates: PROSPECT (levels 1-2) = 10/lvl, POTENTIAL (levels 3-5) = 15/lvl
+        ClassStageHealthRateFactory(
+            character_class=cls.char_class,
+            stage=PathStage.PROSPECT,
+            health_per_level=10,
+        )
+        ClassStageHealthRateFactory(
+            character_class=cls.char_class,
+            stage=PathStage.POTENTIAL,
+            health_per_level=15,
+        )
+
+        # Stamina = 6 (internal value 6, display value 0.6 — get_trait_value returns internal)
+        setup_stat(cls.character, PrimaryStat.STAMINA, 6)
+
+        # Ensure config singleton exists with weight=3
+        cfg = get_vitals_consequence_config()
+        cfg.stamina_to_health_weight = 3
+        cfg.save(update_fields=["stamina_to_health_weight"])
+
+    def test_derive_sums_class_stamina_and_covenant(self) -> None:
+        """Sums class stage-rate term + stamina term + zero covenant term.
+
+        class_term: L1,L2 @PROSPECT=10 → 20; L3,L4 @POTENTIAL=15 → 30; total 50
+        stamina_term: 6 * 3 = 18
+        covenant_term: 0 (no engaged role)
+        expected: 68
+        """
+        self.assertEqual(derive_base_max_health(self.sheet), 68)
+
+    def test_derive_zero_class_term_without_primary_class(self) -> None:
+        """With no primary CharacterClassLevel, class_term is 0; only stamina counts."""
+        # Create a fresh character with no class levels and stamina=6
+        character = CharacterFactory(db_key="NoClassHealthChar")
+        sheet = CharacterSheetFactory(character=character, primary_persona=False)
+        setup_stat(character, PrimaryStat.STAMINA, 6)
+
+        # class_term = 0 (no primary class), stamina_term = 6*3 = 18, covenant_term = 0
+        self.assertEqual(derive_base_max_health(sheet), 18)
