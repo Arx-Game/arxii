@@ -1582,3 +1582,117 @@ class TestGradedAccrualOnAccept(TestCase):
 
         row.refresh_from_db()
         self.assertTrue(row.engagement_credited)
+
+
+class TestNPCAndAreaFallbackDifficulty(TestCase):
+    """Task 14 (X1): NPC/area difficulty-fallback regression.
+
+    Proves that when there is NO consenting player:
+    1. An NPC additional target auto-resolves at the authored difficulty_choice
+       default (NORMAL == 45) — never an initiator pick.
+    2. An area action resolves at the difficulty_choice passed to
+       create_and_resolve_area_action (HARD == 60), unaffected by consent rework.
+
+    Neither path calls respond_to_action_request / respond_to_action_target.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        # NPC additional target: PersonaFactory leaves db_account as None by default.
+        cls.npc_persona = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+        # The social_engagement category is seeded by a RunPython migration that the
+        # SQLite fast tier skips (#855); get_or_create so the fast tier gets the row.
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+    def setUp(self) -> None:
+        # Reset memoized category so tests don't share stale state across transactions.
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_npc_additional_target_auto_resolves_at_normal_difficulty(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """NPC additional target auto-resolves at NORMAL (45) — the authored default.
+
+        No defender call is needed or made; difficulty_choice defaults to NORMAL and
+        _auto_resolve_npc_targets accepts on the NPC's behalf with no override.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            action_key="intimidate",
+            action_template=self.action_template,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionTarget.objects.create(action_request=request, target_persona=self.npc_persona)
+        _auto_resolve_npc_targets(request)
+
+        npc_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.npc_persona
+        )
+        self.assertEqual(
+            npc_row.status,
+            ActionRequestStatus.RESOLVED,
+            "NPC target must be auto-resolved at dispatch without any defender call",
+        )
+        self.assertEqual(
+            npc_row.resolved_difficulty,
+            DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+            "NPC auto-resolve must use the authored NORMAL default (45), not an initiator pick",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_area_action_resolves_at_authored_difficulty_choice(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Area action (no target, no consent) resolves at the passed difficulty_choice.
+
+        Using HARD (60) to prove the authored-difficulty param is honoured and is
+        unaffected by the effort/difficulty consent-rework (there is no defender).
+        """
+        from world.scenes.action_services import create_and_resolve_area_action
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        create_and_resolve_area_action(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_template=self.action_template,
+            action_key="tell_tale",
+            difficulty_choice=DifficultyChoice.HARD,
+        )
+
+        from world.scenes.action_models import SceneActionRequest
+
+        area_request = SceneActionRequest.objects.filter(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key="tell_tale",
+        ).latest("pk")
+
+        self.assertEqual(area_request.status, ActionRequestStatus.RESOLVED)
+        self.assertEqual(
+            area_request.resolved_difficulty,
+            DIFFICULTY_VALUES[DifficultyChoice.HARD],
+            "Area action must resolve at the authored HARD difficulty (60), not NORMAL",
+        )
