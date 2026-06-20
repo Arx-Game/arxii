@@ -4,6 +4,9 @@ Generic seam: each app that wants to add post-resolution side-effects to
 SceneActionRequests registers a callable here.
 
 A resolver runs after respond_to_action_request() resolves an accepted SceneActionRequest.
+For multi-target casts the resolver is also invoked by respond_to_action_target()
+once per accepted additional target. Resolvers registered for multi-target actions
+must therefore keep cast-level (non-idempotent) side-effects target-scoped/idempotent.
 """
 
 from __future__ import annotations
