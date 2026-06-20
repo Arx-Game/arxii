@@ -121,20 +121,21 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         assert receivers.filter(persona=self.target).exists()
 
     def test_hard_difficulty_affects_check(self) -> None:
-        """Higher difficulty choice maps to higher target difficulty."""
+        """The defender's plausibility band at consent maps to a higher target difficulty."""
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
         )
         request.action_template = self.persuade_template
         request.save(update_fields=["action_template"])
 
+        # Difficulty is authored by the DEFENDER at consent, not the initiator at dispatch.
         result = respond_to_action_request(
             action_request=request,
             decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.HARD,
         )
 
         assert result is not None
