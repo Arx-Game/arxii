@@ -104,6 +104,15 @@ visible = my_instance.is_visible_to(viewer_tenure)
 #   Checks all tenures in the character's current scene.
 ```
 
+The picker sweep `_social_consent_exclusions` **batches** its preference / category-rule /
+whitelist lookups across the whole participant set — a bounded number of queries per sweep,
+independent of scene size (one tenure load, one preference load, and when a `category` is
+set one category-rule load plus, when the actor has a tenure, one whitelist load). It shares
+the per-tenure decision with `_tenure_blocks_actor` via `_decide_allowlist_block`; keep new
+work on this path off any per-participant query loop (#1248). A query-count regression test
+(`actions/tests/test_social_consent_enforcement.py::SocialConsentExclusionsQueryBudgetTest`)
+pins that the sweep stays constant in participant count.
+
 Enforcement happens in `_target_spec_for_action()`: for any social `ActionTemplate`,
 `_social_consent_exclusions` is called with the template's `consent_category` and the
 result is wired into `TargetFilters.excluded_persona_ids`.

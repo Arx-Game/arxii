@@ -1065,14 +1065,35 @@ def _tenure_persona_ids(tenure: object) -> set[int]:
         return set()
 
 
+def _decide_allowlist_block(
+    rule_mode: str | None, actor_tenure_present: bool, whitelisted: bool
+) -> bool:
+    """Allowlist-branch consent decision, given a pref exists with the master switch on.
+
+    Shared by the per-tenure :func:`_tenure_blocks_actor` and the batched
+    :func:`_social_consent_exclusions` so the rule/whitelist logic lives in one place.
+
+    - No rule row (``rule_mode is None``) or ``EVERYONE`` → not blocked (default allow).
+    - ``ALLOWLIST`` with no resolvable actor tenure → blocked.
+    - ``ALLOWLIST`` with an actor tenure → blocked unless that actor is whitelisted.
+    """
+    from world.consent.constants import ConsentMode  # noqa: PLC0415
+
+    if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
+        return False
+    if not actor_tenure_present:
+        return True  # allowlist mode, unknown actor → block
+    return not whitelisted
+
+
 def _tenure_blocks_actor(
     tenure: object, actor_tenure: object | None, category: object | None
 ) -> bool:
     """True if *tenure*'s consent excludes *actor_tenure* for *category*.
 
-    False when no preference row exists (default: allow).
+    False when no preference row exists (default: allow). Single-tenure path; the
+    scene-wide picker sweep batches the same decision in :func:`_social_consent_exclusions`.
     """
-    from world.consent.constants import ConsentMode  # noqa: PLC0415
     from world.consent.models import (  # noqa: PLC0415
         SocialConsentCategoryRule,
         SocialConsentPreference,
@@ -1091,14 +1112,98 @@ def _tenure_blocks_actor(
         return False  # uncategorized → master switch only
 
     rule = SocialConsentCategoryRule.objects.filter(preference=pref, category=category).first()
-    if rule is None or rule.mode == ConsentMode.EVERYONE:
-        return False
+    rule_mode = rule.mode if rule is not None else None
+    if rule_mode is None or actor_tenure is None:
+        return _decide_allowlist_block(rule_mode, actor_tenure is not None, False)
 
-    if actor_tenure is None:
-        return True  # allowlist mode, unknown actor → block
-    return not SocialConsentWhitelist.objects.filter(
+    whitelisted = SocialConsentWhitelist.objects.filter(
         owner_tenure=tenure, allowed_tenure=actor_tenure, category=category
     ).exists()
+    return _decide_allowlist_block(rule_mode, True, whitelisted)
+
+
+def _load_category_consent_data(
+    prefs_by_tenure: dict[int, object],
+    tenure_ids: list[int],
+    category: object | None,
+    actor_tenure: object | None,
+) -> tuple[dict[int, str], set[int]]:
+    """Batch-load the per-category consent data for a participant sweep.
+
+    Returns ``(rule_modes, whitelisted_owner_ids)`` where ``rule_modes`` maps a
+    preference id to its category rule mode and ``whitelisted_owner_ids`` is the set of
+    owner-tenure ids that have whitelisted *actor_tenure* for *category*. Both are empty
+    when *category* is ``None`` (uncategorized → master switch only). At most two queries.
+    """
+    from world.consent.models import (  # noqa: PLC0415
+        SocialConsentCategoryRule,
+        SocialConsentWhitelist,
+    )
+
+    rule_modes: dict[int, str] = {}
+    whitelisted_owner_ids: set[int] = set()
+    if category is None:
+        return rule_modes, whitelisted_owner_ids
+
+    pref_ids = [pref.pk for pref in prefs_by_tenure.values()]
+    if pref_ids:
+        # One query: this category's rules across all of those preferences.
+        rule_modes = {
+            rule.preference_id: rule.mode
+            for rule in SocialConsentCategoryRule.objects.filter(
+                preference_id__in=pref_ids, category=category
+            )
+        }
+    if actor_tenure is not None:
+        # One query: whitelist entries naming the actor for this category.
+        whitelisted_owner_ids = set(
+            SocialConsentWhitelist.objects.filter(
+                owner_tenure_id__in=tenure_ids,
+                allowed_tenure=actor_tenure,
+                category=category,
+            ).values_list("owner_tenure_id", flat=True)
+        )
+    return rule_modes, whitelisted_owner_ids
+
+
+def _consent_excluded_persona_ids(
+    tenures: list,
+    tenure_ids: list[int],
+    category: object | None,
+    actor_tenure: object | None,
+) -> set[int]:
+    """Persona ids of *tenures* whose consent blocks the actor, decided from batched data.
+
+    Mirrors the per-tenure decision in :func:`_tenure_blocks_actor` but loads the
+    preference / category-rule / whitelist data once for the whole set (one preference
+    query plus the loads in :func:`_load_category_consent_data`).
+    """
+    from world.consent.models import SocialConsentPreference  # noqa: PLC0415
+
+    # One query: preferences for those tenures, keyed by tenure id (missing → default allow).
+    prefs_by_tenure: dict[int, object] = {
+        pref.tenure_id: pref
+        for pref in SocialConsentPreference.objects.filter(tenure_id__in=tenure_ids)
+    }
+    rule_modes, whitelisted_owner_ids = _load_category_consent_data(
+        prefs_by_tenure, tenure_ids, category, actor_tenure
+    )
+
+    actor_present = actor_tenure is not None
+    excluded: set[int] = set()
+    for tenure in tenures:
+        pref = prefs_by_tenure.get(tenure.pk)
+        if pref is None:
+            continue  # no preference row → default allow
+        if not pref.allow_social_actions:
+            excluded.update(_tenure_persona_ids(tenure))
+            continue
+        if category is None:
+            continue  # uncategorized → master switch only
+        rule_mode = rule_modes.get(pref.pk)
+        if _decide_allowlist_block(rule_mode, actor_present, tenure.pk in whitelisted_owner_ids):
+            excluded.update(_tenure_persona_ids(tenure))
+    return excluded
 
 
 def _social_consent_exclusions(character: ObjectDB, category: object | None) -> frozenset[int]:
@@ -1106,7 +1211,13 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
 
     Checks SocialConsentPreference for all tenures participating in the character's
     current scene. Returns a frozenset of Persona PKs to exclude from the target picker.
-    *category* is threaded into :func:`_tenure_blocks_actor` for per-category enforcement.
+    *category* gates per-category enforcement (mirrors :func:`_tenure_blocks_actor`).
+
+    The preference / category-rule / whitelist lookups are **batched** across the whole
+    participant set: a bounded number of queries per sweep (one tenure load, one
+    preference load, and — when *category* is set — one category-rule load plus, when the
+    actor has a tenure, one whitelist load), rather than the per-tenure fan-out that would
+    scale with scene size (#1248).
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
     from world.scenes.models import Scene, SceneParticipation  # noqa: PLC0415
@@ -1130,23 +1241,22 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
         ).first()
 
     participations = list(SceneParticipation.objects.filter(scene=scene).select_related("account"))
-    excluded: set[int] = set()
+    account_ids = {p.account_id for p in participations if p.account_id is not None}
+    if not account_ids:
+        return frozenset()
 
-    for participation in participations:
-        account = participation.account
-        if account is None:
-            continue
-        tenures = list(
-            RosterTenure.objects.filter(
-                player_data__account=account,
-                end_date__isnull=True,
-            )
+    # One query: every active tenure for the participating accounts.
+    tenures = list(
+        RosterTenure.objects.filter(
+            player_data__account_id__in=account_ids,
+            end_date__isnull=True,
         )
-        for tenure in tenures:
-            if _tenure_blocks_actor(tenure, actor_tenure, category):
-                excluded.update(_tenure_persona_ids(tenure))
+    )
+    if not tenures:
+        return frozenset()
+    tenure_ids = [tenure.pk for tenure in tenures]
 
-    return frozenset(excluded)
+    return frozenset(_consent_excluded_persona_ids(tenures, tenure_ids, category, actor_tenure))
 
 
 def _target_spec_for_action(
