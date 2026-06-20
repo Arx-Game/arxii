@@ -156,18 +156,20 @@ describe('actionQueries', () => {
   });
 
   describe('respondToRequest', () => {
-    it('sends POST with decision=accept for accept: true', async () => {
+    it('sends POST with decision=accept and the chosen difficulty band', async () => {
       const responseData = { status: 'resolved' };
       vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(responseData));
 
       const result = await respondToRequest('42', 7, {
         accept: true,
-        difficulty: 'standard',
+        difficulty: 'easy',
       });
 
+      // #1275: the defender's plausibility band is now forwarded (it was
+      // previously accepted by this function but silently dropped).
       expect(apiFetch).toHaveBeenCalledWith('/api/action-requests/7/respond/', {
         method: 'POST',
-        body: JSON.stringify({ decision: 'accept' }),
+        body: JSON.stringify({ decision: 'accept', difficulty: 'easy' }),
       });
       expect(result).toEqual(responseData);
     });
