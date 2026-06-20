@@ -15,6 +15,7 @@ from world.classes.factories import (
 from world.covenants.constants import MentorBondAdjusted
 from world.covenants.factories import CovenantFactory, MentorBondFactory, seed_mentor_bond_defaults
 from world.covenants.mentorship import (
+    _adjusted_level_for_mentor,
     active_bond_adjusting,
     bond_adjusted_level,
     covenant_band,
@@ -344,3 +345,61 @@ class BondLifecycleHealthRecomputeTests(TestCase):
         after_dissolve = CharacterVitals.objects.get(character_sheet=sidekick_sheet).max_health
         # After dissolve, effective level drops back to raw 1 → health decreases.
         self.assertLess(after_dissolve, after_establish)
+
+
+class CrossCovenantMentorIsolationTests(TestCase):
+    """Mentor bonded as MENTOR in two covenants: each covenant aggregates its own sidekicks (#1264).
+
+    Covenant A: level=10, band [8, 12]. Sidekick S_A primary level=10.
+      expected = clamp(10 + 1, 8, 12) = 11
+    Covenant B: level=6, band [4, 8]. Sidekick S_B primary level=4.
+      expected = clamp(4 + 1, 4, 8) = 5
+    The two covenants must yield different results driven by their own sidekick.
+    """
+
+    def setUp(self):
+        seed_mentor_bond_defaults()
+        # Covenant A: level=10, band_width=2 → band [8, 12]
+        self.covenant_a = CovenantFactory(level=10)
+        # Covenant B: level=6, band_width=2 → band [4, 8]
+        self.covenant_b = CovenantFactory(level=6)
+
+    def test_mentor_aggregates_each_covenant_independently(self):
+        """Mentor M in covenant A (sidekick level 10) and covenant B (sidekick level 4).
+
+        _adjusted_level_for_mentor must draw only from each covenant's own sidekick bonds.
+        Covenant A expected: clamp(10 + 1, 8, 12) = 11.
+        Covenant B expected: clamp(4 + 1, 4, 8) = 5.
+        """
+        mentor_sheet = CharacterSheetFactory()
+        sidekick_a = CharacterSheetFactory()
+        sidekick_b = CharacterSheetFactory()
+
+        # Mentor is out-of-band in both covenants (level 20 is outside [8,12] and [4,8]).
+        _set_primary_level(mentor_sheet, 20)
+        # S_A primary level 10 — in-band for covenant A [8, 12], drives A's calculation.
+        _set_primary_level(sidekick_a, 10)
+        # S_B primary level 4 — in-band for covenant B [4, 8], drives B's calculation.
+        _set_primary_level(sidekick_b, 4)
+
+        bond_in_a = MentorBondFactory(
+            covenant=self.covenant_a,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_a,
+            adjusted_party=MentorBondAdjusted.MENTOR,
+        )
+        bond_in_b = MentorBondFactory(
+            covenant=self.covenant_b,
+            mentor_sheet=mentor_sheet,
+            sidekick_sheet=sidekick_b,
+            adjusted_party=MentorBondAdjusted.MENTOR,
+        )
+
+        # Covenant A: clamp(10 + 1, 8, 12) = 11
+        self.assertEqual(_adjusted_level_for_mentor(bond_in_a), 11)
+        # Covenant B: clamp(4 + 1, 4, 8) = 5
+        self.assertEqual(_adjusted_level_for_mentor(bond_in_b), 5)
+        # Sanity: the two covenants yield different results driven by their own sidekick.
+        result_a = _adjusted_level_for_mentor(bond_in_a)
+        result_b = _adjusted_level_for_mentor(bond_in_b)
+        self.assertGreater(result_a, result_b)

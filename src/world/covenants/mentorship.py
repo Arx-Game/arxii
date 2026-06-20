@@ -148,10 +148,7 @@ def _adjusted_level_for_mentor(bond: MentorBond) -> int:
         .values_list("sidekick_sheet__character_id", flat=True)
     )
 
-    if not sidekick_bonds:
-        # Fallback: no sidekick bonds found; can't compute top. Return band low.
-        lo, _ = covenant_band(bond.covenant)
-        return lo
+    assert sidekick_bonds, "unreachable: caller active_bond_adjusting guarantees >=1 bond"  # noqa: S101
 
     # Bulk fetch: one query — primary class level per sidekick character.
     # We need the primary level (is_primary=True) or highest level per character.
