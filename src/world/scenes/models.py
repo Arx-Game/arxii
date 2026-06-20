@@ -222,6 +222,18 @@ class Persona(SharedMemoryModel):
         help_text="Name with color formatting codes",
     )
     description = models.TextField(blank=True, help_text="Physical description text")
+    # #1270 — the bio this face presents. The PRIMARY persona points at the sheet's
+    # true_profile (the real bio); an established/cover persona may own its own Profile (a
+    # fabricated bio) so it does not out itself with an empty one. Null falls back to the
+    # sheet's true_profile.
+    profile = models.ForeignKey(
+        "character_sheets.Profile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="personas",
+        help_text="The bio this persona presents (#1270); null ⇒ the sheet's true_profile.",
+    )
     thumbnail_url = models.URLField(blank=True, max_length=500)
     thumbnail = models.ForeignKey(
         "evennia_extensions.PlayerMedia",
