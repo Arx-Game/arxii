@@ -2,7 +2,7 @@
 
 import django_filters
 
-from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 
 class SceneActionRequestFilter(django_filters.FilterSet):
@@ -14,3 +14,12 @@ class SceneActionRequestFilter(django_filters.FilterSet):
     class Meta:
         model = SceneActionRequest
         fields = ["scene", "status", "initiator", "target"]
+
+
+class SceneActionTargetFilter(django_filters.FilterSet):
+    scene = django_filters.NumberFilter(field_name="action_request__scene_id")
+    status = django_filters.CharFilter(field_name="status")
+
+    class Meta:
+        model = SceneActionTarget
+        fields = ["scene", "status"]
