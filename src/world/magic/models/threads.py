@@ -263,6 +263,39 @@ class ThreadPullEffect(SharedMemoryModel):
             raise ValidationError({"capability_grant": "Must be null for this effect_kind."})
 
 
+class ThreadSurvivabilityTuning(SharedMemoryModel):
+    """Per-target tuning for the universal thread survivability baseline (#1175).
+
+    One row per ``VitalBonusTarget``. The baseline a character receives for a
+    target is ``round(cap * S / (S + half_saturation))`` where
+    ``S = coefficient * Σ max(1, thread.level // 10)`` over owned threads — a
+    soft cap: every thread/level raises it with diminishing returns toward
+    ``cap``; a lone wolf (no threads, S=0) receives 0. Real columns, no JSON;
+    staff tune in admin. Seeded explicitly via
+    ``seed_thread_survivability_tuning`` — inert until rows exist.
+    """
+
+    vital_target = models.CharField(
+        max_length=32,
+        choices=VitalBonusTarget.choices,
+        unique=True,
+        help_text="Which survivability vector this row tunes.",
+    )
+    coefficient = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Linear multiplier on the breadth×depth investment score S (default 1).",
+    )
+    cap = models.PositiveSmallIntegerField(
+        help_text="Ceiling the baseline asymptotes toward at very high investment.",
+    )
+    half_saturation = models.PositiveSmallIntegerField(
+        help_text="Investment score S at which the baseline reaches half of cap.",
+    )
+
+    def __str__(self) -> str:
+        return f"ThreadSurvivabilityTuning({self.vital_target})"
+
+
 class Thread(SharedMemoryModel):
     """Per-character thread anchored to a trait/technique/room/relationship/facet/covenant-role.
 

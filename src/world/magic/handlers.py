@@ -215,9 +215,20 @@ class CharacterThreadHandler:
         return granted
 
     def invalidate(self) -> None:
-        """Clear the cached thread list. Called by mutation services."""
+        """Clear the cached thread list and any pull-side cache derived from threads.
+
+        Called by mutation services after threads are created, retired, or levelled.
+        Also clears ``combat_pulls._active`` if it has been loaded: thread mutations
+        can shift the effective level multiplier on pull-resolved effects, so the
+        active-pull snapshot must be refreshed alongside the thread list.
+        """
         self.__dict__.pop("_all", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
+        # Clear the pull-side cached_property only if the combat_pulls handler is
+        # already instantiated (avoids triggering an import cycle on cold access).
+        combat_pulls_handler = self.character.__dict__.get("combat_pulls")
+        if combat_pulls_handler is not None:
+            combat_pulls_handler.invalidate()
 
 
 class CharacterResonanceHandler:

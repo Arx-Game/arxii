@@ -364,7 +364,9 @@ def weave_thread(  # noqa: PLR0913
         "developed_points": 0,
     }
     kwargs[field_map[target_kind]] = target
-    return Thread.objects.create(**kwargs)
+    thread = Thread.objects.create(**kwargs)
+    recompute_max_health_with_threads(character_sheet)
+    return thread
 
 
 def update_thread_narrative(
@@ -610,6 +612,57 @@ def accept_thread_weaving_unlock(
 
 
 # =============================================================================
+# Phase 14 — Thread survivability tuning (#1175)
+# =============================================================================
+
+THREAD_SURVIVABILITY_DEFAULTS: dict[str, tuple[int, int, int]] = {
+    # vital_target: (coefficient, cap, half_saturation)
+    VitalBonusTarget.DAMAGE_TAKEN_REDUCTION: (1, 20, 8),
+    VitalBonusTarget.MAX_HEALTH: (1, 80, 10),
+}
+
+
+def seed_thread_survivability_tuning() -> None:
+    """Idempotently author the default ThreadSurvivabilityTuning rows (#1175)."""
+    from world.magic.models import ThreadSurvivabilityTuning  # noqa: PLC0415
+
+    for target, (coefficient, cap, half) in THREAD_SURVIVABILITY_DEFAULTS.items():
+        ThreadSurvivabilityTuning.objects.get_or_create(
+            vital_target=target,
+            defaults={"coefficient": coefficient, "cap": cap, "half_saturation": half},
+        )
+
+
+def get_thread_survivability_tuning(vital_target: str) -> "ThreadSurvivabilityTuning | None":  # noqa: F821, UP037
+    """Return the tuning row for a target, or None if unseeded (baseline 0)."""
+    from world.magic.models import ThreadSurvivabilityTuning  # noqa: PLC0415
+
+    return ThreadSurvivabilityTuning.objects.filter(vital_target=vital_target).first()
+
+
+def _soft_cap(score: int, cap: int, half_saturation: int) -> int:
+    """round(cap * score / (score + half)) with a 0 floor at score<=0."""
+    if score <= 0:
+        return 0
+    return round(cap * score / (score + half_saturation))
+
+
+def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
+    """Universal soft-capped survivability baseline from thread investment (#1175).
+
+    S = coefficient * Σ max(1, thread.level // 10) over owned (non-retired)
+    threads; baseline = round(cap * S / (S + half_saturation)). Returns 0 when
+    no tuning row exists for the target or the character owns no threads.
+    """
+    tuning = get_thread_survivability_tuning(vital_target)
+    if tuning is None:
+        return 0
+    threads = character.threads._all  # noqa: SLF001 — same handler used by passive_vital_bonuses
+    score = sum(max(1, t.level // 10) for t in threads)
+    return _soft_cap(tuning.coefficient * score, tuning.cap, tuning.half_saturation)
+
+
+# =============================================================================
 # Phase 13 — VITAL_BONUS routing (Spec A §3.8, §5.5, §5.8, §7.4)
 # =============================================================================
 
@@ -638,7 +691,8 @@ def recompute_max_health_with_threads(character_sheet: CharacterSheet) -> int:
     character = character_sheet.character
     passive = character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
     pulled = character.combat_pulls.active_pull_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
-    return recompute_max_health(character_sheet, thread_addend=passive + pulled)
+    baseline = survivability_baseline(character, VitalBonusTarget.MAX_HEALTH)
+    return recompute_max_health(character_sheet, thread_addend=passive + pulled + baseline)
 
 
 def apply_damage_reduction_from_threads(
@@ -664,4 +718,5 @@ def apply_damage_reduction_from_threads(
     pulled = character.combat_pulls.active_pull_vital_bonuses(
         VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
     )
-    return max(0, incoming_damage - (passive + pulled))
+    baseline = survivability_baseline(character, VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
+    return max(0, incoming_damage - (passive + pulled + baseline))

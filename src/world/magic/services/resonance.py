@@ -302,6 +302,8 @@ def spend_resonance_for_imbuing(  # noqa: C901
     cr.save(update_fields=["balance"])
     thread.save(update_fields=["level", "developed_points"])
 
+    recompute_max_health_with_threads(character_sheet)
+
     return ThreadImbueResult(
         resonance_spent=amount,
         developed_points_added=amount,

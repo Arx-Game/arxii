@@ -308,6 +308,42 @@ runtime uses existing infrastructure: `MAX_HEALTH` is folded into
 is applied by a subscriber to combat's existing `DamagePreApply.modify_amount`
 hook (see §5.8).
 
+**Thread survivability baseline — universal passive contribution (#1175):**
+In addition to authored `VITAL_BONUS` `ThreadPullEffect` rows (which are per-resonance
+pull effects), every character receives a **universal passive survivability bonus** from
+their aggregate thread investment. This is separate from authored pull effects and fires
+unconditionally regardless of whether a pull is active.
+
+The bonus for each `VitalBonusTarget` is:
+
+```
+S = coefficient × Σ max(1, thread.level // 10)   # over all owned threads
+baseline = round(cap × S / (S + half_saturation))
+```
+
+`S` is the breadth × depth investment score — a character with many threads or
+high-level threads has a higher `S`. The formula is a soft cap: every additional
+thread or level increases the bonus with diminishing returns toward `cap`; a character
+with no threads (`S=0`) receives 0. The parameters are authored per
+`VitalBonusTarget` via `ThreadSurvivabilityTuning` (one row per target, staff-tunable
+in admin, seeded via `seed_thread_survivability_tuning()`):
+
+| Target                   | coeff | cap | half_saturation | S=3 example |
+|--------------------------|-------|-----|-----------------|-------------|
+| `DAMAGE_TAKEN_REDUCTION` | 1     | 20  | 8               | ≈ 5 DR      |
+| `MAX_HEALTH`             | 1     | 80  | 10              | ≈ +18 HP    |
+
+The baseline is injected at two existing call sites:
+- `recompute_max_health_with_threads(character_sheet) -> int` — MAX_HEALTH baseline
+  added on top of the character's base max-health. Called at weave and imbue time so
+  the bonus updates whenever thread investment changes.
+- `apply_damage_reduction_from_threads(character, damage_amount) -> int` — DR baseline
+  subtracted before returning adjusted damage. Called by the `DamagePreApply` subscriber.
+
+The invariant from #566 is unaffected: encounter difficulty scales on party size + average
+level only. Thread-rich parties are simply stronger; they are not matched by tougher
+enemies.
+
 **Field-name note:** `target_kind` is used uniformly across `Thread`,
 `ThreadPullEffect`, and `ThreadWeavingUnlock`. Avoid the synonym `target_type` to
 keep query/serializer code consistent.

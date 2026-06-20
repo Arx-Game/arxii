@@ -48,6 +48,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadSurvivabilityTuning,
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
@@ -497,6 +498,14 @@ class ThreadPullEffectAdmin(admin.ModelAdmin):
     search_fields = ["resonance__name", "narrative_snippet"]
     autocomplete_fields = ["resonance", "capability_grant"]
     list_select_related = ["resonance", "capability_grant"]
+
+
+@admin.register(ThreadSurvivabilityTuning)
+class ThreadSurvivabilityTuningAdmin(admin.ModelAdmin):
+    """Per-target tuning for the universal thread survivability baseline (#1175)."""
+
+    list_display = ("vital_target", "coefficient", "cap", "half_saturation")
+    list_editable = ("coefficient", "cap", "half_saturation")
 
 
 @admin.register(ImbuingProseTemplate)

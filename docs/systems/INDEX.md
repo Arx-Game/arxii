@@ -31,7 +31,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
     `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
-    `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs)
+    `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
+    `ThreadSurvivabilityTuning` (per-`VitalBonusTarget` tuning row for the
+    universal thread survivability baseline — `vital_target` unique choice,
+    `coefficient`, `cap`, `half_saturation`; one row each for DR and MAX_HEALTH;
+    seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
   - **Dramatic moment tagging (#545 / #1139):**
@@ -98,6 +102,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Strain stage for the active resonance; used in sineating offer payloads)
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
     `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+  - Thread survivability baseline (#1175): `survivability_baseline(character, vital_target) -> int`
+    (soft-capped formula `round(cap × S / (S + half_saturation))` keyed by
+    `ThreadSurvivabilityTuning`; injected into DR and MAX_HEALTH paths above),
+    `get_thread_survivability_tuning(vital_target) -> ThreadSurvivabilityTuning | None`,
+    `seed_thread_survivability_tuning()` (idempotent; called by dev seed)
   - Resonance-environment (2026-05-16): `magical_profile(character_sheet) -> CharacterAura | None`
     (derived magic-capability gate; None = Quiescent);
     `resonance_environment_for_cast(*, caster_sheet, room_profile, technique)` (OPPOSED

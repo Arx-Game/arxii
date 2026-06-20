@@ -2277,7 +2277,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
        CorruptionConfig, AudereThreshold, IntensityTier × 3, MishapPoolTier
     2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement
     3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
-       canonical Tideborne resonance
+       canonical Tideborne resonance; then ``seed_thread_survivability_tuning()`` —
+       ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)
     4. ``seed_cantrip_starter_catalog()`` — 5 TechniqueStyle, 6 EffectType,
        25 Cantrip, 5 PROSPECT Path rows
     5. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
@@ -2303,10 +2304,12 @@ def seed_magic_dev() -> MagicDevSeedResult:
         seed_penetration_contest,
     )
     from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
+    from world.magic.services import seed_thread_survivability_tuning  # noqa: PLC0415
 
     config = seed_magic_config()
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
+    seed_thread_survivability_tuning()
     cantrip_catalog = seed_cantrip_starter_catalog()
     author_reference_corruption_content()
     magic_content = MagicContent.create_all()

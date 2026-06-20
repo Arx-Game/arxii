@@ -157,6 +157,7 @@ from world.magic.models.threads import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadSurvivabilityTuning,
     ThreadXPLockedLevel,
 )
 from world.magic.models.weaving import (
@@ -302,6 +303,7 @@ __all__ = [
     "ThreadLevelUnlock",
     "ThreadPullCost",
     "ThreadPullEffect",
+    "ThreadSurvivabilityTuning",
     "ThreadWeavingTeachingOffer",
     "ThreadWeavingUnlock",
     "ThreadXPLockedLevel",
