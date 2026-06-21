@@ -980,4 +980,338 @@ describe('ActionPanel', () => {
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Insufficient anima to cast Ember Touch.');
   });
+
+  // -------------------------------------------------------------------------
+  // target_spec-driven cast picker (#1321)
+  // -------------------------------------------------------------------------
+
+  it('AREA technique shows area-cast affordance, no picker, cast dispatches without target', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 20,
+          name: 'Wave of Flame',
+          anima_cost: 5,
+          tier: 2,
+          intensity: 3,
+          control: 1,
+          hostile: false,
+          target_type: 'area',
+          reach: 'any',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'area',
+            filters: { in_same_scene: true, exclude_self: false, must_be_conscious: false },
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Wave of Flame')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Wave of Flame'));
+
+    // Should show area affordance text, not a picker button
+    await waitFor(() => {
+      expect(screen.getByText(/area cast/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/choose persona/i)).not.toBeInTheDocument();
+
+    // Cast button enabled — no target needed
+    const castBtn = screen.getByRole('button', { name: /cast wave of flame/i });
+    expect(castBtn).not.toBeDisabled();
+
+    await user.click(castBtn);
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          initiator_persona: 77,
+          technique_id: 20,
+          target_persona: null,
+        })
+      );
+    });
+    // Must NOT send target_persona_ids for area
+    const params = vi.mocked(castTechnique).mock.calls[0][1];
+    expect(params).not.toHaveProperty('target_persona_ids');
+  });
+
+  it('FILTERED_GROUP technique shows multi-select picker + disables cast until targets chosen', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 21,
+          name: 'Group Shield',
+          anima_cost: 4,
+          tier: 2,
+          intensity: 2,
+          control: 2,
+          hostile: false,
+          target_type: 'filtered_group',
+          reach: 'any',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'filtered_group',
+            filters: { in_same_scene: true, exclude_self: false, must_be_conscious: false },
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Group Shield')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Group Shield'));
+
+    // Should show "Choose targets…" button (not "Self / Room" or "Choose persona…")
+    await waitFor(() => {
+      expect(screen.getByText(/choose targets/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/self \/ room/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/choose persona/i)).not.toBeInTheDocument();
+
+    // Cast button disabled until targets selected
+    const castBtn = screen.getByRole('button', { name: /cast group shield/i });
+    expect(castBtn).toBeDisabled();
+
+    // Open the multi-select picker — TargetPicker renders in multi mode (checkboxes)
+    await user.click(screen.getByText(/choose targets/i));
+
+    // TargetPicker in multi mode — scene has Alice (100) and Bob (101)
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    // Verify checkboxes (multi-select) not buttons (single-select)
+    expect(screen.getByRole('checkbox', { name: /alice/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /bob/i })).toBeInTheDocument();
+    // Verify Confirm button exists (multi-select shows Confirm)
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument();
+  });
+
+  it('FILTERED_GROUP picker confirm dispatches target_persona_ids on re-opened panel', async () => {
+    // Note: In JSDOM + Radix, the main Popover closes when TargetPicker opens (focus
+    // management). After picker confirms and castPickingTarget resets, the panel must be
+    // re-opened to access the Cast button. This test covers the full round-trip.
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 21,
+          name: 'Group Shield',
+          anima_cost: 4,
+          tier: 2,
+          intensity: 2,
+          control: 2,
+          hostile: false,
+          target_type: 'filtered_group',
+          reach: 'any',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'filtered_group',
+            filters: { in_same_scene: true, exclude_self: false, must_be_conscious: false },
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    // Open panel → Cast → select technique → open picker → select targets → confirm
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Cast'));
+    await waitFor(() => expect(screen.getByText('Group Shield')).toBeInTheDocument());
+    await user.click(screen.getByText('Group Shield'));
+    await waitFor(() => expect(screen.getByText(/choose targets/i)).toBeInTheDocument());
+    await user.click(screen.getByText(/choose targets/i));
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox', { name: /alice/i }));
+    await user.click(screen.getByRole('checkbox', { name: /bob/i }));
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    // Picker confirmed → castPickingTarget=false, castTargetPersonaIds=[100,101].
+    // In JSDOM + Radix, the main Popover closes when the picker opens; re-open it to
+    // reach the Cast button (component state is preserved across open/close).
+    await waitFor(() => {
+      expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    });
+    // Re-open the panel by clicking the trigger button
+    const trigger = screen.getByRole('button', { name: '' });
+    await user.click(trigger);
+
+    // Cast section and technique selection are preserved — Cast button is now enabled
+    // (castTargetPersonaIds=[100,101] is set)
+    await waitFor(() => {
+      const castBtn = screen.getByRole('button', { name: /cast group shield/i });
+      expect(castBtn).not.toBeDisabled();
+    });
+
+    await user.click(screen.getByRole('button', { name: /cast group shield/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          initiator_persona: 77,
+          technique_id: 21,
+          target_persona_ids: [100, 101],
+        })
+      );
+    });
+    // Must NOT send target_persona for filtered_group
+    const params = vi.mocked(castTechnique).mock.calls[0][1];
+    expect(params).not.toHaveProperty('target_persona');
+  });
+
+  it('SINGLE technique with target_spec shows Self/Room + single persona picker UI', async () => {
+    // Tests the UI affordance for SINGLE cardinality (Self/Room + Choose persona buttons).
+    // The full round-trip (pick → cast) requires two interactions with the Popover because
+    // JSDOM + Radix focus management closes the main Popover when TargetPicker opens;
+    // the dispatch payload for SINGLE (target_persona: id) is verified via the
+    // 'selecting a technique then committing calls castTechnique' test family.
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 22,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+          target_type: 'single',
+          reach: 'any',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'single',
+            filters: { in_same_scene: true, exclude_self: false, must_be_conscious: false },
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Ember Touch')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Ember Touch'));
+
+    // Should show Self/Room + Choose persona (SINGLE cardinality)
+    await waitFor(() => {
+      expect(screen.getByText(/self \/ room/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/choose persona/i)).toBeInTheDocument();
+    // Must NOT show area affordance or filtered_group UI
+    expect(screen.queryByText(/choose targets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/area cast/i)).not.toBeInTheDocument();
+
+    // Open single-select picker — candidates show as clickable rows, not checkboxes
+    await user.click(screen.getByText(/choose persona/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    // Single-select: no Confirm button and no checkboxes
+    expect(screen.queryByRole('button', { name: /confirm/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('SELF technique with target_spec shows no picker, dispatches without target', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 23,
+          name: 'Inner Flame',
+          anima_cost: 2,
+          tier: 1,
+          intensity: 1,
+          control: 2,
+          hostile: false,
+          target_type: 'self',
+          reach: 'any',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'self',
+            filters: { in_same_scene: false, exclude_self: false, must_be_conscious: false },
+          },
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    const user = userEvent.setup();
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByText('Cast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Inner Flame')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Inner Flame'));
+
+    // Should show self (auto) affordance
+    await waitFor(() => {
+      expect(screen.getByText(/targets: self \(auto\)/i)).toBeInTheDocument();
+    });
+    // No picker buttons
+    expect(screen.queryByText(/choose persona/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/self \/ room/i)).not.toBeInTheDocument();
+
+    // Cast button enabled immediately
+    const castBtn = screen.getByRole('button', { name: /cast inner flame/i });
+    expect(castBtn).not.toBeDisabled();
+
+    await user.click(castBtn);
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          initiator_persona: 77,
+          technique_id: 23,
+          target_persona: null,
+        })
+      );
+    });
+  });
 });

@@ -235,6 +235,8 @@ export interface CastRequestBody {
   initiator_persona: number;
   technique_id: number;
   target_persona?: number | null;
+  /** For FILTERED_GROUP casts: the subset of personas selected by the player. */
+  target_persona_ids?: number[];
   strain_commitment?: number;
   pull?: CastPullRequestBody;
 }
