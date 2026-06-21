@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -294,6 +294,10 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         return Response(response_data)
 
+    @extend_schema(
+        request=TechniqueCastCreateSerializer,
+        responses={201: SceneActionRequestSerializer},
+    )
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
     def cast(self, request: Request) -> Response:  # noqa: C901, PLR0911
         """Submit a standalone technique cast.
@@ -406,7 +410,24 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=[HTTPMethod.GET], url_path="castable-techniques")
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "initiator_persona",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Persona id (owned by the requester) to list castable techniques for.",
+            ),
+        ],
+        responses={200: CastableTechniqueSerializer(many=True)},
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="castable-techniques",
+        pagination_class=None,
+    )
     def castable_techniques(self, request: Request) -> Response:
         """List techniques the given persona can cast standalone.
 

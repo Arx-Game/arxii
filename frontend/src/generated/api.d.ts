@@ -189,7 +189,7 @@ export interface paths {
      *     Requires ?initiator_persona=<id> query param. Returns only techniques
      *     with an action_template (castable standalone) known by that character.
      */
-    get: operations['action_requests_castable_techniques_retrieve'];
+    get: operations['action_requests_castable_techniques_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -14009,6 +14009,38 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
+    /**
+     * @description Nested pull declaration on the cast endpoint (#854).
+     *
+     *     Field shapes mirror ThreadPullCommitRequestSerializer
+     *     (world/magic/serializers.py).
+     */
+    CastPullRequestRequest: {
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+    };
+    /** @description Serializes a Technique for the castable-techniques list endpoint. */
+    CastableTechnique: {
+      id: number;
+      name: string;
+      anima_cost: number;
+      tier: number;
+      intensity: number;
+      control: number;
+      readonly hostile: boolean;
+      target_type: string;
+      reach: string;
+      /**
+       * @description Derive and serialize the TargetSpec for this technique.
+       *
+       *     Returns None for SELF-targeting techniques (no picker needed). For other
+       *     cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
+       */
+      readonly target_spec: {
+        [key: string]: unknown;
+      } | null;
+    };
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -21344,15 +21376,6 @@ export interface components {
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
       /**
-       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
-       *
-       *     * `self` - Self
-       *     * `single` - Single Target
-       *     * `area` - Area
-       *     * `filtered_group` - Filtered Group
-       */
-      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
-      /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
        *     * `same` - Same position
@@ -22957,41 +22980,6 @@ export interface components {
       delivery: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       delivery_receiver_ids?: number[];
     };
-    SceneActionRequestRequest: {
-      /** @description The scene where this action takes place */
-      scene: number;
-      /** @description The persona performing the action */
-      initiator_persona: number;
-      /** @description The persona being targeted. Null for area actions (to the room) or standalone technique casts. */
-      target_persona?: number | null;
-      /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
-      action_key?: string;
-      /** @description Data-driven action template if applicable */
-      action_template?: number | null;
-      /** @description Technique used for this action, if any */
-      technique?: number | null;
-      /**
-       * @description Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
-       *
-       *     * `pose` - Pose (whole room)
-       *     * `whisper` - Whisper (target only)
-       *     * `table_talk` - Table talk (your place)
-       *     * `mutter` - Mutter (partial echo)
-       */
-      delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
-      /**
-       * @description Plausibility band chosen by the defender at consent.
-       *
-       *     * `trivial` - Trivial
-       *     * `easy` - Easy
-       *     * `normal` - Normal
-       *     * `hard` - Hard
-       *     * `daunting` - Daunting
-       */
-      difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
-      /** @description Extra anima the player commits beyond base cost. Bounded by available anima at resolution time. */
-      strain_commitment?: number;
-    };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
       readonly action_target_id: number;
@@ -24252,7 +24240,7 @@ export interface components {
        *     * `area` - Area
        *     * `filtered_group` - Filtered Group
        */
-      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      readonly target_type: components['schemas']['TechniqueTargetTypeEnum'];
       /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
@@ -24262,15 +24250,20 @@ export interface components {
        */
       reach?: components['schemas']['ReachEnum'];
       readonly tier: number;
-      /**
-       * @description Derive and serialize the TargetSpec for this technique.
-       *
-       *     Returns None for SELF-targeting techniques (no picker needed). For other
-       *     cardinalities, returns the same shape as TargetSpecSerializer.
-       */
-      readonly target_spec: {
-        [key: string]: unknown;
-      } | null;
+      readonly target_spec: components['schemas']['TargetSpec'];
+    };
+    /** @description Validate input for the standalone technique cast endpoint. */
+    TechniqueCastCreateRequest: {
+      scene: number;
+      initiator_persona: number;
+      technique_id: number;
+      target_persona?: number | null;
+      target_persona_ids?: number[] | null;
+      /** @default 0 */
+      strain_commitment: number;
+      fury_commitment_id?: number | null;
+      fury_anchor_id?: number | null;
+      pull?: components['schemas']['CastPullRequestRequest'] | null;
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
@@ -24295,15 +24288,6 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
-      /**
-       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
-       *
-       *     * `self` - Self
-       *     * `single` - Single Target
-       *     * `area` - Area
-       *     * `filtered_group` - Filtered Group
-       */
-      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
       /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
@@ -25309,11 +25293,11 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneActionRequestRequest'];
+        'application/json': components['schemas']['TechniqueCastCreateRequest'];
       };
     };
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -25323,9 +25307,16 @@ export interface operations {
       };
     };
   };
-  action_requests_castable_techniques_retrieve: {
+  action_requests_castable_techniques_list: {
     parameters: {
-      query?: never;
+      query: {
+        initiator?: number;
+        /** @description Persona id (owned by the requester) to list castable techniques for. */
+        initiator_persona: number;
+        scene?: number;
+        status?: string;
+        target?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -25337,7 +25328,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SceneActionRequest'];
+          'application/json': components['schemas']['CastableTechnique'][];
         };
       };
     };

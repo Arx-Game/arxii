@@ -129,7 +129,7 @@ world/combat/
 │   ├── _build_affected_targets    ← NEW helper: target_kind → ObjectDB list
 │   └── _resolve_pc_action         ← updated: removes "base_power None" no-op
 ├── types.py
-│   ├── AppliedConditionResult     ← NEW
+│   ├── AppliedConditionResult     ← NEW (later relocated to conditions/types.py, #1359)
 │   └── CombatTechniqueResolution  ← extend with applied_conditions list
 ├── typeclasses/
 │   └── combat_npc.py              ← NEW: CombatNPC typeclass
@@ -662,11 +662,11 @@ class CombatTechniqueResolver:
 ### Types
 
 ```python
-# world/combat/types.py
+# world/conditions/types.py  (relocated from combat/types.py — #1359)
 
 @dataclass(frozen=True)
 class AppliedConditionResult:
-    """Per-condition apply outcome from CombatTechniqueResolver._apply_conditions."""
+    """Per-condition apply outcome from a technique cast (combat or standalone)."""
     target: ObjectDB
     condition: ConditionTemplate
     severity_applied: int

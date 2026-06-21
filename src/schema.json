@@ -240,12 +240,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneActionRequestRequest'
+              $ref: '#/components/schemas/TechniqueCastCreateRequest'
         required: true
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
@@ -253,12 +253,36 @@ paths:
           description: ''
   /api/action-requests/castable-techniques/:
     get:
-      operationId: action_requests_castable_techniques_retrieve
+      operationId: action_requests_castable_techniques_list
       description: |-
         List techniques the given persona can cast standalone.
 
         Requires ?initiator_persona=<id> query param. Returns only techniques
         with an action_template (castable standalone) known by that character.
+      parameters:
+      - in: query
+        name: initiator
+        schema:
+          type: number
+      - in: query
+        name: initiator_persona
+        schema:
+          type: integer
+        description: Persona id (owned by the requester) to list castable techniques
+          for.
+        required: true
+      - in: query
+        name: scene
+        schema:
+          type: number
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: target
+        schema:
+          type: number
       tags:
       - action-requests
       security:
@@ -268,7 +292,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SceneActionRequest'
+                type: array
+                items:
+                  $ref: '#/components/schemas/CastableTechnique'
           description: ''
   /api/action-targets/:
     get:
@@ -24013,6 +24039,73 @@ components:
       - description
       - id
       - name
+    CastPullRequestRequest:
+      type: object
+      description: |-
+        Nested pull declaration on the cast endpoint (#854).
+
+        Field shapes mirror ThreadPullCommitRequestSerializer
+        (world/magic/serializers.py).
+      properties:
+        resonance_id:
+          type: integer
+        tier:
+          type: integer
+          maximum: 3
+          minimum: 1
+        thread_ids:
+          type: array
+          items:
+            type: integer
+          maxItems: 20
+      required:
+      - resonance_id
+      - thread_ids
+      - tier
+    CastableTechnique:
+      type: object
+      description: Serializes a Technique for the castable-techniques list endpoint.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        anima_cost:
+          type: integer
+        tier:
+          type: integer
+        intensity:
+          type: integer
+        control:
+          type: integer
+        hostile:
+          type: boolean
+          readOnly: true
+        target_type:
+          type: string
+        reach:
+          type: string
+        target_spec:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Derive and serialize the TargetSpec for this technique.
+
+            Returns None for SELF-targeting techniques (no picker needed). For other
+            cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
+          readOnly: true
+      required:
+      - anima_cost
+      - control
+      - hostile
+      - id
+      - intensity
+      - name
+      - reach
+      - target_spec
+      - target_type
+      - tier
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -38221,16 +38314,6 @@ components:
           type: integer
           nullable: true
           description: The cantrip template this technique was created from, if any.
-        target_type:
-          allOf:
-          - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
-          description: |-
-            Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
-
-            * `self` - Self
-            * `single` - Single Target
-            * `area` - Area
-            * `filtered_group` - Filtered Group
         reach:
           allOf:
           - $ref: '#/components/schemas/ReachEnum'
@@ -41557,63 +41640,6 @@ components:
       - action_key
       - initiator_persona
       - scene
-    SceneActionRequestRequest:
-      type: object
-      properties:
-        scene:
-          type: integer
-          description: The scene where this action takes place
-        initiator_persona:
-          type: integer
-          description: The persona performing the action
-        target_persona:
-          type: integer
-          nullable: true
-          description: The persona being targeted. Null for area actions (to the room)
-            or standalone technique casts.
-        action_key:
-          type: string
-          description: Key identifying the action type (e.g., 'intimidate', 'persuade')
-          maxLength: 100
-        action_template:
-          type: integer
-          nullable: true
-          description: Data-driven action template if applicable
-        technique:
-          type: integer
-          nullable: true
-          description: Technique used for this action, if any
-        delivery:
-          description: |-
-            Resolved audience routing for the result echo (#903). Blank = resolve from the template's default_delivery at resolution time.
-
-            * `pose` - Pose (whole room)
-            * `whisper` - Whisper (target only)
-            * `table_talk` - Table talk (your place)
-            * `mutter` - Mutter (partial echo)
-          oneOf:
-          - $ref: '#/components/schemas/DeliveryEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-        difficulty_choice:
-          allOf:
-          - $ref: '#/components/schemas/DifficultyChoiceEnum'
-          description: |-
-            Plausibility band chosen by the defender at consent.
-
-            * `trivial` - Trivial
-            * `easy` - Easy
-            * `normal` - Normal
-            * `hard` - Hard
-            * `daunting` - Daunting
-        strain_commitment:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: Extra anima the player commits beyond base cost. Bounded by
-            available anima at resolution time.
-      required:
-      - initiator_persona
-      - scene
     SceneActionTarget:
       type: object
       description: Flat read payload for a pending additional-target consent row (#1177).
@@ -44211,6 +44237,7 @@ components:
         target_type:
           allOf:
           - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
+          readOnly: true
           description: |-
             Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
 
@@ -44231,14 +44258,8 @@ components:
           type: integer
           readOnly: true
         target_spec:
-          type: object
-          additionalProperties: {}
-          nullable: true
-          description: |-
-            Derive and serialize the TargetSpec for this technique.
-
-            Returns None for SELF-targeting techniques (no picker needed). For other
-            cardinalities, returns the same shape as TargetSpecSerializer.
+          allOf:
+          - $ref: '#/components/schemas/TargetSpec'
           readOnly: true
       required:
       - anima_cost
@@ -44248,7 +44269,44 @@ components:
       - name
       - style
       - target_spec
+      - target_type
       - tier
+    TechniqueCastCreateRequest:
+      type: object
+      description: Validate input for the standalone technique cast endpoint.
+      properties:
+        scene:
+          type: integer
+        initiator_persona:
+          type: integer
+        technique_id:
+          type: integer
+        target_persona:
+          type: integer
+          nullable: true
+        target_persona_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        strain_commitment:
+          type: integer
+          minimum: 0
+          default: 0
+        fury_commitment_id:
+          type: integer
+          nullable: true
+        fury_anchor_id:
+          type: integer
+          nullable: true
+        pull:
+          allOf:
+          - $ref: '#/components/schemas/CastPullRequestRequest'
+          nullable: true
+      required:
+      - initiator_persona
+      - scene
+      - technique_id
     TechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -44300,16 +44358,6 @@ components:
           type: integer
           nullable: true
           description: The cantrip template this technique was created from, if any.
-        target_type:
-          allOf:
-          - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
-          description: |-
-            Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
-
-            * `self` - Self
-            * `single` - Single Target
-            * `area` - Area
-            * `filtered_group` - Filtered Group
         reach:
           allOf:
           - $ref: '#/components/schemas/ReachEnum'

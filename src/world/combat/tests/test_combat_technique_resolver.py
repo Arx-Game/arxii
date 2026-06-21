@@ -325,8 +325,7 @@ class ApplyConditionsTests(TestCase):
 
     def test_applies_enemy_targeted_condition(self) -> None:
         """A ENEMY-kind row lands on the focused opponent's ObjectDB."""
-        from world.combat.types import AppliedConditionResult
-        from world.conditions.types import ApplyConditionResult
+        from world.conditions.types import AppliedConditionResult, ApplyConditionResult
 
         self._make_applied_condition_row(
             condition=self.cond_a,

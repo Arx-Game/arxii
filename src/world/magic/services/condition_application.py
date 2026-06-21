@@ -11,11 +11,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.conditions.services import bulk_apply_conditions
+from world.conditions.types import AppliedConditionResult, BulkConditionApplication
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.combat.types import AppliedConditionResult
     from world.magic.models.techniques import Technique
 
 
@@ -55,9 +55,6 @@ def apply_technique_conditions(
         submitted, in the same order.  Empty list when no rows pass the SL gate
         or all resolved target lists are empty.
     """
-    from world.combat.types import AppliedConditionResult  # noqa: PLC0415
-    from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
-
     rows = list(technique.condition_applications.select_related("condition").all())
     if not rows:
         return []

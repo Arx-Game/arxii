@@ -46,7 +46,8 @@ in `world/scenes/cast_services.py:request_technique_cast` uses a three-way split
 `apply_technique_conditions` (`world/magic/services/condition_application.py`) — extracted from
 combat's `_apply_conditions`. Standalone casts now apply technique-authored conditions to resolved
 targets via `_resolve_and_pose_cast`. Both combat and standalone paths call the same function;
-`AppliedConditionResult` (return type) still lives in `world/combat/types.py` as a known follow-up.
+`AppliedConditionResult` (return type) lives in `world/conditions/types.py` — the neutral condition
+layer both combat and magic import directly (no deferred import).
 
 ---
 

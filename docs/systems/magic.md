@@ -179,7 +179,8 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 — extracted from combat's `_apply_conditions`; used by **both** combat and standalone
 cast paths. Callers build `targets_by_kind` before calling; the service iterates
 `TechniqueAppliedCondition` rows and batches them via `bulk_apply_conditions`.
-(`AppliedConditionResult` still lives in `world/combat/types.py` — a known follow-up.)
+(`AppliedConditionResult` lives in `world/conditions/types.py` — the neutral condition
+layer both combat and magic depend on; no deferred import needed.)
 
 **AoE — combat** (`world/combat/models.py:CombatRoundActionTarget`):
 New join table. For AREA and FILTERED_GROUP techniques, each targeted `CombatOpponent`
@@ -193,9 +194,11 @@ technique's `target_spec`, built by `_target_spec_for_technique_action` in
 `actions/player_interface.py`. `TargetSpec`/`TargetType`/`TargetKind`/`TargetFilters`
 (all in `actions/types.py` and `actions/constants.py`) were **reused** — not reinvented.
 
-**Deferred follow-ups:** standalone hostile/behavior-altering FILTERED_GROUP multi-consent;
-relocate `AppliedConditionResult`; resonance→aspect mapping (all magic checks still use
-the Arcana aspect).
+**Scope notes:** standalone behavior-altering multi-target casts stay guarded by
+`InvalidCastTarget` — per-target consent for multiple PCs is intentionally unsupported
+(#1358 closed); hostile multi-target routes through combat's existing `CombatRoundActionTarget`
+path. Magic checks use a single placeholder Arcana aspect; how `Aspect` should apply to
+magic checks at all is an open design question (#1363).
 
 ### Motif System
 
@@ -817,7 +820,7 @@ execute_flow("cast_power", context={
 - **ConditionCategory.alters_behavior** — behavior-altering categories (compulsion, charm, fear) require
   the target's consent; capability/stat categories resolve immediately including on other PCs.
 - **apply_technique_conditions** lives in `world/magic/services/condition_application.py` — shared by
-  both combat and standalone cast paths. `AppliedConditionResult` (its return type) still lives in
-  `world/combat/types.py` as a known follow-up to relocate.
+  both combat and standalone cast paths. `AppliedConditionResult` (its return type) lives in
+  `world/conditions/types.py`, the neutral condition layer both combat and magic import directly.
 - **CombatRoundActionTarget** — new combat join table for AoE/multi-target technique actions (AREA and
   FILTERED_GROUP). SINGLE/SELF actions continue to use `CombatRoundAction.focused_opponent_target`.
