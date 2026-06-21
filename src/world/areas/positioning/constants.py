@@ -38,3 +38,10 @@ FLY_CAPABILITY_NAME: str = "fly"
 TELEPORT_CAPABILITY_NAME: str = "teleport"
 TELEKINESIS_CAPABILITY_NAME: str = "telekinesis"
 ACROBATICS_CAPABILITY_NAME: str = "acrobatics"
+
+
+# FELL → plummet wiring identity key (#1228). Shared by the room-owned
+# TriggerDefinition and its FlowDefinition (both named ``fall_to_plummet``),
+# seeded by ``wire_fall_triggers`` and located by ``install_fall_triggers``.
+# Hoisted here so the trigger/flow name has a single source of truth (#1284).
+FALL_TRIGGER_NAME: str = "fall_to_plummet"

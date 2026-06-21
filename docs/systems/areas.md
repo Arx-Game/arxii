@@ -327,9 +327,12 @@ through `_dispatch_immediate_challenge`, since `is_declaration_open` is False in
 round), then translates the graded outcome through `resolve_catch(faller, catcher,
 resolution_result)`:
 
-- **clean catch** (a SUCCESS check outcome, or any `ResolutionType.DESTROY` resolution):
-  `end_plummet(faller, caught=True)` (no impact) **and** `force_move_to_position(faller, ...)`
-  to the catcher's safe non-CHASM position;
+- **clean catch** (a SUCCESS check outcome, or any `ResolutionType.DESTROY` resolution): set
+  the faller down on the catcher's safe non-CHASM position, or — when the catcher is themselves
+  in a CHASM and has none — fall back to the room's PRIMARY ground (`_primary_landing_for`,
+  mirroring `leave_aerial`'s ground fallback), then `end_plummet`. `caught` reflects whether the
+  faller was actually placed, so a caught faller is never left in the pit while the narration
+  claims a safe landing (#1284);
 - **partial** (a neutral / zero-success outcome that did not destroy the challenge): soften —
   decrement the accumulated `Plummeting` `ConditionInstance.severity` (floored at 0) — but let
   the descent continue;

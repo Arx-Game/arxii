@@ -8,7 +8,7 @@ from __future__ import annotations
 import factory
 import factory.django
 
-from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.constants import FALL_TRIGGER_NAME, PositionKind
 from world.areas.positioning.models import (
     BlueprintEdge,
     BlueprintPosition,
@@ -269,7 +269,7 @@ def _build_plummet_flow() -> object:
     from flows.factories import FlowStepDefinitionFactory
     from flows.models import FlowDefinition
 
-    flow, _ = FlowDefinition.objects.get_or_create(name="fall_to_plummet")
+    flow, _ = FlowDefinition.objects.get_or_create(name=FALL_TRIGGER_NAME)
     if not flow.steps.exists():
         FlowStepDefinitionFactory(
             flow=flow,
@@ -291,7 +291,7 @@ class FallToPlummetTriggerDefinitionFactory(factory.django.DjangoModelFactory):
         model = "flows.TriggerDefinition"
         django_get_or_create = ("name",)
 
-    name = "fall_to_plummet"
+    name = FALL_TRIGGER_NAME
     event_name = "fell"  # EventName.FELL value
     flow_definition = factory.LazyFunction(_build_plummet_flow)
     priority = 50
