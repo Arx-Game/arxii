@@ -40614,12 +40614,16 @@ components:
         session_references:
           type: string
           readOnly: true
+        participant_fields:
+          type: string
+          readOnly: true
       required:
       - created_at
       - expires_at
       - id
       - initiator_id
       - initiator_name
+      - participant_fields
       - participants
       - participation_rule
       - proposed_terms

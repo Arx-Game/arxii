@@ -516,3 +516,23 @@ class RitualSessionCancelTests(TestCase):
         self.client.force_authenticate(user=inv_account)
         response = self.client.delete(f"/api/magic/rituals/sessions/{session.pk}/")
         self.assertEqual(response.status_code, 403)
+
+
+class RitualSessionDetailParticipantFieldsTests(TestCase):
+    """GET /api/magic/rituals/sessions/{id}/ exposes participant_fields."""
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_detail_exposes_participant_fields_for_induction(self) -> None:
+        from world.magic.factories import RitualSessionFactory
+
+        _, account, sheet = _make_tenure_with_account()
+        ritual = _make_induction_ritual()
+        session = RitualSessionFactory(ritual=ritual, initiator=sheet)
+        self.client.force_authenticate(user=account)
+        response = self.client.get(f"/api/magic/rituals/sessions/{session.pk}/")
+        self.assertEqual(response.status_code, 200)
+        fields = response.data["participant_fields"]
+        names = {f["name"] for f in fields}
+        self.assertIn("chosen_covenant_role", names)
