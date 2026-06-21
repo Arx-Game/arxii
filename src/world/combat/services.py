@@ -58,6 +58,7 @@ from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
+    INTERPOSE_BASE_FATIGUE_COST,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
@@ -4128,7 +4129,17 @@ def _try_interpose(
     interposer = action.participant.character_sheet.character
     protected = participant.character_sheet.character
 
-    dispatch_interpose(interposer, protected, pre_payload, approach=None)
+    result = dispatch_interpose(interposer, protected, pre_payload, approach=None)
+    if result is not None:
+        # Charge fatigue to the interposer ONLY on fire (readiness is free).
+        # Mirror _resolve_pc_action: apply_fatigue(sheet, category, base_cost, effort).
+        fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+        apply_fatigue(
+            action.participant.character_sheet,
+            fatigue_category,
+            INTERPOSE_BASE_FATIGUE_COST,
+            action.effort_level,
+        )
 
 
 def _ensure_interpose_challenges(
