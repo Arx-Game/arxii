@@ -48,6 +48,7 @@ TARGET_APPS = [
     "world.relationships",
     "world.roster",
     "world.scenes",
+    "world.secrets",
     "world.skills",
     "world.societies",
     "world.stories",

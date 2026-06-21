@@ -775,6 +775,8 @@
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
   - employments <- currency.CharacterEmployment
+  - secrets <- secrets.Secret
+  - implicating_secrets <- secrets.Secret
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
   - relationships_as_source <- relationships.CharacterRelationship
@@ -3459,6 +3461,7 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
+  - authored_secrets <- secrets.Secret
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -3658,6 +3661,24 @@
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`
+
+
+## world.secrets
+
+### SecretCategory
+**Pointed to by:**
+  - secrets <- secrets.Secret
+
+### Secret
+**Foreign Keys:**
+  - subject_sheet -> character_sheets.CharacterSheet [FK]
+  - second_party_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - category -> secrets.SecretCategory [FK] (nullable)
+  - author_persona -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
+- `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, second_party_sheet: 'CharacterSheet | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 
 
 ## world.skills
