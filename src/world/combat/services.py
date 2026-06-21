@@ -2180,7 +2180,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
                 permanent_wound_eligible=False,
             )
 
-    # Use the (possibly modified) amount from the payload
+    _try_interpose(participant, pre_payload)
+    if pre_payload.amount <= 0:
+        return ParticipantDamageResult(
+            damage_dealt=0,
+            health_after=vitals.health,
+            knockout_eligible=False,
+            death_eligible=False,
+            permanent_wound_eligible=False,
+        )
+
+    # Use the (possibly interposed/modified) amount from the payload
     effective_damage = pre_payload.amount
 
     # Thread-derived damage reduction (Spec A §5.8 lines 1658–1668).
@@ -4047,6 +4057,51 @@ def _resolve_clashes(
     ).delete()
 
     return outcomes
+
+
+def _try_interpose(
+    participant: CombatParticipant,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Find the first eligible armed INTERPOSE this round and dispatch it.
+
+    Looks for a :class:`~world.combat.models.CombatRoundAction` declaring
+    ``INTERPOSE`` for *participant* (or any ally) in the current round, resolves
+    the interposer's capability challenge via :func:`dispatch_interpose`, and
+    mutates *pre_payload.amount* in place.
+
+    **Guard:** no-op when the encounter is not ``RESOLVING`` so that
+    non-combat callers of :func:`apply_damage_to_participant` are unaffected.
+
+    Only the *first* eligible interposer is exercised in v1; multiple interposers
+    covering the same target is a follow-up.
+    """
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.RESOLVING:
+        return
+
+    action = (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target__in=[participant, None],
+            participant__status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("participant__character_sheet__character")
+        .first()
+    )
+    if action is None:
+        return
+
+    # Skip self-interpose: the interposer cannot block damage aimed at themselves.
+    if action.participant_id == participant.pk:
+        return
+
+    interposer = action.participant.character_sheet.character
+    protected = participant.character_sheet.character
+
+    dispatch_interpose(interposer, protected, pre_payload, approach=None)
 
 
 def _ensure_interpose_challenges(
