@@ -25,6 +25,21 @@ class CovenantRoleNeverHeldError(CovenantError):
     )
 
 
+class CovenantMemberBlockError(CovenantError):
+    """Raised when joining is blocked because a member has blocked the would-be member (#1278).
+
+    Deliberately generic — the joiner is never told *which* member, preserving the anti-derivation
+    symmetry (they don't learn the blocker's identity).
+    """
+
+    user_message = "This covenant has a member who has blocked you."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "This covenant has a member who has blocked you.",
+        }
+    )
+
+
 class CovenantFormationError(CovenantError):
     """Base for covenant formation failures."""
 
