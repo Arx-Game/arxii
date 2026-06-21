@@ -95,3 +95,13 @@ class CmdDeclareTechniqueTests(TestCase):
             MockOpponent.objects.filter.return_value = [opp1, opp2]
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
+
+
+class CmdsetRegistrationTests(TestCase):
+    def test_cast_command_registered(self) -> None:
+        from commands.default_cmdsets import CharacterCmdSet
+
+        cmdset = CharacterCmdSet()
+        cmdset.at_cmdset_creation()
+        keys = {c.key for c in cmdset.commands}
+        self.assertIn("cast", keys)

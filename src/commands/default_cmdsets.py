@@ -20,6 +20,7 @@ from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
+from commands.combat import CmdDeclareTechnique
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
@@ -119,6 +120,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdMute())
         self.add(CmdUnmute())
         self.add(CmdBlockList())
+        # Combat commands
+        self.add(CmdDeclareTechnique())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
