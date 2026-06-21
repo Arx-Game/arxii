@@ -88,6 +88,30 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `AchievementRequirement` | Story progress/achievement flag | `achievement_key` |
 | `RelationshipRequirement` | Character relationship level | `relationship_target`, `minimum_level` |
 
+### Class-Level Advancement Receipts (#1352)
+
+`AbstractClassLevelAdvancement` is an **abstract** Django model that provides the
+shared shape for a single class-level advance, whether within-tier (Ritual of the
+Durance) or a tier crossing (Audere Majora). Both concrete models inherit it.
+
+| Field | Purpose |
+|-------|---------|
+| `scene` FK → `scenes.Scene` | Scene in which the advance occurred (nullable, SET_NULL) |
+| `declaration_interaction` FK → `scenes.Interaction` | Declaration pose; soft FK (`db_constraint=False` — partitioned table) |
+| `level_before` PositiveSmallIntegerField | Class level immediately before the advance |
+| `level_after` PositiveSmallIntegerField | Class level granted by the advance |
+| `created_at` DateTimeField (auto) | Timestamp |
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `ClassLevelAdvancement` | Receipt for one within-tier advance via the Ritual of the Durance. Survives character death. | inherits `AbstractClassLevelAdvancement` + `character_sheet` FK, `character_class` FK, `officiant` FK (nullable CharacterSheet — the trainer), `ritual` FK (nullable — the `Ritual` row that fired the session) |
+
+`AudereMajoraCrossing` (in `world/magic`) inherits `AbstractClassLevelAdvancement` for
+the same shape on tier crossings. The two share the `apply_class_level_advance` spine
+in `world.progression.services.advancement`.
+
+---
+
 ### Path History
 
 | Model | Purpose | Key Fields |
@@ -99,6 +123,17 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `PathIntent` | Player's declared preferred next path — one per character sheet | `character_sheet` (OneToOne FK → `CharacterSheet`), `intended_path` (FK → `Path`) |
+
+### Progression Exceptions (`exceptions.py` — #1352)
+
+All carry a `user_message` attribute for safe API responses (no `str(exc)` in views).
+
+| Exception | Raised when |
+|-----------|-------------|
+| `ClassLevelAdvancementError` | Base class for all advancement failures |
+| `TierBoundaryRequiresCrossing` | The step would cross a tier boundary; must use Audere Majora instead |
+| `AdvancementRequirementsNotMet` | Authored `ClassLevelUnlock` requirements not met; `.failed: list[str]` carries the failed requirement descriptions |
+| `OfficiantIneligibleError` | Officiant level ≤ target level or wrong Path lineage |
 
 ---
 
@@ -250,6 +285,50 @@ result = claim_kudos(
 # Raises InsufficientKudosError if not enough kudos
 ```
 
+### Class-Level Advancement (`services.advancement` — #1352)
+
+```python
+from world.progression.services.advancement import (
+    primary_class_level,
+    apply_class_level_advance,
+    assert_can_officiate,
+    advance_class_level_via_session,
+)
+
+# Resolve the primary CharacterClassLevel for a character (is_primary=True, or highest level).
+# Returns None when the character has no CharacterClassLevel rows.
+cl = primary_class_level(character)  # -> CharacterClassLevel | None
+
+# Write level_after to the primary CharacterClassLevel and invalidate the sheet cache.
+# Pure level-write — no receipt creation, no scene side-effects.
+# Shared by cross_threshold (Audere Majora) and the Durance action.
+apply_class_level_advance(sheet, level_after=target_level)
+
+# Guard: raise OfficiantIneligibleError if the officiant may not induct this advance.
+# Gates: (1) officiant.current_level > target_level; (2) same Path lineage.
+assert_can_officiate(
+    officiant_sheet=officiant,
+    inductee_sheet=inductee,
+    target_level=target_level,
+)
+
+# Advance each ACCEPTED inductee one class level via the Ritual of the Durance.
+# Called by fire_session inside the session's transaction.
+# Raises ClassLevelAdvancementError subclasses on failure (rolls back the transaction).
+# Returns list of created ClassLevelAdvancement receipts.
+receipts = advance_class_level_via_session(session=locked_ritual_session)
+```
+
+**Per-inductee order inside `advance_class_level_via_session`:**
+1. Resolve primary class level → `target_level = level + 1`.
+2. Refuse a tier boundary (`TierBoundaryRequiresCrossing`) if an `AudereMajoraThreshold` row exists at `level_before`.
+3. Officiant guard (`assert_can_officiate`).
+4. Resolve authored `ClassLevelUnlock`; check requirements (`AdvancementRequirementsNotMet` when absent or unmet).
+5. Post the testament oration (+ cited deeds) as a POSE in the active scene.
+6. Apply the level write and create the `ClassLevelAdvancement` receipt.
+
+---
+
 ### Scene Integration (`services.scene_integration`)
 
 ```python
@@ -309,6 +388,12 @@ transactions = award_scene_development_points(scene, participants, awards)
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
 - **Scenes**: Scene completion triggers `award_scene_development_points()` for trait-specific development.
 - **Character Creation**: CG-to-XP conversion via `award_cg_conversion_xp()` creates locked (non-transferable) `CharacterXP`.
+- **Magic — Ritual of the Durance (#1352):** `advance_class_level_via_session` is
+  dispatched by `fire_session` for the "Ritual of the Durance" `Ritual` row (seeded via
+  `RitualOfTheDuranceFactory`). The `ClassLevelAdvancement` receipt links back to the
+  `Ritual`, the scene, and the officiant. `AudereMajoraCrossing` (magic app) and
+  `ClassLevelAdvancement` both inherit `AbstractClassLevelAdvancement` and share the
+  `apply_class_level_advance` spine.
 - **Magic (Spec A)**: Two XP sinks live in `world.magic.services`:
   - `accept_thread_weaving_unlock(character, unlock)` / `compute_thread_weaving_xp_cost(character, unlock)` — Path-multiplied XP spend that opens a new thread anchor kind via `ThreadWeavingUnlock` → `CharacterThreadWeavingUnlock`
   - `cross_thread_xp_lock(character, thread, target_level)` — XP charged when a thread crosses a `ThreadXPLockedLevel` boundary

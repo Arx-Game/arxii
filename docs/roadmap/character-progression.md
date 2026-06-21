@@ -54,6 +54,25 @@ The central spine connecting every system in the game. Characters develop throug
 - Scene check dev points — certain scene checks award dp and prevent rust (defined in scenes roadmap)
 
 ### Path Leveling
+- **Ritual of the Durance (#1352) — BUILT.** The within-tier class-level advancement
+  ceremony is complete end-to-end:
+  - `AbstractClassLevelAdvancement` — abstract model shared by `ClassLevelAdvancement`
+    (this receipt) and `AudereMajoraCrossing` (Audere Majora receipt).
+  - `ClassLevelAdvancement` — receipt for one within-tier advance (`character_sheet`,
+    `character_class`, `officiant`, `ritual`, inherited `scene` / `declaration_interaction`
+    / `level_before` / `level_after`).
+  - `apply_class_level_advance(sheet, *, level_after)` — shared level-write spine (no
+    receipt, no scene effects); called by both the Durance service and `cross_threshold`.
+  - `assert_can_officiate(officiant_sheet, inductee_sheet, target_level)` — level gate +
+    Path-lineage guard (`OfficiantIneligibleError`).
+  - `advance_class_level_via_session(*, session)` — `fire_session` dispatch target;
+    tier-boundary refusal (`TierBoundaryRequiresCrossing`), unlock requirements check
+    (`AdvancementRequirementsNotMet`), testament pose, receipt creation.
+  - `RitualOfTheDuranceFactory` — seeds the `Ritual` row (SERVICE / INDUCTION) and its
+    companion `RitualLiturgy` (the authored opening call).
+  - Exceptions: `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`,
+    `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all with `user_message`.
+  - **Open follow-up:** telnet drivability of `RitualSession` dispatch (REST-only today).
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics
