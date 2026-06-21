@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.scenes.models import (
+    BlockContactFlag,
     Interaction,
     InteractionFavorite,
     InteractionReaction,
@@ -11,6 +12,34 @@ from world.scenes.models import (
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
+
+
+@admin.register(BlockContactFlag)
+class BlockContactFlagAdmin(admin.ModelAdmin):
+    """Staff review of blocked-player contact attempts (#1278)."""
+
+    list_display = [
+        "created_at",
+        "blocked_account",
+        "blocker_account",
+        "initiator_persona",
+        "target_persona",
+        "resolved",
+    ]
+    list_filter = ["resolved", "created_at"]
+    search_fields = [
+        "blocked_account__username",
+        "blocker_account__username",
+        "initiator_persona__name",
+        "target_persona__name",
+    ]
+    readonly_fields = ["created_at"]
+    list_select_related = [
+        "blocked_account",
+        "blocker_account",
+        "initiator_persona",
+        "target_persona",
+    ]
 
 
 class SceneParticipationInline(admin.TabularInline):

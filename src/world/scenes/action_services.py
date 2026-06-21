@@ -252,6 +252,17 @@ def create_action_request(  # noqa: PLR0913
         SceneActionTarget.objects.create(action_request=request, target_persona=persona)
     if additional:  # multi-target only — single-target path unchanged
         _auto_resolve_npc_targets(request)
+
+    # #1278 — if the initiator is a blocked player reaching the blocker (via any identity), flag
+    # the attempt for staff. The coded block stops the exact pair; circumvention is not code-
+    # prevented (that would leak the alt), so staff review it instead.
+    from world.scenes.block_services import flag_blocked_contact_attempt  # noqa: PLC0415
+
+    for persona in [target_persona, *additional]:
+        if persona is not None:
+            flag_blocked_contact_attempt(
+                initiator_persona=initiator_persona, target_persona=persona, scene=scene
+            )
     return request
 
 
