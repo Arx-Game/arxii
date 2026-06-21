@@ -411,13 +411,15 @@ class AudereMajoraCrossingResult:
 
 
 def _primary_class_level(character: ObjectDB):
-    """Return the primary CharacterClassLevel, or the highest-level one if none is primary."""
-    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    """Return the primary CharacterClassLevel, or the highest-level one if none is primary.
 
-    primary = CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
-    if primary is not None:
-        return primary
-    return CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    Thin alias for ``progression.services.advancement.primary_class_level``; kept for
+    backward compatibility with any callers in this module.
+    Deferred import avoids a circular import through world.progression.services.__init__.
+    """
+    from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
+
+    return primary_class_level(character)
 
 
 def _post_declaration(character: ObjectDB, text: str):
@@ -465,6 +467,9 @@ def cross_threshold(
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
     from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.progression.services.advancement import (  # noqa: PLC0415
+        apply_class_level_advance,
+    )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
     character = sheet.character
@@ -479,12 +484,7 @@ def cross_threshold(
     level_before = threshold.boundary_level
     level_after = threshold.boundary_level + 1
 
-    class_level = _primary_class_level(character)
-    if class_level is not None:
-        class_level.level = level_after
-        class_level.save(update_fields=["level"])
-
-    sheet.invalidate_class_level_cache()
+    apply_class_level_advance(sheet, level_after=level_after)
 
     CharacterPathHistory.objects.create(character=character, path=chosen_path)
 
