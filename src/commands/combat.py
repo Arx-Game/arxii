@@ -43,8 +43,9 @@ class CmdDeclareTechnique(DispatchCommand):
 
     _technique_name: str | None = None
     _target_name: str | None = None
-    _effort: str | None = None
+    _effort: str = "medium"
     _parsed: bool = False
+    _participant: CombatParticipant | None = None
 
     # --------------------------------------------------------------------------
 
@@ -65,7 +66,8 @@ class CmdDeclareTechnique(DispatchCommand):
         # Strip off effort=<level> if present (rightmost keyword=value pair).
         effort_str: str = EffortLevel.MEDIUM
         if _EFFORT_PREFIX in raw.lower():
-            parts = raw.rsplit(_EFFORT_PREFIX, 1)
+            # Split case-insensitively so "Effort=HIGH" is handled correctly.
+            parts = re.split(re.escape(_EFFORT_PREFIX), raw, flags=re.IGNORECASE)
             raw = parts[0].strip()
             effort_val = parts[1].strip().lower()
             valid_values = {v.value for v in EffortLevel}
@@ -160,17 +162,25 @@ class CmdDeclareTechnique(DispatchCommand):
         from world.combat.constants import OpponentStatus  # noqa: PLC0415
         from world.combat.models import CombatOpponent  # noqa: PLC0415
 
-        participant = self._active_participant()
+        # Reuse the participant cached by resolve_action_ref; fall back to querying.
+        participant = (
+            self._participant if self._participant is not None else self._active_participant()
+        )
         name = self._target_name
-        opponent = CombatOpponent.objects.filter(
-            encounter=participant.encounter,
-            status=OpponentStatus.ACTIVE,
-            name__iexact=name,
-        ).first()
-        if opponent is None:
+        matches = list(
+            CombatOpponent.objects.filter(
+                encounter=participant.encounter,
+                status=OpponentStatus.ACTIVE,
+                name__iexact=name,
+            )
+        )
+        if not matches:
             msg = f"No active opponent named '{name}' in this encounter."
             raise CommandError(msg)
-        return opponent.pk
+        if len(matches) > 1:
+            msg = f"More than one opponent named '{name}' — be more specific."
+            raise CommandError(msg)
+        return matches[0].pk
 
     # -- DispatchCommand interface ---------------------------------------------
 
@@ -179,11 +189,17 @@ class CmdDeclareTechnique(DispatchCommand):
 
         Parses args on the first call and caches the results so
         ``resolve_action_args`` can reuse them without re-parsing.
+
+        Raises:
+            CommandError: If the caller is not in an active DECLARING combat round.
         """
         from actions.constants import ActionBackend  # noqa: PLC0415
         from actions.types import ActionRef  # noqa: PLC0415
 
         self._parse_args()
+        # Gate ALL casts (targeted and untargeted) on an active DECLARING round.
+        # Cache the participant so _resolve_opponent_target_id can reuse it.
+        self._participant = self._active_participant()
         technique_id = self._resolve_technique_id()
         return ActionRef(backend=ActionBackend.COMBAT, technique_id=technique_id)
 
