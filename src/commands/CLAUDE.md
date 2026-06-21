@@ -28,6 +28,8 @@ Web:    frontend → websocket → action dispatcher → action.run()
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
+- **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
+  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE rituals
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

@@ -27,6 +27,15 @@ The magic system for Arx II. Power flows from identity and connection.
   `execution_kind=SERVICE` invokes a registered service function path;
   `execution_kind=FLOW` invokes a `FlowDefinition`. Imbuing is the first
   SERVICE-dispatched ritual and wraps `spend_resonance_for_imbuing`.
+  Ritual *performance* is the `perform_ritual` `Action`
+  (`actions/definitions/ritual.py`, key `"perform_ritual"`) — both telnet
+  (`commands.ritual.CmdRitual`) and the web (`RitualPerformView`) converge on
+  `PerformRitualAction.run()` (#1331). There is no standalone executor; the
+  action catches the ritual-surface exceptions (`RitualComponentError`,
+  `ResonanceInsufficient`, `AnchorCapExceeded`, `InvalidImbueAmount`,
+  `XPInsufficient`) and returns a failure `ActionResult` whose `message` the
+  view maps to HTTP 400. Scope: SERVICE + FLOW rituals (Anima/SCENE_ACTION
+  rituals dispatch elsewhere).
 
 ## Models
 

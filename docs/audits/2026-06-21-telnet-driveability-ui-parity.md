@@ -90,7 +90,15 @@ web-only; the minimal fix is telnet `intimidate`/`accept`/`deny` shells over the
 | Declare cast (non-combat) | ❌ none | `dispatch_player_action`→CHALLENGE→`resolve_challenge` (`challenge_resolution.py`) | seam converges; no telnet | — | **G1** |
 | Declare cast (combat) | ❌ none | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | seam converges; no telnet | `test_combat_ui_integration.py` | **G1** |
 | Check + resonance env + effects | N/A (service) | `resolve_round`→`resolve_combat_technique` (`:707`)→`use_technique` (`techniques.py:702`) | **YES** — fully shared service orchestration | `test_magic_story_pipeline.py` | **G0** |
-| Perform ritual | ❌ none | `RitualPerformView` → service | service seam; no telnet | thread/ritual tests | **G3** |
+| Perform ritual | ✅ `ritual`/`perform` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` | **YES** — both converge on `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
+
+> **Rituals (RESOLVED, #1331):** ritual performance is now a real `Action`
+> (`actions/definitions/ritual.py`, key `perform_ritual`). The standalone
+> `world.magic.actions.PerformRitualAction` executor was deleted; telnet
+> (`CmdRitual`) and web (`RitualPerformView`) both call
+> `PerformRitualAction.run()`, so the G3 "web bypasses actions" gap is closed for
+> SERVICE + FLOW rituals. (Anima/SCENE_ACTION rituals dispatch elsewhere and are
+> out of scope.)
 
 **Verdict:** cast→outcome cannot be driven via telnet today (no `cast`/`attempt` command).
 The deep orchestration (`use_technique`, ~15 steps: anima, soulfray, resonance environment,
@@ -109,7 +117,7 @@ conditions, story beats, achievements) is already service-tested. Minimal fix: t
 |---|---|---|---|---|---|
 | Acquire THREAD WEAVING unlock | ❌ none | `teaching-offers/{id}/accept/` → `accept_thread_weaving_unlock` (`services/threads.py:548`) | service-only | `test_thread_weaving_acquisition.py` | **G1** |
 | Weave a thread | ❌ none | `ThreadViewSet.create` → `weave_thread` (`services/threads.py:298`) | service-only | `test_resonance_services.py` | **G1** |
-| Imbue (spend resonance, advance level) | ❌ none | `RitualPerformView` → `spend_resonance_for_imbuing` (`services/resonance.py:221`) | service-only (bypasses `action.run`) | unit tests | **G3** |
+| Imbue (spend resonance, advance level) | ✅ `ritual Rite of Imbuing thread=<id> amount=<n>` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` → `spend_resonance_for_imbuing` | **YES** — both via `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
 | Pull thread (in combat) | ❌ none | `ThreadPullCommitView` → `spend_resonance_for_pull` (`services/resonance.py:588`) | service-only | `test_thread_pull_pipeline.py` | **G3** |
 
 **Verdict:** not telnet-driveable. The web path is *not an action* — it's viewsets calling

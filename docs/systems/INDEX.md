@@ -185,7 +185,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     lifetime_earned rows
   - `POST /api/magic/thread-pull-preview/` — read-only preview of a pull's
     resonance/anima cost and resolved effects
-  - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
+  - `POST /api/magic/rituals/perform/` — dispatches the `perform_ritual` action (`PerformRitualAction.run()`, shared with telnet `CmdRitual`, #1331)
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)

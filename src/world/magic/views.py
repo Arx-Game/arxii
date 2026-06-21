@@ -34,13 +34,9 @@ from rest_framework.viewsets import GenericViewSet
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import PendingAlterationStatus, RitualExecutionKind
 from world.magic.exceptions import (
-    AnchorCapExceeded,
     InvalidImbueAmount,
-    ResonanceInsufficient,
-    RitualComponentError,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
-    XPInsufficient,
 )
 from world.magic.filters import (
     CantripFilter,
@@ -909,7 +905,7 @@ class RitualViewSet(viewsets.ModelViewSet):
 
 
 class RitualPerformView(APIView):
-    """Dispatch a Ritual via PerformRitualAction (Spec A §4.5).
+    """Dispatch a Ritual via ``PerformRitualAction.run()`` (Spec A §4.5, #1331).
 
     POST /api/magic/rituals/perform/
 
@@ -917,8 +913,11 @@ class RitualPerformView(APIView):
     restricted to primitives by the serializer. For SERVICE rituals that
     take model instances (Imbuing takes a Thread), the view resolves the
     primitive key (``thread_id``) into the live model instance before
-    invoking ``PerformRitualAction``. Service-level typed exceptions carry
-    ``user_message`` and are mapped to HTTP 400.
+    invoking the action. Both telnet and web converge on
+    ``actions.definitions.ritual.PerformRitualAction`` — the action catches the
+    ritual-surface exceptions and returns a failure ``ActionResult`` whose
+    ``message`` is the exception's ``user_message``; this view maps that to
+    HTTP 400.
     """
 
     permission_classes = [IsAuthenticated]
@@ -958,28 +957,25 @@ class RitualPerformView(APIView):
                 )
             kwargs["thread"] = thread
 
-        from world.magic.actions import PerformRitualAction  # noqa: PLC0415
+        from actions.definitions.ritual import PerformRitualAction  # noqa: PLC0415
 
-        action_obj = PerformRitualAction(
-            actor=sheet,
+        # Both telnet and web converge on PerformRitualAction.run() (#1331).
+        # run() does not propagate the ritual-surface exceptions: the action
+        # catches them and returns a failure ActionResult whose ``message`` is
+        # the exception's ``user_message``. Map that straight to HTTP 400.
+        action_result = PerformRitualAction().run(
+            actor=sheet.character,
             ritual=ritual,
             components_provided=components,
-            kwargs=kwargs,
+            **kwargs,
         )
-        try:
-            result = action_obj.execute()
-        except (
-            RitualComponentError,
-            ResonanceInsufficient,
-            AnchorCapExceeded,
-            InvalidImbueAmount,
-            XPInsufficient,
-        ) as exc:
+        if not action_result.success:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": action_result.message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        result = action_result.data.get("result")
         payload: dict = {
             "ritual_id": ritual.pk,
             "execution_kind": ritual.execution_kind,

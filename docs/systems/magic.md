@@ -650,7 +650,7 @@ the legacy ThreadType lookup no longer exists.
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
 | `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
-| `/rituals/perform/` | POST | Dispatch a Ritual via PerformRitualAction. Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
+| `/rituals/perform/` | POST | Dispatch a Ritual via `PerformRitualAction.run()` (`actions/definitions/ritual.py`, key `perform_ritual`; shared with telnet `CmdRitual`, #1331). Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
 | `/teaching-offers/` | GET | Read-only list of `ThreadWeavingTeachingOffer` records |
 
 **API conventions.**
