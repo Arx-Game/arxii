@@ -11,10 +11,21 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Swords, Zap } from 'lucide-react';
+import { Ban, Swords, VolumeX, Zap } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { useCreateBlock, useCreateMute } from '@/social/queries';
 import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
@@ -88,6 +99,33 @@ export function PersonaContextMenu({
 
   const [pendingWhisper, setPendingWhisper] = useState<PendingWhisper | null>(null);
 
+  // #1278 — block/mute. The viewer's own face in this scene is the blocker persona; a block needs
+  // it (mute doesn't). You can block/mute any resolved persona but your own.
+  const blockerPersonaId = useMemo(
+    () => (scene?.personas ?? []).find((p) => p.character_sheet === characterId)?.id ?? null,
+    [scene, characterId]
+  );
+  const canModerate = targetPersona !== null && !isSelfTarget;
+  const createMute = useCreateMute();
+  const createBlock = useCreateBlock();
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+
+  function submitBlock() {
+    if (blockerPersonaId === null || blockReason.trim() === '') {
+      return;
+    }
+    createBlock.mutate(
+      { blocker_persona: blockerPersonaId, blocked_persona: personaId, reason: blockReason.trim() },
+      {
+        onSettled: () => {
+          setBlockDialogOpen(false);
+          setBlockReason('');
+        },
+      }
+    );
+  }
+
   const performAction = useMutation({
     mutationFn: (params: {
       action_key: string;
@@ -105,8 +143,8 @@ export function PersonaContextMenu({
   // Show all prerequisite-met actions as potential targeted actions.
   const targetedActions: PlayerAction[] = (data?.results ?? []).filter((a) => a.prerequisite_met);
 
-  // The menu is worth showing if there are targeted actions OR a challenge affordance.
-  if (targetedActions.length === 0 && !canChallenge) {
+  // The menu is worth showing if there are targeted actions, a challenge, or block/mute.
+  if (targetedActions.length === 0 && !canChallenge && !canModerate) {
     return <>{children}</>;
   }
 
@@ -231,8 +269,61 @@ export function PersonaContextMenu({
               })}
             </>
           )}
+          {canModerate && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={createMute.isPending}
+                data-testid="mute-persona-item"
+                onClick={() =>
+                  createMute.mutate({ muted_persona: personaId, mute_ic: true, mute_ooc: true })
+                }
+              >
+                <VolumeX className="mr-2 h-4 w-4" />
+                Mute
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={blockerPersonaId === null}
+                data-testid="block-persona-item"
+                onClick={() => setBlockDialogOpen(true)}
+              >
+                <Ban className="mr-2 h-4 w-4" />
+                Block…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Block {personaName}?</DialogTitle>
+            <DialogDescription>
+              You won't see or be targeted by them. Unblocking takes a full cron cycle to clear, so
+              this is deliberate — a reason is required and goes to staff.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={blockReason}
+            onChange={(e) => setBlockReason(e.target.value)}
+            placeholder="Why are you blocking them?"
+            data-testid="block-reason-input"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={createBlock.isPending || blockReason.trim() === ''}
+              onClick={submitBlock}
+              data-testid="confirm-block-button"
+            >
+              Block
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <WhisperReceiverPicker
         open={pendingWhisper !== null}
         onClose={() => setPendingWhisper(null)}
