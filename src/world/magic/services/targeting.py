@@ -21,21 +21,18 @@ class InvalidCastTarget(ValidationError):
 
 def _check_cardinality(
     technique: Technique,
-    initiator_sheet_id: int,
     target_personas: list[Persona],
 ) -> None:
     """Enforce target_type (cardinality) constraints."""
     target_type = technique.target_type
+    target_count = len(target_personas)
 
-    if target_type == ActionTargetType.SELF:
-        for persona in target_personas:
-            if persona.character_sheet_id != initiator_sheet_id:
-                msg = "This technique can only target the caster, not other characters."
-                raise InvalidCastTarget(msg)
+    if target_type == ActionTargetType.SELF and target_count > 1:
+        msg = "This technique can only target zero or one character."
+        raise InvalidCastTarget(msg)
 
-    if target_type == ActionTargetType.SINGLE and len(target_personas) > 1:
-        count = len(target_personas)
-        msg = f"This technique targets at most one character; {count} were provided."
+    if target_type == ActionTargetType.SINGLE and target_count > 1:
+        msg = f"This technique targets at most one character; {target_count} were provided."
         raise InvalidCastTarget(msg)
 
 
@@ -83,7 +80,7 @@ def validate_cast_target(
     initiator_sheet_id = initiator_persona.character_sheet_id
     relationship = derive_target_relationship(technique)
 
-    _check_cardinality(technique, initiator_sheet_id, target_personas)
+    _check_cardinality(technique, target_personas)
     _check_relationship(relationship, initiator_sheet_id, target_personas)
 
 
