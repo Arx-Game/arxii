@@ -663,6 +663,11 @@ class TestEphemeralInteraction(TestCase):
             db_key="Private Room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
+        # Ephemeral scenes are inherently private; the privacy↔room-publicness
+        # invariant (#1287) forbids them in a publicly-listed room, so this
+        # private room must not be publicly listed.
+        room.room_profile.is_public = False
+        room.room_profile.save()
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
         identity_a = CharacterSheetFactory(character=char_a)
