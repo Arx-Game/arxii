@@ -39,18 +39,49 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    `seeds_checks.py` / `services/anima.py`); the same check is used by the anima ritual
    (wired via `provision_player_anima_ritual`). A graded **"Magic: Technique Cast"**
    `ConsequencePool` routes outcomes. No schema migration required.
-   Remaining follow-ups (filed as issues): technique designer (player picks a pool from
-   a curated catalog) and targeting model (validity + AoE + frontend picker).
-2. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
+   **Follow-ups from #1306:** technique designer (player picks a consequence pool from a
+   curated catalog). The targeting model gaps (listed below) were closed by #1321.
+
+2. **✅ #1321 — RESOLVED: targeting model + behavior-consent + AoE + standalone condition
+   application** (`priority:now` → done). Closed the four gaps deferred from #1306:
+   - **Targeting validity enforcement:** `Technique.target_type` (new field,
+     `ActionTargetType` choices: SELF/SINGLE/AREA/FILTERED_GROUP, default SINGLE) stores
+     per-technique cardinality. `validate_cast_target` (`world/magic/services/targeting.py`)
+     enforces cardinality and relationship rules, raising `InvalidCastTarget` on violation.
+   - **Behavior-consent routing:** `ConditionCategory.alters_behavior` (new boolean, default
+     False) marks behavior-altering categories (compulsion, charm, fear). The consent gate
+     is now **behavior-based**: hostile → combat; benign + behavior-altering → PENDING
+     consent; benign + capability/stat → resolves immediately (including on other PCs).
+     `cast_requires_consent` in `targeting.py` implements this predicate.
+   - **AoE expansion:** standalone AREA auto-expands via `resolve_targets` to all eligible
+     personas in the scene (relationship-derived: SELF→caster only, ALLY/ENEMY→all others).
+     Combat AoE uses the new `CombatRoundActionTarget` join table (`world/combat/models.py`);
+     AREA auto-expands to all active opponents, FILTERED_GROUP uses the stored/supplied subset.
+   - **Frontend target picker:** the existing `TargetPicker.tsx` (multi-select capable) is now
+     driven by a technique's `target_spec`. `_target_spec_for_technique_action` in
+     `actions/player_interface.py` builds the spec from `Technique.target_type` and
+     `derive_target_relationship`. The `TargetSpec`/`TargetType`/`TargetKind`/`TargetFilters`
+     model in `actions/` was **reused** (already existed and wired) — not reinvented.
+   - **Standalone condition application:** `apply_technique_conditions`
+     (`world/magic/services/condition_application.py`) extracted from combat's
+     `_apply_conditions`. Standalone casts now apply technique-authored conditions to
+     resolved targets. `AppliedConditionResult` still lives in `world/combat/types.py` as a
+     known follow-up to relocate.
+
+   **Still deferred (follow-ups):**
+   - Resonance → aspect mapping (all magic checks still use the Arcana aspect).
+   - Relocate `AppliedConditionResult` out of `world/combat/types.py`.
+   - Standalone hostile/behavior-altering FILTERED_GROUP multi-consent state machine.
+3. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
    "Big Button" (`world/seeds/database.py:seed_dev_database`, #651) seeds rules content
    only — 0 CharacterSheets / Personas / Scenes. Needs a playable-slice path (demo
    character via `create_character_with_sheet` + CG finalize, placed in a scene). Child
    of epic #1220.
-3. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
+4. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
    tests mock `castTechnique`; backend tested only at service level. No test drives
    `POST /api/action-requests/cast/` against a seeded + CG'd character. Add one as the
    regression guard. Cross-refs #617.
-4. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
+5. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
    scene; a player should be able to start/auto-join one without staff setup (the
    "implicit scene start" intent).
 
@@ -84,9 +115,11 @@ technique casts always share the same personal check (`provision_player_anima_ri
 in `services/anima.py`).
 
 Deferred to follow-up issues: technique designer (player selects a consequence pool
-from a curated catalog built on `ConsequencePool.parent`); targeting model (targeting
-validity enforcement + AoE + frontend picker); optional resonance→aspect mapping for the
-per-character check (today all magic checks use the Arcana aspect).
+from a curated catalog built on `ConsequencePool.parent`); optional resonance→aspect
+mapping for the per-character check (today all magic checks use the Arcana aspect).
+
+The targeting model gaps (validity enforcement, AoE, frontend picker, standalone condition
+application) were resolved in #1321 — see the #1321 entry above.
 
 ## Deeper design & history
 

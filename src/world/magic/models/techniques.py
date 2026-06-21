@@ -17,7 +17,7 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from actions.constants import ActionCategory
+from actions.constants import ActionCategory, ActionTargetType
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import TechniqueReach
 from world.magic.models.gifts import Gift
@@ -293,6 +293,16 @@ class Technique(SharedMemoryModel):
         help_text=(
             "Positional reach: which positions this technique can target "
             "(SAME=melee, ADJACENT=reach, ANY=ranged)."
+        ),
+    )
+    target_type = models.CharField(
+        max_length=20,
+        choices=ActionTargetType.choices,
+        default=ActionTargetType.SINGLE,
+        help_text=(
+            "Per-technique target cardinality (how many / how selected). "
+            "Relationship (self/ally/enemy) is derived from condition target_kinds "
+            "+ hostility, not stored here."
         ),
     )
     combo_opening_probing = models.PositiveIntegerField(

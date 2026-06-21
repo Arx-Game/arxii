@@ -177,6 +177,8 @@ export async function castTechnique(
     initiator_persona: number;
     technique_id: number;
     target_persona?: number | null;
+    /** For FILTERED_GROUP casts: the subset of personas selected by the player. */
+    target_persona_ids?: number[];
     strain_commitment?: number;
     pull?: CastPullRequestBody;
   }
@@ -188,6 +190,9 @@ export async function castTechnique(
   };
   if (params.target_persona !== undefined) {
     body.target_persona = params.target_persona;
+  }
+  if (params.target_persona_ids !== undefined && params.target_persona_ids.length > 0) {
+    body.target_persona_ids = params.target_persona_ids;
   }
   if (params.strain_commitment !== undefined) {
     body.strain_commitment = params.strain_commitment;

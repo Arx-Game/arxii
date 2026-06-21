@@ -30,6 +30,7 @@ from world.scenes.factories import (
     SceneFactory,
 )
 from world.scenes.tests.cast_test_helpers import (
+    attach_behavior_altering_condition,
     make_cast_pull_fixture,
     make_castable_technique,
     make_enhanced_result as _make_enhanced_result,
@@ -516,8 +517,9 @@ class CastEndpointTestCase(APITestCase):
         assert "power_ledger" in response.data["result"]
 
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
-        """Benign cast at another PC returns PENDING request (consent flow)."""
+        """Benign behavior-altering cast at another PC returns PENDING request (consent flow)."""
         technique = make_castable_technique(hostile=False)
+        attach_behavior_altering_condition(technique)
         CharacterTechniqueFactory(character=self.identity, technique=technique)
         data = {
             "scene": self.scene.pk,
@@ -619,6 +621,7 @@ class CastEndpointTestCase(APITestCase):
         object rather than being silently absent).
         """
         technique = make_castable_technique(hostile=False)
+        attach_behavior_altering_condition(technique)
         CharacterTechniqueFactory(character=self.identity, technique=technique)
 
         # Create a pending cast request via the cast endpoint

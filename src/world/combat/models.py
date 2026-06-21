@@ -875,6 +875,41 @@ class CombatRoundAction(SharedMemoryModel):
         return f"{self.participant} Round {self.round_number}: {action_name}"
 
 
+class CombatRoundActionTarget(SharedMemoryModel):
+    """Extra-target join table for AoE / multi-target CombatRoundActions (#1321).
+
+    For AREA and FILTERED_GROUP techniques, every targeted ``CombatOpponent``
+    gets one row here.  SINGLE and SELF techniques leave this table empty and
+    read ``CombatRoundAction.focused_opponent_target`` directly (backward-compat).
+
+    The primary opponent is ALSO stored here alongside the secondary targets so
+    that AoE loops can iterate a single queryset without a union.
+
+    No FK to ObjectDB — always FK to the typed ``CombatOpponent`` model.
+    """
+
+    action = models.ForeignKey(
+        CombatRoundAction,
+        on_delete=models.CASCADE,
+        related_name="extra_targets",
+        help_text="The round action that owns this target list.",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="action_targets",
+        help_text="Targeted opponent; null is reserved for future ally-AoE rows.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"CombatRoundActionTarget(action={self.action_id}, opponent={self.opponent_id})"
+
+
 class CombatOpponentAction(SharedMemoryModel):
     """NPC action for a round."""
 

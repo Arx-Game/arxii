@@ -17,6 +17,7 @@ from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
 from world.character_sheets.models import CharacterSheet
+from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
@@ -24,11 +25,13 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
     ResonanceFactory,
+    TechniqueAppliedConditionFactory,
     TechniqueFactory,
     ThreadFactory,
     ThreadPullCostFactory,
 )
 from world.magic.models import CharacterResonance, Resonance, Technique, Thread
+from world.magic.models.techniques import ConditionTargetKind
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.models import Persona
 from world.scenes.types import EnhancedSceneActionResult
@@ -87,6 +90,23 @@ def make_benign_castable_technique() -> Technique:
     )
 
 
+def attach_behavior_altering_condition(technique: Technique) -> None:
+    """Attach a behavior-altering ALLY condition to *technique*, making it consent-required.
+
+    After calling this, ``cast_requires_consent(technique)`` returns True so a
+    benign cast at another PC routes to PENDING (consent path) rather than resolving
+    immediately.
+    """
+    behavior_cat = ConditionCategoryFactory(alters_behavior=True)
+    behavior_cond = ConditionTemplateFactory(category=behavior_cat)
+    TechniqueAppliedConditionFactory(
+        technique=technique,
+        condition=behavior_cond,
+        target_kind=ConditionTargetKind.ALLY,
+        minimum_success_level=1,
+    )
+
+
 def make_hostile_castable_technique() -> Technique:
     """A hostile (damage-profile) standalone-castable technique.
 
@@ -129,6 +149,10 @@ def make_cast_pull_fixture(
     The caller binds the technique to its caster (CharacterTechnique row).
     """
     technique = make_hostile_castable_technique() if hostile else make_benign_castable_technique()
+    if not hostile:
+        # Behavior-altering condition makes the technique consent-required so a benign
+        # cast at another PC routes to PENDING (persist pull) rather than resolving immediately.
+        attach_behavior_altering_condition(technique)
     resonance = ResonanceFactory()
     thread = ThreadFactory(
         owner=owner_sheet,
