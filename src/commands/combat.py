@@ -77,11 +77,12 @@ class CmdDeclareTechnique(DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
-        # Split on " at " (case-insensitive) to separate technique from optional target.
-        match = re.match(r"^(.+?)\s+at\s+(.+)$", raw, flags=re.IGNORECASE)
-        if match:
-            self._technique_name = match.group(1).strip()
-            self._target_name = match.group(2).strip()
+        # Split on the first " at " (case-insensitive) to separate technique from
+        # the optional target. A literal search avoids a backtracking-prone regex.
+        at_index = raw.lower().find(" at ")
+        if at_index != -1:
+            self._technique_name = raw[:at_index].strip()
+            self._target_name = raw[at_index + len(" at ") :].strip()
         else:
             self._technique_name = raw.strip()
             self._target_name = None
