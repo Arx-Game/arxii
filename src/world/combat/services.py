@@ -386,70 +386,35 @@ class CombatTechniqueResolver:
     ) -> list[AppliedConditionResult]:
         """Apply technique-authored conditions to appropriate targets.
 
-        Iterates all TechniqueAppliedCondition rows on the technique, skips rows
-        whose minimum_success_level exceeds the check result, resolves each row's
-        target_kind to a concrete ObjectDB, computes severity/duration via the row's
-        formula methods, and delegates to bulk_apply_conditions for the whole batch.
+        Thin wrapper: resolves each ConditionTargetKind (SELF/ALLY/ENEMY) to a
+        concrete ObjectDB via ``_resolve_condition_target``, builds the
+        ``targets_by_kind`` mapping, and delegates to the shared
+        ``apply_technique_conditions`` service.
 
         ``eff_intensity`` is the combined effective intensity (injected power + pull bumps)
         computed by ``__call__`` and forwarded here.
         """
-        from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
-        from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+        from world.magic.services.condition_application import (  # noqa: PLC0415
+            apply_technique_conditions,
+        )
 
         technique = self.action.focused_action
-        sl = check_result.success_level
-        rows = list(technique.condition_applications.select_related("condition").all())
-        if not rows:
-            return []
-
         caster_od = self.participant.character_sheet.character
 
-        bulk_applications: list[BulkConditionApplication] = []
-        for row in rows:
-            if sl < row.minimum_success_level:
-                continue
-            target = _resolve_condition_target(row.target_kind, self.action, caster_od)
-            if target is None:
-                continue
-            severity = row.compute_severity(
-                effective_power=eff_intensity,
-                success_level=sl,
-            )
-            duration = row.compute_duration_rounds(
-                effective_power=eff_intensity,
-                success_level=sl,
-            )
-            bulk_applications.append(
-                BulkConditionApplication(
-                    target=target,
-                    template=row.condition,
-                    severity=severity,
-                    duration_rounds=duration,
-                    stack_count=row.stack_count,
-                )
-            )
+        targets_by_kind: dict[str, list] = {}
+        for kind in (ConditionTargetKind.SELF, ConditionTargetKind.ALLY, ConditionTargetKind.ENEMY):
+            target = _resolve_condition_target(kind, self.action, caster_od)
+            if target is not None:
+                targets_by_kind[kind] = [target]
 
-        if not bulk_applications:
-            return []
-
-        bulk_results = bulk_apply_conditions(
-            bulk_applications,
+        return apply_technique_conditions(
+            technique=technique,
+            success_level=check_result.success_level,
+            eff_intensity=eff_intensity,
+            targets_by_kind=targets_by_kind,
             source_character=caster_od,
-            source_technique=technique,
         )
-        out: list[AppliedConditionResult] = []
-        for app, result in zip(bulk_applications, bulk_results, strict=True):
-            out.append(
-                AppliedConditionResult(
-                    target=app.target,
-                    condition=app.template,
-                    severity_applied=app.severity,
-                    duration_rounds=app.duration_rounds,
-                    success=result.success,
-                )
-            )
-        return out
 
     def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:
         """Run the penetration-vs-resistance contest (#639) against the ward.
