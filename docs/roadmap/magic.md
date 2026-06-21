@@ -20,7 +20,7 @@ disagree, this doc and the code win.
 | Pose / narration into the scene | ✅ wired | `world/scenes/cast_services.py:create_cast_outcome_pose` → `world/magic/narration.py` |
 | Logging — `SceneActionRequest` + `Interaction` + power ledger | ✅ wired | `world/scenes/action_models.py`; `cast_services.py:persist_power_ledger` |
 | Resonance / progression feedback | ✅ by design | earned from RP perception (endorsements), **not** from casting — see "By design" below |
-| **A real character actually being able to cast** | ❌ **blocked** | **see #1306** |
+| **A real character actually being able to cast** | ✅ wired | `#1306` — shared template + per-character check; see below |
 
 The backend cast→pose→log→outcome loop is fully wired and resolves end-to-end (verified
 by tracing + a throwaway smoke test). The remaining frontier is **assembly, content, and
@@ -31,12 +31,16 @@ integration**, not engine mechanics.
 Ordered by priority. These are the gaps between "the engine works" and "a player can do
 magic." Each is a filed issue — work these, not micro-hardening tickets.
 
-1. **🔴 #1306 — nothing is castable out of the box** (`priority:now`). Standalone cast
-   rejects any technique with no `action_template` (`cast_services.py:418`); the CG
-   cantrip→technique path (`character_creation/services.py:_finalize_cantrip_gift_and_technique`
-   → `magic/services/technique_builder.py:create_technique`) never sets one, and 0 seeded
-   techniques have one. The cast button fails for every real character. **This is the
-   one blocker that gates playable magic.**
+1. **✅ #1306 — RESOLVED: every technique is now castable** (`priority:now` → done).
+   `create_technique` defaults `action_template` to the shared **Technique Cast**
+   `ActionTemplate` seeded by `seeds_cast.ensure_technique_cast_content()`. Cast
+   resolution rolls the **caster's own per-character magic check**
+   (`ensure_character_magic_check_type` / `get_character_cast_check` in
+   `seeds_checks.py` / `services/anima.py`); the same check is used by the anima ritual
+   (wired via `provision_player_anima_ritual`). A graded **"Magic: Technique Cast"**
+   `ConsequencePool` routes outcomes. No schema migration required.
+   Remaining follow-ups (filed as issues): technique designer (player picks a pool from
+   a curated catalog) and targeting model (validity + AoE + frontend picker).
 2. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
    "Big Button" (`world/seeds/database.py:seed_dev_database`, #651) seeds rules content
    only — 0 CharacterSheets / Personas / Scenes. Needs a playable-slice path (demo
@@ -65,11 +69,24 @@ before treating any as a bug:
 - **Non-combat thread pulls are passive-only** (VITAL_BONUS inactive outside combat) —
   Resonance Spec §7.4.
 
-## Open design question carried by #1306
+## Design resolution — #1306 (castability, RESOLVED)
 
-Is castability (the `action_template`) auto-provisioned per technique, shared per
-effect-type/style, or authored staff content? The cast gate keys on a per-technique FK
-today (`world/magic/models/techniques.py:362`). Resolve this in #1306's spec.
+**Was:** Is castability (the `action_template`) auto-provisioned per technique, shared
+per effect-type/style, or authored staff content?
+
+**Resolved:** A single shared **Technique Cast** `ActionTemplate` is seeded by
+`seeds_cast.ensure_technique_cast_content()`. `create_technique` defaults `action_template`
+to it; the per-technique FK remains as a staff-only override. Cast resolution rolls the
+**caster's own per-character magic check** (synthesized from their stat + skill via
+`ensure_character_magic_check_type`), not a technique-level authored check. Outcomes route
+through a graded **"Magic: Technique Cast"** `ConsequencePool`. The anima ritual and
+technique casts always share the same personal check (`provision_player_anima_ritual`
+in `services/anima.py`).
+
+Deferred to follow-up issues: technique designer (player selects a consequence pool
+from a curated catalog built on `ConsequencePool.parent`); targeting model (targeting
+validity enforcement + AoE + frontend picker); optional resonance→aspect mapping for the
+per-character check (today all magic checks use the Arcana aspect).
 
 ## Deeper design & history
 

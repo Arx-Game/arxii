@@ -133,6 +133,22 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Standalone casting (#1306):
+    `ensure_technique_cast_content()` (`seeds_cast.py`) — idempotent seed: shared
+    "Technique Cast" `ActionTemplate` + fallback `CheckType` + graded "Magic: Technique
+    Cast" `ConsequencePool`; called by the magic dev seed.
+    `get_standalone_cast_template()` (`seeds_cast.py`) — retrieves the shared
+    ActionTemplate; used as default by `create_technique`.
+    `ensure_character_magic_check_type(character_sheet, *, stat, skill)` (`seeds_checks.py`)
+    — synthesizes a per-character `CheckType` (name from `character_magic_check_type_name()`)
+    for the character's stat + skill.
+    `get_character_cast_check(character)` (`services/anima.py`) — resolves the
+    per-character CheckType for cast resolution.
+    `get_character_anima_ritual(character)` (`services/anima.py`) — retrieves the
+    character's personal SCENE_ACTION `Ritual` (their anima ritual).
+    `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
+    `RitualCheckConfig.check_type` at the per-character check so ritual and technique
+    casts roll the same personal check.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls

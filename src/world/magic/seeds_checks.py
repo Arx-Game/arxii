@@ -280,6 +280,48 @@ def ensure_ritual_check_configs(
     return configs
 
 
+def character_magic_check_type_name(character_sheet) -> str:
+    """Stable, per-character CheckType name (natural key with the Magic category)."""
+    return f"Magic Check — sheet {character_sheet.pk}"
+
+
+def ensure_character_magic_check_type(character_sheet, *, stat, skill):
+    """Synthesize/return a per-character magic CheckType from stat + skill (+ Arcana).
+
+    The character's signature check: rolled by their Anima Ritual AND their
+    technique casts. Idempotent; weights are tuning placeholders (staff-tunable).
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import (  # noqa: PLC0415
+        CheckType,
+        CheckTypeAspect,
+        CheckTypeTrait,
+    )
+
+    category = ensure_magic_check_category()
+    arcana = _ensure_arcana_aspect()
+    name = character_magic_check_type_name(character_sheet)
+    check_type, _ = CheckType.objects.get_or_create(
+        name=name,
+        category=category,
+        defaults={
+            "description": "A character's personal magic check (anima ritual + casting).",
+            "is_active": True,
+        },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=stat, defaults={"weight": Decimal("1.00")}
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check_type, trait=skill.trait, defaults={"weight": Decimal("1.00")}
+    )
+    CheckTypeAspect.objects.get_or_create(
+        check_type=check_type, aspect=arcana, defaults={"weight": Decimal("1.00")}
+    )
+    return check_type
+
+
 def ensure_magic_check_content() -> MagicCheckContentResult:
     """Umbrella: skills + check types + ritual configs. Safe to call repeatedly."""
     skills = ensure_magic_skills()
