@@ -1,5 +1,6 @@
 """Tests for scene action services: create_action_request and respond_to_action_request."""
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -9,7 +10,8 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.progression.models import KudosSourceCategory
+from world.progression.factories import seed_kudos_difficulty_weights
+from world.progression.models import KudosPointsData, KudosSourceCategory, WeeklySocialEngagement
 from world.scenes import action_services
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
@@ -75,15 +77,16 @@ class TestCreateActionRequest(TestCase):
         assert request.action_key == "intimidate"
         assert request.difficulty_choice == DifficultyChoice.NORMAL
 
-    def test_creates_with_custom_difficulty(self) -> None:
+    def test_create_persists_effort_not_initiator_difficulty(self) -> None:
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
-            action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
+            action_key="intimidate",
+            effort_level="high",
         )
-        assert request.difficulty_choice == DifficultyChoice.HARD
+        self.assertEqual(request.effort_level, "high")
+        self.assertEqual(request.difficulty_choice, DifficultyChoice.NORMAL)  # defender sets later
 
 
 class TestRespondToActionRequest(TestCase):
@@ -95,12 +98,12 @@ class TestRespondToActionRequest(TestCase):
 
     def setUp(self) -> None:
         """Mock award_kudos for all tests in this class."""
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
         """Stop mocking award_kudos."""
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def test_deny_sets_status(self) -> None:
         request = create_action_request(
@@ -169,6 +172,7 @@ class TestRespondToActionRequest(TestCase):
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_accept_with_hard_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Defender sets difficulty_choice before accepting; resolved_difficulty reflects it."""
         mock_resolve.return_value = _make_pending_resolution(success=True)
 
         action_template = ActionTemplateFactory()
@@ -177,10 +181,11 @@ class TestRespondToActionRequest(TestCase):
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
         )
+        # Defender sets difficulty at consent time (not the initiator at dispatch)
+        request.difficulty_choice = DifficultyChoice.HARD
         request.action_template = action_template
-        request.save(update_fields=["action_template"])
+        request.save(update_fields=["action_template", "difficulty_choice"])
 
         result = respond_to_action_request(
             action_request=request,
@@ -219,12 +224,12 @@ class TestResolverIntegration(TestCase):
 
     def setUp(self) -> None:
         """Mock award_kudos for all tests in this class."""
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
         """Stop mocking award_kudos."""
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_resolver_called_on_accept(self, mock_resolve: MagicMock) -> None:
@@ -291,7 +296,7 @@ class TestResolverIntegration(TestCase):
 
 
 class GenericKudosOnAcceptTests(TestCase):
-    """Tests that accepting an action request awards Kudos to the target."""
+    """Tests that accepting an action request accrues engagement credit (not instant kudos)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -319,21 +324,24 @@ class GenericKudosOnAcceptTests(TestCase):
         action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
         self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
 
-    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.accrue")
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_kudos_awarded_to_target_on_accept(
-        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    def test_accrue_called_for_target_on_accept(
+        self, mock_resolve: MagicMock, mock_accrue: MagicMock
     ) -> None:
-        """Accepting an action request calls award_kudos with target account."""
+        """Accepting an action request calls accrue with the target account."""
         from evennia.accounts.models import AccountDB
 
         mock_resolve.return_value = _make_pending_resolution(success=True)
 
-        # Attach an account to the target's character so the kudos path runs.
-        # (The default PersonaFactory wires a CharacterSheet with no db_account.)
+        # Attach accounts so the accrual path runs (both initiator and target need accounts).
         target_account = AccountDB.objects.create(username="kudos_target_acct")
         self.target.character_sheet.character.db_account = target_account
         self.target.character_sheet.character.save(update_fields=["db_account"])
+
+        initiator_account = AccountDB.objects.create(username="kudos_initiator_acct")
+        self.initiator.character_sheet.character.db_account = initiator_account
+        self.initiator.character_sheet.character.save(update_fields=["db_account"])
 
         action_request = SceneActionRequestFactory(
             scene=self.scene,
@@ -347,19 +355,17 @@ class GenericKudosOnAcceptTests(TestCase):
 
         respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
 
-        # Verify award_kudos was called with the target account
-        mock_award_kudos.assert_called_once()
-        call_args = mock_award_kudos.call_args
+        # Verify accrue was called with the target account.
+        mock_accrue.assert_called_once()
+        call_args = mock_accrue.call_args
         self.assertIsNotNone(call_args)
-        # Check that source_category name is 'social_engagement'
-        self.assertEqual(
-            call_args.kwargs.get("source_category").name,
-            "social_engagement",
-        )
+        self.assertEqual(call_args.args[0], target_account)
+        self.assertEqual(call_args.args[1], initiator_account)
 
+    @patch("world.scenes.action_services.accrue")
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_no_kudos_award_call_on_deny(self, mock_resolve: MagicMock) -> None:
-        """Denying an action request does not call award_kudos."""
+    def test_no_accrue_call_on_deny(self, mock_resolve: MagicMock, mock_accrue: MagicMock) -> None:
+        """Denying an action request does not call accrue."""
         mock_resolve.return_value = _make_pending_resolution(success=True)
 
         action_request = SceneActionRequestFactory(
@@ -372,21 +378,18 @@ class GenericKudosOnAcceptTests(TestCase):
         action_request.action_template = self.action_template
         action_request.save(update_fields=["action_template"])
 
-        with patch("world.scenes.action_services.award_kudos") as mock_award:
-            respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
-            # Verify award_kudos was NOT called
-            mock_award.assert_not_called()
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
+        mock_accrue.assert_not_called()
 
-    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.accrue")
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_no_kudos_when_target_has_no_account(
-        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    def test_no_accrue_when_target_has_no_account(
+        self, mock_resolve: MagicMock, mock_accrue: MagicMock
     ) -> None:
-        """Skip kudos award when target's character has no linked account.
+        """Skip accrual when target's character has no linked account (NPC).
 
         Personas backed by characters without db_account (NPCs, test fixtures)
-        are valid action_request targets; the kudos award is a no-op for them
-        rather than crashing on a NOT NULL constraint violation.
+        are valid action_request targets; the accrual is a no-op for them.
         """
         mock_resolve.return_value = _make_pending_resolution(success=True)
 
@@ -404,9 +407,9 @@ class GenericKudosOnAcceptTests(TestCase):
         action_request.action_template = self.action_template
         action_request.save(update_fields=["action_template"])
 
-        # Should not raise — and should not call award_kudos.
+        # Should not raise — and should not call accrue.
         respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
-        mock_award_kudos.assert_not_called()
+        mock_accrue.assert_not_called()
 
 
 class TestCreateActionRequestSnapshotFields(TestCase):
@@ -472,11 +475,11 @@ class TestRespondToActionTarget(TestCase):
         cls.action_template = ActionTemplateFactory()
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _make_request_with_template(self) -> "SceneActionRequest":
         """Build a SceneActionRequest that has an action_template set (needed to resolve)."""
@@ -673,11 +676,11 @@ class MultiTargetE2ETests(TestCase):
         # Reset memoized category so tests don't share stale state across transactions.
         action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
         self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _make_action_request(self, mock_resolve: MagicMock) -> "SceneActionRequest":
         """Build a multi-target request with 1 NPC + 3 PC additional target rows.
@@ -870,11 +873,11 @@ class TestPerTargetResolverIntegration(TestCase):
         cls.action_template = ActionTemplateFactory()
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _make_request(self, action_key: str) -> "SceneActionRequest":
         from world.scenes.action_models import SceneActionRequest
@@ -921,3 +924,775 @@ class TestPerTargetResolverIntegration(TestCase):
 
         result = respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
         self.assertIsNotNone(result)  # must not raise
+
+
+class TestEffortAndFatigueOnTargetedResolution(TestCase):
+    """Targeted social-action resolution charges initiator effort + fatigue (Task A3)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from actions.factories import ActionTemplateFactory
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        # social_fatigue_cost=1 → HIGH effort multiplier 2.0 → 2 fatigue charged
+        cls.action_template = ActionTemplateFactory(social_fatigue_cost=1)
+
+    def setUp(self) -> None:
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    def _make_request(self, effort_level: str = "high") -> "SceneActionRequest":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+            effort_level=effort_level,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_effort_charges_initiator_social_fatigue(self, mock_resolve: MagicMock) -> None:
+        """HIGH-effort accept should increase the initiator's social_current fatigue."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="high")
+
+        pool_before = get_or_create_fatigue_pool(self.initiator.character_sheet).get_current(
+            "social"
+        )
+
+        respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+        pool_after = get_or_create_fatigue_pool(self.initiator.character_sheet).get_current(
+            "social"
+        )
+        self.assertGreater(pool_after, pool_before)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_difficulty_override_none_falls_back_to_normal(self, mock_resolve: MagicMock) -> None:
+        """When difficulty_override=None, difficulty should match NORMAL default."""
+        from world.scenes.action_services import _resolve_action_against_persona
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request(effort_level="medium")
+
+        _result, _interaction, difficulty = _resolve_action_against_persona(
+            request, self.target, difficulty_override=None
+        )
+        self.assertEqual(difficulty, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
+
+
+class TestDefenderSetsPlausibilityBandAtConsent(TestCase):
+    """Task 4 (A4): defender supplies difficulty at consent; diverges per-target.
+
+    One cast, two targets (primary + one SceneActionTarget).  Primary accepts
+    with difficulty="easy"; additional accepts with difficulty="daunting".
+    Asserts that resolved_difficulty diverges per-target and that
+    resist_effort_level is persisted when provided.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.primary_target = PersonaFactory()
+        cls.additional_target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    def _make_request(self) -> "SceneActionRequest":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.primary_target,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_accepts_with_easy_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Primary target accepts with difficulty='easy'; resolved_difficulty == EASY."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.EASY,
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_accepts_with_daunting_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Additional target accepts with difficulty='daunting'; resolved_difficulty == DAUNTING."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.DAUNTING,
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.DAUNTING])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_divergent_per_target_difficulty(self, mock_resolve: MagicMock) -> None:
+        """Primary (easy) and additional (daunting) diverge on resolved_difficulty."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.EASY,
+        )
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.DAUNTING,
+        )
+
+        request.refresh_from_db()
+        row.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.EASY])
+        self.assertEqual(row.resolved_difficulty, DIFFICULTY_VALUES[DifficultyChoice.DAUNTING])
+        # Sanity: easy (30) != daunting (75)
+        self.assertNotEqual(request.resolved_difficulty, row.resolved_difficulty)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resist_effort_level_persisted_on_primary(self, mock_resolve: MagicMock) -> None:
+        """resist_effort_level is persisted on the primary request when provided."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resist_effort_level, "high")
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resist_effort_level_persisted_on_additional_target(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """resist_effort_level is persisted on the additional target row when provided."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="low",
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resist_effort_level, "low")
+
+
+class TestActiveResistanceRaisesDifficultyAndChargesFatigue(TestCase):
+    """Task 8 (C3): when a defender spends resist-effort, difficulty rises by the
+    Composure increment AND the defender is charged social fatigue.
+
+    Covers both the primary path (respond_to_action_request) and the additional-
+    target path (respond_to_action_target).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.checks.factories import create_resistance_check_types
+        from world.traits.models import (
+            CharacterTraitValue,
+            PointConversionRange,
+            Trait,
+            TraitCategory,
+            TraitType,
+        )
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.primary_target = PersonaFactory()
+        cls.additional_target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+        # PointConversionRange needed so _calculate_trait_points converts correctly.
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+
+        # Seed Composure CheckType + willpower trait weight.
+        create_resistance_check_types()
+
+        willpower_trait, _ = Trait.objects.get_or_create(
+            name="willpower",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.GENERAL,
+            },
+        )
+
+        # Give both defenders a willpower value so compute_resist_increment > 0.
+        primary_character = cls.primary_target.character_sheet.character
+        additional_character = cls.additional_target.character_sheet.character
+        CharacterTraitValue.objects.create(
+            character=primary_character, trait=willpower_trait, value=20
+        )
+        CharacterTraitValue.objects.create(
+            character=additional_character, trait=willpower_trait, value=20
+        )
+
+    def setUp(self) -> None:
+        from world.checks.models import CheckType
+        from world.traits.models import CharacterTraitValue
+
+        CharacterTraitValue.flush_instance_cache()
+        CheckType.flush_instance_cache()
+
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    def _make_request(self):
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.primary_target,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_resist_raises_difficulty_and_charges_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Primary target with resist_effort='high' → difficulty = base + increment;
+        defender's social_current > 0 (fatigue charged)."""
+        from world.checks.services import compute_resist_increment
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        defender_character = self.primary_target.character_sheet.character
+        expected_increment = compute_resist_increment(defender_character, "high")
+        assert expected_increment > 0, "Test precondition: increment must be > 0"
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, base + expected_increment)
+
+        pool = get_or_create_fatigue_pool(self.primary_target.character_sheet)
+        self.assertGreater(pool.social_current, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_primary_no_resist_uses_base_difficulty_no_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Primary target with no resist_effort → resolved_difficulty == base,
+        defender social fatigue unchanged."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+
+        # Ensure pool exists with 0 to have a clean baseline.
+        pool_before = get_or_create_fatigue_pool(self.primary_target.character_sheet)
+        social_before = pool_before.social_current
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        request.refresh_from_db()
+        self.assertEqual(request.resolved_difficulty, base)
+
+        pool_before.refresh_from_db()
+        self.assertEqual(pool_before.social_current, social_before)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_target_resist_raises_difficulty_and_charges_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Additional target with resist_effort='high' → difficulty = base + increment;
+        defender's social_current > 0 (fatigue charged)."""
+        from world.checks.services import compute_resist_increment
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        # Also accept the primary to not block the test object state.
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        row.refresh_from_db()
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        defender_character = self.additional_target.character_sheet.character
+        expected_increment = compute_resist_increment(defender_character, "high")
+        assert expected_increment > 0, "Test precondition: increment must be > 0"
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+            resist_effort="high",
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, base + expected_increment)
+
+        pool = get_or_create_fatigue_pool(self.additional_target.character_sheet)
+        self.assertGreater(pool.social_current, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_additional_target_no_resist_uses_base_difficulty_no_fatigue(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Additional target with no resist_effort → resolved_difficulty == base,
+        defender social fatigue unchanged."""
+        from world.fatigue.services import get_or_create_fatigue_pool
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        request = self._make_request()
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_target,
+        )
+
+        # Accept primary first.
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        row.refresh_from_db()
+
+        pool_before = get_or_create_fatigue_pool(self.additional_target.character_sheet)
+        social_before = pool_before.social_current
+
+        base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        row.refresh_from_db()
+        self.assertEqual(row.resolved_difficulty, base)
+
+        pool_before.refresh_from_db()
+        self.assertEqual(pool_before.social_current, social_before)
+
+
+class TestGradedAccrualOnAccept(TestCase):
+    """Task 12 (B3): accepting accrues graded good-sport credit, not instant kudos.
+
+    Verifies:
+    - Others-initiated accept → pending_points increases by default_amount * weight_for(band).
+    - KudosPointsData.total_earned is NOT changed (no instant grant).
+    - Self-initiated accept (initiator account == target account) → no accrual.
+    - Both primary path (respond_to_action_request) and additional-target path
+      (respond_to_action_target) are covered.
+
+    Uses setUp (not setUpTestData) for fresh per-test DB state to avoid idmapper
+    contamination between parallel sessions and cross-test cache leakage.
+    """
+
+    def setUp(self) -> None:
+        from world.progression.models import KudosDifficultyWeight
+
+        self.scene = SceneFactory()
+        self.action_template = ActionTemplateFactory()
+
+        # Seed difficulty weights (idempotent get_or_create).
+        seed_kudos_difficulty_weights()
+
+        # Seed social_engagement category — RunPython migration skipped on SQLite fast tier.
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+        # Reset memoized social engagement category so each test re-fetches it.
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+
+        # Build initiator (PC) and target (PC) — both with real accounts.
+        self.initiator_account = AccountFactory()
+        initiator_character = CharacterFactory()
+        initiator_sheet = CharacterSheetFactory(character=initiator_character)
+        self.initiator_persona = initiator_sheet.primary_persona
+        initiator_character.db_account = self.initiator_account
+        initiator_character.save(update_fields=["db_account"])
+
+        self.target_account = AccountFactory()
+        target_character = CharacterFactory()
+        target_sheet = CharacterSheetFactory(character=target_character)
+        self.target_persona = target_sheet.primary_persona
+        target_character.db_account = self.target_account
+        target_character.save(update_fields=["db_account"])
+
+        # A separate additional-target PC.
+        self.additional_account = AccountFactory()
+        additional_character = CharacterFactory()
+        additional_sheet = CharacterSheetFactory(character=additional_character)
+        self.additional_persona = additional_sheet.primary_persona
+        additional_character.db_account = self.additional_account
+        additional_character.save(update_fields=["db_account"])
+
+        self.normal_weight = KudosDifficultyWeight.weight_for(DifficultyChoice.NORMAL)
+        self.easy_weight = KudosDifficultyWeight.weight_for(DifficultyChoice.EASY)
+
+    def _make_primary_request(self, band: str = DifficultyChoice.NORMAL) -> "SceneActionRequest":
+        """Create a pending SceneActionRequest with initiator→target, template set."""
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator_persona,
+            target_persona=self.target_persona,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+            difficulty_choice=band,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return request
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_others_initiated_primary_accept_accrues_pending_points(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accepting a primary request (initiator ≠ target) accrues pending_points."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        ledger = WeeklySocialEngagement.objects.get(account=self.target_account)
+        expected = Decimal(1) * self.normal_weight  # default_amount=1
+        self.assertEqual(ledger.pending_points, expected)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_others_initiated_primary_accept_does_not_instantly_grant_kudos(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accepting a primary request does NOT increase KudosPointsData.total_earned."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        # KudosPointsData should not be created (or remain at 0 if pre-existing).
+        data = KudosPointsData.objects.filter(account=self.target_account).first()
+        if data is not None:
+            self.assertEqual(data.total_earned, 0)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_others_initiated_primary_accept_sets_engagement_credited(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """After accept, engagement_credited is True on the request record."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        request.refresh_from_db()
+        self.assertTrue(request.engagement_credited)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_self_initiated_primary_accept_accrues_nothing(self, mock_resolve: MagicMock) -> None:
+        """Self-targeted action (initiator == target account) accrues nothing."""
+        from world.scenes.action_models import SceneActionRequest
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        # Build a persona where initiator and target share the SAME account.
+        same_account = AccountFactory()
+        self_character = CharacterFactory()
+        self_sheet = CharacterSheetFactory(character=self_character)
+        self_persona = self_sheet.primary_persona
+        self_character.db_account = same_account
+        self_character.save(update_fields=["db_account"])
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self_persona,
+            target_persona=self_persona,  # same persona → same account
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+            difficulty_choice=DifficultyChoice.NORMAL,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        # No ledger should exist for the self-targeting account.
+        self.assertFalse(WeeklySocialEngagement.objects.filter(account=same_account).exists())
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_others_initiated_additional_target_accept_accrues_pending_points(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Accepting an additional-target row (initiator ≠ additional target) accrues points."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_primary_request(band=DifficultyChoice.EASY)
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_persona,
+            difficulty_choice=DifficultyChoice.EASY,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.EASY,
+        )
+
+        ledger = WeeklySocialEngagement.objects.get(account=self.additional_account)
+        expected = Decimal(1) * self.easy_weight
+        self.assertEqual(ledger.pending_points, expected)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_others_initiated_additional_target_accept_sets_engagement_credited(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """After additional-target accept, engagement_credited is True on the target row."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
+        row = SceneActionTargetFactory(
+            action_request=request,
+            target_persona=self.additional_persona,
+            difficulty_choice=DifficultyChoice.NORMAL,
+        )
+
+        respond_to_action_target(
+            action_target=row,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+
+        row.refresh_from_db()
+        self.assertTrue(row.engagement_credited)
+
+
+class TestNPCAndAreaFallbackDifficulty(TestCase):
+    """Task 14 (X1): NPC/area difficulty-fallback regression.
+
+    Proves that when there is NO consenting player:
+    1. An NPC additional target auto-resolves at the authored difficulty_choice
+       default (NORMAL == 45) — never an initiator pick.
+    2. An area action resolves at the difficulty_choice passed to
+       create_and_resolve_area_action (HARD == 60), unaffected by consent rework.
+
+    Neither path calls respond_to_action_request / respond_to_action_target.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        # NPC additional target: PersonaFactory leaves db_account as None by default.
+        cls.npc_persona = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+        # The social_engagement category is seeded by a RunPython migration that the
+        # SQLite fast tier skips (#855); get_or_create so the fast tier gets the row.
+        KudosSourceCategory.objects.get_or_create(
+            name="social_engagement",
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Seeded for tests on the no-migrations fast tier.",
+                "default_amount": 1,
+            },
+        )
+
+    def setUp(self) -> None:
+        # Reset memoized category so tests don't share stale state across transactions.
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        self.addCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_npc_additional_target_auto_resolves_at_normal_difficulty(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """NPC additional target auto-resolves at NORMAL (45) — the authored default.
+
+        No defender call is needed or made; difficulty_choice defaults to NORMAL and
+        _auto_resolve_npc_targets accepts on the NPC's behalf with no override.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=None,
+            action_key="intimidate",
+            action_template=self.action_template,
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionTarget.objects.create(action_request=request, target_persona=self.npc_persona)
+        _auto_resolve_npc_targets(request)
+
+        npc_row = SceneActionTarget.objects.get(
+            action_request=request, target_persona=self.npc_persona
+        )
+        self.assertEqual(
+            npc_row.status,
+            ActionRequestStatus.RESOLVED,
+            "NPC target must be auto-resolved at dispatch without any defender call",
+        )
+        self.assertEqual(
+            npc_row.resolved_difficulty,
+            DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+            "NPC auto-resolve must use the authored NORMAL default (45), not an initiator pick",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_area_action_resolves_at_authored_difficulty_choice(
+        self, mock_resolve: MagicMock
+    ) -> None:
+        """Area action (no target, no consent) resolves at the passed difficulty_choice.
+
+        Using HARD (60) to prove the authored-difficulty param is honoured and is
+        unaffected by the effort/difficulty consent-rework (there is no defender).
+        """
+        from world.scenes.action_services import create_and_resolve_area_action
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        create_and_resolve_area_action(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_template=self.action_template,
+            action_key="tell_tale",
+            difficulty_choice=DifficultyChoice.HARD,
+        )
+
+        from world.scenes.action_models import SceneActionRequest
+
+        area_request = SceneActionRequest.objects.filter(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key="tell_tale",
+        ).latest("pk")
+
+        self.assertEqual(area_request.status, ActionRequestStatus.RESOLVED)
+        self.assertEqual(
+            area_request.resolved_difficulty,
+            DIFFICULTY_VALUES[DifficultyChoice.HARD],
+            "Area action must resolve at the authored HARD difficulty (60), not NORMAL",
+        )

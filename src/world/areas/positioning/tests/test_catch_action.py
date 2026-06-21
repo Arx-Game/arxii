@@ -183,6 +183,29 @@ class CatchActionTests(TestCase):
             "clean catch should clear the bound catch challenge",
         )
 
+    def test_resolve_catch_catcher_in_chasm_lands_faller_on_primary(self) -> None:
+        # The catcher is themselves standing in the CHASM, so they have no safe
+        # position. The clean catch must still set the faller down somewhere safe
+        # (the room's PRIMARY ground) rather than leaving them in the pit while
+        # the narration claims they were set down safely (#1284 / M2).
+        self._start_plummet()
+        force_move_to_position(self.catcher, self.top_chasm)
+        result = self._result_for(success_level=1, resolution_type=ResolutionType.DESTROY)
+
+        resolve_catch(self.faller, self.catcher, result)
+
+        self.assertFalse(self._is_plummeting(), "clean catch should end the plummet")
+        self.assertEqual(
+            position_of(self.faller),
+            self.ground,
+            "faller must fall back to the room's PRIMARY position, not stay in the chasm",
+        )
+        self.assertNotEqual(
+            position_of(self.faller).kind,
+            PositionKind.CHASM,
+            "a 'caught' faller must never be left in the chasm",
+        )
+
     def test_resolve_catch_partial_softens_but_continues(self) -> None:
         self._start_plummet()
         # Pre-accumulate some depth so the decrement is observable.
@@ -277,3 +300,49 @@ class CatchActionTests(TestCase):
         catcher_actions = get_available_actions(self.catcher, self.room)
         catcher_catch = [a for a in catcher_actions if a.challenge_name == "Catch the Faller"]
         self.assertTrue(catcher_catch, "the telekinetic catcher is offered the catch approach")
+
+
+class SelectCatchActionTests(TestCase):
+    """``_select_catch_action`` honors the requested approach (#1284 / M3).
+
+    Condition-sourced capabilities carry an empty ``capability_source.capability_name``,
+    so the selector must identify the approach by the capability behind its
+    ``ChallengeApproach`` (``application.capability.name``) — not the source name —
+    or it silently returns the wrong approach when a catcher qualifies for several.
+
+    Pure stubs, no DB: the selector only reads ``capability_source`` and
+    ``resolved_challenge_approach.application.capability.name``.
+    """
+
+    @staticmethod
+    def _action(capability_name: str, *, source_name: str):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            capability_source=SimpleNamespace(capability_name=source_name),
+            resolved_challenge_approach=SimpleNamespace(
+                application=SimpleNamespace(capability=SimpleNamespace(name=capability_name))
+            ),
+        )
+
+    def test_matches_requested_approach_when_source_name_is_empty(self) -> None:
+        from world.areas.positioning.plummet import _select_catch_action
+
+        # Both sources are condition-granted → empty capability_name; the requested
+        # approach is NOT the first in the list, so the old [0] fallback would miss.
+        telekinesis = self._action("telekinesis", source_name="")
+        acrobatics = self._action("acrobatics", source_name="")
+
+        chosen = _select_catch_action([telekinesis, acrobatics], "acrobatics")
+
+        self.assertIs(chosen, acrobatics, "selector must honor the requested approach")
+
+    def test_falls_back_to_first_action_when_no_approach_matches(self) -> None:
+        from world.areas.positioning.plummet import _select_catch_action
+
+        fly = self._action("fly", source_name="")
+        teleport = self._action("teleport", source_name="")
+
+        chosen = _select_catch_action([fly, teleport], "telekinesis")
+
+        self.assertIs(chosen, fly, "unmatched approach falls back to the first available action")

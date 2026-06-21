@@ -8,6 +8,7 @@ This package organizes progression models into logical modules:
 - paths: Character path history tracking
 - voting: Weekly vote budget and vote tracking
 - random_scene: Weekly random scene targets and completion tracking
+- engagement: Weekly social-engagement pending ledger
 """
 
 # Import all models from submodules for convenience
@@ -15,8 +16,13 @@ from world.progression.models.character_xp import (
     CharacterXP,
     CharacterXPTransaction,
 )
+from world.progression.models.engagement import (
+    WeeklyEngagementInitiator,
+    WeeklySocialEngagement,
+)
 from world.progression.models.kudos import (
     KudosClaimCategory,
+    KudosDifficultyWeight,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
@@ -74,6 +80,7 @@ __all__ = [
     "DevelopmentTransaction",
     "ExperiencePointsData",
     "KudosClaimCategory",
+    "KudosDifficultyWeight",
     "KudosPointsData",
     "KudosSourceCategory",
     "KudosTransaction",
@@ -89,7 +96,9 @@ __all__ = [
     "TraitRatingUnlock",
     "TraitRequirement",
     "TraitXPCost",
+    "WeeklyEngagementInitiator",
     "WeeklySkillUsage",
+    "WeeklySocialEngagement",
     "WeeklyVote",
     "WeeklyVoteBudget",
     "XPCostChart",

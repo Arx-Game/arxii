@@ -50,6 +50,7 @@ def weekly_rollover_task() -> None:
         ("relationship weekly reset", batch_relationship_weekly_reset),
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
+        ("social engagement kudos grant", _run_social_engagement_grant),
     ]
 
     for name, processor in processors:
@@ -64,6 +65,12 @@ def _run_weekly_economy() -> None:
     from world.currency.services import run_weekly_economy
 
     run_weekly_economy()
+
+
+def _run_social_engagement_grant() -> None:
+    from world.progression.services.engagement import grant_social_engagement_kudos
+
+    grant_social_engagement_kudos()
 
 
 def _run_vote_processing() -> None:

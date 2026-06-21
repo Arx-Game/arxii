@@ -14743,6 +14743,13 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    ConsentResponseRequest: {
+      decision: components['schemas']['DecisionEnum'];
+      target_persona_id?: number;
+      difficulty?: components['schemas']['DifficultyEnum'];
+      /** @default  */
+      resist_effort: components['schemas']['ResistEffortEnum'] | components['schemas']['BlankEnum'];
+    };
     /**
      * @description Read serializer for ConsequenceOutcome.
      *
@@ -15131,6 +15138,12 @@ export interface components {
       diverting: boolean;
       in_default: boolean;
     };
+    /**
+     * @description * `accept` - Accept
+     *     * `deny` - Deny
+     * @enum {string}
+     */
+    DecisionEnum: 'accept' | 'deny';
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
       readonly id: number;
@@ -15174,6 +15187,15 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
+    /**
+     * @description * `trivial` - Trivial
+     *     * `easy` - Easy
+     *     * `normal` - Normal
+     *     * `hard` - Hard
+     *     * `daunting` - Daunting
+     * @enum {string}
+     */
+    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -22251,6 +22273,15 @@ export interface components {
       readonly audit_row_id: number;
     };
     /**
+     * @description * `very_low` - Very Low Effort
+     *     * `low` - Low Effort
+     *     * `medium` - Medium Effort
+     *     * `high` - High Effort
+     *     * `extreme` - Extreme Effort
+     * @enum {string}
+     */
+    ResistEffortEnum: 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
+    /**
      * @description * `destroy` - Destroy (removed for everyone)
      *     * `personal` - Personal (resolved for this character only)
      *     * `temporary` - Temporary (suppressed for N rounds)
@@ -22692,7 +22723,7 @@ export interface components {
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       readonly status: components['schemas']['Status307Enum'];
       /**
-       * @description Difficulty level chosen or determined for this action
+       * @description Plausibility band chosen by the defender at consent.
        *
        *     * `trivial` - Trivial
        *     * `easy` - Easy
@@ -22701,7 +22732,7 @@ export interface components {
        *     * `daunting` - Daunting
        */
       difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
-      /** @description The numeric difficulty used for resolution */
+      /** @description Numeric difficulty used for resolution. */
       readonly resolved_difficulty: number | null;
       /** @description The interaction recording the result of this action */
       readonly result_interaction: number | null;
@@ -22718,6 +22749,23 @@ export interface components {
        * @description When this action was resolved
        */
       readonly resolved_at: string | null;
+    };
+    SceneActionRequestCreateRequest: {
+      scene: number;
+      initiator_persona: number;
+      target_persona?: number;
+      target_persona_ids?: number[];
+      action_key: string;
+      /** @default medium */
+      effort_level: components['schemas']['EffortLevelEnum'];
+      technique_id?: number | null;
+      /** @default 0 */
+      strain_commitment: number;
+      fury_commitment_id?: number | null;
+      fury_anchor_id?: number | null;
+      /** @default  */
+      delivery: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
+      delivery_receiver_ids?: number[];
     };
     SceneActionRequestRequest: {
       /** @description The scene where this action takes place */
@@ -22742,7 +22790,7 @@ export interface components {
        */
       delivery?: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       /**
-       * @description Difficulty level chosen or determined for this action
+       * @description Plausibility band chosen by the defender at consent.
        *
        *     * `trivial` - Trivial
        *     * `easy` - Easy
@@ -24949,7 +24997,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneActionRequestRequest'];
+        'application/json': components['schemas']['SceneActionRequestCreateRequest'];
       };
     };
     responses: {
@@ -24997,7 +25045,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneActionRequestRequest'];
+        'application/json': components['schemas']['ConsentResponseRequest'];
       };
     };
     responses: {

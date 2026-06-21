@@ -2,6 +2,8 @@
 Tests for kudos models and services.
 """
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
@@ -9,13 +11,16 @@ import pytest
 
 from world.progression.factories import (
     KudosClaimCategoryFactory,
+    KudosDifficultyWeightFactory,
     KudosPointsDataFactory,
     KudosSourceCategoryFactory,
     KudosTransactionFactory,
+    seed_kudos_difficulty_weights,
 )
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
+    KudosDifficultyWeight,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
@@ -525,3 +530,51 @@ class ClaimKudosForXPTest(TestCase):
         )
         assert "Claimed 10 kudos" in result.claim_result.transaction.description
         assert "Converted 10 kudos to 10 XP" in result.xp_transaction.description
+
+
+class KudosDifficultyWeightTest(TestCase):
+    """Test KudosDifficultyWeight model and weight_for classmethod."""
+
+    def setUp(self):
+        # Flush idmapper cache between tests per setUpTestData trap guidance
+        KudosDifficultyWeight.flush_instance_cache()
+        KudosDifficultyWeight.objects.all().delete()
+
+    def test_weight_for_returns_configured_multiplier(self):
+        """weight_for returns the configured multiplier for a known band."""
+        KudosDifficultyWeightFactory(difficulty_choice="easy", multiplier=Decimal("1.50"))
+        result = KudosDifficultyWeight.weight_for("easy")
+        assert result == Decimal("1.50")
+
+    def test_weight_for_unconfigured_band_returns_default(self):
+        """weight_for returns Decimal('1.0') when no row exists for the band."""
+        result = KudosDifficultyWeight.weight_for("daunting")
+        assert result == Decimal("1.0")
+
+    def test_easy_weight_greater_than_daunting_after_seed(self):
+        """After seeding, easy > daunting (lower difficulty → higher reward)."""
+        seed_kudos_difficulty_weights()
+        easy_w = KudosDifficultyWeight.weight_for("easy")
+        daunting_w = KudosDifficultyWeight.weight_for("daunting")
+        assert easy_w > daunting_w
+
+    def test_seed_is_idempotent(self):
+        """Calling seed_kudos_difficulty_weights twice does not duplicate rows."""
+        seed_kudos_difficulty_weights()
+        seed_kudos_difficulty_weights()
+        assert KudosDifficultyWeight.objects.count() == 5
+
+    def test_str_representation(self):
+        """__str__ shows the difficulty band and multiplier."""
+        weight = KudosDifficultyWeightFactory(
+            difficulty_choice="normal", multiplier=Decimal("1.00")
+        )
+        assert "normal" in str(weight).lower() or "Normal" in str(weight)
+
+    def test_unique_difficulty_choice_constraint(self):
+        """Only one row per difficulty band is permitted (unique=True)."""
+        from django.db import IntegrityError
+
+        KudosDifficultyWeightFactory(difficulty_choice="hard", multiplier=Decimal("0.50"))
+        with pytest.raises(IntegrityError):
+            KudosDifficultyWeightFactory(difficulty_choice="hard", multiplier=Decimal("0.75"))

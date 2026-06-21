@@ -6,8 +6,14 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
+from world.fatigue.constants import EffortLevel
 from world.magic.services.hostility import is_technique_hostile
-from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, ConsentDecision
+from world.scenes.action_constants import (
+    ActionDelivery,
+    ActionRequestStatus,
+    ConsentDecision,
+    DifficultyChoice,
+)
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 
@@ -306,7 +312,9 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
         child=serializers.IntegerField(), required=False, allow_empty=False
     )
     action_key = serializers.CharField(max_length=100)
-    difficulty_choice = serializers.CharField(max_length=20, required=False)
+    effort_level = serializers.ChoiceField(
+        choices=EffortLevel.choices, required=False, default="medium"
+    )
     technique_id = serializers.IntegerField(required=False, allow_null=True)
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
@@ -348,6 +356,10 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
 class ConsentResponseSerializer(serializers.Serializer):
     decision = serializers.ChoiceField(choices=ConsentDecision.choices)
     target_persona_id = serializers.IntegerField(required=False)
+    difficulty = serializers.ChoiceField(choices=DifficultyChoice.choices, required=False)
+    resist_effort = serializers.ChoiceField(
+        choices=EffortLevel.choices, required=False, allow_blank=True, default=""
+    )
 
 
 class StepResultSerializer(serializers.Serializer):

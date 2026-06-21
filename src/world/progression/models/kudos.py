@@ -14,6 +14,7 @@ Note: Use kudos_service functions for awarding/claiming kudos to ensure
 atomic transactions and proper audit trail creation.
 """
 
+from decimal import Decimal
 from typing import ClassVar
 
 from django.core.exceptions import ValidationError
@@ -22,6 +23,7 @@ from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.scenes.action_constants import DifficultyChoice
 
 
 class KudosSourceCategory(NaturalKeyMixin, SharedMemoryModel):
@@ -269,3 +271,63 @@ class KudosTransaction(SharedMemoryModel):
             models.Index(fields=["source_category", "-transaction_date"]),
             models.Index(fields=["claim_category", "-transaction_date"]),
         ]
+
+
+class KudosDifficultyWeight(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Staff-tunable multiplier applied to base kudos amounts per difficulty band.
+
+    Each difficulty band (trivial/easy/normal/hard/daunting) can have its
+    own multiplier so that kudos rewards from good-sport actions scale with
+    how difficult the resulting encounter was. Staff edit these rows in the
+    admin to tune reward rates without a code change.
+
+    Lower difficulty (trivial/easy) → higher multiplier: easier to trigger
+    affectable actions, so the reward is more generous. Higher difficulty
+    (hard/daunting) → lower multiplier: the player accepted a harder challenge
+    and the reward reflects the intended risk/reward curve.
+    """
+
+    difficulty_choice = models.CharField(
+        max_length=20,
+        choices=DifficultyChoice.choices,
+        unique=True,
+        help_text="Difficulty band this weight applies to (one row per band).",
+    )
+    multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text=(
+            "Kudos multiplier for this difficulty band. "
+            "Values > 1.0 grant more kudos; < 1.0 grant fewer. "
+            "Staff can tune these without a code change."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["difficulty_choice"]
+
+    def __str__(self) -> str:
+        label = DifficultyChoice(self.difficulty_choice).label
+        return f"{label} difficulty → ×{self.multiplier} kudos"
+
+    class Meta:
+        verbose_name = "Kudos Difficulty Weight"
+        verbose_name_plural = "Kudos Difficulty Weights"
+        ordering = ["difficulty_choice"]
+
+    @classmethod
+    def weight_for(cls, band: str) -> Decimal:
+        """
+        Return the configured kudos multiplier for the given difficulty band.
+
+        Falls back to Decimal("1.0") when no row exists for the band so that
+        the system degrades gracefully before staff have seeded the weights.
+        """
+        row = cls.objects.filter(difficulty_choice=band).first()
+        if row is None:
+            return Decimal("1.0")
+        return row.multiplier

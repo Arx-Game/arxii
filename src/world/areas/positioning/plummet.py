@@ -31,6 +31,7 @@ from django.conf import settings
 from world.areas.positioning.constants import (
     CATCH_THE_FALLER_NAME,
     FALL_DAMAGE_TYPE_NAME,
+    FALL_TRIGGER_NAME,
     PLUMMETING_CONDITION_NAME,
 )
 
@@ -254,6 +255,22 @@ def _safe_position_for(catcher: ObjectDB) -> Position | None:  # noqa: OBJECTDB_
     return pos
 
 
+def _primary_landing_for(faller: ObjectDB) -> Position | None:  # noqa: OBJECTDB_PARAM
+    """The PRIMARY ground position of the faller's room, or None.
+
+    Mirrors ``leave_aerial``'s ground fallback: a CHASM's vertical stack bottoms
+    out at the room's PRIMARY position, so it is the natural place to set a caught
+    faller down when the catcher offers no safe position of their own.
+    """
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    room = faller.location
+    if room is None:
+        return None
+    return Position.objects.filter(room=room, kind=PositionKind.PRIMARY).first()
+
+
 def resolve_catch(
     faller: ObjectDB,  # noqa: OBJECTDB_PARAM
     catcher: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -286,10 +303,15 @@ def resolve_catch(
     if is_clean_catch:
         from world.areas.positioning.services import force_move_to_position  # noqa: PLC0415
 
-        end_plummet(faller, caught=True)
-        safe = _safe_position_for(catcher)
-        if safe is not None:
-            force_move_to_position(faller, safe)
+        # Prefer the catcher's own safe spot; if the catcher is themselves in a
+        # CHASM (no safe position), set the faller down on the room's PRIMARY
+        # ground instead of leaving them in the pit. ``caught`` then reflects
+        # whether the faller was actually placed safely, so the narration stays
+        # honest even in the pathological no-safe-position-anywhere case (#1284).
+        landing = _safe_position_for(catcher) or _primary_landing_for(faller)
+        if landing is not None:
+            force_move_to_position(faller, landing)
+        end_plummet(faller, caught=landing is not None)
         return
 
     if success_level == 0:
@@ -358,17 +380,20 @@ _ERR_NO_CATCH_APPROACH = "No catch approach is available to this catcher for thi
 
 
 def _select_catch_action(catch_actions: list[AvailableAction], approach: str) -> AvailableAction:
-    """Pick the catch AvailableAction matching *approach* (capability name)."""
+    """Pick the catch AvailableAction matching *approach* (capability name).
+
+    Matches on the capability behind the approach's ``ChallengeApproach``
+    (``application.capability.name``), which is always populated, rather than the
+    ``capability_source.capability_name`` — that is empty for condition-sourced
+    capabilities, so source-name matching would silently return the wrong approach
+    when a catcher qualifies for several (#1284).
+    """
     for action in catch_actions:
-        source = action.capability_source
-        if source is not None and source.capability_name == approach:
+        approach_row = action.resolved_challenge_approach
+        if approach_row is not None and approach_row.application.capability.name == approach:
             return action
-    # Fall back to the first available catch action when the name does not match
-    # (e.g. condition-sourced sources carry an empty capability_name).
+    # Fall back to the first available catch action when the name does not match.
     return catch_actions[0]
-
-
-FALL_TRIGGER_NAME = "fall_to_plummet"
 
 
 def install_fall_triggers(room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM

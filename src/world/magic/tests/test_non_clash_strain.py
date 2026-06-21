@@ -102,8 +102,8 @@ class StrainPushedNonClashCastTests(TestCase):
 
     def setUp(self) -> None:
         # Patch kudos to avoid loading the social_engagement KudosSourceCategory.
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
         # Fresh anima per test: 5 current vs. strain_commitment=8 → deficit=3.
         self.anima = CharacterAnimaFactory(
@@ -113,7 +113,7 @@ class StrainPushedNonClashCastTests(TestCase):
         )
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_strain_pushed_cast_accrues_soulfray_and_records_audit(

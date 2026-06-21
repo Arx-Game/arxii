@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0029_mute"),
+        ("scenes", "0030_sceneactionrequest_engagement_credited_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
