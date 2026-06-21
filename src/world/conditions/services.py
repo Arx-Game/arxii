@@ -755,6 +755,7 @@ def bulk_apply_conditions(
 
         if result.success and result.instance is not None:
             _notify_stories_condition_applied(app.target, result.instance)
+            _install_reactive_side_effects(app.target, app.template, result.instance)
 
         results.append(result)
 
