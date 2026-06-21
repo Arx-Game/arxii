@@ -7,10 +7,11 @@ loop.
 **Source:** `src/world/secrets/`
 **Umbrella issue / design:** #1334
 
-> **Build status:** Slice 1 (the content model + authoring) is built. Discovery (clue-target
-> wiring), the per-knower held/partial-knowledge record, the profile secret-tab display,
-> action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the Deed↔Secret
-> cross-link, the #1269 distinction migration, and the CG nudge are **later slices** of #1334.
+> **Build status:** Slices 1–2 built — the content model + authoring (slice 1) and **discovery**
+> (slice 2: the per-knower held/partial-knowledge record + the SECRET clue-target wiring). The
+> profile secret-tab display, action-anchored minting (blackmail/murder/affair/crime → Secret +
+> Evidence), the Deed↔Secret cross-link, the #1269 distinction migration, and the CG nudge are
+> **later slices** of #1334.
 
 ---
 
@@ -42,6 +43,13 @@ A hidden fact, anchored to a subject.
 Staff-editable lookup (`SharedMemoryModel`) so the taxonomy grows without a migration. A
 secret with no category reads as **Unknown**.
 
+### `SecretKnowledge`
+A character's held knowledge of a secret — roster-scoped (like `CharacterClue`, so knowledge
+follows the character across players). Holding the row is the **fact** layer; `knows_category`
+and `knows_consequences` are the **partial-knowledge layers** that unlock independently (and
+monotonically — never re-hidden), so a secret's Unknown layers can persist per-knower even after
+the fact is out.
+
 ## The load-bearing invariant — anchor scales with level
 
 `Secret.clean` enforces it: **only Level-1 player-flavor secrets may be free-authored.** A
@@ -58,6 +66,18 @@ player-flavor).
 - `author_secret(...)` — author a secret, enforcing the invariant (raises `SecretError`).
 - `author_player_flavor_secret(...)` — the only path a player may free-write: Level-1 flavor,
   attributed to their persona.
+- `grant_secret_knowledge(*, roster_entry, secret, knows_category=False, knows_consequences=False)`
+  — record that a character knows a secret, unlocking layers (idempotent, monotonic). The single
+  entry point discovery surfaces call.
+- `secret_known_to(secret, roster_entry)` — whether a character holds the fact of a secret.
+
+## Discovery (the clue loop)
+
+Secrets are discovered through the existing investigation loop, not a parallel system. `Clue`
+gained a `SECRET` `target_kind` + `target_secret` FK (#1334); `grant_clue_target` teaches the
+secret's fact via `grant_secret_knowledge`, and `target_already_known` reflects held knowledge.
+So a planted/searched SECRET clue grants the secret on acquisition exactly like a CODEX or RESCUE
+clue.
 
 ## Boundary with Codex
 
@@ -71,8 +91,6 @@ consequences (Secret)?"*
 
 ## Planned integration points (later slices)
 
-- **Clues:** add a `SECRET` value to `ClueTargetKind` + FK on `Clue` (already anticipated, #1143)
-  so secrets are discovered through the same Search / `acquire_clue` loop.
 - **Deeds:** cross-link a Secret to its sibling `MissionDeedRecord` — one act, two tellings
   (public embellished deed vs. private true secret); earning the secret recontextualizes the legend.
 - **Distinctions (#1269):** replace the PUBLIC/PRIVATE visibility flag with a `secret` flag + level.

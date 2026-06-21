@@ -497,21 +497,25 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
 Hidden facts about a character — cover identities, crimes, private distinctions, secret
 relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
 info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
-primitive alongside Distinction / Condition / Resonance. *Slice 1 (this commit) owns the
-content model; discovery (clue-target wiring), the per-knower held record, display, and
-action-anchored minting are later slices.*
+primitive alongside Distinction / Condition / Resonance. *Slices 1–2 own the content model +
+discovery; display, action-anchored minting, the Deed↔Secret cross-link, and the #1269
+distinction migration are later slices.*
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`; `level` 1–4 / `category` FK /
   `consequences` — each may be Unknown; `provenance` ∈ GM / action / player-flavor;
   `author_persona` for OOC attribution; `second_party_sheet` for two-party affair/blackmail),
-  `SecretCategory` (staff-editable lookup; null category = Unknown)
+  `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
+  (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
+  `knows_consequences`, monotonic)
 - **Invariant:** anchor-scales-with-level — only Level-1 player-flavor may be free-authored
   (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
   action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
-- **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`
+- **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`,
+  `grant_secret_knowledge`, `secret_known_to`
+- **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
+  through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
-  Secret = self-serve hidden fact about a concrete entity. Shared substrate = the clue/
-  discovery loop (a SECRET clue target is planned, #1143)
+  Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
 - **Details:** [secrets.md](secrets.md)
 ### Consent

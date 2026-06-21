@@ -60,6 +60,11 @@ def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:
             instance__template=clue.target_mission,
         ).exists()
 
+    if clue.target_kind == ClueTargetKind.SECRET:
+        from world.secrets.services import secret_known_to  # noqa: PLC0415
+
+        return clue.target_secret is not None and secret_known_to(clue.target_secret, roster_entry)
+
     return False
 
 
@@ -68,12 +73,15 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
 
     - CODEX: the character learns the entry (KNOWN, firing the codex reactivity hook).
     - RESCUE: the character is handed the rescue mission for the held captive.
-    Mission/secret target kinds are a documented extension point.
+    - SECRET: the character learns the secret's fact (#1334).
+    The MISSION target kind is a documented extension point.
     """
     if clue.target_kind == ClueTargetKind.CODEX:
         _grant_codex_target(clue, roster_entry)
     elif clue.target_kind == ClueTargetKind.RESCUE:
         _grant_rescue_target(clue, roster_entry)
+    elif clue.target_kind == ClueTargetKind.SECRET:
+        _grant_secret_target(clue, roster_entry)
 
 
 def _grant_codex_target(clue: Clue, roster_entry: RosterEntry) -> None:
@@ -110,6 +118,16 @@ def _grant_rescue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     if character is None:
         return
     grant_rescue_mission(captivity.rescue_template, character, captivity.captive)
+
+
+def _grant_secret_target(clue: Clue, roster_entry: RosterEntry) -> None:
+    """Grant the discoverer the fact of the clue's secret (#1334). No-op if untargeted."""
+    secret = clue.target_secret
+    if secret is None:
+        return
+    from world.secrets.services import grant_secret_knowledge  # noqa: PLC0415
+
+    grant_secret_knowledge(roster_entry=roster_entry, secret=secret)
 
 
 def plant_rescue_clue(
