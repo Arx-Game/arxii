@@ -26,9 +26,6 @@ from world.covenants.exceptions import (
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
     NotEnoughMembersPresentError,
-    SubroleParentMismatchError,
-    SubroleResonanceMismatchError,
-    SubroleThreadLevelInsufficientError,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -50,6 +47,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from typeclasses.characters import Character
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
@@ -566,6 +564,37 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(character_sheet)
+
+
+def resolve_effective_role(*, character: Character, role: CovenantRole) -> CovenantRole:
+    """Return the resonance-specialized sub-role for ``role`` if the character's
+    anchored COVENANT_ROLE thread has crossed a sub-role's unlock_thread_level,
+    else ``role`` unchanged. Derive-on-read; reads cached handlers only."""
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if role.parent_role_id is not None:
+        return role  # already a sub-role; never re-promote (single-depth)
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.COVENANT_ROLE
+            and t.target_covenant_role_id == role.pk
+            and t.retired_at is None
+        ),
+        None,
+    )
+    if thread is None:
+        return role
+    best = None
+    for sub in role.sub_roles.all():
+        if (
+            sub.resonance_id == thread.resonance_id
+            and sub.unlock_thread_level <= thread.level
+            and (best is None or sub.unlock_thread_level > best.unlock_thread_level)
+        ):
+            best = sub
+    return best or role
 
 
 def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:
@@ -1293,56 +1322,6 @@ def covenant_members_present(*, covenant: Covenant, room: ObjectDB) -> list[Char
         if sheet is not None and sheet.pk in active_sheet_ids:
             present.append(sheet)
     return present
-
-
-@transaction.atomic
-def promote_to_subrole(
-    *,
-    membership: CharacterCovenantRole,
-    target_subrole: CovenantRole,
-) -> CharacterCovenantRole:
-    """Promote a character from their current parent role to a sub-role.
-
-    Validates:
-    - target_subrole.parent_role == membership.covenant_role
-    - The character has at least one Thread anchored on
-      target_subrole.parent_role with resonance=target_subrole.resonance
-      and level >= target_subrole.unlock_thread_level.
-
-    Atomic. Closes the existing membership row (sets left_at) and creates
-    a new active row with target_subrole, preserving the engaged flag.
-    Reuses change_role mechanics underneath. Invalidates the
-    character.covenant_roles handler cache.
-    """
-    if target_subrole.parent_role_id != membership.covenant_role_id:
-        raise SubroleParentMismatchError
-    # CharacterThreadHandler.all() returns list[Thread] — NOT a queryset.
-    # No .filter() / .exists() — filter in Python.
-    handler = membership.character_sheet.character.threads
-    matching = [
-        t
-        for t in handler.all()
-        if t.target_covenant_role_id == target_subrole.parent_role_id
-        and t.resonance_id == target_subrole.resonance_id
-    ]
-    if not matching:
-        raise SubroleResonanceMismatchError
-    if not any(t.level >= target_subrole.unlock_thread_level for t in matching):
-        raise SubroleThreadLevelInsufficientError
-    # Reuse change_role: close old, open new with same engaged flag + preserve rank
-    was_engaged = membership.engaged
-    existing_rank = membership.rank
-    end_covenant_role(assignment=membership)
-    new_membership = assign_covenant_role(
-        character_sheet=membership.character_sheet,
-        covenant=membership.covenant,
-        covenant_role=target_subrole,
-        rank=existing_rank,
-    )
-    if was_engaged:
-        set_engaged_membership(membership=new_membership)
-    membership.character_sheet.character.covenant_roles.invalidate()
-    return new_membership
 
 
 def assert_initiator_can_induct(*, session: RitualSession) -> None:

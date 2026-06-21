@@ -233,6 +233,24 @@ class CovenantRole(SharedMemoryModel):
         default=0,
         help_text="0 for primary roles; 3+ for sub-roles (Thread level needed to unlock).",
     )
+    discovery_achievement = models.ForeignKey(
+        "achievements.Achievement",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Sub-roles only: achievement granted (and global-first Discovery) on manifestation."
+        ),
+    )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Sub-roles only: lore entry unlocked on manifestation.",
+    )
 
     class Meta:
         constraints = [
@@ -284,14 +302,24 @@ class CovenantRole(SharedMemoryModel):
                     {"parent_role": "Sub-sub-roles are not allowed (single-depth only)."}
                 )
         # Primary role rules
-        elif self.unlock_thread_level != 0:
-            raise ValidationError(
-                {
-                    "unlock_thread_level": (
-                        "Primary roles (no parent_role/resonance) must have unlock_thread_level=0."
-                    )
-                }
-            )
+        else:
+            if self.discovery_achievement_id is not None or self.codex_entry_id is not None:
+                raise ValidationError(
+                    {
+                        "discovery_achievement": (
+                            "Only sub-roles may set discovery_achievement / codex_entry."
+                        )
+                    }
+                )
+            if self.unlock_thread_level != 0:
+                raise ValidationError(
+                    {
+                        "unlock_thread_level": (
+                            "Primary roles (no parent_role/resonance) must have"
+                            " unlock_thread_level=0."
+                        )
+                    }
+                )
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_covenant_type_display()})"

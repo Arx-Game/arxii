@@ -3334,31 +3334,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/covenants/character-roles/{id}/promote/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/covenants/character-roles/{id}/promote/
-     *
-     *     Promote the membership from its current parent role to a sub-role.
-     *     Body: { "target_subrole": <pk> }
-     *
-     *     Returns the new CharacterCovenantRole row on success.
-     *     Returns 400 with a user_message body on promotion failures.
-     */
-    post: operations['covenants_character_roles_promote_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/covenants/covenants/': {
     parameters: {
       query?: never;
@@ -14160,6 +14135,11 @@ export interface components {
      *     Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
      *     block showing the requesting user's own active membership capabilities in
      *     the same covenant (or all-False if the viewer has no active membership).
+     *
+     *     ``covenant_role`` is the RESOLVED effective role (the resonance sub-role when
+     *     the character's COVENANT_ROLE thread has crossed the sub-role's unlock threshold;
+     *     the stored parent role otherwise). ``anchor_role`` is always the stored parent
+     *     (anchor) role, providing context for what sub-roles are possible.
      */
     CharacterCovenantRole: {
       readonly id: number;
@@ -14167,6 +14147,7 @@ export interface components {
       readonly character_sheet: number;
       readonly covenant: number;
       readonly covenant_role: components['schemas']['CovenantRole'];
+      readonly anchor_role: components['schemas']['CovenantRole'];
       readonly rank: components['schemas']['CovenantRankNested'];
       /** @description True when the character is currently 'fulfilling' this role for this covenant. At most one engaged active row per (character_sheet, covenant.covenant_type) — service-enforced + clean()-enforced. Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull eligibility. See spec 2026-05-09 §3.6. */
       readonly engaged: boolean;
@@ -21993,24 +21974,6 @@ export interface components {
       has_undiscovered: boolean;
       milestones: components['schemas']['ProgressionMilestone'][];
     };
-    /**
-     * @description Input serializer for the CharacterCovenantRoleViewSet.promote action.
-     *
-     *     Validates that the target sub-role's parent matches the membership's current role.
-     *     The actual promotion is performed by the promote_to_subrole service function.
-     */
-    PromoteSubrole: {
-      target_subrole: number;
-    };
-    /**
-     * @description Input serializer for the CharacterCovenantRoleViewSet.promote action.
-     *
-     *     Validates that the target sub-role's parent matches the membership's current role.
-     *     The actual promotion is performed by the promote_to_subrole service function.
-     */
-    PromoteSubroleRequest: {
-      target_subrole: number;
-    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -29069,31 +29032,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterCovenantRole'];
-        };
-      };
-    };
-  };
-  covenants_character_roles_promote_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['PromoteSubroleRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PromoteSubrole'];
         };
       };
     };

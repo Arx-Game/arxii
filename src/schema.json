@@ -4821,40 +4821,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterCovenantRole'
           description: ''
-  /api/covenants/character-roles/{id}/promote/:
-    post:
-      operationId: covenants_character_roles_promote_create
-      description: |-
-        POST /api/covenants/character-roles/{id}/promote/
-
-        Promote the membership from its current parent role to a sub-role.
-        Body: { "target_subrole": <pk> }
-
-        Returns the new CharacterCovenantRole row on success.
-        Returns 400 with a user_message body on promotion failures.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - covenants
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PromoteSubroleRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PromoteSubrole'
-          description: ''
   /api/covenants/covenants/:
     get:
       operationId: covenants_covenants_list
@@ -24420,6 +24386,11 @@ components:
         Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
         block showing the requesting user's own active membership capabilities in
         the same covenant (or all-False if the viewer has no active membership).
+
+        ``covenant_role`` is the RESOLVED effective role (the resonance sub-role when
+        the character's COVENANT_ROLE thread has crossed the sub-role's unlock threshold;
+        the stored parent role otherwise). ``anchor_role`` is always the stored parent
+        (anchor) role, providing context for what sub-roles are possible.
       properties:
         id:
           type: integer
@@ -24432,6 +24403,10 @@ components:
           type: integer
           readOnly: true
         covenant_role:
+          allOf:
+          - $ref: '#/components/schemas/CovenantRole'
+          readOnly: true
+        anchor_role:
           allOf:
           - $ref: '#/components/schemas/CovenantRole'
           readOnly: true
@@ -24471,6 +24446,7 @@ components:
           - $ref: '#/components/schemas/ViewerCapabilities'
           readOnly: true
       required:
+      - anchor_role
       - can_engage
       - character_sheet
       - covenant
@@ -39525,30 +39501,6 @@ components:
       - milestones
       - stage
       - stage_label
-    PromoteSubrole:
-      type: object
-      description: |-
-        Input serializer for the CharacterCovenantRoleViewSet.promote action.
-
-        Validates that the target sub-role's parent matches the membership's current role.
-        The actual promotion is performed by the promote_to_subrole service function.
-      properties:
-        target_subrole:
-          type: integer
-      required:
-      - target_subrole
-    PromoteSubroleRequest:
-      type: object
-      description: |-
-        Input serializer for the CharacterCovenantRoleViewSet.promote action.
-
-        Validates that the target sub-role's parent matches the membership's current role.
-        The actual promotion is performed by the promote_to_subrole service function.
-      properties:
-        target_subrole:
-          type: integer
-      required:
-      - target_subrole
     Pronouns:
       type: object
       description: Serializer for pronoun sets.

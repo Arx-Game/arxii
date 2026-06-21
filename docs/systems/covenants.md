@@ -16,6 +16,15 @@ axes are orthogonal — never re-merge them.
   boolean, `rank` FK → `CovenantRank`.
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
+- **`CovenantRole`** sub-role fields — a sub-role is a `CovenantRole` with a non-null
+  `parent_role` (self-FK) and `resonance` (FK → `magic.Resonance`). Additional fields:
+  - `unlock_thread_level` (PositiveIntegerField, default 0 for primary roles; >0 for
+    sub-roles) — the COVENANT_ROLE thread level a character must reach to manifest this
+    sub-role variant.
+  - `discovery_achievement` (FK → `achievements.Achievement`, nullable) — sub-roles only;
+    the achievement granted (with a global-first `Discovery` row) on first threshold crossing.
+  - `codex_entry` (FK → `codex.CodexEntry`, nullable) — sub-roles only; the lore entry
+    unlocked (`CharacterCodexKnowledge(KNOWN)`) on threshold crossing.
 - **`CovenantRoleBonus`** — authored config: one row per `(CovenantRole, ModifierTarget)`
   with `bonus_per_level` SmallInt. `role_base_bonus_for_target(role, target,
   char_level)` returns `char_level × bonus_per_level`; no row → 0. Admin-registered.
@@ -53,11 +62,41 @@ axes are orthogonal — never re-merge them.
 
 ## Handlers
 
-- `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
-  `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
-  `invalidate()`
+- `character.covenant_roles` (`CharacterCovenantRoleHandler`):
+  - `has_ever_held(role)` — True if the character has ever held this role (active or ended).
+  - `currently_held_role_in(covenant)` — active role in the specified covenant, or None.
+  - `currently_engaged_roles()` — list of **resolved (effective) roles** for every
+    active+engaged membership. Calls `resolve_effective_role` per row: if the character's
+    COVENANT_ROLE thread qualifies for a resonance sub-role, the sub-role is returned instead
+    of the parent. Consumers that must key on the stored anchor identity should use
+    `anchor_role_in()` instead.
+  - `anchor_role_in(covenant)` — returns the **stored parent (anchor) role** for the active
+    membership in `covenant`, ignoring sub-role resolution. Use this when the consumer must
+    key on the thread's `target_covenant_role_id` or the raw membership row.
+  - `invalidate()` — clear the cached assignment list; called by mutator services.
 
 ## Key Services
+
+### Resonance sub-role resolution
+
+- **`resolve_effective_role(*, character, role) -> CovenantRole`** (`world.covenants.services`) —
+  derive-on-read. Given a primary role, walks the character's COVENANT_ROLE threads and finds the
+  highest-qualifying resonance sub-role (highest `unlock_thread_level` the thread has crossed).
+  Returns `role` unchanged when no qualifying sub-role exists, or when `role` is already a
+  sub-role (single-depth; no re-promotion). Called per-row by `currently_engaged_roles()`.
+
+- **`fire_subrole_discoveries(*, thread, starting_level, new_level) -> None`**
+  (`world.covenants.discovery`) — fired by `spend_resonance_for_imbuing` after every COVENANT_ROLE
+  thread imbue. For each sub-role whose `unlock_thread_level` was newly crossed (i.e.,
+  `starting_level < unlock_thread_level <= new_level`):
+  - Grants `discovery_achievement` via `grant_achievement` (creates a global-first `Discovery` row
+    when this is the first ever earner).
+  - Unlocks `codex_entry` via `CharacterCodexKnowledge.objects.get_or_create(status=KNOWN)`,
+    keyed on `roster_entry`.
+  - Sends a `NarrativeMessage(category=COVENANT)`: gamewide to all `active_player_character_sheets()`
+    on first-ever discovery; personal to the discovering sheet otherwise.
+  - Idempotent: an already-existing `CharacterAchievement` row gates the whole beat (no duplicates
+    on replay).
 
 ### Core covenant services
 
@@ -164,7 +203,13 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 
 - `GET /api/covenants/gear-compatibilities/` — read-only authored content
 - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
-  currently-played sheets; exposes nested `rank` + `viewer_capabilities`
+  currently-played sheets; exposes nested `rank` + `viewer_capabilities`.
+  `CharacterCovenantRoleSerializer` fields:
+  - `covenant_role` — the **resolved (effective) sub-role** when the character's thread has
+    crossed a sub-role threshold; otherwise the stored parent role. Derive-on-read via
+    `resolve_effective_role`.
+  - `anchor_role` — the **stored parent (anchor) role** on the membership row, ignoring
+    sub-role resolution. Consumers that need to key on thread identity use this field.
 - `GET|POST /api/covenants/ranks/` — list / create ranks
 - `GET|PATCH|DELETE /api/covenants/ranks/{pk}/` — retrieve / update / delete
 - `POST /api/covenants/ranks/reorder/` — bulk tier reorder
@@ -183,17 +228,29 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 
 ## Integrates With
 
-- Magic (`COVENANT_ROLE` Thread anchor cap = `current_level × 10`; `MentorsVowRitualFactory`)
+- Magic (`COVENANT_ROLE` Thread anchor cap = `current_level × 10`; `MentorsVowRitualFactory`;
+  `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue)
 - Mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`)
 - Items (`gear_archetype` on `ItemTemplate`)
 - Combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`
   via `effective_combat_level`)
+- Achievements (`CovenantRole.discovery_achievement` FK; `grant_achievement` on sub-role
+  threshold crossing; `Discovery` row created on first-ever earner)
+- Codex (`CovenantRole.codex_entry` FK; `CharacterCodexKnowledge(status=KNOWN)` created per
+  roster_entry on threshold crossing)
+- Narrative (`send_narrative_message(category=COVENANT)` for gamewide / personal discovery
+  announcements; `active_player_character_sheets()` from `world.roster.selectors` selects
+  gamewide recipients on first-ever discovery)
 
 ## Source
 
 `src/world/covenants/`
 
 - `models.py` — all covenant + mentor bond models
+- `handlers.py` — `CharacterCovenantRoleHandler`; `currently_engaged_roles()` calls
+  `resolve_effective_role` (defined in `services.py`) per row
+- `services.py` — covenant lifecycle + `resolve_effective_role` + `establish_mentor_bond_via_session`
+- `discovery.py` — `fire_subrole_discoveries` (sub-role discovery beat)
 - `mentorship.py` — `effective_combat_level` and Mentor's Vow math
-- `services.py` — covenant lifecycle + `establish_mentor_bond_via_session`
+- `factories.py` — `seed_resonance_subrole_slice`, `SubroleCovenantRoleFactory`
 - `exceptions.py` — all exceptions

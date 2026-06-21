@@ -33,6 +33,7 @@ class CharacterCovenantRoleHandler:
             qs = (
                 CharacterCovenantRole.objects.filter(character_sheet=sheet)
                 .select_related("covenant_role", "covenant")
+                .prefetch_related("covenant_role__sub_roles")  # noqa: PREFETCH_STRING
                 .order_by("joined_at")
             )
             self._cached = list(qs)
@@ -84,8 +85,31 @@ class CharacterCovenantRoleHandler:
         return None
 
     def currently_engaged_roles(self) -> list[CovenantRole]:
-        """Return roles for every active+engaged membership row."""
-        return [r.covenant_role for r in self._rows if r.engaged and r.left_at is None]
+        """Return resolved (effective) roles for every active+engaged membership row.
+
+        Derives sub-role specialization on read: if the character's COVENANT_ROLE
+        thread on a role qualifies for a resonance sub-role, the sub-role is returned
+        instead of the parent. Anchor identity is always stored on the membership row;
+        use ``anchor_role_in`` for consumers that must key on the stored parent role.
+        """
+        from world.covenants.services import resolve_effective_role  # noqa: PLC0415
+
+        char = self._character
+        return [
+            resolve_effective_role(character=char, role=r.covenant_role)
+            for r in self._rows
+            if r.engaged and r.left_at is None
+        ]
+
+    def anchor_role_in(self, covenant: Covenant) -> CovenantRole | None:
+        """Return the stored (parent/anchor) covenant_role for the active membership in
+        ``covenant``, ignoring sub-role resolution.
+
+        Consumers that must key on the anchor identity (e.g. thread's
+        ``target_covenant_role_id``) use this instead of ``currently_engaged_roles()``.
+        Returns None if the character has no active membership in ``covenant``.
+        """
+        return self.currently_held_role_in(covenant)
 
     @property
     def active_memberships(self) -> list[CharacterCovenantRole]:

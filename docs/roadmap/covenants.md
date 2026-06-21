@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -432,8 +432,7 @@ back to `CovenantRole`, and do not encode combat/role bonuses onto `CovenantRank
 
 - **`CovenantRole`** = the **power** a member wields on behalf of the covenant
   (Sword/Shield/Crown combat archetype, `speed_rank`, `CovenantRoleBonus` Thread
-  pulls). `is_leadership` was removed from `CovenantRole` when #1027 shipped — it
-  no longer exists anywhere in the codebase.
+  pulls). `CovenantRole` has no `is_leadership` field — authority is on `CovenantRank`.
 - **`CovenantRank`** (new in #1027) = **administrative authority** over the
   covenant. Per-covenant, player-named ordered tiers with integer `tier`
   (1 = top authority), capability flags (`can_invite`, `can_kick`, `can_manage_ranks`),
@@ -571,16 +570,23 @@ decision above.
   the highest threshold met, updates `Covenant.level`, and emits a
   `NarrativeMessage(category=COVENANT)` on level-up.
 - **Sub-role fields on `CovenantRole`** — `parent_role` (self-FK, nullable),
-  `resonance` (IntegerField, 0–5 scale), `unlock_thread_level` (IntegerField).
-  Together these encode the sub-role lattice: a sub-role is a `CovenantRole`
-  with a non-null `parent_role`. Uniqueness: `(covenant_type, name)` still
-  enforced; `(parent_role, resonance)` ensures each resonance slot is filled
-  at most once per parent.
-- **`promote_to_subrole`** service — validates character eligibility
-  (current membership, covenant level ≥ threshold, thread level ≥ unlock),
-  ends the existing membership row, creates a new one for the sub-role.
-  Typed exceptions: `SubRoleError`, `NotEligibleForSubRoleError`,
-  `SubRoleAlreadyHeldError`.
+  `resonance` (FK → `magic.Resonance`), `unlock_thread_level` (PositiveIntegerField, 0 for
+  primary roles, >0 for sub-roles). Together these encode the sub-role lattice: a sub-role is
+  a `CovenantRole` with a non-null `parent_role`. Uniqueness: `(covenant_type, name)` still
+  enforced; `(parent_role, resonance, unlock_thread_level)` ensures each slot is unique.
+  Additional nullable sub-role-only FKs: `discovery_achievement` (→ `achievements.Achievement`)
+  and `codex_entry` (→ `codex.CodexEntry`) for the discovery beat.
+- **Runtime sub-role resolution (derive-on-read)** — `resolve_effective_role(*, character, role)`
+  in `world.covenants.services` derives the effective sub-role at read time from the character's
+  COVENANT_ROLE thread level, without mutating the stored membership row. The membership row
+  always stores the parent role; `CharacterCovenantRoleHandler.currently_engaged_roles()` returns
+  the resolved sub-role. `anchor_role_in(covenant)` returns the stored parent for consumers that
+  need the anchor identity.
+- **`fire_subrole_discoveries(*, thread, starting_level, new_level)`** in
+  `world.covenants.discovery` — the discovery beat, hooked into `spend_resonance_for_imbuing`.
+  On threshold crossing: grants the sub-role's `discovery_achievement` (+ global-first `Discovery`
+  row), unlocks `codex_entry` (`CharacterCodexKnowledge(KNOWN)`), and sends a
+  `NarrativeMessage(category=COVENANT)` (gamewide on first-ever; personal otherwise). Idempotent.
 - **Beat consequence pool framework** — `LEGEND_AWARD` added to
   `ConsequenceEffectType`; `ConsequenceEffect` gains `legend_amount`
   (IntegerField) and `award_covenant` FK (nullable, → `Covenant`).
@@ -592,10 +598,12 @@ decision above.
 - **`Story.covenant` FK** — nullable FK on `Story` declaring the storyline's
   owning covenant. Beat resolution now passes `story` through
   `ResolutionContext` so consequence handlers can read it.
-- **API surface** — `promote` action on `CharacterCovenantRoleViewSet`;
-  `CovenantLevelThresholdViewSet` (staff-only, read-only); serializer
+- **API surface** — `CovenantLevelThresholdViewSet` (staff-only, read-only); serializer
   additions for `parent_role`, `resonance`, `unlock_thread_level` on
   `CovenantRoleSerializer`; `covenant` FK on `StorySerializer`.
+  `CharacterCovenantRoleSerializer` exposes `covenant_role` (resolved effective sub-role,
+  derive-on-read) and `anchor_role` (stored parent role). The `promote` action on
+  Sub-role promotion is derive-on-read; `CharacterCovenantRoleViewSet` has no `promote` action.
 
 **Not in Slice D (explicitly out-of-scope per spec):**
 
@@ -804,10 +812,9 @@ effective trait values and stat checks, not only the technique multiplier.
 - The Slice B spec is `docs/architecture/covenants-slice-b-design.md`
   and the implementation plan is
   `docs/superpowers/plans/2026-05-10-covenants-slice-b-implementation.md`.
-- The COVENANT_ROLE anchor cap formula now reads from `covenant.level`
-  via the membership table. The placeholder `current_level × 10` formula
-  was replaced in Slice A. When Slice D ships covenant-level XP, the cap
-  scales naturally without changing call sites.
+- The COVENANT_ROLE anchor cap formula reads from `covenant.level` via the
+  membership table (additive formula, derive-on-read). When covenant-level XP
+  changes `Covenant.level`, the cap scales naturally without changing call sites.
 - Forward-looking nods elsewhere in the roadmap: `gm-system.md` references
   "Covenants stub" as a prerequisite (now understated — should read
   "Covenants Slices A+B"); `seed-and-integration-tests.md` task 2Q

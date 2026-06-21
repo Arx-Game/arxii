@@ -10,6 +10,7 @@ from __future__ import annotations
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterTenure
 
 
@@ -32,3 +33,24 @@ def get_account_for_character(character: ObjectDB) -> AccountDB | None:
     if tenure is None:
         return None
     return tenure.player_data.account
+
+
+def active_player_character_sheets() -> list[CharacterSheet]:
+    """Return every CharacterSheet whose roster_entry has a current (unended) tenure.
+
+    "Current tenure" means a RosterTenure with end_date__isnull=True, matching
+    the RosterTenure.is_current property definition (tenures.py:117).
+
+    Filters on tenure pk__isnull=False to avoid the LEFT JOIN / NULL ambiguity
+    (a sheet with no tenures would otherwise pass the end_date__isnull=True check).
+
+    Returns a de-duplicated list in a single query; no queries-in-loops.
+    """
+    return list(
+        CharacterSheet.objects.filter(
+            roster_entry__tenures__pk__isnull=False,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+        .select_related("roster_entry")
+        .distinct()
+    )
