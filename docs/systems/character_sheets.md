@@ -10,7 +10,7 @@ CharacterSheet is the single anchor for all character-related data.
 
 `CharacterSheet` is OneToOne to ObjectDB (`primary_key=True` — shares pk), holding demographics/appearance fields. Every playable character has one.
 
-The **narrative bio** (concept, real_concept, quote, personality, background, obituary) was sliced out into a separate **`Profile`** model (#1270) so a cover identity can present its own bio. The sheet owns one `true_profile` (its real bio), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, with a `save()` cascade), so existing reads/writes are unchanged — bio just lives on the profile now. Lineage FKs (family/heritage/tarot/origin) and the cover-bio *display* + authoring flow are follow-up slices.
+The **narrative bio** (concept, real_concept, quote, personality, background, obituary) was sliced out into a separate **`Profile`** model (#1270) so a cover identity can present its own bio. The sheet owns one `true_profile` (its real bio), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, with a `save()` cascade), so existing reads/writes are unchanged — bio just lives on the profile now. **Cover-bio display is wired** (#1270 slice 2): the profile serializer reads concept/quote/story from the *presented* persona's profile (`_presented_bio_profile`) — the real `true_profile` when revealed, a cover persona's own authored profile when presenting one, else blank (never the real bio for a non-revealed face). Lineage FKs (family/heritage/tarot/origin) and the cover-bio *authoring* form are the remaining follow-up slices.
 
 ## Privacy Tiers (#1271)
 
