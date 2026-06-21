@@ -9,12 +9,14 @@ from evennia.commands.command import Command
 
 from actions.errors import ActionDispatchError
 from actions.player_interface import dispatch_player_action
+from actions.result_extraction import extract_dispatch_message_data
 from actions.types import ActionResult
 from commands.consts import HelpFileViewMode
 from commands.descriptors import CommandDescriptor
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
 from commands.types import Kwargs
+from world.mechanics.types import ChallengeResolutionResult
 
 if TYPE_CHECKING:
     from actions.base import Action
@@ -232,5 +234,7 @@ class DispatchCommand(ArxCommand):
         if result.deferred:
             self.msg("You ready your action for this round.")
             return
-        if isinstance(result.detail, ActionResult) and result.detail.message:
-            self.msg(result.detail.message)
+        if isinstance(result.detail, (ActionResult, ChallengeResolutionResult)):
+            message, _ = extract_dispatch_message_data(result.detail)
+            if message:
+                self.msg(message)

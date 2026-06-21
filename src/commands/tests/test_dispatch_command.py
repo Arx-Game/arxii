@@ -52,7 +52,7 @@ class DispatchCommandTests(TestCase):
         with patch("commands.command.dispatch_player_action") as mock_dispatch:
             mock_dispatch.return_value = DispatchResult(backend=ActionBackend.COMBAT, deferred=True)
             cmd.func()
-        self.caller.msg.assert_called()
+        self.caller.msg.assert_called_with("You ready your action for this round.")
 
     def test_dispatch_error_shows_user_message(self) -> None:
         cmd = _make_cmd(_ProbeDispatchCommand, self.caller)
@@ -60,3 +60,10 @@ class DispatchCommandTests(TestCase):
             mock_dispatch.side_effect = ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
             cmd.func()
         self.caller.msg.assert_called_with("That action is no longer available.")
+
+    def test_dispatch_error_unknown_code_shows_fallback(self) -> None:
+        cmd = _make_cmd(_ProbeDispatchCommand, self.caller)
+        with patch("commands.command.dispatch_player_action") as mock_dispatch:
+            mock_dispatch.side_effect = ActionDispatchError("totally_unknown_code")
+            cmd.func()
+        self.caller.msg.assert_called_with("That action could not be completed.")
