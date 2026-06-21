@@ -534,7 +534,8 @@ Roleplay session recording with participant tracking, interaction logging, perso
   - `broadcast_scene_message(scene, action)` — pushes scene state to participants via WebSocket.
   - `ensure_scene_for_location(room, privacy_mode=None)` (`place_services.py`) — find-or-create the
     active scene for a room. Returns the existing active scene unchanged (caller's `privacy_mode`
-    ignored on reuse); creates a new scene with `privacy_mode` (defaults to PUBLIC) otherwise.
+    ignored on reuse); when creating, derives `privacy_mode` from the room when omitted —
+    PUBLIC if publicly listed, else PRIVATE.
   - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
     `SceneParticipation` for the character's account in the scene if one does not already exist.
     Public API consumed by combat to record fighters as first-class scene participants.
@@ -559,6 +560,10 @@ Roleplay session recording with participant tracking, interaction logging, perso
 - **Frontend:** `ConsentPrompt` polls both `GET /api/action-requests/?scene={id}&status=pending`
   and `GET /api/action-targets/?scene={id}&status=pending` every 5 s and renders amber consent cards for
   each; additional-target accepts/denies pass `target_persona_id` to the shared respond endpoint.
+- **Privacy ↔ room-publicness invariant (#1287):** a Scene in a publicly-listed room must be PUBLIC;
+  `Scene.save()`/`clean()` enforce this via `_validate_privacy_against_room()`;
+  `ensure_scene_for_location` derives the default. Shared helper: `room_is_publicly_listed(room)`
+  in `evennia_extensions/models.py`. See [scenes.md](scenes.md) §"Scene Privacy ↔ Room-Publicness Invariant".
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
