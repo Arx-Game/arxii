@@ -1024,6 +1024,62 @@ def declare_cover(
     return action
 
 
+def declare_interpose(
+    participant: CombatParticipant,
+    ally: CombatParticipant | None,
+) -> CombatRoundAction:
+    """Declare an interposing maneuver — passives-only, auto-ready.
+
+    ``ally=None`` means the participant will guard any ally hit this round;
+    when a specific ally is given they must be active and in the same encounter.
+    Interpose resolves in a later task; this function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot interpose: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot interpose: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot interpose: character is dead."
+        raise ValueError(msg)
+
+    if ally is not None:
+        if ally.pk == participant.pk:
+            msg = "Cannot interpose yourself."
+            raise ValueError(msg)
+        if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+            msg = "Interpose target must be an active participant in this encounter."
+            raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.INTERPOSE,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     encounter: CombatEncounter,
     *,

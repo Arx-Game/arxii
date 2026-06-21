@@ -94,6 +94,7 @@ class CombatManeuver(models.TextChoices):
     FLEE = "flee", "Flee"
     COVER = "cover", "Cover"
     YIELD = "yield", "Yield"
+    INTERPOSE = "interpose", "Interpose"
 
 
 class DuelChallengeStatus(models.TextChoices):

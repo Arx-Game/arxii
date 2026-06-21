@@ -52,6 +52,7 @@ from world.combat.serializers import (
     DuelChallengeSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
+    InterposeSerializer,
     JoinEncounterSerializer,
     OpponentDefaultsResponseSerializer,
     OpponentStatBlockSerializer,
@@ -65,6 +66,7 @@ from world.combat.services import (
     begin_declaration_phase,
     declare_cover,
     declare_flee,
+    declare_interpose,
     end_encounter,
     join_encounter,
     leave_encounter,
@@ -702,6 +704,39 @@ class CombatEncounterViewSet(ModelViewSet):
         ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
         try:
             declare_cover(participant, ally)
+        except ValueError:
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def interpose(self, request: Request, pk: int | None = None) -> Response:
+        """Declare an interposing maneuver, optionally guarding a named ally.
+
+        Creates a passives-only action with maneuver=INTERPOSE. When
+        ``ally_participant_id`` is omitted or null, the participant guards any
+        ally hit this round (``focused_ally_target=None``). When provided, the
+        ally must be an active participant in this encounter.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = InterposeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ally_id = serializer.validated_data.get("ally_participant_id")
+        ally = (
+            get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
+            if ally_id is not None
+            else None
+        )
+        try:
+            declare_interpose(participant, ally)
         except ValueError:
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
