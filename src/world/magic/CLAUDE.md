@@ -60,7 +60,7 @@ The magic system for Arx II. Power flows from identity and connection.
 
 `services/technique_builder.py` provides a three-layer authoring stack:
 
-**Unrestricted core** — `build_technique(design, *, creator)` writes a `Technique` + payload rows (`TechniqueCapabilityGrant`, `TechniqueDamageProfile`, `TechniqueAppliedCondition`) + restriction attachments in one `transaction.atomic`. No gating, no character binding. `create_technique(...)` is the extracted low-level row writer shared with cantrip finalization.
+**Unrestricted core** — `build_technique(design, *, creator)` writes a `Technique` + payload rows (`TechniqueCapabilityGrant`, `TechniqueDamageProfile`, `TechniqueAppliedCondition`) + restriction attachments in one `transaction.atomic`. No gating, no character binding. `create_technique(...)` is the extracted low-level row writer shared with cantrip finalization. When `action_template` is omitted (the default), `create_technique` resolves it to the shared **Technique Cast** `ActionTemplate` seeded by `seeds_cast.py` via `get_standalone_cast_template()` — so every technique is castable standalone out of the box. Staff may pass an explicit template FK to override on a per-technique basis.
 
 **Policy layer** — `price_design(design, *, config, budget)` is a pure function that itemizes power cost per dimension and subtracts restriction refunds, returning a `TechniqueCostBreakdown`. It always runs for every author — the breakdown is informational for staff and a gate for players. `AuthoringPolicy` subclasses answer three knobs:
 - `StaffPolicy` — `enforced=False`; budget is advisory; any tier allowed.
@@ -86,6 +86,35 @@ The magic system for Arx II. Power flows from identity and connection.
 
 **Note:** During character creation, the magic stage uses a simplified cantrip selection
 system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resonance directly.
+
+### Standalone Casting (#1306)
+
+Every technique now carries an `action_template` FK (defaulted by `create_technique`) so
+casting never hard-fails with "no template." The resolution chain:
+
+- **Shared "Technique Cast" ActionTemplate** — seeded idempotently by
+  `seeds_cast.ensure_technique_cast_content()`, called from the magic dev seed.
+  Retrieved at runtime via `get_standalone_cast_template()`. Staff may override
+  on a per-technique basis via the `action_template` FK; `None` (omit the kwarg)
+  always resolves to this shared template.
+- **Per-character magic check** — every caster rolls *their own* magic check, not a
+  technique-level authored check. `ensure_character_magic_check_type(character_sheet, *, stat, skill)`
+  (`seeds_checks.py`) synthesizes a `CheckType` named after the character (pattern
+  `character_magic_check_type_name(character_sheet)`) that weights the character's
+  personal stat + skill. `get_character_cast_check(character)` (`services/anima.py`)
+  resolves this check type for use by the cast pipeline.
+- **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
+  points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
+  check type, so the anima ritual and technique casts always roll the same personal check.
+  Use `get_character_anima_ritual(character)` to retrieve the anima ritual row.
+- **Graded consequence pool** — a single "Magic: Technique Cast" `ConsequencePool`
+  (seeded by `seeds_cast.py`) routes graded outcomes (critical/success/partial/failure/
+  critical-failure) through the shared consequence machinery. No per-technique pool is
+  required.
+
+Follow-ups deferred to later issues: technique designer (players pick a consequence pool
+from a curated catalog), targeting model (targeting validity + AoE + per-technique target
+constraints + frontend target picker), and the optional resonance→aspect mapping.
 
 ### Cantrips (Character Creation)
 - `Cantrip` - Staff-curated technique templates for CG magic stage selection
