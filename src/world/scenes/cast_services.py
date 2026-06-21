@@ -431,7 +431,7 @@ def resolve_accepted_cast(
     return result  # result.power_ledger is already set from _resolve_cast
 
 
-def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
+def request_technique_cast(  # noqa: PLR0913, C901 - cohesive cast-routing params
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -492,6 +492,21 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         initiator_persona=initiator_persona,
         target_personas=[target_persona] if target_persona is not None else [],
     )
+
+    # AREA technique that requires consent: guard before the immediate route.
+    # Hostile AREA routes to combat; SELF AREA only hits the caster — both safe.
+    # Only behavior-altering ALLY-expanding AREA is the hole: resolve_targets would
+    # silently expand to all other scene personas with no consent step.
+    if technique.target_type == ActionTargetType.AREA and cast_requires_consent(technique):
+        relationship = derive_target_relationship(technique)
+        if relationship == ConditionTargetKind.ALLY:
+            # TODO(#1321 follow-up): mass-consent state machine for AREA behavior-altering
+            # techniques; per-target consent is not yet supported for multi-target casts.
+            msg = (
+                "Multi-target behavior-altering AREA casts are not yet supported; "
+                "obtain individual consent before casting."
+            )
+            raise InvalidCastTarget(msg)
 
     # FILTERED_GROUP with a player-supplied list: guard the deferred cases, then
     # resolve immediately for the benign capability / stat-buff path.

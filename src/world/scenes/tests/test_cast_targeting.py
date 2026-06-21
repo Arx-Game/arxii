@@ -286,6 +286,61 @@ class TestFilteredGroupBenignCast(CastScenarioMixin):
         )
 
 
+# ---------------------------------------------------------------------------
+# AREA technique consent guard — #1321
+# ---------------------------------------------------------------------------
+
+
+class TestAreaBehaviorAlteringCastRaises(CastScenarioMixin):
+    """Behavior-altering AREA technique raises InvalidCastTarget (consent hole fix, #1321)."""
+
+    def test_behavior_altering_area_cast_raises(self) -> None:
+        """AREA technique with alters_behavior=True condition → InvalidCastTarget."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+            target_type=ActionTargetType.AREA,
+        )
+        attach_behavior_altering_condition(technique)
+        grant_technique(self.caster, technique)
+
+        with self.assertRaises(InvalidCastTarget):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+            )
+
+    def test_capability_area_cast_does_not_raise(self) -> None:
+        """Non-behavior-altering (capability/stat) AREA technique does NOT raise."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+            target_type=ActionTargetType.AREA,
+        )
+        # ALLY condition whose category does NOT alter behavior → consent-free.
+        condition_tmpl = ConditionTemplateFactory()
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=condition_tmpl,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=0,
+        )
+        grant_technique(self.caster, technique)
+
+        # Should not raise — just verifying no InvalidCastTarget is thrown.
+        try:
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+            )
+        except InvalidCastTarget as exc:
+            self.fail(f"Capability AREA cast should not raise InvalidCastTarget: {exc}")
+
+
 class TestFilteredGroupDeferredCases(CastScenarioMixin):
     """FILTERED_GROUP hostile and behavior-altering paths raise InvalidCastTarget (#1321)."""
 
