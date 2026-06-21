@@ -12,6 +12,7 @@ from __future__ import annotations
 from django.test import tag
 
 from actions.factories import ActionTemplateFactory
+from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.conditions.services import get_active_conditions
 from world.magic.factories import (
@@ -27,6 +28,7 @@ from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
     grant_technique,
 )
+from world.traits.models import CheckOutcome
 
 
 @tag("postgres")
@@ -54,11 +56,16 @@ class TestSelfBuffAppliesConditionToCaster(CastScenarioMixin):
         caster_char.location = self.scene.location
         caster_char.save()
 
-        cast = request_technique_cast(
-            scene=self.scene,
-            initiator_persona=self.caster,
-            technique=technique,
-        )
+        # Force a successful cast roll so the SL gate (minimum_success_level=0) is met
+        # deterministically — a real d100 roll fails ~40% of the time and would skip
+        # the condition (the cast itself still resolves regardless of SL).
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success):
+            cast = request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+            )
 
         self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
         active = get_active_conditions(caster_char, condition=condition_tmpl)
@@ -97,12 +104,17 @@ class TestBenignNonConsentBuffAtOtherPC(CastScenarioMixin):
         target_char.location = self.scene.location
         target_char.save()
 
-        cast = request_technique_cast(
-            scene=self.scene,
-            initiator_persona=self.caster,
-            target_persona=self.target,
-            technique=technique,
-        )
+        # Force a successful cast roll so the SL gate (minimum_success_level=0) is met
+        # deterministically — a real d100 roll fails ~40% of the time and would skip
+        # the condition (the cast itself still resolves immediately regardless of SL).
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success):
+            cast = request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                target_persona=self.target,
+                technique=technique,
+            )
 
         self.assertEqual(
             cast.request.status,

@@ -31,7 +31,7 @@ from world.combat.cast_seed import (
     seed_or_feed_encounter_from_cast,
 )
 from world.combat.services import acknowledge_encounter_risk
-from world.magic.models.techniques import CharacterTechnique
+from world.magic.models.techniques import CharacterTechnique, ConditionTargetKind
 from world.magic.narration import render_cast_outcome_narration
 from world.magic.services.condition_application import apply_technique_conditions
 from world.magic.services.hostility import is_technique_hostile
@@ -242,12 +242,6 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     )
 
     # Apply technique-authored conditions to resolved targets.
-    resolved_personas = resolve_targets(
-        technique=technique,
-        initiator_persona=caster_persona,
-        scene=scene,
-        supplied_personas=[target_persona] if target_persona is not None else [],
-    )
     success_level = (
         result.action_resolution.main_result.check_result.success_level
         if result.action_resolution.main_result is not None
@@ -255,9 +249,22 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     )
     eff_intensity = power_ledger.total if power_ledger is not None else technique.intensity
     relationship = derive_target_relationship(technique)
-    targets_by_kind: dict[str, list] = {
-        relationship: [p.character_sheet.character for p in resolved_personas]
-    }
+    if relationship == ConditionTargetKind.SELF:
+        # A SELF technique's effect always lands on the caster, independent of the
+        # technique's target_type cardinality — mirrors combat's _resolve_condition_target,
+        # where SELF resolves to caster_od unconditionally. resolve_targets is
+        # cardinality-driven (SINGLE + no supplied target → []), so a self-cast with
+        # the default SINGLE cardinality would otherwise resolve to no targets and
+        # silently drop the condition.
+        targets_by_kind: dict[str, list] = {relationship: [character]}
+    else:
+        resolved_personas = resolve_targets(
+            technique=technique,
+            initiator_persona=caster_persona,
+            scene=scene,
+            supplied_personas=[target_persona] if target_persona is not None else [],
+        )
+        targets_by_kind = {relationship: [p.character_sheet.character for p in resolved_personas]}
     apply_technique_conditions(
         technique=technique,
         success_level=success_level,
