@@ -142,6 +142,7 @@ class CombatEncounterViewSet(ModelViewSet):
             "revert_combo",
             "flee",
             "cover",
+            "interpose",
             "leave",
         ):
             return [IsAuthenticated(), IsEncounterParticipant()]
