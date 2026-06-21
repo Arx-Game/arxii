@@ -232,6 +232,36 @@ class AddMemberTests(TestCase):
         self.assertEqual(cov.ranks.count(), 1)
         self.assertEqual(membership.rank, cov.ranks.get())
 
+    def test_cannot_join_when_a_member_has_blocked_you(self) -> None:
+        """#1278 — a member who blocked the joiner gates the join (generic, no name)."""
+        from evennia_extensions.factories import AccountFactory
+        from evennia_extensions.models import PlayerData
+        from world.covenants.exceptions import CovenantMemberBlockError
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.scenes.models import Block
+
+        def played():
+            account = AccountFactory()
+            player_data, _ = PlayerData.objects.get_or_create(account=account)
+            entry = RosterEntryFactory()
+            RosterTenureFactory(player_data=player_data, roster_entry=entry)
+            return entry.character_sheet, player_data
+
+        cov = CovenantFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        member_sheet, member_pd = played()
+        joiner_sheet, joiner_pd = played()
+        add_member(covenant=cov, character_sheet=member_sheet, role=role)
+
+        Block.objects.create(
+            owner=member_pd,
+            blocked_player=joiner_pd,
+            blocker_persona=member_sheet.primary_persona,
+            blocked_persona=joiner_sheet.primary_persona,
+        )
+        with self.assertRaises(CovenantMemberBlockError):
+            add_member(covenant=cov, character_sheet=joiner_sheet, role=role)
+
     def test_duplicate_active_raises_integrity_error(self) -> None:
         cov = CovenantFactory()
         CovenantRankFactory(covenant=cov, tier=1)

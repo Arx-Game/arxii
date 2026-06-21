@@ -250,6 +250,21 @@ def add_member(
     from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
 
     assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
+
+    # #1278 — you can't join a covenant that holds a member who has blocked you (or whom you
+    # blocked). Generic to the joiner: they're told a member blocked them, never which one.
+    from world.covenants.exceptions import CovenantMemberBlockError  # noqa: PLC0415
+    from world.scenes.block_services import org_join_blocked  # noqa: PLC0415
+
+    member_sheets = [
+        membership.character_sheet
+        for membership in covenant.memberships.filter(left_at__isnull=True).select_related(
+            "character_sheet"
+        )
+    ]
+    if org_join_blocked(joining_sheet=character_sheet, member_sheets=member_sheets):
+        raise CovenantMemberBlockError
+
     rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,

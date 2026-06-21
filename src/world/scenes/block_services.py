@@ -195,18 +195,50 @@ def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     return hidden
 
 
-def _persona_player(persona: Persona) -> PlayerData | None:
-    """The PlayerData currently playing this persona's character, or None (#1278)."""
+def _sheet_player(sheet: CharacterSheet) -> PlayerData | None:
+    """The PlayerData currently playing this character sheet, or None (#1278)."""
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     try:
-        roster_entry = persona.character_sheet.roster_entry
+        roster_entry = sheet.roster_entry
     except ObjectDoesNotExist:
         return None
     if roster_entry is None:
         return None
     current = roster_entry.current_tenure
     return current.player_data if current is not None else None
+
+
+def _persona_player(persona: Persona) -> PlayerData | None:
+    """The PlayerData currently playing this persona's character, or None (#1278)."""
+    return _sheet_player(persona.character_sheet)
+
+
+def org_join_blocked(*, joining_sheet: CharacterSheet, member_sheets: Any) -> bool:
+    """True if an active block sits between the joining player and any member's player (#1278).
+
+    The org/covenant gate: you can't join an org that holds a member who has blocked you (or whom
+    you've blocked). Player-level — the block applies regardless of which face, since joining an org
+    is an account-relevant, deliberate act; the joiner is told only generically (no name), so no
+    identity is derivable. One query.
+    """
+    joining_player = _sheet_player(joining_sheet)
+    if joining_player is None:
+        return False
+    member_player_ids = {
+        player.pk for sheet in member_sheets if (player := _sheet_player(sheet)) is not None
+    }
+    member_player_ids.discard(joining_player.pk)
+    if not member_player_ids:
+        return False
+    return (
+        _active_blocks()
+        .filter(
+            (Q(owner=joining_player) & Q(blocked_player_id__in=member_player_ids))
+            | (Q(blocked_player=joining_player) & Q(owner_id__in=member_player_ids))
+        )
+        .exists()
+    )
 
 
 def create_block(
