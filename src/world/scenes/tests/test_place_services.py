@@ -43,6 +43,8 @@ class TestEnsureSceneForLocation(TestCase):
             db_key="PrivTest",
             db_typeclass_path="typeclasses.rooms.Room",
         )
+        room.room_profile.is_public = False
+        room.room_profile.save()
         scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
         self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
 
