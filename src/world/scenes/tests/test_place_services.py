@@ -43,6 +43,8 @@ class TestEnsureSceneForLocation(TestCase):
             db_key="PrivTest",
             db_typeclass_path="typeclasses.rooms.Room",
         )
+        room.room_profile.is_public = False
+        room.room_profile.save()
         scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
         self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
 
@@ -63,6 +65,24 @@ class TestEnsureSceneForLocation(TestCase):
         second = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(second.privacy_mode, ScenePrivacyMode.PUBLIC)
+
+    def test_default_derives_public_in_public_room(self) -> None:
+        room = ObjectDBFactory(
+            db_key="PubDerive",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )  # default profile is_public=True
+        scene = ensure_scene_for_location(room)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PUBLIC)
+
+    def test_default_derives_private_in_non_public_room(self) -> None:
+        room = ObjectDBFactory(
+            db_key="PrivDerive",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        room.room_profile.is_public = False
+        room.room_profile.save()
+        scene = ensure_scene_for_location(room)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
 
 
 class TestJoinPlace(TestCase):

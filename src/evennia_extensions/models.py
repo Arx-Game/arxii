@@ -6,6 +6,7 @@ This app extends Evennia's core models rather than replacing them.
 from typing import Union
 
 from allauth.account.models import EmailAddress
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
@@ -340,6 +341,18 @@ class PlayerAllowList(SharedMemoryModel):
 # superseded by the persona-aware ``world.scenes.Block`` (block resolution lives there with the
 # Persona FKs it needs). ``PlayerAllowList`` (above) stays — it's the allow/friends list, now wired
 # by the #1271 privacy tiers.
+
+
+def room_is_publicly_listed(room: ObjectDB) -> bool:
+    """Whether a room appears in public listings. Missing RoomProfile -> not public.
+
+    Single source of truth for the scene privacy<->room-publicness invariant:
+    consumed by Scene validation, ensure_scene_for_location, and combat duels.
+    """
+    try:
+        return room.room_profile.is_public
+    except ObjectDoesNotExist:
+        return False
 
 
 class RoomProfile(SharedMemoryModel):

@@ -164,6 +164,36 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             return True
         return any(p.account_id == account.pk for p in self.participations_cached)
 
+    def _validate_privacy_against_room(self) -> None:
+        """Enforce the scene privacy<->room-publicness invariant (#1287).
+
+        A publicly-listed room may host only PUBLIC scenes; PRIVATE/EPHEMERAL
+        scenes leak in a space anyone can enter. No location, a room with no
+        RoomProfile, and non-public rooms are unconstrained. One-directional.
+        See docs/systems/scenes.md.
+        """
+        from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+
+        if self.location_id is None or self.privacy_mode == ScenePrivacyMode.PUBLIC:
+            return
+        if room_is_publicly_listed(self.location):
+            raise ValidationError(
+                {
+                    "privacy_mode": (
+                        f"A {self.get_privacy_mode_display()} scene cannot be held "
+                        "in a publicly-listed room; only PUBLIC scenes are allowed there."
+                    )
+                }
+            )
+
+    def clean(self) -> None:
+        super().clean()
+        self._validate_privacy_against_room()
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self._validate_privacy_against_room()
+        super().save(*args, **kwargs)
+
     def finish_scene(self) -> None:
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:

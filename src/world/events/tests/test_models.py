@@ -184,6 +184,34 @@ class EventHostSocietyTest(TestCase):
         self.assertIsNone(row["host_society_id"])
 
 
+class EventCleanPrivacyTest(TestCase):
+    """Event.clean() rejects a private event in a publicly-listed room."""
+
+    def test_clean_raises_for_private_event_in_public_room(self) -> None:
+        event = EventFactory(is_public=False)
+        event.location.is_public = True
+        event.location.save()
+
+        with self.assertRaises(ValidationError) as ctx:
+            event.clean()
+
+        self.assertIn("is_public", ctx.exception.message_dict)
+
+    def test_clean_passes_for_public_event_in_public_room(self) -> None:
+        event = EventFactory(is_public=True)
+        event.location.is_public = True
+        event.location.save()
+
+        event.clean()  # must not raise
+
+    def test_clean_passes_for_private_event_in_non_public_room(self) -> None:
+        event = EventFactory(is_public=False)
+        event.location.is_public = False
+        event.location.save()
+
+        event.clean()  # must not raise
+
+
 class EventModificationModelTest(TestCase):
     def test_str(self) -> None:
         mod = EventModificationFactory()

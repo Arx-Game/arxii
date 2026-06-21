@@ -130,6 +130,21 @@ class _EventScheduleMixin:
             raise serializers.ValidationError(msg)
         return value
 
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        is_public = attrs.get("is_public")  # noqa: STRING_LITERAL
+        if is_public is None:
+            is_public = self.instance.is_public if self.instance is not None else True
+        if "location" in attrs:  # noqa: STRING_LITERAL
+            location = attrs.get("location")  # noqa: STRING_LITERAL
+        else:
+            location = self.instance.location if self.instance is not None else None
+        if not is_public and location is not None and location.is_public:
+            raise serializers.ValidationError(
+                {"is_public": "A private event cannot be held in a publicly-listed room."}  # noqa: STRING_LITERAL
+            )
+        return attrs
+
 
 class EventUpdateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
     """Serializer for updating events. Only mutable fields are writable."""

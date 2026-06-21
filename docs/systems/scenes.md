@@ -142,11 +142,84 @@ from world.scenes.place_services import ensure_scene_for_location
 
 # Find or create the active scene for a room.  If an active scene already
 # exists the caller's privacy_mode is ignored and the existing scene is
-# returned unchanged.  When a new scene is created, privacy_mode is applied
-# (defaults to PUBLIC when omitted).  Used by combat encounter-start to
-# guarantee every encounter carries a scene.
+# returned unchanged.  When a new scene is created, privacy_mode is derived
+# from the room when omitted — PUBLIC if the room is publicly listed, else
+# PRIVATE.  Used by combat encounter-start to guarantee every encounter
+# carries a scene.
 scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
 ```
+
+### Scene Privacy ↔ Room-Publicness Invariant (#1287)
+
+**The rule (one-directional):** a `Scene` whose `location` is a publicly-listed
+room **must** have `privacy_mode == PUBLIC`. Hosting a PRIVATE or EPHEMERAL scene
+in a space anyone can enter would allow RP-leak. The constraint is one-directional:
+scenes in non-public rooms, scenes with no location, and scenes in rooms that lack
+a `RoomProfile` are completely unconstrained.
+
+**Publicness test:** a room is "publicly listed" when
+`room.room_profile.is_public` is `True`. A missing `RoomProfile` is treated as
+not-public (fail-closed), so unconfigured rooms impose no constraint.
+
+**EPHEMERAL is stricter than PRIVATE.** Both PRIVATE and EPHEMERAL are forbidden
+in publicly-listed rooms; the rule blocks anything that is not PUBLIC.
+
+**Two enforcement points:**
+
+1. `ensure_scene_for_location(room)` (`place_services.py`) — when `privacy_mode`
+   is omitted, the default is derived from the room: `PUBLIC` if
+   `room_is_publicly_listed(room)`, else `PRIVATE`. This is the creation
+   chokepoint; callers that pass an explicit mode get no derivation, but the
+   `Scene.save()` guard (below) will still fire if the mode violates the invariant.
+
+2. `Scene._validate_privacy_against_room()` wired into both `Scene.save()` and
+   `Scene.clean()` — raises `ValidationError({"privacy_mode": "..."})` when a
+   non-PUBLIC scene has a publicly-listed-room `location`. Every ORM `save()`
+   call, including serializer `.save()`, hits this guard.
+
+**Shared helper:**
+
+```python
+from evennia_extensions.models import room_is_publicly_listed
+
+room_is_publicly_listed(room) -> bool
+# Returns room.room_profile.is_public, or False when the RoomProfile is absent.
+# Single source of truth consumed by Scene validation and ensure_scene_for_location.
+```
+
+**Sceneless-interaction reconciliation:** the invariant governs scenes that
+*exist*. Combat no longer creates null-scene encounters (every encounter now
+carries a required scene). However, non-scene interactions legitimately remain
+sceneless — the `scene__isnull=True` branch in `Interaction.objects.visible_to`
+(`world/scenes/managers.py`) treats them as public-visible and this is intentional,
+unchanged behaviour.
+
+**Events obey the invariant:** The rule is enforced at config time (create/edit)
+and at start time. `Event.is_public` is *calendar visibility* (a different axis
+from `RoomProfile.is_public`, which governs room listing).
+
+*Config time:* `Event.clean()` (wired into the admin ModelForm) and
+`_EventScheduleMixin.validate()` (shared by `EventCreateSerializer` and
+`EventUpdateSerializer`) both reject a private event (`is_public=False`) whose
+`location.is_public` is `True`. This means a GM cannot save or submit a private
+event for a publicly-listed room — they hit the error at create or edit, not at
+start.
+
+*Start time:* `start_event` (`world/events/services.py`) enforces the rule again
+as the events chokepoint. When `start_event` derives `privacy_mode` as PRIVATE
+(i.e. the event is not public on the calendar), it checks `event.location.is_public`;
+if the room is publicly listed, it raises `EventError.PRIVATE_IN_PUBLIC_ROOM` before
+the `Scene` is created. The `Scene.save()` guard remains the final backstop for any
+path that bypasses both chokepoints.
+
+**Out of scope:**
+
+- No retroactive re-derivation: if a room's `is_public` flag flips *after* a scene
+  has been created, existing scenes are not automatically updated. The guard fires
+  only at `save()` / `clean()` time on the `Scene` instance itself.
+- `bulk_create` bypasses `save()` and therefore bypasses the guard. Do not use
+  `Scene.objects.bulk_create` to create scenes without manually enforcing the
+  invariant.
 
 ```python
 from world.scenes.interaction_services import ensure_scene_participation
