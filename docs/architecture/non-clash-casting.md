@@ -1,8 +1,57 @@
-# Non-clash casting complete — design
+# Non-clash casting — design and build record
 
-**Bundles:** GitHub issues #547, #541, #542
-**Branch:** `feature-547-regular-cast-strain-integration-ui-non-c`
-**Goal:** make regular (non-clash) magical casting fully player-driven end-to-end — one unified actions endpoint, proper target picker UI, and Strain commitment with canonical audit.
+**Bundles:** GitHub issues #547, #541, #542 (original spec); #1321 (technique-targeting follow-up)
+**Status:** BUILT & WIRED (including technique targeting, behavior-consent routing, and AoE — see
+reconciliation notes below).
+
+## Reconciliation — what changed vs. the original spec (#1321)
+
+This section documents the state of surfaces described in this doc against the shipped code.
+Labels follow the `verify-against-code` convention.
+
+### TargetSpec / TargetType / TargetFilters / TargetKind
+**[BUILT & WIRED]** All four surfaces shipped in the original #547 PR and remain in production:
+- `TargetSpec`, `TargetFilters`, `StrainAvailability`, `PlayerAction.target_spec` — `src/actions/types.py`
+- `TargetType` StrEnum — `src/actions/types.py`
+- `ActionTargetType` TextChoices — `src/actions/constants.py`
+- `TargetKind` TextChoices — `src/actions/constants.py`
+
+### Technique → target_spec branch (#1321) [BUILT & WIRED]
+`_target_spec_for_technique_action(technique_id)` in `src/actions/player_interface.py` builds a
+`TargetSpec` for combat technique actions from `Technique.target_type` (cardinality) and
+`derive_target_relationship(technique)` (relationship). Returns `None` for SELF-targeting techniques
+(no picker needed). Called via `_target_spec_for_action` for any `PlayerAction` where
+`ref.technique_id` is set. `TargetPicker.tsx` (multi-select capable) is driven by the resulting
+`target_spec` on the technique's action row.
+
+### Behavior-gated consent routing (#1321) [BUILT & WIRED]
+The original spec described consent as a gate on "benign vs. hostile." The shipped implementation
+in `world/scenes/cast_services.py:request_technique_cast` uses a three-way split:
+- **Hostile** → `seed_or_feed_encounter_from_cast` (combat).
+- **Benign + behavior-altering** → PENDING `SceneActionRequest` (consent required). Driven by
+  `cast_requires_consent(technique)` which checks `ConditionCategory.alters_behavior` on any
+  applied condition. Behavior-altering categories are compulsion, charm, fear.
+- **Benign + capability/stat** → resolves immediately, including on other PCs. No consent step.
+
+### AoE expansion (#1321) [BUILT & WIRED]
+- **Standalone AREA** — `resolve_targets` (`world/magic/services/targeting.py`) auto-expands to all
+  eligible scene personas (relationship-derived: SELF→caster only, ALLY/ENEMY→all others).
+- **Combat AREA/FILTERED_GROUP** — `CombatRoundActionTarget` join table (`world/combat/models.py`)
+  stores per-`CombatOpponent` target rows. AREA auto-expands to all active opponents;
+  FILTERED_GROUP uses the stored/supplied subset. Per-target damage + conditions expand in
+  `CombatTechniqueResolver`. SINGLE/SELF actions continue to use
+  `CombatRoundAction.focused_opponent_target`.
+
+### Standalone condition application (#1321) [BUILT & WIRED]
+`apply_technique_conditions` (`world/magic/services/condition_application.py`) — extracted from
+combat's `_apply_conditions`. Standalone casts now apply technique-authored conditions to resolved
+targets via `_resolve_and_pose_cast`. Both combat and standalone paths call the same function;
+`AppliedConditionResult` (return type) still lives in `world/combat/types.py` as a known follow-up.
+
+---
+
+**Original goal:** make regular (non-clash) magical casting fully player-driven end-to-end — one
+unified actions endpoint, proper target picker UI, and Strain commitment with canonical audit.
 
 ## Motivation
 
@@ -114,7 +163,7 @@ Location: `src/actions/types.py`
 - `TargetType` StrEnum at `src/actions/types.py:27-33` and `ActionTargetType` TextChoices at `src/actions/constants.py:36-42` already describe target cardinality (`SELF | SINGLE | AREA | FILTERED_GROUP`). **Reuse them for cardinality.**
 - `Action` base class at `src/actions/base.py` already has `target_type` as a class field (alongside `get_prerequisites`, `execute`, `check_availability`). **Extend with class fields** — no new method needed.
 
-**New dataclasses (only the genuinely missing surfaces):**
+**Shipped dataclasses [BUILT & WIRED]** (`src/actions/types.py`):
 
 ```python
 @dataclass(frozen=True)
@@ -123,11 +172,12 @@ class TargetFilters:
     in_same_zone: bool = False
     exclude_self: bool = False
     must_be_conscious: bool = False
+    excluded_persona_ids: frozenset[int] = field(default_factory=frozenset)
 
 @dataclass(frozen=True)
 class TargetSpec:
-    kind: TargetKind          # NEW TextChoices below — entity type axis
-    cardinality: TargetType   # REUSED existing enum — SELF/SINGLE/AREA/FILTERED_GROUP
+    kind: TargetKind          # entity type axis — PERSONA / CHARACTER / ITEM / ROOM
+    cardinality: TargetType   # SELF / SINGLE / AREA / FILTERED_GROUP
     filters: TargetFilters
 
 @dataclass(frozen=True)
@@ -136,20 +186,20 @@ class StrainAvailability:
     default: int = 0
 ```
 
-**PlayerAction extensions** (note: `is_targeted` deliberately omitted — `target_spec is None` is the source of truth; `multi` deliberately omitted — `cardinality in {AREA, FILTERED_GROUP}` covers it):
+**PlayerAction [BUILT & WIRED]** (`src/actions/types.py`):
 
 ```python
 @dataclass(frozen=True)
 class PlayerAction:
     # ...existing fields...
     target_spec: TargetSpec | None = None       # None = self-action
-    enhancements: tuple[AvailableEnhancement, ...] = ()  # reusing existing dataclass
+    enhancements: tuple[AvailableEnhancement, ...] = ()
     strain: StrainAvailability | None = None
 ```
 
-### New: `TargetKind` TextChoices
+### `TargetKind` TextChoices [BUILT & WIRED]
 
-Location: `src/actions/constants.py` (sibling to existing `ActionTargetType`)
+Location: `src/actions/constants.py` (sibling to `ActionTargetType`)
 
 ```python
 class TargetKind(TextChoices):
@@ -159,7 +209,12 @@ class TargetKind(TextChoices):
     ROOM = "room", "Room"
 ```
 
-This is orthogonal to `ActionTargetType` (cardinality). Kind = *what type of entity*; cardinality = *how many / how selected*.
+Orthogonal to `ActionTargetType` (cardinality). Kind = *what type of entity*; cardinality = *how many / how selected*.
+
+**Technique branch (#1321):** `_target_spec_for_technique_action(technique_id)` in
+`src/actions/player_interface.py` synthesizes a `TargetSpec` for any combat PlayerAction whose
+`ref.technique_id` is set, using `Technique.target_type` (cardinality) and
+`derive_target_relationship` (exclude_self logic). Returns `None` for SELF techniques.
 
 ### Migrations
 

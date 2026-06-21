@@ -42,6 +42,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
+  - **Combat AoE targeting (#1321, in `world/combat`):** `CombatRoundActionTarget` (join
+    table; per-`CombatOpponent` row for AREA/FILTERED_GROUP technique actions)
   - **Dramatic moment tagging (#545 / #1139):**
     `DramaticMomentType` (inherits `RenownAwardConfig`; staff-authored catalog —
     `label`, `resonance` FK, `resonance_amount`, `per_scene_cap`),
@@ -149,6 +151,21 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
     `RitualCheckConfig.check_type` at the per-character check so ritual and technique
     casts roll the same personal check.
+  - Technique targeting (#1321):
+    `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
+    — ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF.
+    `technique_alters_behavior(technique) -> bool` — True if any applied condition's
+    `category.alters_behavior` is True (compulsion, charm, fear).
+    `cast_requires_consent(technique) -> bool` — True iff `technique_alters_behavior`; **behavior
+    only**, not blanket benign (capability/stat buffs on other PCs are consent-free).
+    `validate_cast_target(*, technique, initiator_persona, target_personas)` — raises
+    `InvalidCastTarget` on cardinality or relationship violations.
+    `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` —
+    expands `Technique.target_type` to concrete personas (SELF→caster; SINGLE→one;
+    AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible).
+    `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind,
+    source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
+    — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -161,11 +178,17 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
   MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect),
   `VitalBonusTarget`, `RitualExecutionKind`, `AnimaRitualCategory`,
-  `PendingAlterationStatus`, `AlterationTier`
+  `PendingAlterationStatus`, `AlterationTier`,
+  `ConditionTargetKind` (SELF/ALLY/ENEMY — `world/magic/models/techniques.py`; derived
+  relationship axis for targeting, distinct from `ActionTargetType` cardinality),
+  `ActionTargetType` (SELF/SINGLE/AREA/FILTERED_GROUP — `actions/constants.py`; per-technique
+  cardinality field `Technique.target_type`)
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
   `XPInsufficient`, `RitualComponentError`,
-  `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item) —
+  `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
+  `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
+  on cardinality/relationship violations) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
@@ -256,14 +279,20 @@ Check resolution engine — converts trait values to ranks and rolls against res
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
-- **Models:** `ConditionCategory`, `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`, `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`, `ConditionDamageInteraction`, `ConditionConditionInteraction`
+- **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
+  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent),
+  `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`,
+  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
+  `ConditionDamageInteraction`, `ConditionConditionInteraction`
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
 - **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
   `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()`
   wired into all `world/conditions/services.py` mutation sites.
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
-- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment boon/injury application), progression (interactions)
+- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment
+  boon/injury application, behavior-consent gating via `ConditionCategory.alters_behavior`),
+  progression (interactions)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
