@@ -7,13 +7,8 @@ cast routing downstream.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
-
-if TYPE_CHECKING:
-    pass
 
 
 def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
