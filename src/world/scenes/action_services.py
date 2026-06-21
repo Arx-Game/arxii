@@ -389,9 +389,6 @@ def respond_to_action_request(
                 )
 
             _accrue_engagement_for_primary(action_request)
-            if action_request.target_persona is not None:
-                action_request.engagement_credited = True
-                action_request.save(update_fields=["engagement_credited"])
 
             # result is None only for hostile consent-accepts (#777), which have
             # an empty action_key and therefore never a resolver.
@@ -641,7 +638,6 @@ def respond_to_action_target(
             _accrue_engagement_for_persona(
                 action_request, action_target.target_persona, band=action_target.difficulty_choice
             )
-            action_target.engagement_credited = True
             action_target.save(
                 update_fields=[
                     "status",
@@ -650,7 +646,6 @@ def respond_to_action_target(
                     "result_interaction",
                     "difficulty_choice",
                     "resist_effort_level",
-                    "engagement_credited",
                 ]
             )
             # Per-target resolver invocation (#1178): fire the registered resolver for
