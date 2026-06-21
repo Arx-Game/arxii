@@ -36,7 +36,7 @@ actions. Magic and combat never touch `action.run()`. **Fix-on-sight target.**
 
 | # | Web dispatch family | Entry | Reaches | Telnet today |
 |---|---|---|---|---|
-| 1 | **Unified action dispatch** | `dispatch_player_action()` | REGISTRY→`action.run`, CHALLENGE→`resolve_challenge`, COMBAT→`declare_action`/`resolve_round`→`use_technique` | Only REGISTRY, and only via `self.action.run()` (bypassing the dispatcher) |
+| 1 | **Unified action dispatch** | `dispatch_player_action()` | REGISTRY→`action.run`, CHALLENGE→`resolve_challenge`, COMBAT→`declare_action`/`resolve_round`→`use_technique` | REGISTRY via `ArxCommand` → `self.action.run()`; COMBAT via `DispatchCommand` → `dispatch_player_action()` (`CmdDeclareTechnique`); CHALLENGE still G1 (#1332) |
 | 2 | **Consent flow** | `SceneActionRequestViewSet` (`action_views.py:55`) → `create_action_request`/`respond_to_action_request` (`action_services.py:150/304`) → `start_action_resolution` | Targeted social actions (intimidate, persuade, …) with accept/deny gating | ❌ none |
 | 3 | **Direct viewset→service** | dedicated viewsets/views → service fn (no action, no dispatcher) | thread weave/imbue/pull, rituals, outfits, narrative | ❌ none |
 
@@ -88,7 +88,7 @@ web-only; the minimal fix is telnet `intimidate`/`accept`/`deny` shells over the
 |---|---|---|---|---|---|
 | See available techniques | ❌ none | `get_player_actions` / `_combat_actions` (`player_interface.py`) | N/A | — | G3 |
 | Declare cast (non-combat) | ❌ none | `dispatch_player_action`→CHALLENGE→`resolve_challenge` (`challenge_resolution.py`) | seam converges; no telnet | — | **G1** |
-| Declare cast (combat) | ❌ none | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | seam converges; no telnet | `test_combat_ui_integration.py` | **G1** |
+| Declare cast (combat) | `cast`/`declare` (`commands/combat.py` — `CmdDeclareTechnique(DispatchCommand)`) | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | **YES** — telnet calls `dispatch_player_action` (same seam) | `test_combat_ui_integration.py`, `test_cmd_declare_technique.py` | **G0** |
 | Check + resonance env + effects | N/A (service) | `resolve_round`→`resolve_combat_technique` (`:707`)→`use_technique` (`techniques.py:702`) | **YES** — fully shared service orchestration | `test_magic_story_pipeline.py` | **G0** |
 | Perform ritual | ✅ `ritual`/`perform` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` | **YES** — both converge on `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
 
@@ -100,11 +100,11 @@ web-only; the minimal fix is telnet `intimidate`/`accept`/`deny` shells over the
 > SERVICE + FLOW rituals. (Anima/SCENE_ACTION rituals dispatch elsewhere and are
 > out of scope.)
 
-**Verdict:** cast→outcome cannot be driven via telnet today (no `cast`/`attempt` command).
-The deep orchestration (`use_technique`, ~15 steps: anima, soulfray, resonance environment,
-conditions, story beats, achievements) is already service-tested. Minimal fix: telnet
-`cast`/`attempt` commands that call `dispatch_player_action()` with a COMBAT/CHALLENGE
-`ActionRef` — riding the exact path the web uses.
+**Verdict:** combat declare is now telnet-driveable (G0) — `cast`/`declare`
+(`CmdDeclareTechnique`) calls `dispatch_player_action()` with a COMBAT `ActionRef`, the same
+seam the web uses. Non-combat (CHALLENGE) declare remains G1 (#1332). The deep
+orchestration (`use_technique`, ~15 steps: anima, soulfray, resonance environment, conditions,
+story beats, achievements) is already service-tested.
 
 ---
 
