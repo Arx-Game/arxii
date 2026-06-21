@@ -10,7 +10,7 @@ CharacterSheet is the single anchor for all character-related data.
 
 `CharacterSheet` is OneToOne to ObjectDB (`primary_key=True` — shares pk), holding demographics/appearance fields. Every playable character has one.
 
-The **narrative bio** (concept, real_concept, quote, personality, background, obituary) was sliced out into a separate **`Profile`** model (#1270) so a cover identity can present its own bio. The sheet owns one `true_profile` (its real bio), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, with a `save()` cascade), so existing reads/writes are unchanged — bio just lives on the profile now. **Cover-bio display is wired** (#1270 slice 2): the profile serializer reads concept/quote/story from the *presented* persona's profile (`_presented_bio_profile`) — the real `true_profile` when revealed, a cover persona's own authored profile when presenting one, else blank (never the real bio for a non-revealed face). Lineage FKs (family/heritage/tarot/origin) and the cover-bio *authoring* form are the remaining follow-up slices.
+The **narrative bio** (concept, real_concept, quote, personality, background, obituary) *and* the **lineage FKs** (family, heritage, tarot_card, tarot_reversed, origin_realm) were sliced out into a separate **`Profile`** model (#1270, slices 1 + 3) so a cover identity can present its own fabricated bio *and* lineage. The sheet owns one `true_profile` (its real bio + lineage), and the PRIMARY persona points at it. `CharacterSheet` keeps read/write forwarding properties (`sheet.concept` → `true_profile.concept`, `sheet.family` → `true_profile.family`, with a `save()` cascade), so existing reads/writes — and all *mechanical* lineage reads — are unchanged; they always resolve to the real `true_profile`. **Cover display is wired** (slices 2 + 3): the profile serializer reads concept/quote/story **and lineage** from the *presented* persona's profile (`_presented_bio_profile`) — the real `true_profile` when revealed, a cover persona's own authored profile when presenting one, else blank/none (never the real bio or lineage for a non-revealed face). The real `fullname` and progression `path` stay reveal-gated (not part of the guise). The cover *authoring* form (letting a player fill in a cover persona's fabricated profile) is the remaining player-facing follow-up.
 
 ## Privacy Tiers (#1271)
 
@@ -93,8 +93,8 @@ from world.character_sheets.types import Gender as GenderChoices
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `heritage`, `origin_realm`, `species`, `family`, `tarot_card`, `tarot_reversed`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) is read/written through forwarding properties → `true_profile` (#1270). |
-| `Profile` | The narrative bio a persona presents (#1270) | `concept`, `real_concept`, `quote`, `personality`, `background`, `obituary`. Referenced by `CharacterSheet.true_profile` and `Persona.profile`. |
+| `CharacterSheet` | Primary character demographics, identity, and source-of-truth anchor | `character` (OneToOne to ObjectDB, primary_key), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `species`, `social_rank`, `marital_status`, `additional_desc`, `true_profile` (OneToOne → Profile). Narrative bio (`concept`/`quote`/`background`/…) **and lineage** (`family`/`heritage`/`tarot_card`/`tarot_reversed`/`origin_realm`) are read/written through forwarding properties → `true_profile` (#1270). |
+| `Profile` | The narrative bio + lineage a persona presents (#1270) | `concept`, `real_concept`, `quote`, `personality`, `background`, `obituary`, `family` (FK roster.Family), `heritage` (FK), `tarot_card` (FK), `tarot_reversed`, `origin_realm` (FK realms.Realm). Referenced by `CharacterSheet.true_profile` and `Persona.profile`. |
 | `CharacterSheetValue` | Links characters to characteristic values | `character_sheet` (FK), `characteristic_value` (FK) |
 
 ---
@@ -103,10 +103,10 @@ from world.character_sheets.types import Gender as GenderChoices
 
 - **Societies**: Personas are the identity layer for organization memberships, reputation, and legend
 - **Character Creation**: `CharacterSheet` fields are populated during `finalize_character()`; use `create_character_with_sheet()` as the blessed creation path
-- **Roster**: `RosterEntry` is OneToOne to CharacterSheet; `CharacterSheet.family` links to `roster.Family`
+- **Roster**: `RosterEntry` is OneToOne to CharacterSheet; `sheet.family` links to `roster.Family` (the FK lives on `Profile`; read via the forwarding property, #1270 slice 3)
 - **Species**: `CharacterSheet.species` and `CharacteristicValue.allowed_for_species`
-- **Tarot**: `CharacterSheet.tarot_card` for familyless character surnames
+- **Tarot**: `sheet.tarot_card` for familyless character surnames (FK on `Profile`, forwarded)
 - **Forms**: `CharacterSheet.build` links to `forms.Build` for body type
-- **Realms**: `CharacterSheet.origin_realm` links to `realms.Realm`
+- **Realms**: `sheet.origin_realm` links to `realms.Realm` (FK on `Profile`, forwarded)
 - **Scenes**: `Persona.character_sheet` FK links sheets to their personas; `sheet.primary_persona` accesses the PRIMARY
 - **Vitals**: `CharacterVitals` is OneToOne to CharacterSheet

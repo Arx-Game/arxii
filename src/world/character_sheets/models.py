@@ -11,7 +11,7 @@ and the evennia_extensions/object_extensions/models.py display name system.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
@@ -93,10 +93,10 @@ class Profile(SharedMemoryModel):
     cover. A sheet owns one ``true_profile`` (its real bio, presented by the PRIMARY
     persona); established/cover personas may each own their own ``Profile``.
 
-    Slice 1 (#1270) extracts the narrative *text* fields only. Lineage FKs (family,
-    heritage, tarot, origin) and the cover-bio *display* + authoring flow are follow-ups —
-    today every persona's profile is its sheet's ``true_profile``, so behaviour is
-    unchanged; this only moves where the data lives.
+    Holds the narrative *text* fields (slice 1) and the *lineage* FKs — family, heritage,
+    tarot, origin (slice 3). A cover persona may own its own Profile to present a fabricated
+    bio + lineage; the sheet's ``true_profile`` is the real one, surfaced through forwarding
+    properties on ``CharacterSheet`` so existing ``sheet.<field>`` reads/writes are unchanged.
     """
 
     concept = models.CharField(
@@ -120,6 +120,46 @@ class Profile(SharedMemoryModel):
         help_text="Death notice if character is deceased",
     )
 
+    # Lineage (#1270 slice 3). Sliced off CharacterSheet so a cover identity can present its
+    # OWN (fabricated) lineage. Mechanical reads use the sheet's forwarding properties (always
+    # → ``true_profile``, the real lineage); only display reads the *presented* face's profile.
+    heritage = models.ForeignKey(
+        Heritage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profiles",
+        help_text="Character's heritage (Normal, Sleeper, Misbegotten, etc.)",
+    )
+    origin_realm = models.ForeignKey(
+        "realms.Realm",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profiles",
+        help_text="Realm/homeland the character is from",
+    )
+    family = models.ForeignKey(
+        "roster.Family",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profiles",
+        help_text="Character's family. Null for orphans/unknown lineage.",
+    )
+    tarot_card = models.ForeignKey(
+        "tarot.TarotCard",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profiles",
+        help_text="Tarot card from naming ritual (for familyless characters).",
+    )
+    tarot_reversed = models.BooleanField(
+        default=False,
+        help_text="Whether the tarot card is reversed.",
+    )
+
     class Meta:
         verbose_name = "Profile"
         verbose_name_plural = "Profiles"
@@ -128,9 +168,9 @@ class Profile(SharedMemoryModel):
         return self.concept or f"Profile #{self.pk}"
 
 
-# The narrative bio fields that live on ``Profile`` and are exposed on ``CharacterSheet``
-# as read-only forwarding properties (→ ``true_profile``). Writers set them on the profile
-# directly; readers keep using ``sheet.<field>`` unchanged (#1270).
+# The fields that live on ``Profile`` and are exposed on ``CharacterSheet`` as forwarding
+# properties (→ ``true_profile``). Creation routes these kwargs to the profile; readers/writers
+# keep using ``sheet.<field>`` unchanged (#1270). Bio (slice 1) + lineage (slice 3).
 _PROFILE_BIO_FIELDS: tuple[str, ...] = (
     "concept",
     "real_concept",
@@ -139,6 +179,14 @@ _PROFILE_BIO_FIELDS: tuple[str, ...] = (
     "background",
     "obituary",
 )
+_PROFILE_LINEAGE_FIELDS: tuple[str, ...] = (
+    "heritage",
+    "origin_realm",
+    "family",
+    "tarot_card",
+    "tarot_reversed",
+)
+_PROFILE_FIELDS: tuple[str, ...] = _PROFILE_BIO_FIELDS + _PROFILE_LINEAGE_FIELDS
 
 
 class CharacterSheet(SharedMemoryModel):
@@ -224,23 +272,8 @@ class CharacterSheet(SharedMemoryModel):
         help_text="Possessive pronoun (e.g., 'his', 'her', 'their')",
     )
 
-    # Heritage and Origin
-    heritage = models.ForeignKey(
-        Heritage,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="character_sheets",
-        help_text="Character's heritage (Normal, Sleeper, Misbegotten, etc.)",
-    )
-    origin_realm = models.ForeignKey(
-        "realms.Realm",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="character_sheets",
-        help_text="Realm/homeland the character is from",
-    )
+    # Heritage and Origin lineage moved to Profile (#1270 slice 3); read/written through the
+    # forwarding properties below (sheet.heritage / sheet.origin_realm → true_profile).
 
     # Species
     species = models.ForeignKey(
@@ -286,26 +319,8 @@ class CharacterSheet(SharedMemoryModel):
         default=MaritalStatus.SINGLE,
         help_text="Character's marital status",
     )
-    family = models.ForeignKey(
-        "roster.Family",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="members",
-        help_text="Character's family. Null for orphans/unknown lineage.",
-    )
-    tarot_card = models.ForeignKey(
-        "tarot.TarotCard",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="character_sheets",
-        help_text="Tarot card from naming ritual (for familyless characters).",
-    )
-    tarot_reversed = models.BooleanField(
-        default=False,
-        help_text="Whether the tarot card is reversed.",
-    )
+    # family / tarot_card / tarot_reversed lineage moved to Profile (#1270 slice 3);
+    # read/written through the forwarding properties below.
     vocation = models.CharField(
         max_length=255,
         blank=True,
@@ -509,6 +524,51 @@ class CharacterSheet(SharedMemoryModel):
     @obituary.setter
     def obituary(self, value: str) -> None:
         self._ensure_true_profile().obituary = value
+
+    # --- Lineage forwarding (#1270 slice 3) ------------------------------
+    # Lineage FKs live on Profile now; mechanical callers read the REAL lineage through
+    # these (always → true_profile). Only the display layer reads a *cover* persona's
+    # profile. Reads on a sheet without a true_profile return the field's empty default.
+
+    @property
+    def heritage(self) -> Heritage | None:
+        return self.true_profile.heritage if self.true_profile is not None else None
+
+    @heritage.setter
+    def heritage(self, value: Heritage | None) -> None:
+        self._ensure_true_profile().heritage = value
+
+    @property
+    def origin_realm(self) -> Any:
+        return self.true_profile.origin_realm if self.true_profile is not None else None
+
+    @origin_realm.setter
+    def origin_realm(self, value: Any) -> None:
+        self._ensure_true_profile().origin_realm = value
+
+    @property
+    def family(self) -> Any:
+        return self.true_profile.family if self.true_profile is not None else None
+
+    @family.setter
+    def family(self, value: Any) -> None:
+        self._ensure_true_profile().family = value
+
+    @property
+    def tarot_card(self) -> Any:
+        return self.true_profile.tarot_card if self.true_profile is not None else None
+
+    @tarot_card.setter
+    def tarot_card(self, value: Any) -> None:
+        self._ensure_true_profile().tarot_card = value
+
+    @property
+    def tarot_reversed(self) -> bool:
+        return self.true_profile.tarot_reversed if self.true_profile is not None else False
+
+    @tarot_reversed.setter
+    def tarot_reversed(self, value: bool) -> None:
+        self._ensure_true_profile().tarot_reversed = value
 
     def save(self, *args: object, **kwargs: object) -> None:
         # Persist an attached true_profile first so a bio set via the forwarding setters
