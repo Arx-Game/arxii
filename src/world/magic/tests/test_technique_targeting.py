@@ -356,8 +356,13 @@ class ResolveTargetsTests(TestCase):
 
     def test_area_enemy_technique_excludes_initiator(self):
         """AREA + ENEMY relationship → all scene personas excluding the initiator."""
-        # TechniqueFactory default → hostile → ENEMY
-        tech = TechniqueFactory(target_type=ActionTargetType.AREA)
+        # Explicitly mark as ENEMY by adding an ENEMY condition application.
+        tech = TechniqueFactory(
+            target_type=ActionTargetType.AREA,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+        )
+        TechniqueAppliedConditionFactory(technique=tech, target_kind=ConditionTargetKind.ENEMY)
         initiator = PersonaFactory()
         enemy1 = PersonaFactory()
         scene = SceneFactory()
@@ -389,7 +394,29 @@ class ResolveTargetsTests(TestCase):
             scene=scene,
             supplied_personas=[],
         )
-        self.assertEqual(result, [initiator])
+        result_sheet_ids = {p.character_sheet_id for p in result}
+        self.assertEqual(len(result), 1)
+        self.assertIn(initiator.character_sheet_id, result_sheet_ids)
+
+    def test_area_self_relationship_initiator_no_interaction(self):
+        """AREA + SELF returns [initiator] even if initiator has no Interaction in scene."""
+        tech = self._make_self_technique(target_type=ActionTargetType.AREA)
+        initiator = PersonaFactory()
+        other = PersonaFactory()
+        scene = SceneFactory()
+        # Only add other to scene, NOT initiator.
+        self._add_persona_to_scene(scene, other)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        # Should return initiator even though they have no Interaction in scene.
+        result_sheet_ids = {p.character_sheet_id for p in result}
+        self.assertEqual(len(result), 1)
+        self.assertIn(initiator.character_sheet_id, result_sheet_ids)
 
     def test_area_only_counts_personas_present_in_scene(self):
         """AREA does not include personas that never posted in the scene."""

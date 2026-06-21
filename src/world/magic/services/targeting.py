@@ -152,16 +152,13 @@ def _eligible_area_personas(
 ) -> list[Persona]:
     """Return the set of scene personas eligible for an AREA or FILTERED_GROUP cast.
 
-    - SELF relationship → only the initiator.
+    - SELF relationship → only the initiator (unconditionally).
     - ENEMY or ALLY relationship → all scene personas except the initiator.
     """
     if relationship == ConditionTargetKind.SELF:
-        # Self-targeting AoE affects only the caster.
-        return [
-            p
-            for p in scene_personas
-            if p.character_sheet_id == initiator_persona.character_sheet_id
-        ]
+        # Self-targeting AoE affects only the caster, even if they have no
+        # Interaction in the scene yet.
+        return [initiator_persona]
     # ALLY and ENEMY both expand to all OTHER personas in the scene.
     return [
         p for p in scene_personas if p.character_sheet_id != initiator_persona.character_sheet_id
