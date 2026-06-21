@@ -518,6 +518,100 @@ class RitualSessionCancelTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class RitualInductionRoundTripTests(TestCase):
+    """Integration: draft → candidate accepts with COVENANT_ROLE ref → fire → membership row."""
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_draft_accept_fire_creates_membership(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CovenantFactory,
+            CovenantRankFactory,
+            CovenantRoleFactory,
+        )
+        from world.covenants.models import CharacterCovenantRole
+        from world.covenants.services import add_member
+
+        # --- participants ---
+        _, initiator_account, initiator_sheet = _make_tenure_with_account()
+        _, candidate_account, candidate_sheet = _make_tenure_with_account()
+
+        # --- covenant + roles (both DURANCE to match CovenantFactory default) ---
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        initiator_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        candidate_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        # Pre-create the rank ladder so add_member's _ensure_base_rank picks up the
+        # member rank (highest tier = lowest authority).  The initiator will be
+        # promoted to the manager rank afterward so can_invite_to_covenant passes.
+        manager_rank = CovenantRankFactory(
+            covenant=covenant,
+            can_invite=True,
+            can_kick=True,
+            can_manage_ranks=True,
+            tier=1,
+        )
+        CovenantRankFactory(covenant=covenant, can_invite=False, tier=2)
+
+        # add_member assigns the base rank (tier=2, no can_invite).
+        initiator_ccr = add_member(
+            covenant=covenant,
+            character_sheet=initiator_sheet,
+            role=initiator_role,
+        )
+        # Promote initiator to the manager rank (can_invite=True).
+        initiator_ccr.rank = manager_rank
+        initiator_ccr.save(update_fields=["rank"])
+
+        ritual = _make_induction_ritual()
+
+        # --- step 1: initiator drafts with session-level COVENANT ref ---
+        self.client.force_authenticate(user=initiator_account)
+        draft = self.client.post(
+            "/api/magic/rituals/sessions/",
+            {
+                "ritual_id": ritual.pk,
+                "invitee_ids": [candidate_sheet.pk],
+                "session_references": [{"kind": "COVENANT", "ref_covenant_id": covenant.pk}],
+                "expires_at": _future_dt(),
+            },
+            format="json",
+        )
+        self.assertEqual(draft.status_code, 201, draft.data)
+        session_id = draft.data["id"]
+
+        # --- step 2: candidate accepts with COVENANT_ROLE ref ---
+        self.client.force_authenticate(user=candidate_account)
+        accept = self.client.post(
+            f"/api/magic/rituals/sessions/{session_id}/accept/",
+            {
+                "participant_kwargs": {},
+                "references": [
+                    {"kind": "COVENANT_ROLE", "ref_covenant_role_id": candidate_role.pk}
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(accept.status_code, 200, accept.data)
+
+        # --- step 3: initiator fires ---
+        self.client.force_authenticate(user=initiator_account)
+        fire = self.client.post(
+            f"/api/magic/rituals/sessions/{session_id}/fire/", {}, format="json"
+        )
+        self.assertEqual(fire.status_code, 200, fire.data)
+        self.assertEqual(fire.data["result_kind"], "membership")
+
+        # --- assert: CCR row was created for the candidate ---
+        membership = CharacterCovenantRole.objects.get(
+            character_sheet=candidate_sheet,
+            covenant=covenant,
+        )
+        self.assertEqual(membership.covenant_role_id, candidate_role.pk)
+
+
 class RitualSessionDetailParticipantFieldsTests(TestCase):
     """GET /api/magic/rituals/sessions/{id}/ exposes participant_fields."""
 
