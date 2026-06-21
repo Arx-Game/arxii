@@ -2,8 +2,9 @@ import factory
 import factory.django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterEntryFactory
 from world.secrets.constants import SecretLevel, SecretProvenance
-from world.secrets.models import Secret, SecretCategory
+from world.secrets.models import Secret, SecretCategory, SecretKnowledge
 
 
 class SecretCategoryFactory(factory_django.DjangoModelFactory):
@@ -26,3 +27,12 @@ class SecretFactory(factory_django.DjangoModelFactory):
     provenance = SecretProvenance.GM_AUTHORED
     level = SecretLevel.UNCOMMON_KNOWLEDGE
     content = factory.Faker("sentence")
+
+
+class SecretKnowledgeFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SecretKnowledge
+        django_get_or_create = ("roster_entry", "secret")
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+    secret = factory.SubFactory(SecretFactory)

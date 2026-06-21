@@ -127,3 +127,45 @@ class Secret(SharedMemoryModel):
         ):
             msg = "Player-authored secrets above Level 1 must be GM- or action-anchored."
             raise ValidationError({"level": msg})
+
+
+class SecretKnowledge(SharedMemoryModel):
+    """A character's held knowledge of a secret, with partial-knowledge layers (#1334).
+
+    Roster-scoped like ``CharacterClue`` (knowledge follows the character across players).
+    Holding the row means you know the **fact**; ``knows_category`` / ``knows_consequences``
+    track whether you've *also* placed its category or learned its fallout — so a secret's
+    Unknown layers can persist per-knower even after the fact itself is out. Layers only ever
+    unlock (monotonic); they're never re-hidden.
+    """
+
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        on_delete=models.CASCADE,
+        related_name="secrets_known",
+        help_text="The character who holds this knowledge.",
+    )
+    secret = models.ForeignKey(
+        Secret,
+        on_delete=models.CASCADE,
+        related_name="known_by",
+        help_text="The secret this character knows.",
+    )
+    knows_category = models.BooleanField(
+        default=False,
+        help_text="Whether this knower has placed the secret's category (else it reads Unknown).",
+    )
+    knows_consequences = models.BooleanField(
+        default=False,
+        help_text="Whether this knower has learned the secret's consequences.",
+    )
+    found_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["roster_entry", "secret"]
+        ordering = ["-found_at"]
+        verbose_name = "Secret knowledge"
+        verbose_name_plural = "Secret knowledge"
+
+    def __str__(self) -> str:
+        return f"{self.roster_entry_id} knows secret {self.secret_id}"

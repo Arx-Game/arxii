@@ -9,13 +9,16 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterEntryFactory
 from world.secrets.constants import SecretLevel, SecretProvenance
 from world.secrets.factories import SecretCategoryFactory, SecretFactory
-from world.secrets.models import Secret
+from world.secrets.models import Secret, SecretKnowledge
 from world.secrets.services import (
     SecretError,
     author_player_flavor_secret,
     author_secret,
+    grant_secret_knowledge,
+    secret_known_to,
 )
 
 
@@ -107,3 +110,59 @@ class AuthorSecretServiceTests(TestCase):
         assert secret.level == SecretLevel.UNCOMMON_KNOWLEDGE
         assert secret.provenance == SecretProvenance.PLAYER_FLAVOR
         assert secret.author_persona_id == persona.pk
+
+
+class SecretKnowledgeServiceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.secret = SecretFactory()
+        cls.knower = RosterEntryFactory()
+
+    def test_grant_records_the_fact_layer(self) -> None:
+        held = grant_secret_knowledge(roster_entry=self.knower, secret=self.secret)
+        assert isinstance(held, SecretKnowledge)
+        assert held.knows_category is False  # extra layers stay locked until unlocked
+        assert held.knows_consequences is False
+        assert secret_known_to(self.secret, self.knower) is True
+
+    def test_grant_is_idempotent_and_layers_are_monotonic(self) -> None:
+        grant_secret_knowledge(roster_entry=self.knower, secret=self.secret)
+        # Unlock a layer; re-granting without it does NOT re-hide it.
+        grant_secret_knowledge(roster_entry=self.knower, secret=self.secret, knows_category=True)
+        grant_secret_knowledge(roster_entry=self.knower, secret=self.secret)
+        rows = SecretKnowledge.objects.filter(roster_entry=self.knower, secret=self.secret)
+        assert rows.count() == 1
+        held = rows.get()
+        assert held.knows_category is True  # stayed unlocked
+
+    def test_unknown_to_a_stranger(self) -> None:
+        assert secret_known_to(self.secret, RosterEntryFactory()) is False
+
+
+class SecretClueTargetTests(TestCase):
+    """A secret is discovered through the clue loop: a SECRET clue grants its fact (#1334)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.secret = SecretFactory()
+        cls.knower = RosterEntryFactory()
+
+    def _secret_clue(self):
+        from world.clues.constants import ClueTargetKind
+        from world.clues.models import Clue
+
+        return Clue.objects.create(
+            target_kind=ClueTargetKind.SECRET,
+            target_secret=self.secret,
+            name="A torn love letter",
+            description="Ink smudged, but the meaning is plain.",
+        )
+
+    def test_granting_a_secret_clue_target_teaches_the_secret(self) -> None:
+        from world.clues.services import grant_clue_target, target_already_known
+
+        clue = self._secret_clue()
+        assert target_already_known(clue, self.knower) is False
+        grant_clue_target(clue, self.knower)
+        assert secret_known_to(self.secret, self.knower) is True
+        assert target_already_known(clue, self.knower) is True

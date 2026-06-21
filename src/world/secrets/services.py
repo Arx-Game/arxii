@@ -12,10 +12,11 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 
 from world.secrets.constants import SecretLevel, SecretProvenance
-from world.secrets.models import Secret
+from world.secrets.models import Secret, SecretKnowledge
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.secrets.models import SecretCategory
 
@@ -85,3 +86,34 @@ def author_player_flavor_secret(
         category=category,
         author_persona=author_persona,
     )
+
+
+def grant_secret_knowledge(
+    *,
+    roster_entry: RosterEntry,
+    secret: Secret,
+    knows_category: bool = False,
+    knows_consequences: bool = False,
+) -> SecretKnowledge:
+    """Record that a character knows a secret, unlocking the given layers (idempotent).
+
+    Holding the row is the **fact** layer; ``knows_category`` / ``knows_consequences`` unlock the
+    extra layers. Monotonic — re-granting only ever unlocks more, never re-hides. This is the
+    single entry point discovery surfaces (clue acquisition, evidence-sharing, GM grant) call.
+    """
+    held, _ = SecretKnowledge.objects.get_or_create(roster_entry=roster_entry, secret=secret)
+    updates: list[str] = []
+    if knows_category and not held.knows_category:
+        held.knows_category = True
+        updates.append("knows_category")
+    if knows_consequences and not held.knows_consequences:
+        held.knows_consequences = True
+        updates.append("knows_consequences")
+    if updates:
+        held.save(update_fields=updates)
+    return held
+
+
+def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
+    """Whether this character already holds the fact of this secret (#1334)."""
+    return SecretKnowledge.objects.filter(secret=secret, roster_entry=roster_entry).exists()

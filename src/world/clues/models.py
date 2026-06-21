@@ -22,7 +22,7 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
     """A pointer to one discoverable target. Always points at something (invariant).
 
     Add a new target kind by adding the value to ``ClueTargetKind``, a nullable
-    per-kind FK below, and a ``DISCRIMINATOR_MAP`` entry (SECRET/SCANDAL planned, #1143).
+    per-kind FK below, and a ``DISCRIMINATOR_MAP`` entry (SCANDAL planned, #1143).
     """
 
     DISCRIMINATOR_FIELD = "target_kind"
@@ -30,6 +30,7 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         ClueTargetKind.CODEX: "target_codex_entry",
         ClueTargetKind.MISSION: "target_mission",
         ClueTargetKind.RESCUE: "target_captivity",
+        ClueTargetKind.SECRET: "target_secret",
     }
 
     target_kind = models.CharField(
@@ -60,6 +61,14 @@ class Clue(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="rescue_clues",
         help_text="The captivity this clue points to freeing (target_kind=RESCUE, #931).",
+    )
+    target_secret = models.ForeignKey(
+        "secrets.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="clues",
+        help_text="The character secret this clue points to (target_kind=SECRET, #1334).",
     )
 
     name = models.CharField(

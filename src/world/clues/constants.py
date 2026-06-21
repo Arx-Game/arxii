@@ -7,13 +7,13 @@ class ClueTargetKind(models.TextChoices):
     """What a clue points at — selects the active per-kind target FK on ``Clue``.
 
     Extend for a new kind by adding the value here, a nullable FK on ``Clue``, and a
-    ``DISCRIMINATOR_MAP`` entry. SECRET/SCANDAL targets are planned (#1143) once their
-    own models exist.
+    ``DISCRIMINATOR_MAP`` entry. SCANDAL targets remain planned (#1143).
     """
 
     CODEX = "codex", "Codex Entry"
     MISSION = "mission", "Mission"
     RESCUE = "rescue", "Rescue (a held captive)"
+    SECRET = "secret", "Character Secret"
 
 
 class ClueResolution(models.TextChoices):
