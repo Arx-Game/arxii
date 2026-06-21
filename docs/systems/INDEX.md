@@ -1096,6 +1096,12 @@ These two axes are orthogonal — never re-merge them.
   `viewer_capabilities.can_invite` is true (read from the first member row of the
   `character-roles` endpoint). The induction `RitualSessionDraftDialog` sets the
   COVENANT reference so `assert_initiator_can_induct` can validate rank at draft time.
+  `RitualSessionResponseDialog` renders `candidate_only` participant fields (role picker),
+  resolves the COVENANT reference from `session.session_references` to filter the role
+  picker, and converts `emits_reference: "COVENANT_ROLE"` into a typed reference on
+  accept — completing the draft → accept-with-role → fire → `CharacterCovenantRole`
+  round-trip. Covered by `RitualInductionRoundTripTests` (backend) + `RitualSessionPages`
+  component tests (frontend).
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
   `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate;
   `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue),
