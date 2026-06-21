@@ -907,6 +907,7 @@
 ### Service Functions
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
+- `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str) -> int — Compute how much a defender's active resistance raises difficulty.`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
@@ -2906,6 +2907,18 @@
 **Foreign Keys:**
   - character -> objects.ObjectDB [FK]
 
+### WeeklySocialEngagement
+**Foreign Keys:**
+  - account -> accounts.AccountDB [OneToOne]
+  - game_week -> game_clock.GameWeek [FK] (nullable)
+**Pointed to by:**
+  - initiators <- progression.WeeklyEngagementInitiator
+
+### WeeklyEngagementInitiator
+**Foreign Keys:**
+  - ledger -> progression.WeeklySocialEngagement [FK]
+  - initiator_account -> accounts.AccountDB [FK]
+
 ### KudosSourceCategory
 **Pointed to by:**
   - transactions <- progression.KudosTransaction
@@ -2925,6 +2938,8 @@
   - claim_category -> progression.KudosClaimCategory [FK] (nullable)
   - awarded_by -> accounts.AccountDB [FK] (nullable)
   - character -> objects.ObjectDB [FK] (nullable)
+
+### KudosDifficultyWeight
 
 ### PathIntent
 **Foreign Keys:**

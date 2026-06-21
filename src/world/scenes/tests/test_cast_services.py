@@ -323,7 +323,7 @@ class TestImmediateCastSurfacesEnvironmentLedger(ResonanceCacheIsolationMixin, T
 
         scene = SceneFactory(location=room)
 
-        with patch("world.scenes.action_services.award_kudos"):
+        with patch("world.scenes.action_services.accrue"):
             cast = request_technique_cast(
                 scene=scene,
                 initiator_persona=initiator,
@@ -527,7 +527,7 @@ class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase)
         return initiator, technique, scene
 
     def _cast(self, initiator, technique, scene):
-        with patch("world.scenes.action_services.award_kudos"):
+        with patch("world.scenes.action_services.accrue"):
             return request_technique_cast(
                 scene=scene,
                 initiator_persona=initiator,

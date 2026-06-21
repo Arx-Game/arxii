@@ -11,10 +11,12 @@ from world.checks.factories import (
     CheckTypeAspectFactory,
     CheckTypeFactory,
     CheckTypeTraitFactory,
+    create_resistance_check_types,
 )
 from world.checks.services import (
     _calculate_aspect_bonus,
     chart_has_success_outcomes,
+    compute_resist_increment,
     perform_check,
     preview_check_difficulty,
 )
@@ -383,3 +385,51 @@ class ChartHasSuccessOutcomesTests(TestCase):
         ResultChart.clear_cache()
         ResultChart.objects.all().delete()
         assert chart_has_success_outcomes(999) is False
+
+
+class ComputeResistIncrementTests(TestCase):
+    """Test compute_resist_increment: Composure check type + effort level → resist increment."""
+
+    @classmethod
+    def setUpTestData(cls):
+        Trait.flush_instance_cache()
+        # PointConversionRange is required for _calculate_trait_points to convert trait
+        # values into points. weight=1.0 on willpower, so we need STAT conversion.
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        # Seed the Composure CheckType + willpower trait weight via the factory helper.
+        create_resistance_check_types()
+        cls.character = CharacterFactory()
+        # Resolve the willpower trait seeded by create_resistance_check_types().
+        cls.willpower_trait, _ = Trait.objects.get_or_create(
+            name="willpower",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.GENERAL,
+            },
+        )
+
+    def setUp(self):
+        Trait.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+
+    def test_high_effort_greater_than_low_effort(self):
+        """A defender with willpower gets more resist increment at high effort than low."""
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.willpower_trait, value=20
+        )
+        increment_high = compute_resist_increment(self.character, resist_effort_level="high")
+        increment_low = compute_resist_increment(self.character, resist_effort_level="low")
+        assert increment_high > 0
+        assert increment_high > increment_low
+
+    def test_returns_zero_when_no_composure_check_type(self):
+        """When Composure CheckType does not exist, compute_resist_increment returns 0."""
+        from world.checks.models import CheckType
+
+        CheckType.objects.filter(name="Composure").delete()
+        result = compute_resist_increment(self.character, resist_effort_level="high")
+        assert result == 0

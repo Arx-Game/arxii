@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -10,9 +11,11 @@ from django.utils import timezone
 from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
 from world.progression.models import KudosSourceCategory
-from world.progression.services.kudos import award_kudos
+from world.progression.models.kudos import KudosDifficultyWeight
+from world.progression.services.engagement import accrue
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
+    RESIST_FATIGUE_BASE,
     ActionDelivery,
     ActionRequestStatus,
     ConsentDecision,
@@ -150,7 +153,7 @@ def create_action_request(  # noqa: PLR0913
     initiator_persona: Persona,
     target_persona: Persona | None,
     action_key: str,
-    difficulty_choice: str = DifficultyChoice.NORMAL,
+    effort_level: str = "medium",
     technique: Technique | None = None,
     ritual_id: int | None = None,
     strain_commitment: int = 0,
@@ -175,7 +178,9 @@ def create_action_request(  # noqa: PLR0913
         initiator_persona: The persona attempting the action.
         target_persona: The persona being targeted.
         action_key: Key identifying the action type.
-        difficulty_choice: Difficulty level for this action.
+        effort_level: EffortLevel value declared by the initiator at dispatch.
+            Modifies the check and scales social fatigue. Defaults to "medium".
+            Difficulty is left at NORMAL (model default); the defender sets it later.
         technique: Optional technique to enhance this action. Must have an
             ActionEnhancement record for the given action_key and the
             initiator's character must know it.
@@ -231,7 +236,7 @@ def create_action_request(  # noqa: PLR0913
         target_persona=target_persona,
         action_key=action_key,
         action_template=_action_template_for_key(action_key),
-        difficulty_choice=difficulty_choice,
+        effort_level=effort_level,
         status=ActionRequestStatus.PENDING,
         technique=technique,
         strain_commitment=strain_commitment,
@@ -289,6 +294,8 @@ def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
     decision: str,
+    difficulty: str | None = None,
+    resist_effort: str = "",
 ) -> EnhancedSceneActionResult | None:
     """Process a consent decision on an action request.
 
@@ -298,6 +305,11 @@ def respond_to_action_request(
     Args:
         action_request: The pending action request.
         decision: ConsentDecision value (ACCEPT or DENY).
+        difficulty: Optional DifficultyChoice value supplied by the defender at
+            consent. When present, overrides the initiator's authored band for
+            this target only (Task 4 — per-target plausibility).
+        resist_effort: Optional EffortLevel value for the defender's active
+            resistance. Stored on the request; increment applied in a later task.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved via the cast/action
@@ -320,6 +332,13 @@ def respond_to_action_request(
 
     if decision == ConsentDecision.ACCEPT:
         with transaction.atomic():
+            # Persist the defender's plausibility band before resolving so that
+            # _resolve_standard_action picks it up via action_request.difficulty_choice.
+            if difficulty is not None:
+                action_request.difficulty_choice = difficulty
+            action_request.resist_effort_level = resist_effort
+            action_request.save(update_fields=["difficulty_choice", "resist_effort_level"])
+
             # Standalone cast (no action_template, no action_key) — resolve via the cast
             # pipeline; enhanced/plain actions go through the standard resolution path.
             # The inner transaction.atomic() blocks in resolve_accepted_cast and
@@ -331,9 +350,37 @@ def respond_to_action_request(
 
                 result = resolve_accepted_cast(action_request)
             else:
-                result = _resolve_standard_action(action_request)
+                # Compute resistance increment and charge defender fatigue when
+                # resist_effort is declared and there is a primary target.
+                difficulty_override: int | None = None
+                if action_request.target_persona is not None:
+                    from actions.constants import ActionCategory  # noqa: PLC0415
+                    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+                    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
 
-            _award_acceptance_kudos(action_request)
+                    base = DIFFICULTY_VALUES[action_request.difficulty_choice]
+                    if resist_effort:
+                        increment = compute_resist_increment(
+                            action_request.target_persona.character_sheet.character,
+                            resist_effort,
+                        )
+                        apply_fatigue(
+                            action_request.target_persona.character_sheet,
+                            ActionCategory.SOCIAL,
+                            RESIST_FATIGUE_BASE,
+                            resist_effort,
+                        )
+                    else:
+                        increment = 0
+                    difficulty_override = base + increment
+                result = _resolve_standard_action(
+                    action_request, difficulty_override=difficulty_override
+                )
+
+            _accrue_engagement_for_primary(action_request)
+            if action_request.target_persona is not None:
+                action_request.engagement_credited = True
+                action_request.save(update_fields=["engagement_credited"])
 
             # result is None only for hostile consent-accepts (#777), which have
             # an empty action_key and therefore never a resolver.
@@ -349,12 +396,21 @@ def respond_to_action_request(
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
+    *,
+    difficulty_override: int | None = None,
 ) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
     Status bookkeeping is the caller's job (request.status for the primary,
     SceneActionTarget.status for additional targets), so this helper never
     writes a status field.
+
+    Args:
+        action_request: The action request being resolved.
+        target_persona: The persona being targeted.
+        difficulty_override: When provided, overrides the difficulty computed
+            from ``action_request.difficulty_choice``. Task 4 (plausibility
+            defender) supplies per-target values via this seam.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -363,9 +419,16 @@ def _resolve_action_against_persona(
     Raises:
         ValueError: If the request has no action_template set.
     """
-    difficulty = DIFFICULTY_VALUES.get(
-        action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-    )
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    if difficulty_override is not None:
+        difficulty = difficulty_override
+    else:
+        difficulty = DIFFICULTY_VALUES.get(
+            action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+        )
     action_template = action_request.action_template
     if action_template is None:
         msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
@@ -392,17 +455,28 @@ def _resolve_action_against_persona(
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
         # inside use_technique). The serializer rejects fury_commitment_id on
         # plain actions, so fury_commitment is always None here.
+        check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
         action_resolution = start_action_resolution(
             character=character,
             template=action_template,
             target_difficulty=difficulty,
             context=context,
+            extra_modifiers=check_modifiers,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
             action_key=action_request.action_key,
             fury_committed=None,
         )
+
+    # Charge social fatigue once per target resolved. Multi-target casts charge
+    # the initiator per-target — this is the intended per-target-independent model.
+    apply_fatigue(
+        action_request.initiator_persona.character_sheet,
+        ActionCategory.SOCIAL,
+        action_template.social_fatigue_cost,
+        action_request.effort_level,
+    )
 
     # Dispatch the action's inherent target effects (e.g. RestoreSense removing a
     # Berserk condition). The check chain above resolves the action; this is where
@@ -421,11 +495,13 @@ def _resolve_action_against_persona(
 
 def _resolve_standard_action(
     action_request: SceneActionRequest,
+    *,
+    difficulty_override: int | None = None,
 ) -> EnhancedSceneActionResult:
     """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
         result, result_interaction, difficulty = _resolve_action_against_persona(
-            action_request, action_request.target_persona
+            action_request, action_request.target_persona, difficulty_override=difficulty_override
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -437,43 +513,42 @@ def _resolve_standard_action(
     return result
 
 
-def _award_acceptance_kudos_for_persona(
+def _accrue_engagement_for_persona(
     action_request: SceneActionRequest,
     persona: Persona,
+    band: str,
 ) -> None:
-    """Award kudos to ``persona`` for accepting an action request.
+    """Accrue graded good-sport credit for ``persona`` accepting an action request.
 
-    Skips when the persona's character has no linked account (NPC personas
-    and established/temporary personas without an account are valid; the kudos
-    award only applies to real player accounts).
+    Skips when:
+    - The persona's character has no linked account (NPC defender — no accrual).
+    - The initiator has no account (NPC initiator — no accrual).
+    - The initiator and target share the same account (self-target — no farming).
     """
     target_character = persona.character_sheet.character
     target_account = target_character.db_account
     if target_account is None:
         return
-    category = _get_social_engagement_category()
     initiator_character = action_request.initiator_persona.character_sheet.character
     initiator_account = initiator_character.db_account
-    initiator_name = action_request.initiator_persona.name
-    award_kudos(
-        account=target_account,
-        amount=category.default_amount,
-        source_category=category,
-        description=f"Engaged with action request from {initiator_name}",
-        awarded_by=initiator_account,
-    )
+    if initiator_account is None or initiator_account == target_account:
+        return
+    category = _get_social_engagement_category()
+    pts = Decimal(category.default_amount) * KudosDifficultyWeight.weight_for(band)
+    accrue(target_account, initiator_account, pts)
 
 
-def _award_acceptance_kudos(action_request: SceneActionRequest) -> None:
-    """Award kudos to the primary target for accepting an action request.
+def _accrue_engagement_for_primary(action_request: SceneActionRequest) -> None:
+    """Accrue graded good-sport credit for the primary target of an action request.
 
-    Skips the award when the target persona is absent (standalone casts allow
-    no-target). Delegates the per-persona kudos rule to
-    ``_award_acceptance_kudos_for_persona``.
+    Skips when the target persona is absent (standalone casts allow no-target).
+    Delegates the per-persona accrual rule to ``_accrue_engagement_for_persona``.
     """
     if action_request.target_persona is None:
         return
-    _award_acceptance_kudos_for_persona(action_request, action_request.target_persona)
+    _accrue_engagement_for_persona(
+        action_request, action_request.target_persona, band=action_request.difficulty_choice
+    )
 
 
 def _persona_is_npc(persona: Persona) -> bool:
@@ -485,12 +560,19 @@ def respond_to_action_target(
     *,
     action_target: SceneActionTarget,
     decision: str,
+    difficulty: str | None = None,
+    resist_effort: str = "",
 ) -> EnhancedSceneActionResult | None:
     """Consent + resolution for ONE additional target row. Never touches siblings.
 
     Args:
         action_target: The SceneActionTarget row to resolve.
         decision: ConsentDecision value (ACCEPT or DENY).
+        difficulty: Optional DifficultyChoice value supplied by the defender at
+            consent. When present, stored on the target row and used as the
+            difficulty_override for resolution (Task 4 — per-target plausibility).
+        resist_effort: Optional EffortLevel value for the defender's active
+            resistance. Stored on the target row; increment applied in a later task.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved. None if denied, already
@@ -506,17 +588,55 @@ def respond_to_action_target(
     if decision == ConsentDecision.ACCEPT:
         action_request = action_target.action_request
         with transaction.atomic():
-            result, result_interaction, difficulty = _resolve_action_against_persona(
-                action_request, action_target.target_persona
+            # Persist defender's plausibility band on the target row, then pass it
+            # as difficulty_override so the per-target band is used for resolution
+            # (the target's band lives on SceneActionTarget, not the request).
+            if difficulty is not None:
+                action_target.difficulty_choice = difficulty
+            action_target.resist_effort_level = resist_effort
+            base = DIFFICULTY_VALUES[action_target.difficulty_choice]
+            if resist_effort:
+                from actions.constants import ActionCategory  # noqa: PLC0415
+                from world.checks.services import compute_resist_increment  # noqa: PLC0415
+                from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+                increment = compute_resist_increment(
+                    action_target.target_persona.character_sheet.character,
+                    resist_effort,
+                )
+                apply_fatigue(
+                    action_target.target_persona.character_sheet,
+                    ActionCategory.SOCIAL,
+                    RESIST_FATIGUE_BASE,
+                    resist_effort,
+                )
+            else:
+                increment = 0
+            difficulty_override = base + increment
+            result, result_interaction, resolved_difficulty = _resolve_action_against_persona(
+                action_request,
+                action_target.target_persona,
+                difficulty_override=difficulty_override,
             )
             action_target.status = ActionRequestStatus.RESOLVED
             action_target.resolved_at = timezone.now()
-            action_target.resolved_difficulty = difficulty
+            action_target.resolved_difficulty = resolved_difficulty
             action_target.result_interaction = result_interaction
-            action_target.save(
-                update_fields=["status", "resolved_at", "resolved_difficulty", "result_interaction"]
+            _accrue_engagement_for_persona(
+                action_request, action_target.target_persona, band=action_target.difficulty_choice
             )
-            _award_acceptance_kudos_for_persona(action_request, action_target.target_persona)
+            action_target.engagement_credited = True
+            action_target.save(
+                update_fields=[
+                    "status",
+                    "resolved_at",
+                    "resolved_difficulty",
+                    "result_interaction",
+                    "difficulty_choice",
+                    "resist_effort_level",
+                    "engagement_credited",
+                ]
+            )
             # Per-target resolver invocation (#1178): fire the registered resolver for
             # THIS target's result, symmetric with respond_to_action_request (:340).
             # Runs once per accepted target; resolvers registered for multi-target

@@ -168,6 +168,62 @@ _SOCIAL_POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
 }
 
 
+# (check_type_name, description, display_order)
+_RESISTANCE_CHECK_TYPES = [
+    ("Composure", "Resisting social pressure through force of will.", 0),
+]
+
+# (check_type_name, trait_name, weight)
+# "willpower" matches the existing social trait already seeded by _SOCIAL_TRAIT_WEIGHTS.
+_RESISTANCE_TRAIT_WEIGHTS = [
+    ("Composure", "willpower", "1.00"),
+]
+
+
+def create_resistance_check_types() -> dict[str, CheckType]:
+    """Create resistance CheckTypes (e.g. Composure) under the Social category.
+
+    Composure represents a defender's capacity to resist social influence through
+    force of will.  It is placed in the existing ``Social`` CheckCategory so
+    resistance checks share the same organisational grouping as the social
+    actions that trigger them.
+
+    Uses the same ``willpower`` stat trait already referenced by social
+    check-type weights — no new trait name is introduced.
+
+    Self-contained and idempotent — safe to call multiple times.
+
+    Returns:
+        Dict mapping check type name to CheckType instance.
+    """
+    from world.traits.factories import StatTraitFactory
+
+    social_cat = CheckCategoryFactory(
+        name="Social",
+        description="Checks involving social interaction, persuasion, and presence.",
+        display_order=10,
+    )
+
+    check_types: dict[str, CheckType] = {}
+    for name, description, display_order in _RESISTANCE_CHECK_TYPES:
+        check_types[name] = CheckTypeFactory(
+            name=name,
+            category=social_cat,
+            description=description,
+            display_order=display_order,
+        )
+
+    for ct_name, trait_name, weight in _RESISTANCE_TRAIT_WEIGHTS:
+        trait = StatTraitFactory(name=trait_name)
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_types[ct_name],
+            trait=trait,
+            defaults={"weight": Decimal(weight)},
+        )
+
+    return check_types
+
+
 def create_social_check_types() -> dict[str, CheckType]:
     """Create the Social CheckCategory, 6 CheckTypes, and placeholder trait weights.
 

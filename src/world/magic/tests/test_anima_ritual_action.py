@@ -36,7 +36,7 @@ from world.traits.factories import CheckOutcomeFactory
 # ---------------------------------------------------------------------------
 
 _PERFORM_CHECK_PATCH = "world.scenes.action_services.start_action_resolution"
-_AWARD_KUDOS_PATCH = "world.scenes.action_services.award_kudos"
+_ACCRUE_PATCH = "world.scenes.action_services.accrue"
 
 
 def _make_pending_resolution(outcome_row: object) -> PendingActionResolution:
@@ -87,11 +87,11 @@ class AnimaRitualResolverTests(TestCase):
         # Django test runner does call ready(), so this is a belt-and-suspenders guard).
         from world.magic.services import anima_ritual_action  # noqa: F401
 
-        self.award_kudos_patcher = patch(_AWARD_KUDOS_PATCH)
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch(_ACCRUE_PATCH)
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _setup_ritual_scene(self, success_level: int = 1) -> tuple:
         """Create a full ritual+scene setup and a real CheckOutcome row.

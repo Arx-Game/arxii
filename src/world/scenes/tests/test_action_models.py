@@ -266,3 +266,13 @@ class SceneActionTargetModelTests(TestCase):
         SceneActionTarget.objects.create(action_request=request, target_persona=persona)
         with self.assertRaises(IntegrityError):
             SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+
+
+class DefenderConsentFieldsTest(TestCase):
+    def test_target_has_consent_fields(self):
+        from world.scenes.factories import SceneActionTargetFactory
+
+        t = SceneActionTargetFactory()
+        self.assertEqual(t.difficulty_choice, DifficultyChoice.NORMAL)
+        self.assertEqual(t.resist_effort_level, "")
+        self.assertFalse(t.engagement_credited)

@@ -313,11 +313,11 @@ class FuryCommittedAuditTests(TestCase):
         )
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.magic.services.use_technique")
     @patch("world.scenes.action_services.start_action_resolution")
@@ -379,11 +379,11 @@ class BerserkAppliedOnLostControlTests(TestCase):
         BerserkConditionTemplateFactory()
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.scenes.action_services.start_action_resolution")
     @patch("world.magic.services.use_technique")

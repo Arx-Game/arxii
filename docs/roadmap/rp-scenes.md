@@ -72,11 +72,42 @@ Two follow-ups from the #572 multi-target dispatch foundation:
     `POST /api/action-requests/{id}/respond/` with `target_persona_id`.
 - **Additional-target combat-risk parity (#1259):** `SceneActionTargetSerializer` now
   includes `combat_risk_level` (computed from the row's own target persona). `ConsentPrompt`
-  renders the combat-risk warning on additional-target cards, matching primary-target
-  behaviour. Per-target *difficulty* was deliberately **not** added — difficulty is
-  uniform cast-level, declared once by the initiator at dispatch via
-  `SceneActionRequest.difficulty_choice`. Removal of the now-vestigial primary-target
-  difficulty buttons in `ConsentPrompt` is tracked as a follow-up.
+  renders the combat-risk warning on additional-target cards, matching primary-target behaviour.
+
+### Effort/Difficulty Split + Defender Agency + Good-Sport Kudos — DONE (#1275)
+
+A deliberate extension of the consent flow replacing the prior "uniform cast-level difficulty"
+model with a split where the initiator controls effort and each defender controls difficulty:
+
+- **Initiator declares effort** at dispatch via `SceneActionRequest.effort_level` (EffortLevel).
+  `EFFORT_CHECK_MODIFIER[effort_level]` is added to the check pool at resolution and the
+  initiator is charged social fatigue proportional to effort.
+- **Abstract base `DefenderConsentFields`** (`action_models.py`) — inherited by both
+  `SceneActionRequest` (primary target) and `SceneActionTarget` (additional targets). Carries:
+  `difficulty_choice` (DifficultyChoice plausibility band, default NORMAL), `resolved_difficulty`,
+  `resist_effort_level` (EffortLevel, optional active resistance), `engagement_credited`.
+- **Plausibility bands** in `ConsentCard` (frontend): "It works" → EASY, "Hard but possible" →
+  HARD, "No way" → DAUNTING (accept-but-daunting, not a deny). The initiator's dispatch UI
+  has an effort picker.
+- **Active resistance (Slice C):** when the defender selects "Dig in (costs stamina)", a
+  `resist_effort_level` is stored at consent. `compute_resist_increment(defender, resist_effort)`
+  in `world.checks.services` resolves the `Composure` CheckType (willpower-weighted, seeded by
+  `create_resistance_check_types()` in `world.checks.factories`) and produces a numeric increment
+  added to the plausibility base. The defender is charged `RESIST_FATIGUE_BASE` (currently 1)
+  social fatigue.
+- **Good-sport kudos (Slice B):** `KudosDifficultyWeight` (staff-tunable band→multiplier,
+  one row per DifficultyChoice) and `WeeklySocialEngagement` + `WeeklyEngagementInitiator`
+  ledger. On ACCEPT, `_accrue_engagement_for_persona` in `action_services.py` calls
+  `progression.services.engagement.accrue()` with `default_amount × weight_for(band)` for the
+  defender's account. Anti-farm guards: NPC defender/initiator and self-targeting are skipped.
+  At weekly rollover `grant_social_engagement_kudos()` grants Kudos to all ledgers meeting
+  `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2).
+- **NPC/area fallback:** `difficulty_choice` defaults to its authored value when there is no
+  consenting player; area actions use their own `difficulty_choice`.
+- **Consent serializer:** `ConsentResponseSerializer` accepts `difficulty` (DifficultyChoice)
+  and `resist_effort` (EffortLevel) in `POST /api/action-requests/{id}/respond/`.
+- **Slice D deferred → #520:** effort↔strain unification + scene-seriousness gating remain
+  out of scope and are tracked in the non-combat rounds epic.
 
 ### Scene System (core)
 - **Models:** Scene (privacy_mode, summary fields), SceneParticipation, SceneSummaryRevision

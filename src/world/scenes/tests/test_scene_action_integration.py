@@ -28,16 +28,16 @@ from world.traits.models import CharacterTraitValue, Trait
 
 
 class _BaseActionIntegrationTest(TestCase):
-    """Base class that mocks award_kudos for all action integration tests."""
+    """Base class that mocks accrue for all action integration tests."""
 
     def setUp(self) -> None:
-        """Mock award_kudos for all tests in this class."""
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        """Mock accrue for all tests in this class."""
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        """Stop mocking award_kudos."""
-        self.award_kudos_patcher.stop()
+        """Stop mocking accrue."""
+        self.accrue_patcher.stop()
 
 
 class TestSceneActionIntegration(_BaseActionIntegrationTest):
@@ -121,20 +121,21 @@ class TestSceneActionIntegration(_BaseActionIntegrationTest):
         assert receivers.filter(persona=self.target).exists()
 
     def test_hard_difficulty_affects_check(self) -> None:
-        """Higher difficulty choice maps to higher target difficulty."""
+        """The defender's plausibility band at consent maps to a higher target difficulty."""
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="persuade",
-            difficulty_choice=DifficultyChoice.HARD,
         )
         request.action_template = self.persuade_template
         request.save(update_fields=["action_template"])
 
+        # Difficulty is authored by the DEFENDER at consent, not the initiator at dispatch.
         result = respond_to_action_request(
             action_request=request,
             decision=ConsentDecision.ACCEPT,
+            difficulty=DifficultyChoice.HARD,
         )
 
         assert result is not None

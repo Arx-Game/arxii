@@ -41,13 +41,13 @@ class SceneMagicTestMixin:
     """Shared setup for scene magic integration tests."""
 
     def setUp(self) -> None:
-        """Mock award_kudos for all tests in this class."""
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        """Mock accrue for all tests in this class."""
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        """Stop mocking award_kudos."""
-        self.award_kudos_patcher.stop()
+        """Stop mocking accrue."""
+        self.accrue_patcher.stop()
 
     @classmethod
     def setUpTestData(cls) -> None:

@@ -475,11 +475,11 @@ class CastEndpointTestCase(APITestCase):
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _cast_url(self) -> str:
         return reverse("sceneactionrequest-cast")
@@ -934,7 +934,10 @@ class PerTargetRespondTestCase(APITestCase):
         )
         assert response.status_code == status.HTTP_200_OK, response.data
         mock_respond.assert_called_once_with(
-            action_target=action_target, decision=ConsentDecision.ACCEPT
+            action_target=action_target,
+            decision=ConsentDecision.ACCEPT,
+            difficulty=None,
+            resist_effort="",
         )
         # Response carries the row's id and action_request_id
         assert response.data["action_target_id"] == action_target.pk

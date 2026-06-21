@@ -1,9 +1,38 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { ActionRequest } from '../actionTypes';
+
+// Mock Radix Select to avoid jsdom portal/pointer-event issues in tests.
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value?: string;
+    onValueChange?: (v: string) => void;
+    children?: React.ReactNode;
+  }) => (
+    <select
+      value={value}
+      onChange={(e) => onValueChange?.(e.target.value)}
+      data-testid="mock-resist-select"
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children?: React.ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
+  SelectLabel: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectSeparator: () => null,
+}));
 
 vi.mock('../actionQueries', () => ({
   fetchPendingRequests: vi.fn(),
@@ -123,7 +152,7 @@ describe('ConsentPrompt', () => {
     });
   });
 
-  it('clicking Standard accept calls respondToRequest with accept: true and standard difficulty', async () => {
+  it('clicking Accept (neutral) calls respondToRequest with difficulty: normal', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -131,20 +160,21 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Standard')).toBeInTheDocument();
+      expect(screen.getAllByText('Accept').length).toBeGreaterThan(0);
     });
 
-    await user.click(screen.getByText('Standard'));
+    // The first Accept button in the primary card is the neutral one.
+    await user.click(screen.getAllByText('Accept')[0]);
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
         accept: true,
-        difficulty: 'standard',
+        difficulty: 'normal',
       });
     });
   });
 
-  it('clicking Easy accept calls respondToRequest with easy difficulty', async () => {
+  it('clicking "It works" band calls respondToRequest with difficulty: easy', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -152,10 +182,10 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Easy')).toBeInTheDocument();
+      expect(screen.getByText('It works')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Easy'));
+    await user.click(screen.getByText('It works'));
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
@@ -165,7 +195,7 @@ describe('ConsentPrompt', () => {
     });
   });
 
-  it('clicking Hard accept calls respondToRequest with hard difficulty', async () => {
+  it('clicking "Hard but possible" band calls respondToRequest with difficulty: hard', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
     const user = userEvent.setup();
@@ -173,15 +203,36 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(screen.getByText('Hard')).toBeInTheDocument();
+      expect(screen.getByText('Hard but possible')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Hard'));
+    await user.click(screen.getByText('Hard but possible'));
 
     await waitFor(() => {
       expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
         accept: true,
         difficulty: 'hard',
+      });
+    });
+  });
+
+  it('clicking "No way" band calls respondToRequest with difficulty: daunting', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('No way')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('No way'));
+
+    await waitFor(() => {
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: true,
+        difficulty: 'daunting',
       });
     });
   });
@@ -276,7 +327,7 @@ describe('ConsentPrompt', () => {
     expect(screen.getByText('Hex')).toBeInTheDocument();
   });
 
-  it('accepting a target calls respondToRequest with target_persona_id and no difficulty', async () => {
+  it('accepting a target (neutral Accept) calls respondToRequest with target_persona_id and difficulty: normal', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
     vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
@@ -289,6 +340,7 @@ describe('ConsentPrompt', () => {
     await waitFor(() =>
       expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
         accept: true,
+        difficulty: 'normal',
         target_persona_id: 99,
       })
     );
@@ -339,5 +391,138 @@ describe('ConsentPrompt', () => {
     render(<ConsentPrompt sceneId="1" />, { wrapper: createWrapper() });
 
     expect(await screen.findByText(/LETHAL risk/i)).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Resist effort (Task 9 / C4) — active-resistance "dig in" control
+  // ---------------------------------------------------------------------------
+
+  it('selecting resist effort then clicking Accept includes resist_effort in payload', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getAllByText('Accept').length).toBeGreaterThan(0));
+
+    // Select 'high' resistance on the primary card's select.
+    const selects = screen.getAllByTestId('mock-resist-select');
+    fireEvent.change(selects[0], { target: { value: 'high' } });
+
+    await userEvent.click(screen.getAllByText('Accept')[0]);
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: true,
+        difficulty: 'normal',
+        resist_effort: 'high',
+      })
+    );
+  });
+
+  it('without selecting resist effort, Accept omits resist_effort from payload', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getAllByText('Accept').length).toBeGreaterThan(0));
+
+    // Do NOT change the select — leave it at empty/no resistance.
+    await userEvent.click(screen.getAllByText('Accept')[0]);
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: true,
+        difficulty: 'normal',
+      })
+    );
+  });
+
+  it('selecting resist effort then clicking a plausibility band includes resist_effort', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getByText('It works')).toBeInTheDocument());
+
+    const selects = screen.getAllByTestId('mock-resist-select');
+    fireEvent.change(selects[0], { target: { value: 'extreme' } });
+
+    await userEvent.click(screen.getByText('It works'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: true,
+        difficulty: 'easy',
+        resist_effort: 'extreme',
+      })
+    );
+  });
+
+  it('deny never sends resist_effort even when resist is selected', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getByText('Deny')).toBeInTheDocument());
+
+    const selects = screen.getAllByTestId('mock-resist-select');
+    fireEvent.change(selects[0], { target: { value: 'medium' } });
+
+    await userEvent.click(screen.getByText('Deny'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: false,
+      })
+    );
+  });
+
+  it('resist effort on additional-target card is included when accepting via band', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getByText('Morgan')).toBeInTheDocument());
+
+    const selects = screen.getAllByTestId('mock-resist-select');
+    fireEvent.change(selects[0], { target: { value: 'low' } });
+
+    await userEvent.click(screen.getByText('Accept'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+        accept: true,
+        difficulty: 'normal',
+        resist_effort: 'low',
+        target_persona_id: 99,
+      })
+    );
+  });
+
+  it('resist effort on additional-target card omitted when none selected', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [] });
+    vi.mocked(fetchPendingTargets).mockResolvedValue({ results: [MOCK_TARGET] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(screen.getByText('Accept')).toBeInTheDocument());
+
+    // No resist effort selected — default empty.
+    await userEvent.click(screen.getByText('Accept'));
+
+    await waitFor(() =>
+      expect(respondToRequest).toHaveBeenCalledWith('42', 12, {
+        accept: true,
+        difficulty: 'normal',
+        target_persona_id: 99,
+      })
+    );
   });
 });

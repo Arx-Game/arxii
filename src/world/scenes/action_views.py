@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -20,7 +21,7 @@ from rest_framework.response import Response
 from actions.registry import get_action
 from actions.types import TargetType
 from world.magic.exceptions import MagicError
-from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 from world.scenes.action_serializers import (
@@ -85,6 +86,9 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
+    @extend_schema(
+        request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
+    )
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
@@ -101,9 +105,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         initiator_persona_id = serializer.validated_data["initiator_persona"]
         action_key = serializer.validated_data["action_key"]
         target_ids: list[int] = serializer.validated_data["target_ids"]
-        difficulty_choice = serializer.validated_data.get(
-            "difficulty_choice", DifficultyChoice.NORMAL
-        )
+        effort_level: str = serializer.validated_data["effort_level"]
 
         # Cardinality validation: enforce the action's target_type against the
         # normalised target_ids list.  Unknown / unregistered actions default to
@@ -171,7 +173,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 initiator_persona=initiator_persona,
                 target_persona=target_persona,
                 action_key=action_key,
-                difficulty_choice=difficulty_choice,
+                effort_level=effort_level,
                 technique=technique,
                 strain_commitment=strain_commitment,
                 delivery=delivery,
@@ -190,6 +192,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @extend_schema(request=ConsentResponseSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
     def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
         """Respond to a pending action request (accept/deny).
@@ -213,6 +216,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         consent_serializer.is_valid(raise_exception=True)
         decision = consent_serializer.validated_data["decision"]
         target_persona_id = consent_serializer.validated_data.get("target_persona_id")
+        difficulty = consent_serializer.validated_data.get("difficulty")
+        resist_effort = consent_serializer.validated_data.get("resist_effort", "")
 
         if target_persona_id is not None:
             # Per-target consent path: look up the additional-target row directly.
@@ -228,7 +233,12 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             try:
-                result = respond_to_action_target(action_target=action_target, decision=decision)
+                result = respond_to_action_target(
+                    action_target=action_target,
+                    decision=decision,
+                    difficulty=difficulty,
+                    resist_effort=resist_effort,
+                )
             except ValueError:
                 return Response(
                     {"detail": "Unable to process this action request."},
@@ -265,6 +275,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             result = respond_to_action_request(
                 action_request=action_request,
                 decision=decision,
+                difficulty=difficulty,
+                resist_effort=resist_effort,
             )
         except ValueError as _exc:
             return Response(

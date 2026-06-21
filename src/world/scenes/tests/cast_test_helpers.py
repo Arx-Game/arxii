@@ -206,10 +206,10 @@ class CastScenarioMixin(TestCase):
             )
 
     def setUp(self) -> None:
-        # award_kudos would hit the DB for KudosSourceCategory which may not be
+        # accrue would hit the DB for KudosSourceCategory + GameWeek which may not be
         # seeded in the fast tier. Patch it for all cast tests.
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.mock_award_kudos = self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.mock_accrue = self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
