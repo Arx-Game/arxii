@@ -128,8 +128,11 @@ class EventViewSetTestCase(APITestCase):
             self.assertEqual(event_data["status"], "scheduled")
 
     def test_search_by_name(self) -> None:
-        EventFactory(name="Grand Ball")
-        EventFactory(name="Secret Meeting")
+        # Pin descriptions: search covers name AND description (views.py search_fields), and the
+        # factory's faker description can randomly contain "ball" (ballroom, ballot, …), which
+        # otherwise makes this match the second event intermittently.
+        EventFactory(name="Grand Ball", description="A formal dance.")
+        EventFactory(name="Secret Meeting", description="A quiet gathering.")
         response = self.client.get("/api/events/", {"search": "Ball"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
