@@ -12,3 +12,11 @@ class TechniqueTargetTypeTests(TestCase):
     def test_target_type_authorable(self):
         tech = TechniqueFactory(target_type=ActionTargetType.AREA)
         self.assertEqual(tech.target_type, ActionTargetType.AREA)
+
+
+class ConditionCategoryAltersBehaviorTests(TestCase):
+    def test_alters_behavior_defaults_false(self):
+        from world.conditions.factories import ConditionCategoryFactory
+
+        cat = ConditionCategoryFactory()
+        self.assertFalse(cat.alters_behavior)
