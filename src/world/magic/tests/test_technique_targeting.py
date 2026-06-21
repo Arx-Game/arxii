@@ -13,10 +13,11 @@ from world.magic.services.targeting import (
     InvalidCastTarget,
     cast_requires_consent,
     derive_target_relationship,
+    resolve_targets,
     technique_alters_behavior,
     validate_cast_target,
 )
-from world.scenes.factories import PersonaFactory
+from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 
 
 class TechniqueTargetTypeTests(TestCase):
@@ -258,3 +259,196 @@ class ValidateCastTargetTests(TestCase):
         validate_cast_target(
             technique=tech, initiator_persona=initiator, target_personas=[initiator]
         )
+
+
+class ResolveTargetsTests(TestCase):
+    """Tests for resolve_targets."""
+
+    def _make_ally_technique(self, **kwargs):
+        """Non-hostile ALLY-relationship technique."""
+        tech = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(), damage_profile=False, **kwargs
+        )
+        TechniqueAppliedConditionFactory(technique=tech, target_kind=ConditionTargetKind.ALLY)
+        return tech
+
+    def _make_self_technique(self, **kwargs):
+        """Non-hostile SELF-relationship technique."""
+        tech = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(), damage_profile=False, **kwargs
+        )
+        TechniqueAppliedConditionFactory(technique=tech, target_kind=ConditionTargetKind.SELF)
+        return tech
+
+    def _add_persona_to_scene(self, scene, persona):
+        """Create an Interaction linking persona to scene so _collect_personas sees them."""
+        InteractionFactory(scene=scene, persona=persona)
+
+    # --- SELF target_type ---
+
+    def test_self_type_returns_initiator(self):
+        """target_type=SELF → [initiator_persona] regardless of supplied_personas."""
+        tech = self._make_self_technique(target_type=ActionTargetType.SELF)
+        initiator = PersonaFactory()
+        scene = SceneFactory()
+        other = PersonaFactory()
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[other],
+        )
+        self.assertEqual(result, [initiator])
+
+    # --- SINGLE target_type ---
+
+    def test_single_type_returns_first_supplied(self):
+        """target_type=SINGLE → supplied_personas[:1]."""
+        tech = self._make_ally_technique(target_type=ActionTargetType.SINGLE)
+        initiator = PersonaFactory()
+        scene = SceneFactory()
+        target1 = PersonaFactory()
+        target2 = PersonaFactory()
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[target1, target2],
+        )
+        self.assertEqual(result, [target1])
+
+    def test_single_type_empty_supplied_returns_empty(self):
+        """target_type=SINGLE with no supplied → empty list."""
+        tech = self._make_ally_technique(target_type=ActionTargetType.SINGLE)
+        initiator = PersonaFactory()
+        scene = SceneFactory()
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        self.assertEqual(result, [])
+
+    # --- AREA target_type ---
+
+    def test_area_ally_technique_returns_all_others_in_scene(self):
+        """AREA + ALLY relationship → all personas in scene except the initiator."""
+        tech = self._make_ally_technique(target_type=ActionTargetType.AREA)
+        initiator = PersonaFactory()
+        ally1 = PersonaFactory()
+        ally2 = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, ally1)
+        self._add_persona_to_scene(scene, ally2)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        result_ids = {p.pk for p in result}
+        self.assertNotIn(initiator.pk, result_ids)
+        self.assertIn(ally1.pk, result_ids)
+        self.assertIn(ally2.pk, result_ids)
+
+    def test_area_enemy_technique_excludes_initiator(self):
+        """AREA + ENEMY relationship → all scene personas excluding the initiator."""
+        # TechniqueFactory default → hostile → ENEMY
+        tech = TechniqueFactory(target_type=ActionTargetType.AREA)
+        initiator = PersonaFactory()
+        enemy1 = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, enemy1)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        result_ids = {p.pk for p in result}
+        self.assertNotIn(initiator.pk, result_ids)
+        self.assertIn(enemy1.pk, result_ids)
+
+    def test_area_self_relationship_returns_only_initiator(self):
+        """AREA + SELF relationship → [initiator] only."""
+        tech = self._make_self_technique(target_type=ActionTargetType.AREA)
+        initiator = PersonaFactory()
+        other = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, other)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        self.assertEqual(result, [initiator])
+
+    def test_area_only_counts_personas_present_in_scene(self):
+        """AREA does not include personas that never posted in the scene."""
+        tech = self._make_ally_technique(target_type=ActionTargetType.AREA)
+        initiator = PersonaFactory()
+        in_scene = PersonaFactory()
+        not_in_scene = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, in_scene)
+        # not_in_scene is never added
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[],
+        )
+        result_ids = {p.pk for p in result}
+        self.assertIn(in_scene.pk, result_ids)
+        self.assertNotIn(not_in_scene.pk, result_ids)
+
+    # --- FILTERED_GROUP target_type ---
+
+    def test_filtered_group_intersects_supplied_with_area_eligible(self):
+        """FILTERED_GROUP → only supplied_personas that are in the scene's eligible set."""
+        tech = self._make_ally_technique(target_type=ActionTargetType.FILTERED_GROUP)
+        initiator = PersonaFactory()
+        in_scene = PersonaFactory()
+        not_in_scene = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, in_scene)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[in_scene, not_in_scene],
+        )
+        result_ids = {p.pk for p in result}
+        self.assertIn(in_scene.pk, result_ids)
+        self.assertNotIn(not_in_scene.pk, result_ids)
+
+    def test_filtered_group_respects_relationship_exclusion(self):
+        """FILTERED_GROUP with ENEMY relationship excludes the initiator even if supplied."""
+        tech = TechniqueFactory(target_type=ActionTargetType.FILTERED_GROUP)
+        initiator = PersonaFactory()
+        enemy = PersonaFactory()
+        scene = SceneFactory()
+        self._add_persona_to_scene(scene, initiator)
+        self._add_persona_to_scene(scene, enemy)
+
+        result = resolve_targets(
+            technique=tech,
+            initiator_persona=initiator,
+            scene=scene,
+            supplied_personas=[initiator, enemy],
+        )
+        result_ids = {p.pk for p in result}
+        self.assertNotIn(initiator.pk, result_ids)
+        self.assertIn(enemy.pk, result_ids)

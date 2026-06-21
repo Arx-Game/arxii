@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from actions.constants import ActionTargetType
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
-from world.scenes.models import Persona
+from world.scenes.models import Persona, Scene
 
 
 class InvalidCastTarget(ValidationError):
@@ -117,3 +117,96 @@ def cast_requires_consent(technique: Technique) -> bool:
     the behavior-alteration consent path only.
     """
     return technique_alters_behavior(technique)
+
+
+def _collect_scene_personas(scene: Scene) -> list[Persona]:
+    """Return the deduplicated list of personas present in the scene.
+
+    Mirrors SceneListSerializer._collect_personas but called from a service layer
+    context where importing a serializer would introduce a circular dependency and
+    would be architecturally inappropriate. The logic is simple enough (one query +
+    in-Python dedup) that inlining it is cleaner than calling a serializer staticmethod.
+
+    One query is issued (select_related the persona chain); filtering is then
+    done in Python to avoid queries-in-loops.
+    """
+    interactions = list(
+        scene.interactions.select_related(
+            "persona__character_sheet",
+        )
+    )
+    seen: dict[int, Persona] = {}
+    for interaction in interactions:
+        persona = interaction.persona
+        if persona is None or persona.pk in seen:
+            continue
+        seen[persona.pk] = persona
+    return list(seen.values())
+
+
+def _eligible_area_personas(
+    *,
+    relationship: ConditionTargetKind,
+    initiator_persona: Persona,
+    scene_personas: list[Persona],
+) -> list[Persona]:
+    """Return the set of scene personas eligible for an AREA or FILTERED_GROUP cast.
+
+    - SELF relationship → only the initiator.
+    - ENEMY or ALLY relationship → all scene personas except the initiator.
+    """
+    if relationship == ConditionTargetKind.SELF:
+        # Self-targeting AoE affects only the caster.
+        return [
+            p
+            for p in scene_personas
+            if p.character_sheet_id == initiator_persona.character_sheet_id
+        ]
+    # ALLY and ENEMY both expand to all OTHER personas in the scene.
+    return [
+        p for p in scene_personas if p.character_sheet_id != initiator_persona.character_sheet_id
+    ]
+
+
+def resolve_targets(
+    *,
+    technique: Technique,
+    initiator_persona: Persona,
+    scene: Scene,
+    supplied_personas: list[Persona],
+) -> list[Persona]:
+    """Expand a technique's target_type into a concrete list of Persona targets.
+
+    Resolution rules:
+    - SELF       → [initiator_persona]
+    - SINGLE     → supplied_personas[:1]  (cardinality validated upstream)
+    - AREA       → all scene personas matching the technique's derived relationship
+                   (SELF→only caster; ALLY/ENEMY→all others in the scene)
+    - FILTERED_GROUP → supplied_personas intersected with the AREA-eligible set
+
+    One query is issued to enumerate scene personas (via _collect_scene_personas);
+    all subsequent filtering is done in Python.
+    """
+    target_type = technique.target_type
+
+    if target_type == ActionTargetType.SELF:
+        return [initiator_persona]
+
+    if target_type == ActionTargetType.SINGLE:
+        return supplied_personas[:1]
+
+    # AREA and FILTERED_GROUP both need the scene's eligible set.
+    relationship = derive_target_relationship(technique)
+    scene_personas = _collect_scene_personas(scene)
+    eligible = _eligible_area_personas(
+        relationship=relationship,
+        initiator_persona=initiator_persona,
+        scene_personas=scene_personas,
+    )
+
+    if target_type == ActionTargetType.AREA:
+        return eligible
+
+    # FILTERED_GROUP: supplied_personas ∩ eligible (preserve supply order, filter by pk set).
+    eligible_ids = {p.pk for p in eligible}
+    return [p for p in supplied_personas if p.pk in eligible_ids]
