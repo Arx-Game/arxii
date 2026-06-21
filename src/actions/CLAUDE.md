@@ -28,6 +28,9 @@ They do not use the command system, dispatchers, or handlers.
 - **`prerequisites.py`**: `Prerequisite` base class — `is_met(actor, target, context)`
 - **`registry.py`**: Action lookup by key (`get_action`) and by target type (`get_actions_for_target_type`)
 - **`definitions/`**: Concrete action implementations grouped by category
+  (e.g. `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
+  action.run() seam for SERVICE/FLOW ritual performance shared by telnet
+  `CmdRitual` and the web `RitualPerformView`, #1331)
 
 ## Prerequisites
 

@@ -95,10 +95,22 @@ whose target category is `resonance` directly.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator`, `target_type`, `reach` |
 
-Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression gate, derives tier).
+Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression
+gate, derives tier), `target_type` (per-technique cardinality — see below).
 Key property: `tier` (derived from level: 1-5=T1, 6-10=T2, etc.)
+
+**`Technique.target_type`** (`actions.constants.ActionTargetType`, default `SINGLE`) stores the
+cardinality of who this technique can target:
+- `SELF` — affects only the caster.
+- `SINGLE` — one target.
+- `AREA` — auto-expands to all eligible personas in the scene (derived from relationship).
+- `FILTERED_GROUP` — a player-supplied subset intersected with the eligible set.
+
+The targeting *relationship* (who is eligible: SELF/ALLY/ENEMY) is **derived** from the
+technique's authored condition `target_kind`s and hostility — it is not stored here.
+See `derive_target_relationship` in `world/magic/services/targeting.py`.
 
 **Intensity and Control:** These are base/static values on the technique. Runtime casting
 values (after resonance bonuses, combat escalation, audere states) are tracked by a
@@ -137,6 +149,53 @@ per-technique via the FK. Key surfaces:
 Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caster's personal
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
+
+### Targeting Model (#1321) [BUILT & WIRED]
+
+Standalone casts now validate targets, resolve AoE expansion, apply conditions, and route
+consent based on behavioral impact rather than blanket benign/hostile.
+
+**`ConditionCategory.alters_behavior`** (new boolean, default `False`) — marks behavior-altering
+condition categories (compulsion, charm, fear) as distinct from capability/stat conditions.
+Lives on `world/conditions/models.py:ConditionCategory`.
+
+**Targeting services** (`world/magic/services/targeting.py`):
+
+| Function | Purpose |
+|----------|---------|
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF |
+| `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
+| `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
+| `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
+| `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` | Expands target_type to concrete personas: SELF→caster; SINGLE→one; AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible |
+
+**Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
+- Hostile → `seed_or_feed_encounter_from_cast` (combat).
+- Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).
+- Benign + capability/stat → resolves immediately, including on other PCs.
+
+**Shared condition application** (`world/magic/services/condition_application.py`):
+`apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character)`
+— extracted from combat's `_apply_conditions`; used by **both** combat and standalone
+cast paths. Callers build `targets_by_kind` before calling; the service iterates
+`TechniqueAppliedCondition` rows and batches them via `bulk_apply_conditions`.
+(`AppliedConditionResult` still lives in `world/combat/types.py` — a known follow-up.)
+
+**AoE — combat** (`world/combat/models.py:CombatRoundActionTarget`):
+New join table. For AREA and FILTERED_GROUP techniques, each targeted `CombatOpponent`
+gets one row. AREA auto-expands to all active opponents; FILTERED_GROUP uses the
+stored/supplied subset. Per-target damage + condition expansion happens in
+`CombatTechniqueResolver`. SINGLE/SELF techniques leave this table empty and continue
+to read `CombatRoundAction.focused_opponent_target`.
+
+**Frontend** — the existing `TargetPicker.tsx` (multi-select capable) is driven by each
+technique's `target_spec`, built by `_target_spec_for_technique_action` in
+`actions/player_interface.py`. `TargetSpec`/`TargetType`/`TargetKind`/`TargetFilters`
+(all in `actions/types.py` and `actions/constants.py`) were **reused** — not reinvented.
+
+**Deferred follow-ups:** standalone hostile/behavior-altering FILTERED_GROUP multi-consent;
+relocate `AppliedConditionResult`; resonance→aspect mapping (all magic checks still use
+the Arcana aspect).
 
 ### Motif System
 
@@ -388,10 +447,11 @@ character.combat_pulls.invalidate()
 ### Technique
 
 ```python
-technique.tier       # Derived from level: 1-5=T1, 6-10=T2, etc.
-technique.intensity  # Base power stat
-technique.control    # Base safety/precision stat
-technique.anima_cost # Base anima cost to activate
+technique.tier        # Derived from level: 1-5=T1, 6-10=T2, etc.
+technique.intensity   # Base power stat
+technique.control     # Base safety/precision stat
+technique.anima_cost  # Base anima cost to activate
+technique.target_type # ActionTargetType: SELF / SINGLE / AREA / FILTERED_GROUP (default SINGLE)
 ```
 
 ### Resonance-Environment Services
@@ -650,7 +710,7 @@ the legacy ThreadType lookup no longer exists.
 | `/threads/{id}/` | GET | Thread detail with anchor + resonance |
 | `/threads/{id}/` | DELETE | Soft-retire (stamps `retired_at`; row remains for historical references) |
 | `/thread-pull-preview/` | POST | Read-only preview; body `{character_sheet_id, resonance_id, tier, thread_ids[], action_context?}`; returns resonance/anima cost + `affordable` + `resolved_effects[]` |
-| `/rituals/perform/` | POST | Dispatch a Ritual via PerformRitualAction. Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
+| `/rituals/perform/` | POST | Dispatch a Ritual via `PerformRitualAction.run()` (`actions/definitions/ritual.py`, key `perform_ritual`; shared with telnet `CmdRitual`, #1331). Body `{character_sheet_id, ritual_id, kwargs, components[]}`; Imbuing takes `{thread_id}` in kwargs (view resolves into Thread instance) |
 | `/teaching-offers/` | GET | Read-only list of `ThreadWeavingTeachingOffer` records |
 
 **API conventions.**
@@ -752,3 +812,12 @@ execute_flow("cast_power", context={
 - **Cantrips are technique templates** - Staff-curated, produce real Techniques at CG finalization
 - **Intensity/Control** - Base stats on techniques. Runtime values modified by resonance, combat, audere, and thread pull effects
 - **No healing** - Shielding yes, restoration no. Healing is counter to the escalation-based combat design
+- **Technique.target_type** — cardinality field (SELF/SINGLE/AREA/FILTERED_GROUP). The *relationship*
+  (who is eligible: SELF/ALLY/ENEMY) is derived at runtime by `derive_target_relationship`, not stored.
+- **ConditionCategory.alters_behavior** — behavior-altering categories (compulsion, charm, fear) require
+  the target's consent; capability/stat categories resolve immediately including on other PCs.
+- **apply_technique_conditions** lives in `world/magic/services/condition_application.py` — shared by
+  both combat and standalone cast paths. `AppliedConditionResult` (its return type) still lives in
+  `world/combat/types.py` as a known follow-up to relocate.
+- **CombatRoundActionTarget** — new combat join table for AoE/multi-target technique actions (AREA and
+  FILTERED_GROUP). SINGLE/SELF actions continue to use `CombatRoundAction.focused_opponent_target`.

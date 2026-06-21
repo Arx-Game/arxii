@@ -209,6 +209,15 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     initiator_persona = serializers.IntegerField()
     technique_id = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False, allow_null=True)
+    # FILTERED_GROUP casts supply an explicit subset of target persona IDs.
+    # The intersection with the technique's eligible scene-set is computed server-side
+    # by resolve_targets. Omit for SELF / SINGLE / AREA techniques.
+    target_persona_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        allow_empty=False,
+    )
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
@@ -233,6 +242,9 @@ class CastableTechniqueSerializer(serializers.Serializer):
     intensity = serializers.IntegerField()
     control = serializers.IntegerField()
     hostile = serializers.SerializerMethodField()
+    target_type = serializers.CharField()
+    reach = serializers.CharField()
+    target_spec = serializers.SerializerMethodField()
 
     def get_hostile(self, obj: object) -> bool:
         from world.magic.models.techniques import Technique  # noqa: PLC0415
@@ -245,6 +257,36 @@ class CastableTechniqueSerializer(serializers.Serializer):
         if isinstance(technique, Technique):
             return is_technique_hostile(technique)
         return False
+
+    def get_target_spec(self, obj: object) -> dict | None:
+        """Derive and serialize the TargetSpec for this technique.
+
+        Returns None for SELF-targeting techniques (no picker needed). For other
+        cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
+        """
+        from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
+        from world.magic.models.techniques import Technique  # noqa: PLC0415
+
+        if isinstance(obj, Technique):
+            technique_id = obj.pk
+        else:
+            technique = getattr(obj, "technique", None)  # noqa: GETATTR_LITERAL
+            if not isinstance(technique, Technique):
+                return None
+            technique_id = technique.pk
+
+        spec = _target_spec_for_technique_action(technique_id)
+        if spec is None:
+            return None
+        return {
+            "kind": spec.kind,
+            "cardinality": spec.cardinality,
+            "filters": {
+                "in_same_scene": spec.filters.in_same_scene,
+                "exclude_self": spec.filters.exclude_self,
+                "must_be_conscious": spec.filters.must_be_conscious,
+            },
+        }
 
 
 class SceneActionRequestSerializer(serializers.ModelSerializer):

@@ -74,6 +74,8 @@ export function ActionPanel({ sceneId }: Props) {
   const [castOpen, setCastOpen] = useState(false);
   const [selectedTechnique, setSelectedTechnique] = useState<CastableTechnique | null>(null);
   const [castTargetPersonaId, setCastTargetPersonaId] = useState<number | null>(null);
+  /** Selected persona ids for FILTERED_GROUP multi-cast. */
+  const [castTargetPersonaIds, setCastTargetPersonaIds] = useState<number[]>([]);
   const [castPickingTarget, setCastPickingTarget] = useState(false);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
 
@@ -121,6 +123,7 @@ export function ActionPanel({ sceneId }: Props) {
     mutationFn: (params: {
       technique_id: number;
       target_persona?: number | null;
+      target_persona_ids?: number[];
       strain_commitment?: number;
       pull?: CastPullRequestBody;
     }) =>
@@ -133,6 +136,7 @@ export function ActionPanel({ sceneId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       setSelectedTechnique(null);
       setCastTargetPersonaId(null);
+      setCastTargetPersonaIds([]);
       setCastPickingTarget(false);
       pull.reset();
       if (data.result?.power_ledger) {
@@ -273,6 +277,7 @@ export function ActionPanel({ sceneId }: Props) {
   function handleTechniqueSelect(technique: CastableTechnique) {
     setSelectedTechnique(technique);
     setCastTargetPersonaId(null);
+    setCastTargetPersonaIds([]);
     setCastLedgerResult(null);
     performCast.reset();
     pull.reset();
@@ -285,15 +290,31 @@ export function ActionPanel({ sceneId }: Props) {
       pull.setPullNotice(payload.error);
       return;
     }
-    performCast.mutate({
-      technique_id: selectedTechnique.id,
-      target_persona: castTargetPersonaId ?? null,
-      ...payload,
-    });
+    const cardinality = selectedTechnique.target_spec?.cardinality ?? selectedTechnique.target_type;
+    if (cardinality === 'filtered_group') {
+      performCast.mutate({
+        technique_id: selectedTechnique.id,
+        target_persona_ids: castTargetPersonaIds,
+        ...payload,
+      });
+    } else {
+      // SELF, SINGLE, AREA — pass the single target persona (or null for self/area/no-target).
+      performCast.mutate({
+        technique_id: selectedTechnique.id,
+        target_persona: castTargetPersonaId ?? null,
+        ...payload,
+      });
+    }
   }
 
   function handleCastTargetConfirm(ids: number[]) {
-    setCastTargetPersonaId(ids[0] ?? null);
+    const cardinality =
+      selectedTechnique?.target_spec?.cardinality ?? selectedTechnique?.target_type;
+    if (cardinality === 'filtered_group') {
+      setCastTargetPersonaIds(ids);
+    } else {
+      setCastTargetPersonaId(ids[0] ?? null);
+    }
     setCastPickingTarget(false);
   }
 
@@ -463,6 +484,7 @@ export function ActionPanel({ sceneId }: Props) {
                   if (castOpen) {
                     setSelectedTechnique(null);
                     setCastTargetPersonaId(null);
+                    setCastTargetPersonaIds([]);
                     setCastPickingTarget(false);
                     setCastLedgerResult(null);
                     performCast.reset();
@@ -554,37 +576,82 @@ export function ActionPanel({ sceneId }: Props) {
                         </p>
                       )}
 
-                      {/* Target selector */}
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">Target:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCastTargetPersonaId(null);
-                          }}
-                          className={`rounded px-2 py-0.5 text-xs ${
-                            castTargetPersonaId === null && !castPickingTarget
-                              ? 'bg-primary text-primary-foreground'
-                              : 'hover:bg-muted/50'
-                          }`}
-                        >
-                          Self / Room
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCastPickingTarget(true)}
-                          className={`rounded px-2 py-0.5 text-xs ${
-                            castTargetPersonaId !== null || castPickingTarget
-                              ? 'bg-primary text-primary-foreground'
-                              : 'hover:bg-muted/50'
-                          }`}
-                        >
-                          {castTargetPersonaId !== null
-                            ? (candidates.find((c) => c.id === castTargetPersonaId)?.name ??
-                              'Persona')
-                            : 'Choose persona…'}
-                        </button>
-                      </div>
+                      {/* Target selector — driven by target_spec.cardinality (#1321) */}
+                      {(() => {
+                        const cardinality =
+                          selectedTechnique.target_spec?.cardinality ??
+                          selectedTechnique.target_type;
+                        if (cardinality === 'self') {
+                          // SELF: no picker — cast resolves on the caster.
+                          return (
+                            <p className="text-xs text-muted-foreground">Targets: self (auto)</p>
+                          );
+                        }
+                        if (cardinality === 'area') {
+                          // AREA: backend auto-expands; no picker needed.
+                          return (
+                            <p className="text-xs text-muted-foreground">
+                              Targets: all eligible in scene (area cast)
+                            </p>
+                          );
+                        }
+                        if (cardinality === 'filtered_group') {
+                          // FILTERED_GROUP: multi-select via TargetPicker.
+                          const chosenNames = castTargetPersonaIds
+                            .map((id) => candidates.find((c) => c.id === id)?.name)
+                            .filter(Boolean)
+                            .join(', ');
+                          return (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">Targets:</span>
+                              <button
+                                type="button"
+                                onClick={() => setCastPickingTarget(true)}
+                                className={`rounded px-2 py-0.5 text-xs ${
+                                  castTargetPersonaIds.length > 0 || castPickingTarget
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                {castTargetPersonaIds.length > 0 ? chosenNames : 'Choose targets…'}
+                              </button>
+                            </div>
+                          );
+                        }
+                        // Default: SINGLE — original Self/Room + single persona picker.
+                        return (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Target:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCastTargetPersonaId(null);
+                              }}
+                              className={`rounded px-2 py-0.5 text-xs ${
+                                castTargetPersonaId === null && !castPickingTarget
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'hover:bg-muted/50'
+                              }`}
+                            >
+                              Self / Room
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCastPickingTarget(true)}
+                              className={`rounded px-2 py-0.5 text-xs ${
+                                castTargetPersonaId !== null || castPickingTarget
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'hover:bg-muted/50'
+                              }`}
+                            >
+                              {castTargetPersonaId !== null
+                                ? (candidates.find((c) => c.id === castTargetPersonaId)?.name ??
+                                  'Persona')
+                                : 'Choose persona…'}
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                       {/* Thread pulls — optional resonance surge on this cast */}
                       {pull.pullsContext && characterId !== null && (
@@ -608,7 +675,13 @@ export function ActionPanel({ sceneId }: Props) {
                       <Button
                         size="sm"
                         className="w-full"
-                        disabled={performCast.isPending || initiatorPersonaId === null}
+                        disabled={
+                          performCast.isPending ||
+                          initiatorPersonaId === null ||
+                          ((selectedTechnique.target_spec?.cardinality ??
+                            selectedTechnique.target_type) === 'filtered_group' &&
+                            castTargetPersonaIds.length === 0)
+                        }
                         onClick={handleCastCommit}
                       >
                         {performCast.isPending ? 'Casting…' : `Cast ${selectedTechnique.name}`}
@@ -638,15 +711,17 @@ export function ActionPanel({ sceneId }: Props) {
 
       {castPickingTarget && selectedTechnique && (
         <TargetPicker
-          spec={{
-            kind: 'persona',
-            cardinality: 'single',
-            filters: {
-              in_same_scene: true,
-              exclude_self: false,
-              must_be_conscious: false,
-            },
-          }}
+          spec={
+            selectedTechnique.target_spec ?? {
+              kind: 'persona',
+              cardinality: 'single',
+              filters: {
+                in_same_scene: true,
+                exclude_self: false,
+                must_be_conscious: false,
+              },
+            }
+          }
           candidates={candidates}
           onConfirm={handleCastTargetConfirm}
           onCancel={handleCastTargetCancel}

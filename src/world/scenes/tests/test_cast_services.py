@@ -65,6 +65,7 @@ from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.models import Interaction, Scene
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
+    attach_behavior_altering_condition,
     grant_technique,
     make_benign_castable_technique,
     make_cast_pull_fixture,
@@ -231,8 +232,9 @@ class TestRequestTechniqueCastRouting(CastScenarioMixin):
         self.assertEqual(cast.request.strain_commitment, 3)
 
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
-        """Benign technique aimed at another PC → PENDING consent request."""
+        """Benign behavior-altering technique aimed at another PC → PENDING consent request."""
         technique = make_benign_castable_technique()
+        attach_behavior_altering_condition(technique)
         grant_technique(self.initiator, technique)
 
         cast = request_technique_cast(
@@ -403,8 +405,13 @@ class TestRespondToActionRequestStandaloneCast(CastScenarioMixin):
         cls.initiator = cls.caster
 
     def _make_pending_standalone_request(self) -> SceneActionRequest:
-        """Create a PENDING standalone cast request via request_technique_cast."""
+        """Create a PENDING standalone cast request via request_technique_cast.
+
+        Uses a behavior-altering condition so the technique requires consent, routing
+        to PENDING rather than immediate resolution.
+        """
         technique = make_benign_castable_technique()
+        attach_behavior_altering_condition(technique)
         grant_technique(self.initiator, technique)
         cast = request_technique_cast(
             scene=self.scene,

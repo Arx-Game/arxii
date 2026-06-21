@@ -46,6 +46,7 @@ class OpponentDamageResult:
     probing_increment: int
     defeated: bool
     kills: int = 0  # swarm bodies cleared this hit (#875); 0 for non-swarm
+    opponent_id: int | None = None  # FK to CombatOpponent; set by apply_damage_to_opponent (#1321)
 
 
 @dataclass(frozen=True)

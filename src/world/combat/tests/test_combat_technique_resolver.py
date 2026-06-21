@@ -310,7 +310,7 @@ class ApplyConditionsTests(TestCase):
             minimum_success_level=2,
         )
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
@@ -335,7 +335,7 @@ class ApplyConditionsTests(TestCase):
         )
         expected_target = self.resolver.action.focused_opponent_target.objectdb
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=2)
             results = self.resolver._apply_conditions(check, eff_intensity=0)
@@ -356,7 +356,7 @@ class ApplyConditionsTests(TestCase):
         )
         expected_target = self.resolver.participant.character_sheet.character
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
@@ -389,7 +389,7 @@ class ApplyConditionsTests(TestCase):
         )
         expected_target = ally_sheet.character
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
@@ -411,7 +411,7 @@ class ApplyConditionsTests(TestCase):
         opponent.status = OpponentStatus.DEFEATED
         opponent.save(update_fields=["status"])
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
             results = self.resolver._apply_conditions(check, eff_intensity=0)
 
@@ -431,7 +431,7 @@ class ApplyConditionsTests(TestCase):
             severity_per_extra_sl=0,
         )
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
@@ -454,7 +454,7 @@ class ApplyConditionsTests(TestCase):
             duration_per_extra_sl=0,
         )
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
@@ -474,7 +474,7 @@ class ApplyConditionsTests(TestCase):
             minimum_success_level=1,
         )
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             from world.conditions.types import ApplyConditionResult
 
             mock_bulk.return_value = [ApplyConditionResult(success=False)]
@@ -494,7 +494,7 @@ class ApplyConditionsTests(TestCase):
         self.resolver.action.focused_opponent_target = None
         self.resolver.action.save(update_fields=["focused_opponent_target"])
 
-        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+        with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
             results = self.resolver._apply_conditions(check, eff_intensity=0)
 

@@ -13,7 +13,7 @@ Lifecycle" for the current contracts.
 - `docs/architecture/covenants-slice-a.md` — Slice A; this spec composes with it
 - `docs/architecture/ritual-ui-pattern.md` — UI precedent for "formation IS the ritual"
 - `src/world/magic/models/rituals.py` — existing `Ritual` + `RitualComponentRequirement` shape this spec extends
-- `src/world/magic/actions.py` — `PerformRitualAction` dispatch path (single-actor; Slice B introduces a session-based path alongside it)
+- `src/actions/definitions/ritual.py` — `PerformRitualAction` (key `perform_ritual`) dispatch path (single-actor; Slice B introduces a session-based path alongside it)
 - `src/world/covenants/services.py` — Slice A services this spec wraps (`create_covenant`, `add_member`, engagement services)
 - `src/world/covenants/handlers.py` — `CharacterCovenantRoleHandler` this spec extends
 

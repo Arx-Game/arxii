@@ -185,6 +185,7 @@ class ActionRegistryTests(TestCase):
             "yield",
             "acknowledge_risk",
             "restore_sense",
+            "perform_ritual",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -43,6 +43,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    CombatRoundActionTarget,
     RoundChallengeDeclaration,
 )
 
@@ -135,12 +136,16 @@ class CombatRoundContext(RoundContext):
         technique: Any,
         existing: CombatRoundAction | None,
         kwargs: dict[str, Any],
-    ) -> tuple[Any, Any, Any, Any, CombatOpponent | None, CombatParticipant | None]:
+    ) -> tuple[Any, Any, Any, Any, CombatOpponent | None, CombatParticipant | None, list]:
         """Apply the named slot's technique onto the existing CombatRoundAction's slots.
 
         Reads the existing row's slot values, overwrites only the slot this
         dispatch names, and returns the merged
-        ``(focused, physical, social, mental, opponent_target, ally_target)``.
+        ``(focused, physical, social, mental, opponent_target, ally_target, aoe_opponents)``.
+
+        ``aoe_opponents`` is the full ordered opponent list for AoE/FILTERED_GROUP
+        dispatches (empty for SINGLE/SELF).  The caller writes
+        ``CombatRoundActionTarget`` join rows from this list.
         """
         from actions.constants import CombatActionSlot  # noqa: PLC0415
         from world.combat.constants import ActionCategory  # noqa: PLC0415
@@ -153,10 +158,11 @@ class CombatRoundContext(RoundContext):
         # merges; a FOCUSED dispatch re-supplies them from its own kwargs.
         opponent_target = existing.focused_opponent_target if existing else None
         ally_target = existing.focused_ally_target if existing else None
+        aoe_opponents: list[CombatOpponent] = []
 
         if slot == CombatActionSlot.FOCUSED:
             focused = technique
-            opponent_target, ally_target = self._resolve_focused_targets(kwargs)
+            opponent_target, ally_target, aoe_opponents = self._resolve_focused_targets(kwargs)
             # XOR authority lives on the backend: the just-declared focused action
             # WINS over any previously-declared passive in the same category, so we
             # clear that colliding passive before declare_action validates. This
@@ -176,7 +182,7 @@ class CombatRoundContext(RoundContext):
         elif slot == CombatActionSlot.PASSIVE_MENTAL:
             mental = technique
 
-        return focused, physical, social, mental, opponent_target, ally_target
+        return focused, physical, social, mental, opponent_target, ally_target, aoe_opponents
 
     @transaction.atomic
     def _record_combat_declaration(
@@ -219,7 +225,7 @@ class CombatRoundContext(RoundContext):
             round_number=self._encounter.round_number,
         ).first()
 
-        focused, physical, social, mental, opponent_target, ally_target = (
+        focused, physical, social, mental, opponent_target, ally_target, aoe_opponents = (
             self._merge_slot_into_existing(slot, technique, existing, kwargs)
         )
 
@@ -229,7 +235,7 @@ class CombatRoundContext(RoundContext):
             or EffortLevel.MEDIUM
         )
 
-        declare_action(
+        action = declare_action(
             participant,
             focused_action=focused,
             focused_category=None,
@@ -241,10 +247,19 @@ class CombatRoundContext(RoundContext):
             mental_passive=mental,
         )
 
+        # AoE / FILTERED_GROUP: persist the full target set as join rows so the
+        # resolver can iterate them without a round-trip to the declaration kwargs.
+        # Always clear then re-insert so a re-declaration stays consistent.
+        if aoe_opponents:
+            action.extra_targets.all().delete()
+            CombatRoundActionTarget.objects.bulk_create(
+                [CombatRoundActionTarget(action=action, opponent=opp) for opp in aoe_opponents]
+            )
+
     def _resolve_focused_targets(
         self,
         kwargs: dict[str, Any],
-    ) -> tuple[CombatOpponent | None, CombatParticipant | None]:
+    ) -> tuple[CombatOpponent | None, CombatParticipant | None, list[CombatOpponent]]:
         """Resolve the focused target ids supplied by the player dispatch.
 
         The frontend sends ``focused_opponent_target_id`` (a ``CombatOpponent`` PK)
@@ -255,20 +270,52 @@ class CombatRoundContext(RoundContext):
         ``focused_ally_target``) take precedence when present, so direct callers
         can pass instances.
 
+        For AoE / FILTERED_GROUP techniques the caller may supply
+        ``focused_opponent_target_ids`` (a list of ``CombatOpponent`` PKs).  All
+        ids are validated against this encounter.  The **first** resolved opponent
+        is returned as the primary ``opponent`` (set on
+        ``CombatRoundAction.focused_opponent_target``) for backward-compat; the
+        full list is returned as the third element so the caller can persist join
+        rows via ``CombatRoundActionTarget``.
+
+        Returns:
+            ``(primary_opponent, ally, extra_opponents)`` where ``extra_opponents``
+            is the full ordered list for AoE (may be empty for SINGLE / SELF).
+
         Raises:
             ActionDispatchError: ``UNKNOWN_ACTION_REF`` if a supplied id does not
                 resolve to an entity in this encounter.
         """
         opponent: CombatOpponent | None = kwargs.get("focused_opponent_target")
-        opponent_id = kwargs.get("focused_opponent_target_id")
-        if opponent is None and opponent_id is not None:
-            try:
-                opponent = CombatOpponent.objects.get(
-                    pk=opponent_id,
+        opponent_ids: list[int] | None = kwargs.get("focused_opponent_target_ids")
+
+        aoe_opponents: list[CombatOpponent] = []
+
+        if opponent_ids:
+            # AoE / FILTERED_GROUP dispatch: validate each id in this encounter.
+            resolved = list(
+                CombatOpponent.objects.filter(
+                    pk__in=opponent_ids,
                     encounter=self._encounter,
                 )
-            except CombatOpponent.DoesNotExist as exc:
-                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+            )
+            resolved_map = {o.pk: o for o in resolved}
+            for oid in opponent_ids:
+                if oid not in resolved_map:
+                    raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+                aoe_opponents.append(resolved_map[oid])
+            if aoe_opponents and opponent is None:
+                opponent = aoe_opponents[0]
+        else:
+            opponent_id = kwargs.get("focused_opponent_target_id")
+            if opponent is None and opponent_id is not None:
+                try:
+                    opponent = CombatOpponent.objects.get(
+                        pk=opponent_id,
+                        encounter=self._encounter,
+                    )
+                except CombatOpponent.DoesNotExist as exc:
+                    raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
 
         ally: CombatParticipant | None = kwargs.get("focused_ally_target")
         ally_id = kwargs.get("focused_ally_target_id")
@@ -281,7 +328,7 @@ class CombatRoundContext(RoundContext):
             except CombatParticipant.DoesNotExist as exc:
                 raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
 
-        return opponent, ally
+        return opponent, ally, aoe_opponents
 
     @transaction.atomic
     def _record_challenge_declaration(

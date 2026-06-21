@@ -36,7 +36,7 @@ actions. Magic and combat never touch `action.run()`. **Fix-on-sight target.**
 
 | # | Web dispatch family | Entry | Reaches | Telnet today |
 |---|---|---|---|---|
-| 1 | **Unified action dispatch** | `dispatch_player_action()` | REGISTRY→`action.run`, CHALLENGE→`resolve_challenge`, COMBAT→`declare_action`/`resolve_round`→`use_technique` | Only REGISTRY, and only via `self.action.run()` (bypassing the dispatcher) |
+| 1 | **Unified action dispatch** | `dispatch_player_action()` | REGISTRY→`action.run`, CHALLENGE→`resolve_challenge`, COMBAT→`declare_action`/`resolve_round`→`use_technique` | REGISTRY via `ArxCommand` → `self.action.run()`; COMBAT via `DispatchCommand` → `dispatch_player_action()` (`CmdDeclareTechnique`); CHALLENGE still G1 (#1332) |
 | 2 | **Consent flow** | `SceneActionRequestViewSet` (`action_views.py:55`) → `create_action_request`/`respond_to_action_request` (`action_services.py:150/304`) → `start_action_resolution` | Targeted social actions (intimidate, persuade, …) with accept/deny gating | ❌ none |
 | 3 | **Direct viewset→service** | dedicated viewsets/views → service fn (no action, no dispatcher) | thread weave/imbue/pull, rituals, outfits, narrative | ❌ none |
 
@@ -88,15 +88,23 @@ web-only; the minimal fix is telnet `intimidate`/`accept`/`deny` shells over the
 |---|---|---|---|---|---|
 | See available techniques | ❌ none | `get_player_actions` / `_combat_actions` (`player_interface.py`) | N/A | — | G3 |
 | Declare cast (non-combat) | ❌ none | `dispatch_player_action`→CHALLENGE→`resolve_challenge` (`challenge_resolution.py`) | seam converges; no telnet | — | **G1** |
-| Declare cast (combat) | ❌ none | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | seam converges; no telnet | `test_combat_ui_integration.py` | **G1** |
+| Declare cast (combat) | `cast`/`declare` (`commands/combat.py` — `CmdDeclareTechnique(DispatchCommand)`) | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | **YES** — telnet calls `dispatch_player_action` (same seam) | `test_combat_ui_integration.py`, `test_combat_cast_telnet_e2e.py`, `test_combat_commands.py` | **G0** |
 | Check + resonance env + effects | N/A (service) | `resolve_round`→`resolve_combat_technique` (`:707`)→`use_technique` (`techniques.py:702`) | **YES** — fully shared service orchestration | `test_magic_story_pipeline.py` | **G0** |
-| Perform ritual | ❌ none | `RitualPerformView` → service | service seam; no telnet | thread/ritual tests | **G3** |
+| Perform ritual | ✅ `ritual`/`perform` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` | **YES** — both converge on `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
 
-**Verdict:** cast→outcome cannot be driven via telnet today (no `cast`/`attempt` command).
-The deep orchestration (`use_technique`, ~15 steps: anima, soulfray, resonance environment,
-conditions, story beats, achievements) is already service-tested. Minimal fix: telnet
-`cast`/`attempt` commands that call `dispatch_player_action()` with a COMBAT/CHALLENGE
-`ActionRef` — riding the exact path the web uses.
+> **Rituals (RESOLVED, #1331):** ritual performance is now a real `Action`
+> (`actions/definitions/ritual.py`, key `perform_ritual`). The standalone
+> `world.magic.actions.PerformRitualAction` executor was deleted; telnet
+> (`CmdRitual`) and web (`RitualPerformView`) both call
+> `PerformRitualAction.run()`, so the G3 "web bypasses actions" gap is closed for
+> SERVICE + FLOW rituals. (Anima/SCENE_ACTION rituals dispatch elsewhere and are
+> out of scope.)
+
+**Verdict:** combat declare is now telnet-driveable (G0) — `cast`/`declare`
+(`CmdDeclareTechnique`) calls `dispatch_player_action()` with a COMBAT `ActionRef`, the same
+seam the web uses. Non-combat (CHALLENGE) declare remains G1 (#1332). The deep
+orchestration (`use_technique`, ~15 steps: anima, soulfray, resonance environment, conditions,
+story beats, achievements) is already service-tested.
 
 ---
 
@@ -109,7 +117,7 @@ conditions, story beats, achievements) is already service-tested. Minimal fix: t
 |---|---|---|---|---|---|
 | Acquire THREAD WEAVING unlock | ❌ none | `teaching-offers/{id}/accept/` → `accept_thread_weaving_unlock` (`services/threads.py:548`) | service-only | `test_thread_weaving_acquisition.py` | **G1** |
 | Weave a thread | ❌ none | `ThreadViewSet.create` → `weave_thread` (`services/threads.py:298`) | service-only | `test_resonance_services.py` | **G1** |
-| Imbue (spend resonance, advance level) | ❌ none | `RitualPerformView` → `spend_resonance_for_imbuing` (`services/resonance.py:221`) | service-only (bypasses `action.run`) | unit tests | **G3** |
+| Imbue (spend resonance, advance level) | ✅ `ritual Rite of Imbuing thread=<id> amount=<n>` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` → `spend_resonance_for_imbuing` | **YES** — both via `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
 | Pull thread (in combat) | ❌ none | `ThreadPullCommitView` → `spend_resonance_for_pull` (`services/resonance.py:588`) | service-only | `test_thread_pull_pipeline.py` | **G3** |
 
 **Verdict:** not telnet-driveable. The web path is *not an action* — it's viewsets calling
@@ -177,3 +185,64 @@ web. Minimal fix: a `CmdDeclareAction` plus a GM-only `start encounter` for test
   for *all* player actions), or remain a distinct viewset that telnet shells call directly?
 - For combat/magic seed prerequisites, which belong in a shared **combat seed module** so the
   E2E is writable without bespoke per-test wiring?
+
+---
+
+## Broad-pass inventory (follow-up sweep)
+
+The four loops above were a *deep* trace. This section is the *broad* pass the original
+scope deferred: a full sweep of the DRF surface (every `router.register`, `APIView`, and
+`@action`) to find player-facing mutations with no telnet command. **Result: ~150
+player-facing API mutations; only ~7 have any telnet command** (`wear`, `undress`, `use`,
+`+block`/`+unblock`/`+mute`/`+unmute`, plus `say`/`pose`/`emit` via actions). Everything
+mechanical is web-only.
+
+### Two corrections to the deep trace above
+
+1. **Combat was under-counted.** Loop 4 traced only *declare* and *clash-commit* (through
+   `dispatch_player_action`). But `CombatEncounterViewSet` exposes ~13 *additional* direct
+   `@action`→service player surfaces with no telnet path that **will not** be reached by the
+   `dispatch_player_action` routing fix: `flee` (`declare_flee`, `combat/services.py:926`),
+   `cover` (`declare_cover` `:975`), `interpose` (`declare_interpose` `:1028`), `yield`
+   (`duels.yield_duel:303`), `join`/`leave` (`:852`/`:886`), `ready`, `upgrade_combo`/
+   `revert_combo` (`:2523`/`:2642`). These need their own thin shells (family 3), not just
+   the dispatch reroute.
+2. **The dispatch-routing keystone is now its own issue** (foundation), not just the bullet
+   in "Cross-cutting conclusions #1".
+
+### Web-only clusters with no telnet surface (by domain)
+
+| Domain | Representative web-only surfaces (seam) | Class |
+|---|---|---|
+| **Social consent** | `create_action_request` / `respond_to_action_request` (`scenes/action_views.py:55/195`) | G1/G3 |
+| **Entrance + flourish** | `EntranceAction`; `resolve_entry_flourish_offer` (`magic/entry_flourish.py`) | G1/G3 |
+| **Resonance endorsements** | pose / scene-entry / style (`magic/views.py:1053+`); fashion `FashionJudgementViewSet` (`items/views.py:1280`) | G3 |
+| **Interaction reactions** | `InteractionFavorite` / `InteractionReaction` / reaction windows (`scenes/`) | G3 |
+| **Thread weave/imbue/pull** | `weave_thread` / `spend_resonance_for_imbuing` / `_for_pull` (`magic/services/`) | G1/G3 |
+| **Soul-tether & sineating** | 8 APIViews: accept/dissolve/request/respond/rescue/stage-advance (`magic/views.py:1206–1461`) | G3 |
+| **Audere / Audere Majora** | `resolve_audere_offer`; `cross_threshold` (`magic/audere*.py`) — the progression/"leveling" surface | G3 |
+| **Multi-participant rituals** | `draft_session`/`accept`/`decline`/`fire` (`magic/services/sessions.py`) | G3 |
+| **Covenant membership** | engage/disengage/leave/kick/rank; banner-call/stand-down (`covenants/services.py`) | G3 |
+| **Persona / guise** | `set_active_persona` (`scenes/services.py:86`) | G3 |
+| **Progression rewards** | `claim_kudos_for_xp`; `cast_vote`/`remove_vote`; random-scene; path-intent (`progression/views.py`) | G3 |
+| **Missions** | resolve/abandon/group_pick/group_vote (`missions/views.py:497+`) | G3 |
+| **Journals & goals** | `create_journal_entry`/`respond`; `CharacterGoalViewSet` (`journals/`, `goals/`) | G3 |
+
+### Two named surfaces that don't map to code
+
+- **Soulfray combat-consent** — no dedicated surface found (neither telnet nor web). Soulfray
+  severity accumulates as a runtime side-effect of casting (`techniques.py:525`); entry appears
+  automatic at Warp stage 3. Whether an explicit consent gate is intended is an open design
+  question, tracked separately.
+- **"Ritual of the Durance"** — no ritual by that name exists. "Durance" is a *covenant type*
+  (`Covenant of the Durance`, the default/standing covenant). Level advancement actually rides
+  **thread Imbuing** and **Audere Majora crossing**. Naming reconciliation tracked separately.
+
+### Disposition
+
+Tracked as journey-shaped children of the umbrella issue (telnet commands + one user-journey
+E2E each, which then retires the unit tests it covers): two **foundation** issues (dispatch
+routing; consent-flow / direct-viewset strategy), the per-domain **journey** issues above, and
+two **design-clarification** issues (soulfray consent; durance naming). Existing combat (scope
+widened), ritual-as-Action, and non-combat-cast journeys are reconciled into the same set. See
+the umbrella issue for the live child map.
