@@ -630,3 +630,5 @@ class RitualSessionDetailParticipantFieldsTests(TestCase):
         fields = response.data["participant_fields"]
         names = {f["name"] for f in fields}
         self.assertIn("chosen_covenant_role", names)
+        role_field = next(f for f in fields if f["name"] == "chosen_covenant_role")
+        self.assertEqual(role_field["emits_reference"], "COVENANT_ROLE")
