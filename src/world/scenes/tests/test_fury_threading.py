@@ -19,6 +19,7 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import ConditionInstanceFactory
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.magic.factories import (
     BerserkConditionTemplateFactory,
     CharacterAnimaFactory,
@@ -428,3 +429,73 @@ class BerserkAppliedOnLostControlTests(TestCase):
             call_kwargs.args[1] if call_kwargs.args else call_kwargs.kwargs.get("condition")
         )
         self.assertEqual(applied_template, ConditionTemplate.get_by_name("Berserk"))
+
+
+# ---------------------------------------------------------------------------
+# #1293: effort modifier threads into the technique-enhanced check roll
+# ---------------------------------------------------------------------------
+
+
+class EffortThreadsIntoTechniqueCheckTests(TestCase):
+    """A technique-enhanced action applies EFFORT_CHECK_MODIFIER to its check roll.
+
+    Parity with the plain/area branches, which already pass the effort modifier as
+    ``extra_modifiers`` to ``start_action_resolution``. The ``use_technique`` mock
+    invokes the passed ``resolve_fn`` so the inner lambda's call is captured.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene, cls.initiator, cls.anchor, cls.tier, cls.cfg = _setup_fury_fixture()
+        cls.action_template = ActionTemplateFactory()
+        cls.technique = TechniqueFactory(
+            action_template=cls.action_template,
+            damage_profile=False,
+        )
+
+    def setUp(self) -> None:
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self.accrue_patcher.stop()
+
+    def _extra_modifiers_for_effort(self, effort_level: str) -> int:
+        pending = _make_pending_resolution(success_level=1)
+
+        def fake_use_technique(*, resolve_fn, **_kwargs):
+            resolve_fn(power=1, ledger=None)
+            return _make_technique_use_result(pending)
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.anchor,
+            action_key="intimidate",
+            technique=self.technique,
+            effort_level=effort_level,
+        )
+        request.action_template = self.action_template
+        request.save(update_fields=["action_template"])
+
+        with (
+            patch("world.scenes.action_services.start_action_resolution") as mock_resolve,
+            patch("world.magic.services.use_technique", side_effect=fake_use_technique),
+        ):
+            mock_resolve.return_value = pending
+            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+        self.assertTrue(mock_resolve.called, "start_action_resolution was not invoked")
+        return mock_resolve.call_args.kwargs["extra_modifiers"]
+
+    def test_high_effort_threads_positive_check_modifier(self) -> None:
+        self.assertEqual(
+            self._extra_modifiers_for_effort(EffortLevel.HIGH),
+            EFFORT_CHECK_MODIFIER[EffortLevel.HIGH],
+        )
+
+    def test_very_low_effort_threads_negative_check_modifier(self) -> None:
+        self.assertEqual(
+            self._extra_modifiers_for_effort(EffortLevel.VERY_LOW),
+            EFFORT_CHECK_MODIFIER[EffortLevel.VERY_LOW],
+        )
