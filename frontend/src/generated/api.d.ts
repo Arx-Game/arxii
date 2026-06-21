@@ -2409,6 +2409,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/interpose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare an interposing maneuver, optionally guarding a named ally.
+     *
+     *     Creates a passives-only action with maneuver=INTERPOSE. When
+     *     ``ally_participant_id`` is omitted or null, the participant guards any
+     *     ally hit this round (``focused_ally_target=None``). When provided, the
+     *     ally must be an active participant in this encounter.
+     */
+    post: operations['combat_interpose_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/join/': {
     parameters: {
       query?: never;
@@ -28073,6 +28097,32 @@ export interface operations {
     };
   };
   combat_flee_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_interpose_create: {
     parameters: {
       query?: never;
       header?: never;
