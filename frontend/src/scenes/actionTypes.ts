@@ -216,6 +216,12 @@ export interface CastableTechnique {
   control: number;
   /** True if casting this against another PC will seed/feed a combat encounter. */
   hostile: boolean;
+  /** Cardinality of target selection: "self" | "single" | "area" | "filtered_group". */
+  target_type: string;
+  /** Positional reach constraint: "same" | "adjacent" | "any". */
+  reach: string;
+  /** Target picker spec — null for SELF-targeting techniques. */
+  target_spec: TargetSpec | null;
 }
 
 export interface CastPullRequestBody {

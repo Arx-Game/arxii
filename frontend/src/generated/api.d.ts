@@ -21343,6 +21343,23 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -22286,6 +22303,13 @@ export interface components {
      * @enum {integer}
      */
     RatingEnum: -2 | -1 | 0 | 1 | 2;
+    /**
+     * @description * `same` - Same position
+     *     * `adjacent` - Adjacent position
+     *     * `any` - Anywhere in room
+     * @enum {string}
+     */
+    ReachEnum: 'same' | 'adjacent' | 'any';
     /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed
@@ -24220,7 +24244,33 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
       readonly tier: number;
+      /**
+       * @description Derive and serialize the TargetSpec for this technique.
+       *
+       *     Returns None for SELF-targeting techniques (no picker needed). For other
+       *     cardinalities, returns the same shape as TargetSpecSerializer.
+       */
+      readonly target_spec: {
+        [key: string]: unknown;
+      } | null;
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
@@ -24245,6 +24295,23 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {
@@ -24254,6 +24321,14 @@ export interface components {
       /** @description Description of this technique style. */
       readonly description: string;
     };
+    /**
+     * @description * `self` - Self
+     *     * `single` - Single Target
+     *     * `area` - Area
+     *     * `filtered_group` - Filtered Group
+     * @enum {string}
+     */
+    TechniqueTargetTypeEnum: 'self' | 'single' | 'area' | 'filtered_group';
     /** @description Serializer for interaction bindings with flavor text. */
     TemplateInteraction: {
       readonly interaction_type: components['schemas']['InteractionType'];

@@ -156,6 +156,83 @@ class TechniqueSerializerTest(TestCase):
 
         self.assertEqual(data["restriction_ids"], [restriction.id])
 
+    def test_target_type_included(self) -> None:
+        """TechniqueSerializer exposes target_type."""
+        from actions.constants import ActionTargetType
+
+        technique = TechniqueFactory(target_type=ActionTargetType.SINGLE, damage_profile=False)
+        data = TechniqueSerializer(technique).data
+        self.assertEqual(data["target_type"], ActionTargetType.SINGLE)
+
+    def test_reach_included(self) -> None:
+        """TechniqueSerializer exposes reach."""
+        from world.magic.constants import TechniqueReach
+
+        technique = TechniqueFactory(reach=TechniqueReach.ANY, damage_profile=False)
+        data = TechniqueSerializer(technique).data
+        self.assertIn("reach", data)
+        self.assertEqual(data["reach"], TechniqueReach.ANY)
+
+    def test_target_spec_hostile_single_technique(self) -> None:
+        """TechniqueSerializer target_spec: hostile SINGLE → cardinality=single, exclude_self."""
+        technique = TechniqueFactory(
+            damage_profile=True,
+            target_type="single",
+        )
+        data = TechniqueSerializer(technique).data
+        spec = data["target_spec"]
+        self.assertIsNotNone(spec)
+        self.assertEqual(spec["cardinality"], "single")
+        self.assertTrue(spec["filters"]["exclude_self"])
+        self.assertTrue(spec["filters"]["in_same_scene"])
+
+    def test_target_spec_self_technique_is_none(self) -> None:
+        """TechniqueSerializer target_spec: SELF target_type → None."""
+        technique = TechniqueFactory(
+            damage_profile=False,
+            target_type="self",
+        )
+        data = TechniqueSerializer(technique).data
+        self.assertIsNone(data["target_spec"])
+
+
+class CastableTechniqueSerializerTests(TestCase):
+    """Tests for CastableTechniqueSerializer — standalone cast payload shape."""
+
+    def test_target_type_and_reach_included(self) -> None:
+        """CastableTechniqueSerializer includes target_type and reach."""
+        from world.magic.constants import TechniqueReach
+        from world.scenes.action_serializers import CastableTechniqueSerializer
+
+        technique = TechniqueFactory(
+            damage_profile=False,
+            target_type="single",
+            reach=TechniqueReach.ANY,
+        )
+        data = CastableTechniqueSerializer(technique).data
+        self.assertEqual(data["target_type"], "single")
+        self.assertEqual(data["reach"], TechniqueReach.ANY)
+
+    def test_target_spec_hostile_technique(self) -> None:
+        """CastableTechniqueSerializer target_spec for a hostile SINGLE technique."""
+        from world.scenes.action_serializers import CastableTechniqueSerializer
+
+        technique = TechniqueFactory(damage_profile=True, target_type="single")
+        data = CastableTechniqueSerializer(technique).data
+        spec = data["target_spec"]
+        self.assertIsNotNone(spec)
+        self.assertEqual(spec["cardinality"], "single")
+        self.assertTrue(spec["filters"]["exclude_self"])
+        self.assertTrue(spec["filters"]["in_same_scene"])
+
+    def test_target_spec_self_technique_is_none(self) -> None:
+        """CastableTechniqueSerializer target_spec is None for SELF-targeting techniques."""
+        from world.scenes.action_serializers import CastableTechniqueSerializer
+
+        technique = TechniqueFactory(damage_profile=False, target_type="self")
+        data = CastableTechniqueSerializer(technique).data
+        self.assertIsNone(data["target_spec"])
+
 
 class GiftSerializerTest(TestCase):
     """Tests for GiftSerializer."""

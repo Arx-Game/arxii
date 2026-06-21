@@ -38221,6 +38221,25 @@ components:
           type: integer
           nullable: true
           description: The cantrip template this technique was created from, if any.
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
+          description: |-
+            Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+
+            * `self` - Self
+            * `single` - Single Target
+            * `area` - Area
+            * `filtered_group` - Filtered Group
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachEnum'
+          description: |-
+            Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+
+            * `same` - Same position
+            * `adjacent` - Adjacent position
+            * `any` - Anywhere in room
     PatchedTenureGalleryRequest:
       type: object
       description: Serialize tenure galleries.
@@ -40104,6 +40123,16 @@ components:
         * `0` - Neutral/No Opinion
         * `1` - Good
         * `2` - Excellent
+    ReachEnum:
+      enum:
+      - same
+      - adjacent
+      - any
+      type: string
+      description: |-
+        * `same` - Same position
+        * `adjacent` - Adjacent position
+        * `any` - Anywhere in room
     ReferencedMilestoneTypeEnum:
       enum:
       - story_resolved
@@ -44179,8 +44208,37 @@ components:
           type: integer
           nullable: true
           description: The cantrip template this technique was created from, if any.
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
+          description: |-
+            Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+
+            * `self` - Self
+            * `single` - Single Target
+            * `area` - Area
+            * `filtered_group` - Filtered Group
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachEnum'
+          description: |-
+            Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+
+            * `same` - Same position
+            * `adjacent` - Adjacent position
+            * `any` - Anywhere in room
         tier:
           type: integer
+          readOnly: true
+        target_spec:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Derive and serialize the TargetSpec for this technique.
+
+            Returns None for SELF-targeting techniques (no picker needed). For other
+            cardinalities, returns the same shape as TargetSpecSerializer.
           readOnly: true
       required:
       - anima_cost
@@ -44189,6 +44247,7 @@ components:
       - id
       - name
       - style
+      - target_spec
       - tier
     TechniqueRequest:
       type: object
@@ -44241,6 +44300,25 @@ components:
           type: integer
           nullable: true
           description: The cantrip template this technique was created from, if any.
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
+          description: |-
+            Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+
+            * `self` - Self
+            * `single` - Single Target
+            * `area` - Area
+            * `filtered_group` - Filtered Group
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachEnum'
+          description: |-
+            Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+
+            * `same` - Same position
+            * `adjacent` - Adjacent position
+            * `any` - Anywhere in room
       required:
       - anima_cost
       - effect_type
@@ -44266,6 +44344,18 @@ components:
       - description
       - id
       - name
+    TechniqueTargetTypeEnum:
+      enum:
+      - self
+      - single
+      - area
+      - filtered_group
+      type: string
+      description: |-
+        * `self` - Self
+        * `single` - Single Target
+        * `area` - Area
+        * `filtered_group` - Filtered Group
     TemplateInteraction:
       type: object
       description: Serializer for interaction bindings with flavor text.

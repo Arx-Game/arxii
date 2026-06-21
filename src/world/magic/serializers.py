@@ -205,6 +205,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
         queryset=Restriction.objects.all(),
         required=False,
     )
+    target_spec = serializers.SerializerMethodField()
 
     class Meta:
         model = Technique
@@ -222,8 +223,31 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "description",
             "source_cantrip",
             "target_type",
+            "reach",
             "tier",
+            "target_spec",
         ]
+
+    def get_target_spec(self, obj: Technique) -> dict | None:
+        """Derive and serialize the TargetSpec for this technique.
+
+        Returns None for SELF-targeting techniques (no picker needed). For other
+        cardinalities, returns the same shape as TargetSpecSerializer.
+        """
+        from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
+
+        spec = _target_spec_for_technique_action(obj.pk)
+        if spec is None:
+            return None
+        return {
+            "kind": spec.kind,
+            "cardinality": spec.cardinality,
+            "filters": {
+                "in_same_scene": spec.filters.in_same_scene,
+                "exclude_self": spec.filters.exclude_self,
+                "must_be_conscious": spec.filters.must_be_conscious,
+            },
+        }
 
 
 # =============================================================================
