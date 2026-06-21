@@ -79,11 +79,9 @@ export interface RitualSessionResponseDialogProps {
  * but at runtime it's an array of reference objects.
  */
 function targetCovenantIdFromRefs(session: RitualSessionDetail): number | null {
-  const refs =
-    (session.session_references as unknown as Array<{
-      kind: string;
-      ref_covenant_id?: number;
-    }>) ?? [];
+  const raw = session.session_references as unknown;
+  if (!Array.isArray(raw)) return null;
+  const refs = raw as Array<{ kind: string; ref_covenant_id?: number }>;
   const covRef = refs.find((r) => r.kind === 'COVENANT' && r.ref_covenant_id != null);
   return covRef?.ref_covenant_id ?? null;
 }
