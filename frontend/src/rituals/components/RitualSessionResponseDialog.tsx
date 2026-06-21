@@ -15,14 +15,23 @@
  *
  * --- depends_on path resolution ---
  * CovenantRolePickerField has `depends_on: "session.target_covenant.covenant_type"`.
- * RitualSessionDetail.session_kwargs contains `target_covenant` as a covenant PK (number).
  * We resolve this path by:
- *   1. Extracting target_covenant_id from session_kwargs (cast to unknown→Record).
+ *   1. Reading the COVENANT-kind entry from session.session_references (the primary path for
+ *      induction sessions). Falls back to extracting target_covenant from session_kwargs for
+ *      older sessions that stored it there.
  *   2. Fetching GET /api/covenants/covenants/{id}/ to get covenant_type.
  *   3. Injecting the resolved value into formValues under the full depends_on key
  *      "session.target_covenant.covenant_type" before passing to RitualForm.
  * CovenantRolePickerField reads formValues[field.depends_on] — the key is the full path
  * string, so no changes are needed to CovenantRolePickerField itself.
+ *
+ * --- applies_to gating ---
+ * Fields with applies_to === "candidate_only" are hidden from the initiator. The
+ * effectiveSchema reflects only the fields the viewer should fill in.
+ *
+ * --- emits_reference ---
+ * On accept, fields with emits_reference are sent as typed references entries (not
+ * participant_kwargs). COVENANT_ROLE → ref_covenant_role_id; COVENANT → ref_covenant_id.
  */
 
 import { useState } from 'react';
@@ -65,7 +74,22 @@ export interface RitualSessionResponseDialogProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract the target_covenant id from session_kwargs.
+ * Resolve target_covenant id from the session-level COVENANT reference.
+ * session_references is typed as `string` in the generated schema (SerializerMethodField),
+ * but at runtime it's an array of reference objects.
+ */
+function targetCovenantIdFromRefs(session: RitualSessionDetail): number | null {
+  const refs =
+    (session.session_references as unknown as Array<{
+      kind: string;
+      ref_covenant_id?: number;
+    }>) ?? [];
+  const covRef = refs.find((r) => r.kind === 'COVENANT' && r.ref_covenant_id != null);
+  return covRef?.ref_covenant_id ?? null;
+}
+
+/**
+ * Extract the target_covenant id from session_kwargs (legacy fallback).
  * session_kwargs is typed as `unknown` in the generated schema.
  * We defensively cast and look for a `target_covenant` number field.
  */
@@ -91,8 +115,10 @@ async function fetchCovenant(id: number): Promise<Covenant> {
   return res.json() as Promise<Covenant>;
 }
 
-function useTargetCovenantType(sessionKwargs: unknown): string | null {
-  const covenantId = extractTargetCovenantId(sessionKwargs);
+function useTargetCovenantType(session: RitualSessionDetail): string | null {
+  // Prefer the session-level COVENANT reference; fall back to session_kwargs for older sessions.
+  const covenantId =
+    targetCovenantIdFromRefs(session) ?? extractTargetCovenantId(session.session_kwargs);
 
   const { data } = useQuery({
     queryKey: ['covenants', 'detail', covenantId],
@@ -130,7 +156,16 @@ export function RitualSessionResponseDialog({
   // We fetch the target covenant's type and inject it into formValues under the full
   // depends_on key. CovenantRolePickerField reads formValues[field.depends_on] which
   // is the full string "session.target_covenant.covenant_type" — so the key must match.
-  const targetCovenantType = useTargetCovenantType(session.session_kwargs);
+  const targetCovenantType = useTargetCovenantType(session);
+
+  // Gate fields by applies_to: the initiator does not see candidate_only fields.
+  const isInitiator = participantId === session.initiator_id;
+  const visibleFields = (participantFieldsSchema?.fields ?? []).filter(
+    (f) => !(f.applies_to === 'candidate_only' && isInitiator)
+  );
+  const effectiveSchema = participantFieldsSchema
+    ? { ...participantFieldsSchema, fields: visibleFields }
+    : participantFieldsSchema;
 
   /**
    * Build the formValues passed to RitualForm, injecting the resolved covenant_type
@@ -145,9 +180,7 @@ export function RitualSessionResponseDialog({
 
   function resetForm() {
     setParticipantValues(
-      participantFieldsSchema
-        ? Object.fromEntries(participantFieldsSchema.fields.map((f) => [f.name, null]))
-        : {}
+      effectiveSchema ? Object.fromEntries(effectiveSchema.fields.map((f) => [f.name, null])) : {}
     );
     acceptMutation.reset();
     declineMutation.reset();
@@ -167,11 +200,25 @@ export function RitualSessionResponseDialog({
     });
   }
 
+  // Maps emits_reference kind to the correct id key for the reference object.
+  const REF_ID_KEY: Record<string, 'ref_covenant_id' | 'ref_covenant_role_id'> = {
+    COVENANT: 'ref_covenant_id',
+    COVENANT_ROLE: 'ref_covenant_role_id',
+  };
+
   function handleAccept() {
-    // Build participant_kwargs from form values; filter out null values
+    // Split form values: fields with emits_reference become references entries;
+    // remaining non-null values go into participant_kwargs.
     const participant_kwargs: Record<string, unknown> = {};
+    const references: Array<Record<string, unknown>> = [];
+    const fieldByName = new Map((effectiveSchema?.fields ?? []).map((f) => [f.name, f]));
     for (const [k, v] of Object.entries(participantValues)) {
-      if (v !== null && v !== undefined) {
+      if (v === null || v === undefined) continue;
+      const emits = fieldByName.get(k)?.emits_reference;
+      if (emits) {
+        const idKey = REF_ID_KEY[emits];
+        if (idKey) references.push({ kind: emits, [idKey]: v });
+      } else {
         participant_kwargs[k] = v;
       }
     }
@@ -182,6 +229,7 @@ export function RitualSessionResponseDialog({
         body: {
           participant_kwargs:
             Object.keys(participant_kwargs).length > 0 ? participant_kwargs : undefined,
+          references: references.length > 0 ? references : undefined,
         },
       },
       {
@@ -193,12 +241,12 @@ export function RitualSessionResponseDialog({
     );
   }
 
-  const hasSchema = participantFieldsSchema && participantFieldsSchema.fields.length > 0;
+  const hasSchema = effectiveSchema && effectiveSchema.fields.length > 0;
 
   // Required-field validation: all required participant_fields must have a value
   const canAccept = !hasSchema
     ? true
-    : participantFieldsSchema.fields
+    : effectiveSchema.fields
         .filter((f) => f.required === true)
         .every((f) => {
           const v = participantValues[f.name];
@@ -246,7 +294,7 @@ export function RitualSessionResponseDialog({
               Your choices (required to accept):
             </p>
             <RitualForm
-              schema={participantFieldsSchema}
+              schema={effectiveSchema}
               values={formValuesWithResolved}
               onChange={setParticipantValues}
               disabled={isPending}
