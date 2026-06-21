@@ -275,4 +275,3 @@ class DefenderConsentFieldsTest(TestCase):
         t = SceneActionTargetFactory()
         self.assertEqual(t.difficulty_choice, DifficultyChoice.NORMAL)
         self.assertEqual(t.resist_effort_level, "")
-        self.assertFalse(t.engagement_credited)

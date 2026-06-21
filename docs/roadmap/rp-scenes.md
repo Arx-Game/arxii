@@ -85,7 +85,7 @@ model with a split where the initiator controls effort and each defender control
 - **Abstract base `DefenderConsentFields`** (`action_models.py`) — inherited by both
   `SceneActionRequest` (primary target) and `SceneActionTarget` (additional targets). Carries:
   `difficulty_choice` (DifficultyChoice plausibility band, default NORMAL), `resolved_difficulty`,
-  `resist_effort_level` (EffortLevel, optional active resistance), `engagement_credited`.
+  `resist_effort_level` (EffortLevel, optional active resistance).
 - **Plausibility bands** in `ConsentCard` (frontend): "It works" → EASY, "Hard but possible" →
   HARD, "No way" → DAUNTING (accept-but-daunting, not a deny). The initiator's dispatch UI
   has an effort picker.

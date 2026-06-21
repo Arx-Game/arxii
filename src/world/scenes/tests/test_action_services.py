@@ -1482,24 +1482,6 @@ class TestGradedAccrualOnAccept(TestCase):
             self.assertEqual(data.total_earned, 0)
 
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_others_initiated_primary_accept_sets_engagement_credited(
-        self, mock_resolve: MagicMock
-    ) -> None:
-        """After accept, engagement_credited is True on the request record."""
-        mock_resolve.return_value = _make_pending_resolution(success=True)
-
-        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
-
-        respond_to_action_request(
-            action_request=request,
-            decision=ConsentDecision.ACCEPT,
-            difficulty=DifficultyChoice.NORMAL,
-        )
-
-        request.refresh_from_db()
-        self.assertTrue(request.engagement_credited)
-
-    @patch("world.scenes.action_services.start_action_resolution")
     def test_self_initiated_primary_accept_accrues_nothing(self, mock_resolve: MagicMock) -> None:
         """Self-targeted action (initiator == target account) accrues nothing."""
         from world.scenes.action_models import SceneActionRequest
@@ -1559,29 +1541,6 @@ class TestGradedAccrualOnAccept(TestCase):
         ledger = WeeklySocialEngagement.objects.get(account=self.additional_account)
         expected = Decimal(1) * self.easy_weight
         self.assertEqual(ledger.pending_points, expected)
-
-    @patch("world.scenes.action_services.start_action_resolution")
-    def test_others_initiated_additional_target_accept_sets_engagement_credited(
-        self, mock_resolve: MagicMock
-    ) -> None:
-        """After additional-target accept, engagement_credited is True on the target row."""
-        mock_resolve.return_value = _make_pending_resolution(success=True)
-
-        request = self._make_primary_request(band=DifficultyChoice.NORMAL)
-        row = SceneActionTargetFactory(
-            action_request=request,
-            target_persona=self.additional_persona,
-            difficulty_choice=DifficultyChoice.NORMAL,
-        )
-
-        respond_to_action_target(
-            action_target=row,
-            decision=ConsentDecision.ACCEPT,
-            difficulty=DifficultyChoice.NORMAL,
-        )
-
-        row.refresh_from_db()
-        self.assertTrue(row.engagement_credited)
 
 
 class TestNPCAndAreaFallbackDifficulty(TestCase):
