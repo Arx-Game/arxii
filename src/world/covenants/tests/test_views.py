@@ -259,6 +259,78 @@ class CharacterCovenantRoleViewTests(CovenantsViewTestCase):
         for row in response.data["results"]:
             self.assertIsNotNone(row["left_at"])
 
+    def test_list_query_count_character_join_does_not_add_per_row(self) -> None:
+        """select_related("character_sheet__character") eliminates the OneToOne N+1.
+
+        Before the fix, each serialized membership row fired one extra query to
+        traverse character_sheet → character (ObjectDB). With the fix that JOIN is
+        done up front; adding more rows must NOT increase the count by more than
+        the fixed per-covenant viewer_capabilities overhead (1 query per unique
+        covenant, memoized). Character lookups must contribute 0 additional queries.
+        We verify this by comparing the query delta for adding 3 extra rows with 3
+        extra covenants (max expected delta = 3 viewer_caps + 3 sub_roles + 3
+        threads = 9) against the old N+1 path (which would have been 3 additional
+        character-lookup queries on top).
+
+        Concretely: delta must be <= 9 (viewer_caps + resolve queries), not 12+
+        (viewer_caps + resolve + character lookups).
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.factories import (
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        # Force-staff so queryset is unfiltered (avoids tenure filter complexity).
+        self.user.is_staff = True
+        self.user.save()
+        try:
+            # Warm up session so session queries are stable.
+            self.client.get("/api/covenants/character-roles/")
+
+            with CaptureQueriesContext(connection) as ctx_small:
+                response = self.client.get("/api/covenants/character-roles/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            count_small = len(ctx_small.captured_queries)
+
+            # Add 3 extra memberships, each on a distinct covenant + character.
+            for i in range(3):
+                extra_sheet = CharacterSheetFactory()
+                extra_entry = RosterEntryFactory(character_sheet=extra_sheet)
+                RosterTenureFactory(
+                    roster_entry=extra_entry,
+                    player_data=self.player_data,
+                    end_date=None,
+                )
+                CharacterCovenantRoleFactory(
+                    character_sheet=extra_sheet,
+                    covenant_role=CovenantRoleFactory(name=f"QCRole_{i}"),
+                )
+
+            with CaptureQueriesContext(connection) as ctx_large:
+                response = self.client.get("/api/covenants/character-roles/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            count_large = len(ctx_large.captured_queries)
+
+            delta = count_large - count_small
+            # 3 extra rows × (1 viewer_caps + 1 threads + 1 sub_roles) = 9 max.
+            # Without the select_related fix there would be an extra +3 (character
+            # lookups). We assert strictly less than 12 to catch any regression.
+            self.assertLess(
+                delta,
+                12,
+                f"Query count grew by {delta} for 3 extra rows: "
+                f"baseline={count_small}, large={count_large}. "
+                "N+1 on character_sheet__character may have regressed.",
+            )
+        finally:
+            self.user.is_staff = False
+            self.user.save()
+
     def test_unauthenticated_denied(self) -> None:
         """Unauthenticated requests receive 403."""
         unauthenticated_client = APIClient()

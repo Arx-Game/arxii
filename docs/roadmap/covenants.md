@@ -432,8 +432,7 @@ back to `CovenantRole`, and do not encode combat/role bonuses onto `CovenantRank
 
 - **`CovenantRole`** = the **power** a member wields on behalf of the covenant
   (Sword/Shield/Crown combat archetype, `speed_rank`, `CovenantRoleBonus` Thread
-  pulls). `is_leadership` was removed from `CovenantRole` when #1027 shipped — it
-  no longer exists anywhere in the codebase.
+  pulls). `CovenantRole` has no `is_leadership` field — authority is on `CovenantRank`.
 - **`CovenantRank`** (new in #1027) = **administrative authority** over the
   covenant. Per-covenant, player-named ordered tiers with integer `tier`
   (1 = top authority), capability flags (`can_invite`, `can_kick`, `can_manage_ranks`),
@@ -604,7 +603,7 @@ decision above.
   `CovenantRoleSerializer`; `covenant` FK on `StorySerializer`.
   `CharacterCovenantRoleSerializer` exposes `covenant_role` (resolved effective sub-role,
   derive-on-read) and `anchor_role` (stored parent role). The `promote` action on
-  `CharacterCovenantRoleViewSet` was replaced by derive-on-read resolution (#1277).
+  Sub-role promotion is derive-on-read; `CharacterCovenantRoleViewSet` has no `promote` action.
 
 **Not in Slice D (explicitly out-of-scope per spec):**
 
@@ -813,10 +812,9 @@ effective trait values and stat checks, not only the technique multiplier.
 - The Slice B spec is `docs/architecture/covenants-slice-b-design.md`
   and the implementation plan is
   `docs/superpowers/plans/2026-05-10-covenants-slice-b-implementation.md`.
-- The COVENANT_ROLE anchor cap formula now reads from `covenant.level`
-  via the membership table. The placeholder `current_level × 10` formula
-  was replaced in Slice A. When Slice D ships covenant-level XP, the cap
-  scales naturally without changing call sites.
+- The COVENANT_ROLE anchor cap formula reads from `covenant.level` via the
+  membership table (additive formula, derive-on-read). When covenant-level XP
+  changes `Covenant.level`, the cap scales naturally without changing call sites.
 - Forward-looking nods elsewhere in the roadmap: `gm-system.md` references
   "Covenants stub" as a prerequisite (now understated — should read
   "Covenants Slices A+B"); `seed-and-integration-tests.md` task 2Q

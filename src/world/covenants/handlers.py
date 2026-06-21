@@ -109,10 +109,7 @@ class CharacterCovenantRoleHandler:
         ``target_covenant_role_id``) use this instead of ``currently_engaged_roles()``.
         Returns None if the character has no active membership in ``covenant``.
         """
-        for r in self._rows:
-            if r.left_at is None and r.covenant_id == covenant.pk:
-                return r.covenant_role
-        return None
+        return self.currently_held_role_in(covenant)
 
     @property
     def active_memberships(self) -> list[CharacterCovenantRole]:

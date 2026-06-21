@@ -247,7 +247,8 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 `src/world/covenants/`
 
 - `models.py` — all covenant + mentor bond models
-- `handlers.py` — `CharacterCovenantRoleHandler` (including `resolve_effective_role` routing)
+- `handlers.py` — `CharacterCovenantRoleHandler`; `currently_engaged_roles()` calls
+  `resolve_effective_role` (defined in `services.py`) per row
 - `services.py` — covenant lifecycle + `resolve_effective_role` + `establish_mentor_bond_via_session`
 - `discovery.py` — `fire_subrole_discoveries` (sub-role discovery beat)
 - `mentorship.py` — `effective_combat_level` and Mentor's Vow math

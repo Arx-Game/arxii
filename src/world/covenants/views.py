@@ -98,6 +98,7 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[CharacterCovenantRole]:
         qs = CharacterCovenantRole.objects.select_related(
             "character_sheet",
+            "character_sheet__character",
             "covenant_role",
             "covenant",
         ).order_by("-joined_at")
