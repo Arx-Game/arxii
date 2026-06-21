@@ -4049,6 +4049,91 @@ def _resolve_clashes(
     return outcomes
 
 
+def _ensure_interpose_challenges(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Round pre-pass: bind an Interpose ChallengeInstance to each protected ally.
+
+    For every armed INTERPOSE ``CombatRoundAction`` this round, idempotently
+    ``get_or_create`` an active+revealed ``ChallengeInstance`` from the seeded
+    Interpose ``ChallengeTemplate`` bound to each protected ally's character
+    ObjectDB (``target_object``), so ``get_available_actions(interposer, room)``
+    can surface the approach.
+
+    - Specific-ally path (``focused_ally_target`` set): binds to that ally's character.
+    - Any-ally path (``focused_ally_target=None``): binds to every ACTIVE participant
+      in this encounter except the interposer.
+
+    Idempotent: ``get_or_create`` on (template, target_object, is_active=True) ensures
+    no duplicates when called multiple times in the same round.
+
+    No queries in loops: the active-ally list is fetched once per any-ally action;
+    the template is fetched once before the loop.
+    """
+    from world.mechanics.models import ChallengeInstance, ChallengeTemplate  # noqa: PLC0415
+
+    # Collect armed interpose actions for this round.
+    interpose_actions = [
+        action
+        for action in pc_actions.values()
+        if action.maneuver == CombatManeuver.INTERPOSE and action.is_ready
+    ]
+    if not interpose_actions:
+        return
+
+    try:
+        template = ChallengeTemplate.objects.get(name="Interpose")
+    except ChallengeTemplate.DoesNotExist:
+        logger.warning(
+            "Interpose ChallengeTemplate not seeded; skipping challenge binding for encounter %s.",
+            encounter.pk,
+        )
+        return
+
+    room = encounter.room
+
+    # Fetch all active allies once (needed for the any-ally path).
+    # select_related prevents N+1 when accessing .character_sheet.character below.
+    active_participants_by_id: dict[int, CombatParticipant] | None = None
+
+    def _get_active_participants() -> dict[int, CombatParticipant]:
+        return {
+            p.pk: p
+            for p in CombatParticipant.objects.filter(
+                encounter=encounter,
+                status=ParticipantStatus.ACTIVE,
+            ).select_related("character_sheet__character")
+        }
+
+    for action in interpose_actions:
+        interposer_participant_id = action.participant_id
+
+        if action.focused_ally_target_id is not None:
+            # Specific-ally path: bind to the declared ally's character.
+            ally_char = action.focused_ally_target.character_sheet.character
+            ChallengeInstance.objects.get_or_create(
+                template=template,
+                target_object=ally_char,
+                is_active=True,
+                defaults={"location": room, "is_revealed": True},
+            )
+        else:
+            # Any-ally path: bind to every active participant except the interposer.
+            if active_participants_by_id is None:
+                active_participants_by_id = _get_active_participants()
+            for part_id, part in active_participants_by_id.items():
+                if part_id == interposer_participant_id:
+                    continue
+                ally_char = part.character_sheet.character
+                ChallengeInstance.objects.get_or_create(
+                    template=template,
+                    target_object=ally_char,
+                    is_active=True,
+                    defaults={"location": room, "is_revealed": True},
+                )
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -4134,6 +4219,7 @@ def resolve_round(
             "focused_action__action_template",
             "focused_action__action_template__check_type",
             "focused_opponent_target",
+            "focused_ally_target__character_sheet__character",
             "combo_upgrade",
             "physical_passive",
             "social_passive",
@@ -4173,6 +4259,7 @@ def resolve_round(
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
     _resolve_passive_actions(encounter, pc_actions)
+    _ensure_interpose_challenges(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,
