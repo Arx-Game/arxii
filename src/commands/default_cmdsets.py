@@ -42,6 +42,14 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.social.blocking import (
+    CmdBlock,
+    CmdBlockList,
+    CmdMute,
+    CmdShareBlock,
+    CmdUnblock,
+    CmdUnmute,
+)
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -102,6 +110,13 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdOpen())
         self.add(CmdLink())
         self.add(CmdUnlink())
+        # #1278 — block/mute social controls (the telnet face of the persona menu).
+        self.add(CmdBlock())
+        self.add(CmdUnblock())
+        self.add(CmdShareBlock())
+        self.add(CmdMute())
+        self.add(CmdUnmute())
+        self.add(CmdBlockList())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
