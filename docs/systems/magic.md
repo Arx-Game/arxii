@@ -131,7 +131,7 @@ per-technique via the FK. Key surfaces:
 | `get_standalone_cast_template()` | `seeds_cast.py` | Retrieves the shared ActionTemplate; called by `create_technique` default |
 | `ensure_character_magic_check_type(character_sheet, *, stat, skill)` | `seeds_checks.py` | Synthesizes a per-character `CheckType` (pattern: `character_magic_check_type_name()`) for that character's stat + skill |
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
-| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's `CharacterAnimaRitual` |
+| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
 
 Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caster's personal

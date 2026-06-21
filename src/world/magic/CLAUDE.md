@@ -81,11 +81,12 @@ The magic system for Arx II. Power flows from identity and connection.
 **Frontend** — `TechniqueBuilderForm` with `mode: "staff" | "player"`. Staff mode shows the budget meter informationally without blocking; player mode gates submit on `within_budget`. `usePriceTechnique` (debounced `POST .../price/`) drives the live budget meter; `useAuthorTechnique` handles submission.
 
 ### Anima Recovery
-- `CharacterAnimaRitual` - Personalized recovery ritual (stat + skill + resonance)
+- `Ritual` (execution_kind=SCENE_ACTION) + `RitualCheckConfig` sidecar - Personalized recovery ritual (stat + skill + resonance + check_type)
 - `AnimaRitualPerformance` - Historical record of ritual performances
 
 **Note:** During character creation, the magic stage uses a simplified cantrip selection
-system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resonance directly.
+system. Anima rituals are set up post-CG. The player-authored `Ritual` row (SCENE_ACTION)
+carries check configuration via its `RitualCheckConfig` sidecar (stat, skill, resonance, check_type).
 
 ### Standalone Casting (#1306)
 
@@ -108,9 +109,8 @@ casting never hard-fails with "no template." The resolution chain:
   check type, so the anima ritual and technique casts always roll the same personal check.
   Use `get_character_anima_ritual(character)` to retrieve the anima ritual row.
 - **Graded consequence pool** — a single "Magic: Technique Cast" `ConsequencePool`
-  (seeded by `seeds_cast.py`) routes graded outcomes (critical/success/partial/failure/
-  critical-failure) through the shared consequence machinery. No per-technique pool is
-  required.
+  (seeded by `seeds_cast.py`) routes graded outcomes (failure / partial success / success)
+  through the shared consequence machinery. No per-technique pool is required.
 
 Follow-ups deferred to later issues: technique designer (players pick a consequence pool
 from a curated catalog), targeting model (targeting validity + AoE + per-technique target
