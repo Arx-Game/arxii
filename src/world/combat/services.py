@@ -296,16 +296,22 @@ class CombatTechniqueResolver:
     def _resolved_opponent_targets(self) -> list[CombatOpponent]:
         """Return the ordered list of CombatOpponents to act on for this action.
 
-        - AREA / FILTERED_GROUP: returns all opponents stored in the
-          ``CombatRoundActionTarget`` join table (written at declaration time).
+        - AREA: returns ALL non-DEFEATED opponents in the encounter, enumerated
+          directly from the encounter (one query, no join table required).
+          The client does NOT need to enumerate them at declaration time —
+          the encounter is the source of truth for "who is targetable".
+        - FILTERED_GROUP: returns only the opponents stored in the
+          ``CombatRoundActionTarget`` join table (the explicitly-stored subset).
           Falls back to the single ``focused_opponent_target`` when no join rows
           exist (e.g. direct callers that bypass dispatch).
         - SINGLE / SELF (default): returns a one-element list containing only
           ``focused_opponent_target``, preserving pre-AoE behavior exactly.
 
-        DEFEATED opponents are NOT filtered here — callers skip them individually
-        so that per-target status checks are fresh after each preceding target's
-        damage write.
+        DEFEATED opponents are NOT filtered here for FILTERED_GROUP / SINGLE —
+        callers skip them individually so that per-target status checks are fresh
+        after each preceding target's damage write.  AREA is the exception: it
+        pre-filters to exclude DEFEATED so clients never need to enumerate the
+        full list.
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -315,7 +321,18 @@ class CombatTechniqueResolver:
             return [primary] if primary is not None else []
 
         target_type = technique.target_type
-        if target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+        if target_type == ActionTargetType.AREA:
+            # Enumerate ALL active (non-DEFEATED) opponents in the encounter.
+            # One query; no join-table rows required.
+            return list(
+                CombatOpponent.objects.filter(
+                    encounter=self.participant.encounter,
+                )
+                .exclude(status=OpponentStatus.DEFEATED)
+                .order_by("pk")
+            )
+
+        if target_type == ActionTargetType.FILTERED_GROUP:
             join_opponents = list(
                 CombatRoundActionTarget.objects.filter(
                     action=self.action,

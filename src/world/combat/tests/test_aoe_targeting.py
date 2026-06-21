@@ -183,6 +183,112 @@ class AoEDamageExpansionTests(TestCase):
         self.assertIn(opponent_a.pk, hit_targets)
         self.assertNotIn(opponent_b.pk, hit_targets)
 
+    def test_area_technique_no_join_rows_hits_all_active_opponents(self) -> None:
+        """AREA technique with NO join-table rows auto-expands to all active opponents.
+
+        This is the regression test for the bug where an AREA cast with no stored
+        CombatRoundActionTarget rows silently fell back to single-target behavior.
+        After the fix, AREA always enumerates all non-DEFEATED encounter opponents
+        directly from the encounter — the client does not need to enumerate them.
+        """
+        technique = _area_technique()
+        encounter = CombatEncounterFactory(round_number=1)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=10)
+        opponent_a = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            soak_value=0,
+            threat_pool=pool,
+        )
+        opponent_b = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            soak_value=0,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=opponent_a,
+            effort_level=EffortLevel.MEDIUM,
+            # Intentionally NO CombatRoundActionTarget join rows written
+        )
+
+        resolver = _resolver(participant, action)
+
+        with patch("world.combat.services.perform_check") as mock_check:
+            mock_check.return_value = type(
+                "CR", (), {"success_level": 1, "roll": 10, "difficulty": 5}
+            )()
+            result = resolver(power=20, ledger=_ledger(20))
+
+        hit_targets = {r.opponent_id for r in result.damage_results}
+        self.assertIn(opponent_a.pk, hit_targets, "AREA must hit opponent_a without join rows")
+        self.assertIn(opponent_b.pk, hit_targets, "AREA must hit opponent_b without join rows")
+
+    def test_area_no_join_rows_skips_defeated_opponent(self) -> None:
+        """AREA technique without join rows skips DEFEATED opponents.
+
+        The encounter-level query pre-filters to exclude DEFEATED status, so a
+        defeated opponent is never passed to the damage pipeline even when no
+        CombatRoundActionTarget rows exist.
+        """
+        technique = _area_technique()
+        encounter = CombatEncounterFactory(round_number=1)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=10)
+        opponent_a = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            soak_value=0,
+            threat_pool=pool,
+        )
+        opponent_b = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            soak_value=0,
+            threat_pool=pool,
+        )
+        # Mark opponent_b as DEFEATED — should be excluded by the encounter query
+        opponent_b.status = OpponentStatus.DEFEATED
+        opponent_b.save(update_fields=["status"])
+
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=opponent_a,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        resolver = _resolver(participant, action)
+
+        with patch("world.combat.services.perform_check") as mock_check:
+            mock_check.return_value = type(
+                "CR", (), {"success_level": 1, "roll": 10, "difficulty": 5}
+            )()
+            result = resolver(power=20, ledger=_ledger(20))
+
+        hit_targets = {r.opponent_id for r in result.damage_results}
+        self.assertIn(opponent_a.pk, hit_targets)
+        self.assertNotIn(opponent_b.pk, hit_targets, "DEFEATED opponent must not be hit by AREA")
+
     def test_filtered_group_hits_stored_subset(self) -> None:
         """A FILTERED_GROUP technique hits only the opponents in the join table."""
         from actions.constants import ActionTargetType
