@@ -145,11 +145,19 @@ def start_event(event: Event) -> Event:
     """Transition an event from SCHEDULED to ACTIVE and create a linked Scene.
 
     The Scene is created at the event's location with the event's name.
-    Privacy mode auto-derived: public events get public scenes, private events
-    get private scenes. Applies room description overlay if configured.
+    Privacy mode auto-derived: public events get public scenes; private events
+    require a non-public room (``Event.is_public`` is calendar visibility,
+    distinct from ``RoomProfile.is_public`` which governs room listing).
+    Starting a private event in a publicly-listed room is rejected with
+    ``EventError.PRIVATE_IN_PUBLIC_ROOM``. Applies room description overlay
+    if configured.
 
     Wraps scene creation + status update in a transaction. Uses
     select_for_update to prevent duplicate scenes from concurrent requests.
+
+    Raises:
+        EventError: If the event is not SCHEDULED, or if a private event is
+            attempted in a publicly-listed room.
     """
     with transaction.atomic():
         event = Event.objects.select_for_update().get(pk=event.pk)
@@ -157,6 +165,8 @@ def start_event(event: Event) -> Event:
             raise EventError(EventError.START_INVALID)
 
         privacy = ScenePrivacyMode.PUBLIC if event.is_public else ScenePrivacyMode.PRIVATE
+        if privacy != ScenePrivacyMode.PUBLIC and event.location.is_public:
+            raise EventError(EventError.PRIVATE_IN_PUBLIC_ROOM)
         Scene.objects.create(
             name=event.name,
             location=event.location.objectdb,

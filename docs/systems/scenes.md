@@ -194,6 +194,14 @@ sceneless — the `scene__isnull=True` branch in `Interaction.objects.visible_to
 (`world/scenes/managers.py`) treats them as public-visible and this is intentional,
 unchanged behaviour.
 
+**Events obey the invariant:** `start_event` (`world/events/services.py`) enforces
+the same rule at the events chokepoint. `Event.is_public` is *calendar visibility*
+(a different axis from `RoomProfile.is_public`, which governs room listing). When
+`start_event` derives `privacy_mode` as PRIVATE (i.e. the event is not public on
+the calendar), it checks `event.location.is_public`; if the room is publicly listed,
+it raises `EventError.PRIVATE_IN_PUBLIC_ROOM` before the `Scene` is created. The
+`Scene.save()` guard remains the backstop for any path that bypasses this chokepoint.
+
 **Out of scope:**
 
 - No retroactive re-derivation: if a room's `is_public` flag flips *after* a scene
