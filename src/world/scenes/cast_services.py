@@ -33,7 +33,14 @@ from world.combat.cast_seed import (
 from world.combat.services import acknowledge_encounter_risk
 from world.magic.models.techniques import CharacterTechnique
 from world.magic.narration import render_cast_outcome_narration
+from world.magic.services.condition_application import apply_technique_conditions
 from world.magic.services.hostility import is_technique_hostile
+from world.magic.services.targeting import (
+    cast_requires_consent,
+    derive_target_relationship,
+    resolve_targets,
+    validate_cast_target,
+)
 from world.scenes.action_constants import (
     CAST_ACTION_KEY,
     CAST_DIFFICULTY_BANDS,
@@ -234,6 +241,31 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         cast_pull=cast_pull,
     )
 
+    # Apply technique-authored conditions to resolved targets.
+    resolved_personas = resolve_targets(
+        technique=technique,
+        initiator_persona=caster_persona,
+        scene=scene,
+        supplied_personas=[target_persona] if target_persona is not None else [],
+    )
+    success_level = (
+        result.action_resolution.main_result.check_result.success_level
+        if result.action_resolution.main_result is not None
+        else 0
+    )
+    eff_intensity = power_ledger.total if power_ledger is not None else technique.intensity
+    relationship = derive_target_relationship(technique)
+    targets_by_kind: dict[str, list] = {
+        relationship: [p.character_sheet.character for p in resolved_personas]
+    }
+    apply_technique_conditions(
+        technique=technique,
+        success_level=success_level,
+        eff_intensity=eff_intensity,
+        targets_by_kind=targets_by_kind,
+        source_character=character,
+    )
+
     request.status = ActionRequestStatus.RESOLVED
     request.resolved_at = timezone.now()
     request.resolved_difficulty = difficulty
@@ -425,6 +457,12 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         msg = "Technique is not castable standalone (no action template)."
         raise ValidationError(msg)
 
+    validate_cast_target(
+        technique=technique,
+        initiator_persona=initiator_persona,
+        target_personas=[target_persona] if target_persona is not None else [],
+    )
+
     # Inline the other-PC check (rather than a bool var) so the type checker can
     # narrow ``target_persona`` to non-None inside the block.
     if (
@@ -441,7 +479,19 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
                 target_persona=target_persona,
                 technique=technique,
             )
-        return _route_benign_cast(
+        if cast_requires_consent(technique):
+            return _route_benign_cast(
+                scene=scene,
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                technique=technique,
+                strain_commitment=strain_commitment,
+                fury_commitment=fury_commitment,
+                fury_anchor=fury_anchor,
+                cast_pull=cast_pull,
+            )
+        # Benign but no consent required (capability/stat buffs) → immediate resolution.
+        return _route_immediate_cast(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,
