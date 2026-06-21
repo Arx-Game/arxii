@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 
 
 class RoomProfileIsOutdoorTests(TestCase):
@@ -57,3 +57,33 @@ class RoomProfileDefaultBlueprintTests(TestCase):
         rp.flush_from_cache()
         rp.refresh_from_db()
         self.assertIsNone(rp.default_blueprint_id)
+
+
+class TestRoomIsPubliclyListed(TestCase):
+    def _room(self):
+        return ObjectDBFactory(
+            db_key="Helper Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def test_public_profile_returns_true(self) -> None:
+        from evennia_extensions.models import room_is_publicly_listed
+
+        room = self._room()  # at_object_creation auto-creates profile, is_public defaults True
+        self.assertTrue(room_is_publicly_listed(room))
+
+    def test_non_public_profile_returns_false(self) -> None:
+        from evennia_extensions.models import room_is_publicly_listed
+
+        room = self._room()
+        room.room_profile.is_public = False
+        room.room_profile.save()
+        self.assertFalse(room_is_publicly_listed(room))
+
+    def test_missing_profile_returns_false(self) -> None:
+        from evennia_extensions.models import room_is_publicly_listed
+
+        room = self._room()
+        room.room_profile.delete()
+        room.refresh_from_db()
+        self.assertFalse(room_is_publicly_listed(room))
