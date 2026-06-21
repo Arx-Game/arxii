@@ -463,6 +463,28 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
   (`Character.at_post_move` trigger hook)
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
+
+### Secrets (#1334)
+Hidden facts about a character — cover identities, crimes, private distinctions, secret
+relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
+info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
+primitive alongside Distinction / Condition / Resonance. *Slice 1 (this commit) owns the
+content model; discovery (clue-target wiring), the per-knower held record, display, and
+action-anchored minting are later slices.*
+
+- **Models:** `Secret` (subject-anchored to a `CharacterSheet`; `level` 1–4 / `category` FK /
+  `consequences` — each may be Unknown; `provenance` ∈ GM / action / player-flavor;
+  `author_persona` for OOC attribution; `second_party_sheet` for two-party affair/blackmail),
+  `SecretCategory` (staff-editable lookup; null category = Unknown)
+- **Invariant:** anchor-scales-with-level — only Level-1 player-flavor may be free-authored
+  (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
+  action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
+- **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`
+- **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
+  Secret = self-serve hidden fact about a concrete entity. Shared substrate = the clue/
+  discovery loop (a SECRET clue target is planned, #1143)
+- **Source:** `src/world/secrets/`
+- **Details:** [secrets.md](secrets.md)
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
 content sharing and social action targeting (#1141).
