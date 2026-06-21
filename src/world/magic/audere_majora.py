@@ -18,6 +18,7 @@ from world.magic.audere import (
     soulfray_stage_order_snapshot,
 )
 from world.magic.models.renown_config import RenownAwardConfig
+from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
 
 
@@ -112,7 +113,7 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
         )
 
 
-class AudereMajoraCrossing(SharedMemoryModel):
+class AudereMajoraCrossing(AbstractClassLevelAdvancement, SharedMemoryModel):
     """Irreversible receipt: this character crossed this threshold. Survives death."""
 
     character_sheet = models.ForeignKey(
@@ -131,29 +132,6 @@ class AudereMajoraCrossing(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="audere_majora_crossings",
     )
-    scene = models.ForeignKey(
-        "scenes.Scene",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    declaration_interaction = models.ForeignKey(
-        "scenes.Interaction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        db_constraint=False,
-        # db_constraint=False: scenes_interaction is partitioned by timestamp.
-        help_text="The declaration pose. Soft FK — partitioned table.",
-    )
-    level_before = models.PositiveSmallIntegerField(
-        help_text="Character level immediately before the crossing.",
-    )
-    level_after = models.PositiveSmallIntegerField(
-        help_text="Character level granted by the crossing.",
-    )
     legend_entry = models.OneToOneField(
         "societies.LegendEntry",
         on_delete=models.SET_NULL,
@@ -162,7 +140,6 @@ class AudereMajoraCrossing(SharedMemoryModel):
         related_name="audere_majora_crossing",
         help_text="The legend deed minted for this crossing. Receipt stays source of truth.",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
