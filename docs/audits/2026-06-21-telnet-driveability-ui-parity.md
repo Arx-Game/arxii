@@ -88,7 +88,7 @@ web-only; the minimal fix is telnet `intimidate`/`accept`/`deny` shells over the
 |---|---|---|---|---|---|
 | See available techniques | ❌ none | `get_player_actions` / `_combat_actions` (`player_interface.py`) | N/A | — | G3 |
 | Declare cast (non-combat) | ❌ none | `dispatch_player_action`→CHALLENGE→`resolve_challenge` (`challenge_resolution.py`) | seam converges; no telnet | — | **G1** |
-| Declare cast (combat) | `cast`/`declare` (`commands/combat.py` — `CmdDeclareTechnique(DispatchCommand)`) | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | **YES** — telnet calls `dispatch_player_action` (same seam) | `test_combat_ui_integration.py`, `test_cmd_declare_technique.py` | **G0** |
+| Declare cast (combat) | `cast`/`declare` (`commands/combat.py` — `CmdDeclareTechnique(DispatchCommand)`) | `dispatch_player_action`→COMBAT→`declare_action` (`combat/services.py:1494`) | **YES** — telnet calls `dispatch_player_action` (same seam) | `test_combat_ui_integration.py`, `test_combat_cast_telnet_e2e.py`, `test_combat_commands.py` | **G0** |
 | Check + resonance env + effects | N/A (service) | `resolve_round`→`resolve_combat_technique` (`:707`)→`use_technique` (`techniques.py:702`) | **YES** — fully shared service orchestration | `test_magic_story_pipeline.py` | **G0** |
 | Perform ritual | ✅ `ritual`/`perform` (`CmdRitual`) | `RitualPerformView` → `PerformRitualAction.run()` | **YES** — both converge on `perform_ritual` action | `test_ritual_telnet_e2e.py` | **RESOLVED (#1331)** |
 
