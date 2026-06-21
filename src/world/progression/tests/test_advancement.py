@@ -408,37 +408,40 @@ class AdvanceViaSessionMultiInducteeTests(TestCase):
 
 @tag("postgres")
 class AdvanceViaSessionLegendGatePGTests(TestCase):
-    """Prove the requirements gate passes/fails through the real legend view."""
+    """Prove the Durance requirements gate passes/fails through the real legend view.
 
-    def setUp(self) -> None:
+    Each scenario runs end-to-end through ``advance_class_level_via_session`` with a
+    real ``LegendRequirement`` resolved against the ``societies_characterlegendsummary``
+    materialized view (no patching). Split into two classes-worth of self-contained
+    methods that each build their own world so the matview state for one inductee never
+    bleeds into another.
+    """
+
+    def _build(self, *, legend_value: int):
         from world.progression.models import ClassLevelUnlock, LegendRequirement
-
-        self.session, self.officiant, self.inductee, self.character_class = _build_durance_session(
-            officiant_level=10, inductee_level=2
-        )
-        self.unlock = ClassLevelUnlock.objects.create(
-            character_class=self.character_class, target_level=3
-        )
-        LegendRequirement.objects.create(
-            class_level_unlock=self.unlock,
-            minimum_legend=50,
-            is_active=True,
-        )
-
-    def _give_legend(self, sheet, value: int) -> None:
         from world.societies.factories import LegendEntryFactory
         from world.societies.models import refresh_legend_views
 
-        LegendEntryFactory(persona=sheet.primary_persona, base_value=value, is_active=True)
+        session, _officiant, inductee, character_class = _build_durance_session(
+            officiant_level=10, inductee_level=2
+        )
+        unlock = ClassLevelUnlock.objects.create(character_class=character_class, target_level=3)
+        LegendRequirement.objects.create(
+            class_level_unlock=unlock, minimum_legend=50, is_active=True
+        )
+        LegendEntryFactory(
+            persona=inductee.primary_persona, base_value=legend_value, is_active=True
+        )
         refresh_legend_views()
+        return session, inductee
 
     def test_gate_fails_below_threshold(self) -> None:
-        self._give_legend(self.inductee, 10)
+        session, _inductee = self._build(legend_value=10)
         with self.assertRaises(AdvancementRequirementsNotMet):
-            advance_class_level_via_session(session=self.session)
+            advance_class_level_via_session(session=session)
 
     def test_gate_passes_at_threshold(self) -> None:
-        self._give_legend(self.inductee, 75)
-        receipts = advance_class_level_via_session(session=self.session)
+        session, _inductee = self._build(legend_value=75)
+        receipts = advance_class_level_via_session(session=session)
         assert len(receipts) == 1
         assert receipts[0].level_after == 3
