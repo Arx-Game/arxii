@@ -174,11 +174,11 @@ class RealCastFuryBerserkIntegrationTests(TestCase):
         )
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.award_kudos_patcher.start()
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     @patch("world.scenes.action_services.start_action_resolution")
     def test_real_apply_condition_on_fury_failure(self, mock_resolve: object) -> None:

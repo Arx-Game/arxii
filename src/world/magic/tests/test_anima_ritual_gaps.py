@@ -38,7 +38,7 @@ from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckOutcomeFactory
 
 _PERFORM_CHECK_PATCH = "world.scenes.action_services.start_action_resolution"
-_AWARD_KUDOS_PATCH = "world.scenes.action_services.award_kudos"
+_ACCRUE_PATCH = "world.scenes.action_services.accrue"
 
 
 def _make_pending_resolution(outcome_row: object) -> PendingActionResolution:
@@ -92,11 +92,11 @@ class AnimaRecoverySerializerFieldTests(TestCase):
     def setUp(self) -> None:
         from world.magic.services import anima_ritual_action  # noqa: F401
 
-        self.award_kudos_patcher = patch(_AWARD_KUDOS_PATCH)
-        self.award_kudos_patcher.start()
+        self.accrue_patcher = patch(_ACCRUE_PATCH)
+        self.accrue_patcher.start()
 
     def tearDown(self) -> None:
-        self.award_kudos_patcher.stop()
+        self.accrue_patcher.stop()
 
     def _setup(self, success_level: int = 1) -> tuple:
         """Create a full ritual+scene setup and return (action_request, outcome)."""

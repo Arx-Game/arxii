@@ -153,9 +153,9 @@ class RestoreSenseConsentE2ETests(TestCase):
         cls.scene = SceneFactory(is_active=True)
 
     def setUp(self) -> None:
-        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
-        self.award_kudos_patcher.start()
-        self.addCleanup(self.award_kudos_patcher.stop)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
 
     @patch("actions.effects.conditions.perform_check")
     @patch("world.scenes.action_services.start_action_resolution")

@@ -130,13 +130,18 @@ class WeeklyGrantKudosTest(TestCase):
             username="grant_init_b",
             email="grant_init_b@example.com",
         )
-        # KudosSourceCategory with name "social_engagement" must exist for award_kudos.
-        self.source_cat = KudosSourceCategory.objects.create(
+        # KudosSourceCategory "social_engagement" must exist for award_kudos. It is
+        # seeded by migration 0003 on the PG parity tier but absent on the SQLite fast
+        # tier (which builds the schema from models, skipping data migrations), so
+        # get_or_create works on both tiers.
+        self.source_cat, _ = KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
-            display_name="Social Engagement",
-            description="Weekly good-sport credit conversion.",
-            default_amount=1,
-            is_active=True,
+            defaults={
+                "display_name": "Social Engagement",
+                "description": "Weekly good-sport credit conversion.",
+                "default_amount": 1,
+                "is_active": True,
+            },
         )
 
     def _make_qualifying_ledger(self, pending: Decimal = Decimal("4.00")):
