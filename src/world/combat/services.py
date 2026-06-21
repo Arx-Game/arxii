@@ -4134,6 +4134,74 @@ def _ensure_interpose_challenges(
                 )
 
 
+def apply_interpose_outcome(
+    pre_payload: DamagePreApplyPayload,
+    result: ChallengeResolutionResult,
+) -> None:
+    """Map a graded interpose resolution onto *pre_payload*.
+
+    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
+    branches but acts on the incoming damage amount rather than plummet state:
+
+    - **clean block** (``resolution_type == DESTROY`` or ``success_level > 0``):
+      the blow is fully turned aside — ``pre_payload.amount = 0``.
+    - **partial** (``success_level == 0``, not DESTROY): the interposer softens
+      but does not stop the blow — ``pre_payload.amount //= 2``.
+    - **failure** (``success_level < 0``): the interpose fails — no change.
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
+
+    if is_clean_block:
+        pre_payload.amount = 0
+        return
+
+    if success_level == 0:
+        pre_payload.amount //= 2
+        return
+
+    # Failure (success_level < 0) — the blow continues at full damage.
+
+
+def dispatch_interpose(
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+    *,
+    approach: str | None,
+) -> ChallengeResolutionResult | None:
+    """Resolve *interposer*'s interpose attempt and apply the graded outcome.
+
+    Thin wrapper over :func:`~world.mechanics.reactions.dispatch_capability_reaction`:
+    looks up the active Interpose :class:`~world.mechanics.models.ChallengeInstance`
+    bound to *protected*, resolves it through *interposer*'s capabilities, and
+    calls :func:`apply_interpose_outcome` to mutate *pre_payload* in place.
+
+    Returns the :class:`~world.mechanics.types.ChallengeResolutionResult`, or
+    ``None`` when no active Interpose challenge is bound to *protected* or
+    *interposer* has no qualifying approach.
+    """
+    import functools  # noqa: PLC0415
+
+    from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
+    from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
+
+    return dispatch_capability_reaction(
+        interposer,
+        protected,
+        challenge_name=INTERPOSE_CHALLENGE_NAME,
+        approach=approach,
+        error_msg=(
+            f"No interpose approach is available to {interposer!r} "
+            f"for protected target {protected!r}."
+        ),
+        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload),
+    )
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
