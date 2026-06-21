@@ -14,7 +14,7 @@ Pipeline:
         effective_damage = original // 2 (int from float * int).
 """
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.combat.constants import EncounterStatus, ParticipantStatus
 from world.combat.defend_content import (
@@ -24,11 +24,15 @@ from world.combat.defend_content import (
 )
 from world.combat.factories import (
     CombatEncounterFactory,
+    CombatOpponentFactory,
     CombatParticipantFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
 )
+from world.combat.models import CombatOpponentAction, CombatRoundAction
 from world.combat.services import (
     _apply_passive_technique,
-    apply_damage_to_participant,
+    resolve_round,
 )
 from world.conditions.models import ConditionInstance
 from world.magic.models.techniques import ConditionTargetKind, Technique
@@ -161,122 +165,118 @@ class DefendPassiveShieldsAllyTest(TestCase):
 # ---------------------------------------------------------------------------
 
 
+@tag("postgres")
 class ShieldedConditionHalvesDamageTest(TestCase):
-    """End-to-end: the Shielded reactive condition halves incoming damage.
+    """End-to-end via the REAL ``resolve_round`` path: Shielded halves NPC damage.
 
-    Pipeline: _apply_passive_technique installs Shielded on ally →
-    apply_damage_to_participant emits DAMAGE_PRE_APPLY →
-    ally's Shielded trigger fires MODIFY_PAYLOAD(multiply 0.5) →
-    ally takes N//2.
+    Production pipeline, no test-only shortcuts:
+        defender declares DEFEND passive on a passive slot →
+        resolve_round → _resolve_passive_actions → _apply_passive_technique (ALLY)
+            → bulk_apply_conditions → _install_reactive_side_effects installs the
+              Shielded reactive Trigger on the ally (bulk_create, in-transaction) →
+        _refresh_participant_trigger_handlers refreshes the ally's TriggerHandler
+            SYNCHRONOUSLY so the new Trigger is visible THIS round →
+        NPC fixed-damage attack → apply_damage_to_participant emits
+            DAMAGE_PRE_APPLY → ally's Shielded trigger fires MODIFY_PAYLOAD(0.5) →
+        ally takes NPC_DAMAGE // 2.
 
-    We call _apply_passive_technique directly (not resolve_round) so the
-    test is independent of encounter-status bookkeeping and character-location
-    setup is explicit.
+    The whole round runs inside resolve_round's single @transaction.atomic block, so
+    this proves the same-round ordering that production requires — the bug was that
+    without the synchronous refresh the freshly-installed trigger was invisible until
+    on_commit (after the round), so DEFEND did nothing the round it was declared.
+
+    @tag("postgres"): bulk_apply_conditions → _build_bulk_context uses DISTINCT ON
+    (.distinct("condition_id")), which is PG-only; runs on the parity tier.
     """
 
     NPC_DAMAGE = 40
 
-    def setUp(self):
-        ensure_defend_content()
+    def _build_round(self, *, with_defend: bool):
+        """Build an encounter with an ally; declare DEFEND on the defender iff asked.
 
-        self.encounter = CombatEncounterFactory(
+        Returns (encounter, ally). The NPC always attacks the ally for fixed
+        NPC_DAMAGE with no damage_type (so the only reduction is Shielded's 0.5).
+        """
+        encounter = CombatEncounterFactory(
             status=EncounterStatus.DECLARING,
             round_number=1,
         )
-        self.room = self.encounter.room
+        room = encounter.room
 
-        self.defender = CombatParticipantFactory(
-            encounter=self.encounter, status=ParticipantStatus.ACTIVE
+        defender = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        ally = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+
+        # The ally's character must be in the room so emit_event(DAMAGE_PRE_APPLY)
+        # finds its trigger_handler when the NPC hit lands.
+        ally.character_sheet.character.location = room
+
+        CharacterVitals.objects.create(
+            character_sheet=defender.character_sheet,
+            health=100,
+            max_health=100,
         )
-        self.ally = CombatParticipantFactory(
-            encounter=self.encounter, status=ParticipantStatus.ACTIVE
+        CharacterVitals.objects.create(
+            character_sheet=ally.character_sheet,
+            health=100,
+            max_health=100,
         )
 
-        # Place characters in the room so emit_event finds their triggers.
-        # character.location = room persists db_location to DB AND updates
-        # room.contents_cache so emit_event's _gather_triggers finds the ally.
-        self.ally_char = self.ally.character_sheet.character
-        self.ally_char.location = self.room
-
-        # Defender doesn't need location for the passive-dispatch test.
-        self.defender_char = self.defender.character_sheet.character
-
-        # Vitals — ally starts at full health.
-        self.ally_vitals, _ = CharacterVitals.objects.get_or_create(
-            character_sheet=self.ally.character_sheet,
-            defaults={"health": 100, "max_health": 100},
+        # Fixed-damage, no-type NPC attack targeting the ally.
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(
+            pool=pool,
+            base_damage=self.NPC_DAMAGE,
+            damage_type=None,
         )
-        self.ally_vitals.health = 100
-        self.ally_vitals.max_health = 100
-        self.ally_vitals.save()
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(ally)
 
-        self.defend_tech = Technique.objects.get(name=DEFEND_PASSIVE_NAME)
+        action_kwargs = {}
+        if with_defend:
+            defend_tech = Technique.objects.get(name=DEFEND_PASSIVE_NAME)
+            action_kwargs["physical_passive"] = defend_tech
+        CombatRoundAction.objects.create(
+            participant=defender,
+            round_number=1,
+            focused_category=None,
+            focused_action=None,
+            **action_kwargs,
+        )
+        return encounter, ally
+
+    def setUp(self):
+        ensure_defend_content()
+
+    def _ally_damage_taken(self, *, with_defend: bool) -> int:
+        encounter, ally = self._build_round(with_defend=with_defend)
+        resolve_round(encounter)
+        vitals = CharacterVitals.objects.get(character_sheet=ally.character_sheet)
+        return 100 - vitals.health
 
     def test_defend_stance_halves_ally_damage(self):
-        """Ally takes NPC_DAMAGE // 2 after DEFEND passive installs Shielded."""
-        # Step 1: Apply the DEFEND passive — installs Shielded + reactive trigger on ally.
-        _apply_passive_technique(self.defend_tech, self.defender, self.encounter)
-
-        # Confirm the trigger was installed (Trigger row exists for the ally's char).
-        from flows.models.triggers import Trigger
-
-        self.assertTrue(
-            Trigger.objects.filter(obj=self.ally_char).exists(),
-            "Shielded's reactive trigger must be installed as a Trigger row on the ally.",
-        )
-
-        # Confirm the ally is still in the room (location must not be None for
-        # emit_event to fire the DAMAGE_PRE_APPLY trigger in apply_damage_to_participant).
-        self.assertEqual(
-            self.ally_char.location,
-            self.room,
-            "Ally's character must be in the room so emit_event(DAMAGE_PRE_APPLY) fires.",
-        )
-
-        # TriggerHandler.on_trigger_added defers cache invalidation to
-        # transaction.on_commit (rollback-safe design). In Django TestCase,
-        # the test transaction is never committed, so the callback never fires
-        # and _populated stays True with the stale pre-install _by_event cache.
-        # Force an immediate re-populate so the next emit_event finds the trigger.
-        self.ally_char.trigger_handler._reset()
-
-        # Step 2: NPC deals damage to the ally via apply_damage_to_participant.
-        # emit_event(DAMAGE_PRE_APPLY, ..., location=ally_char.location) fires
-        # the Shielded trigger → multiply 0.5 → ally takes N//2 damage.
-        result = apply_damage_to_participant(
-            self.ally,
-            self.NPC_DAMAGE,
-            damage_type=None,
-        )
-
-        self.ally_vitals.refresh_from_db()
-        expected_damage = self.NPC_DAMAGE // 2
-        actual_damage = 100 - self.ally_vitals.health
+        """Driving resolve_round, the shielded ally takes NPC_DAMAGE // 2, not full."""
+        baseline = self._ally_damage_taken(with_defend=False)
+        defended = self._ally_damage_taken(with_defend=True)
 
         self.assertEqual(
-            actual_damage,
-            expected_damage,
-            f"Expected Shielded to halve damage to {expected_damage}, "
-            f"but ally took {actual_damage}.",
-        )
-        self.assertEqual(result.damage_dealt, expected_damage)
-
-    def test_no_shielded_ally_takes_full_damage(self):
-        """Control: without Shielded condition, ally takes the full NPC_DAMAGE."""
-        # Don't call _apply_passive_technique — no Shielded condition, no trigger.
-        result = apply_damage_to_participant(
-            self.ally,
+            baseline,
             self.NPC_DAMAGE,
-            damage_type=None,
+            f"Without DEFEND the ally must take the full {self.NPC_DAMAGE} damage.",
         )
-
-        self.ally_vitals.refresh_from_db()
-        actual_damage = 100 - self.ally_vitals.health
-
         self.assertEqual(
-            actual_damage,
-            self.NPC_DAMAGE,
-            f"Without DEFEND, ally should take full {self.NPC_DAMAGE} damage, "
-            f"but took {actual_damage}.",
+            defended,
+            self.NPC_DAMAGE // 2,
+            "DEFEND's Shielded must halve the NPC hit THE SAME ROUND it is declared "
+            f"(expected {self.NPC_DAMAGE // 2}, got {defended}).",
         )
-        self.assertEqual(result.damage_dealt, self.NPC_DAMAGE)
+        self.assertLess(
+            defended,
+            baseline,
+            "A declared DEFEND passive must measurably lower the NPC attack the "
+            "same round it is declared.",
+        )

@@ -2104,6 +2104,33 @@ def _apply_passive_technique(
     )
 
 
+def _refresh_participant_trigger_handlers(encounter: CombatEncounter) -> None:
+    """Make passive-installed reactive triggers visible within the same round.
+
+    ``_resolve_passive_actions`` may install reactive conditions (e.g. DEFEND's
+    Shielded) on allies. Installing a reactive condition creates ``Trigger`` rows
+    and calls ``TriggerHandler.on_trigger_added`` → ``invalidate``, which defers the
+    cache reset to ``transaction.on_commit``. But ``resolve_round`` runs the whole
+    round inside one ``@transaction.atomic`` block, so that ``on_commit`` callback
+    does not fire until *after* this round's damage resolution — meaning the new
+    triggers would be invisible to the very NPC attack they are meant to mitigate.
+
+    Synchronously refresh each active participant's character trigger handler so the
+    freshly ``bulk_create``d rows (already visible in this transaction) are loaded
+    before ``_resolve_actions`` runs. The deferred ``on_commit(_reset)`` remains
+    intact as the cross-transaction/rollback safety net.
+    """
+    participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for participant in participants:
+        character = participant.character_sheet.character
+        handler = getattr(character, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if handler is not None:
+            handler.refresh()
+
+
 def _resolve_passive_actions(
     encounter: CombatEncounter,
     pc_actions: dict[int, CombatRoundAction],
@@ -4382,6 +4409,7 @@ def resolve_round(
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
     _resolve_passive_actions(encounter, pc_actions)
+    _refresh_participant_trigger_handlers(encounter)
     _ensure_interpose_challenges(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
