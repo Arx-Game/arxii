@@ -1029,6 +1029,18 @@ class CoverSerializer(serializers.Serializer):
     ally_participant_id = serializers.IntegerField(min_value=1)
 
 
+class InterposeSerializer(serializers.Serializer):
+    """Write serializer for declaring an interposing maneuver.
+
+    ``ally_participant_id`` is optional: omitting it (or passing ``null``)
+    means the participant will guard any ally hit this round. When provided,
+    ownership and encounter-membership validation happens in the service
+    (``declare_interpose``).
+    """
+
+    ally_participant_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+
 class PhaseSpecSerializer(serializers.Serializer):
     """Read-only serializer for a single PhaseSpec dataclass (boss phase budget)."""
 

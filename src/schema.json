@@ -3479,6 +3479,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/interpose/:
+    post:
+      operationId: combat_interpose_create
+      description: |-
+        Declare an interposing maneuver, optionally guarding a named ally.
+
+        Creates a passives-only action with maneuver=INTERPOSE. When
+        ``ally_participant_id`` is omitted or null, the participant guards any
+        ally hit this round (``focused_ally_target=None``). When provided, the
+        ally must be an active participant in this encounter.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/join/:
     post:
       operationId: combat_join_create

@@ -58,6 +58,7 @@ from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
+    INTERPOSE_BASE_FATIGUE_COST,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
@@ -1014,6 +1015,62 @@ def declare_cover(
             "focused_opponent_target": None,
             "focused_ally_target": ally,
             "maneuver": CombatManeuver.COVER,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def declare_interpose(
+    participant: CombatParticipant,
+    ally: CombatParticipant | None,
+) -> CombatRoundAction:
+    """Declare an interposing maneuver — passives-only, auto-ready.
+
+    ``ally=None`` means the participant will guard any ally hit this round;
+    when a specific ally is given they must be active and in the same encounter.
+    Interpose resolves in a later task; this function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot interpose: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot interpose: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot interpose: character is dead."
+        raise ValueError(msg)
+
+    if ally is not None:
+        if ally.pk == participant.pk:
+            msg = "Cannot interpose yourself."
+            raise ValueError(msg)
+        if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+            msg = "Interpose target must be an active participant in this encounter."
+            raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.INTERPOSE,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -2048,6 +2105,33 @@ def _apply_passive_technique(
     )
 
 
+def _refresh_participant_trigger_handlers(encounter: CombatEncounter) -> None:
+    """Make passive-installed reactive triggers visible within the same round.
+
+    ``_resolve_passive_actions`` may install reactive conditions (e.g. DEFEND's
+    Shielded) on allies. Installing a reactive condition creates ``Trigger`` rows
+    and calls ``TriggerHandler.on_trigger_added`` → ``invalidate``, which defers the
+    cache reset to ``transaction.on_commit``. But ``resolve_round`` runs the whole
+    round inside one ``@transaction.atomic`` block, so that ``on_commit`` callback
+    does not fire until *after* this round's damage resolution — meaning the new
+    triggers would be invisible to the very NPC attack they are meant to mitigate.
+
+    Synchronously refresh each active participant's character trigger handler so the
+    freshly ``bulk_create``d rows (already visible in this transaction) are loaded
+    before ``_resolve_actions`` runs. The deferred ``on_commit(_reset)`` remains
+    intact as the cross-transaction/rollback safety net.
+    """
+    participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for participant in participants:
+        character = participant.character_sheet.character
+        handler = getattr(character, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if handler is not None:
+            handler.refresh()
+
+
 def _resolve_passive_actions(
     encounter: CombatEncounter,
     pc_actions: dict[int, CombatRoundAction],
@@ -2124,7 +2208,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
                 permanent_wound_eligible=False,
             )
 
-    # Use the (possibly modified) amount from the payload
+    _try_interpose(participant, pre_payload)
+    if pre_payload.amount <= 0:
+        return ParticipantDamageResult(
+            damage_dealt=0,
+            health_after=vitals.health,
+            knockout_eligible=False,
+            death_eligible=False,
+            permanent_wound_eligible=False,
+        )
+
+    # Use the (possibly interposed/modified) amount from the payload
     effective_damage = pre_payload.amount
 
     # Thread-derived damage reduction (Spec A §5.8 lines 1658–1668).
@@ -3993,6 +4087,214 @@ def _resolve_clashes(
     return outcomes
 
 
+def _try_interpose(
+    participant: CombatParticipant,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Find the first eligible armed INTERPOSE this round and dispatch it.
+
+    Looks for a :class:`~world.combat.models.CombatRoundAction` declaring
+    ``INTERPOSE`` for *participant* (or any ally) in the current round, resolves
+    the interposer's capability challenge via :func:`dispatch_interpose`, and
+    mutates *pre_payload.amount* in place.
+
+    **Guard:** no-op when the encounter is not ``RESOLVING`` so that
+    non-combat callers of :func:`apply_damage_to_participant` are unaffected.
+
+    Only the *first* eligible interposer is exercised in v1; multiple interposers
+    covering the same target is a follow-up.
+    """
+    encounter = participant.encounter
+    if encounter.status != EncounterStatus.RESOLVING:
+        return
+
+    action = (
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=encounter.round_number,
+            maneuver=CombatManeuver.INTERPOSE,
+            focused_ally_target__in=[participant, None],
+            participant__status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("participant__character_sheet__character")
+        .first()
+    )
+    if action is None:
+        return
+
+    # Skip self-interpose: the interposer cannot block damage aimed at themselves.
+    if action.participant_id == participant.pk:
+        return
+
+    interposer = action.participant.character_sheet.character
+    protected = participant.character_sheet.character
+
+    result = dispatch_interpose(interposer, protected, pre_payload, approach=None)
+    if result is not None:
+        # Charge fatigue to the interposer ONLY on fire (readiness is free).
+        # Mirror _resolve_pc_action: apply_fatigue(sheet, category, base_cost, effort).
+        fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+        apply_fatigue(
+            action.participant.character_sheet,
+            fatigue_category,
+            INTERPOSE_BASE_FATIGUE_COST,
+            action.effort_level,
+        )
+
+
+def _ensure_interpose_challenges(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Round pre-pass: bind an Interpose ChallengeInstance to each protected ally.
+
+    For every armed INTERPOSE ``CombatRoundAction`` this round, idempotently
+    ``get_or_create`` an active+revealed ``ChallengeInstance`` from the seeded
+    Interpose ``ChallengeTemplate`` bound to each protected ally's character
+    ObjectDB (``target_object``), so ``get_available_actions(interposer, room)``
+    can surface the approach.
+
+    - Specific-ally path (``focused_ally_target`` set): binds to that ally's character.
+    - Any-ally path (``focused_ally_target=None``): binds to every ACTIVE participant
+      in this encounter except the interposer.
+
+    Idempotent: ``get_or_create`` on (template, target_object, is_active=True) ensures
+    no duplicates when called multiple times in the same round.
+
+    No queries in loops: the active-ally list is fetched once per any-ally action;
+    the template is fetched once before the loop.
+    """
+    from world.mechanics.models import ChallengeInstance, ChallengeTemplate  # noqa: PLC0415
+
+    # Collect armed interpose actions for this round.
+    interpose_actions = [
+        action
+        for action in pc_actions.values()
+        if action.maneuver == CombatManeuver.INTERPOSE and action.is_ready
+    ]
+    if not interpose_actions:
+        return
+
+    try:
+        template = ChallengeTemplate.objects.get(name="Interpose")
+    except ChallengeTemplate.DoesNotExist:
+        logger.warning(
+            "Interpose ChallengeTemplate not seeded; skipping challenge binding for encounter %s.",
+            encounter.pk,
+        )
+        return
+
+    room = encounter.room
+
+    # Fetch all active allies once (needed for the any-ally path).
+    # select_related prevents N+1 when accessing .character_sheet.character below.
+    active_participants_by_id: dict[int, CombatParticipant] | None = None
+
+    def _get_active_participants() -> dict[int, CombatParticipant]:
+        return {
+            p.pk: p
+            for p in CombatParticipant.objects.filter(
+                encounter=encounter,
+                status=ParticipantStatus.ACTIVE,
+            ).select_related("character_sheet__character")
+        }
+
+    for action in interpose_actions:
+        interposer_participant_id = action.participant_id
+
+        if action.focused_ally_target_id is not None:
+            # Specific-ally path: bind to the declared ally's character.
+            ally_char = action.focused_ally_target.character_sheet.character
+            ChallengeInstance.objects.get_or_create(
+                template=template,
+                target_object=ally_char,
+                is_active=True,
+                defaults={"location": room, "is_revealed": True},
+            )
+        else:
+            # Any-ally path: bind to every active participant except the interposer.
+            if active_participants_by_id is None:
+                active_participants_by_id = _get_active_participants()
+            for part_id, part in active_participants_by_id.items():
+                if part_id == interposer_participant_id:
+                    continue
+                ally_char = part.character_sheet.character
+                ChallengeInstance.objects.get_or_create(
+                    template=template,
+                    target_object=ally_char,
+                    is_active=True,
+                    defaults={"location": room, "is_revealed": True},
+                )
+
+
+def apply_interpose_outcome(
+    pre_payload: DamagePreApplyPayload,
+    result: ChallengeResolutionResult,
+) -> None:
+    """Map a graded interpose resolution onto *pre_payload*.
+
+    Mirrors :func:`~world.areas.positioning.plummet.resolve_catch`'s graded
+    branches but acts on the incoming damage amount rather than plummet state:
+
+    - **clean block** (``resolution_type == DESTROY`` or ``success_level > 0``):
+      the blow is fully turned aside — ``pre_payload.amount = 0``.
+    - **partial** (``success_level == 0``, not DESTROY): the interposer softens
+      but does not stop the blow — ``pre_payload.amount //= 2``.
+    - **failure** (``success_level < 0``): the interpose fails — no change.
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
+
+    if is_clean_block:
+        pre_payload.amount = 0
+        return
+
+    if success_level == 0:
+        pre_payload.amount //= 2
+        return
+
+    # Failure (success_level < 0) — the blow continues at full damage.
+
+
+def dispatch_interpose(
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    pre_payload: DamagePreApplyPayload,
+    *,
+    approach: str | None,
+) -> ChallengeResolutionResult | None:
+    """Resolve *interposer*'s interpose attempt and apply the graded outcome.
+
+    Thin wrapper over :func:`~world.mechanics.reactions.dispatch_capability_reaction`:
+    looks up the active Interpose :class:`~world.mechanics.models.ChallengeInstance`
+    bound to *protected*, resolves it through *interposer*'s capabilities, and
+    calls :func:`apply_interpose_outcome` to mutate *pre_payload* in place.
+
+    Returns the :class:`~world.mechanics.types.ChallengeResolutionResult`, or
+    ``None`` when no active Interpose challenge is bound to *protected* or
+    *interposer* has no qualifying approach.
+    """
+    import functools  # noqa: PLC0415
+
+    from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
+    from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
+
+    return dispatch_capability_reaction(
+        interposer,
+        protected,
+        challenge_name=INTERPOSE_CHALLENGE_NAME,
+        approach=approach,
+        error_msg=(
+            f"No interpose approach is available to {interposer!r} "
+            f"for protected target {protected!r}."
+        ),
+        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload),
+    )
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -4078,6 +4380,7 @@ def resolve_round(
             "focused_action__action_template",
             "focused_action__action_template__check_type",
             "focused_opponent_target",
+            "focused_ally_target__character_sheet__character",
             "combo_upgrade",
             "physical_passive",
             "social_passive",
@@ -4117,6 +4420,8 @@ def resolve_round(
     # --- Resolve in speed-rank order ---
     resolution_order = get_resolution_order(encounter)
     _resolve_passive_actions(encounter, pc_actions)
+    _refresh_participant_trigger_handlers(encounter)
+    _ensure_interpose_challenges(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,
