@@ -194,13 +194,23 @@ sceneless — the `scene__isnull=True` branch in `Interaction.objects.visible_to
 (`world/scenes/managers.py`) treats them as public-visible and this is intentional,
 unchanged behaviour.
 
-**Events obey the invariant:** `start_event` (`world/events/services.py`) enforces
-the same rule at the events chokepoint. `Event.is_public` is *calendar visibility*
-(a different axis from `RoomProfile.is_public`, which governs room listing). When
-`start_event` derives `privacy_mode` as PRIVATE (i.e. the event is not public on
-the calendar), it checks `event.location.is_public`; if the room is publicly listed,
-it raises `EventError.PRIVATE_IN_PUBLIC_ROOM` before the `Scene` is created. The
-`Scene.save()` guard remains the backstop for any path that bypasses this chokepoint.
+**Events obey the invariant:** The rule is enforced at config time (create/edit)
+and at start time. `Event.is_public` is *calendar visibility* (a different axis
+from `RoomProfile.is_public`, which governs room listing).
+
+*Config time:* `Event.clean()` (wired into the admin ModelForm) and
+`_EventScheduleMixin.validate()` (shared by `EventCreateSerializer` and
+`EventUpdateSerializer`) both reject a private event (`is_public=False`) whose
+`location.is_public` is `True`. This means a GM cannot save or submit a private
+event for a publicly-listed room — they hit the error at create or edit, not at
+start.
+
+*Start time:* `start_event` (`world/events/services.py`) enforces the rule again
+as the events chokepoint. When `start_event` derives `privacy_mode` as PRIVATE
+(i.e. the event is not public on the calendar), it checks `event.location.is_public`;
+if the room is publicly listed, it raises `EventError.PRIVATE_IN_PUBLIC_ROOM` before
+the `Scene` is created. The `Scene.save()` guard remains the final backstop for any
+path that bypasses both chokepoints.
 
 **Out of scope:**
 

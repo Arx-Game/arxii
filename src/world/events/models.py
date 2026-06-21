@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -83,6 +84,18 @@ class Event(SharedMemoryModel):
     @property
     def is_upcoming(self) -> bool:
         return self.status == EventStatus.SCHEDULED
+
+    def _validate_privacy_against_room(self) -> None:
+        if self.is_public:
+            return
+        if self.location_id is not None and self.location.is_public:
+            raise ValidationError(
+                {"is_public": "A private event cannot be held in a publicly-listed room."}
+            )
+
+    def clean(self) -> None:
+        super().clean()
+        self._validate_privacy_against_room()
 
     # These cached_property methods serve as fallbacks when instances are accessed
     # outside the ViewSet (admin, shell, service functions). The ViewSet uses
