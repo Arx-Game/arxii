@@ -521,7 +521,7 @@ Two deliverables in one branch:
   returns per-action `AvailableEnhancement` lists (anima costs, Soulfray warnings).
   The unified endpoint returns plain `PlayerAction` descriptors without enhancement data.
   `ActionPanel` fetches both and joins client-side. Follow-up: fold enhancement data into
-  `PlayerAction` so the unified endpoint is self-contained. (See magic.md Scope 4 deferred note.)
+  `PlayerAction` so the unified endpoint is self-contained. (See magic-build-history.md Scope 4 deferred note.)
 - **Consequence→challenge spawn not yet wired** — the unified read surfaces spawned
   challenges when that lands; no interface change will be needed.
 - **General (non-combat) turn provider — built (#520).** The `SceneRound` provider in
