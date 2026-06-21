@@ -111,11 +111,13 @@ _CAN_EDIT_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "gender",
     "species",
-    "heritage",
-    "family",
-    "tarot_card",
-    "origin_realm",
-    "true_profile",  # #1270 — concept/quote now read through the profile
+    # #1270 — concept/quote + lineage (heritage/family/tarot/origin) now read through the
+    # presented face's profile; the revealed case reads them off true_profile.
+    "true_profile",
+    "true_profile__heritage",
+    "true_profile__family",
+    "true_profile__tarot_card",
+    "true_profile__origin_realm",
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -133,14 +135,23 @@ def _build_identity(
     defaults to the character's key. ``bio_profile`` is the **presented face's** bio (#1270): the
     real ``true_profile`` for a revealed identity, a cover persona's own (fabricated) profile when
     presenting an anonymous face that has authored one, or None (concept/quote blank). When
-    ``reveal_identity`` is False — a non-privileged viewer of an anonymous face — the **lineage**
-    fields (real fullname, family, heritage, tarot, origin, path) are still withheld, but the
-    presented face's own concept/quote DO show (a cover identity reads as a real person).
+    ``reveal_identity`` is False — a non-privileged viewer of an anonymous face — the **real
+    fullname** and **path** are withheld, but the presented face's own concept/quote AND lineage
+    (#1270 slice 3: a cover persona's *fabricated* family/heritage/tarot/origin) DO show, so a
+    cover identity reads as a real person. A non-revealed face with no cover profile shows none.
     """
     character = sheet.character
     name = display_name if display_name is not None else character.db_key
     concept = bio_profile.concept if bio_profile is not None else ""
     quote = bio_profile.quote if bio_profile is not None else ""
+
+    # Lineage follows the presented bio profile (#1270 slice 3): a revealed viewer gets the real
+    # lineage (bio_profile is true_profile); an outsider viewing a cover gets the cover's
+    # fabricated lineage; an anonymous face with no cover profile gets none.
+    family = bio_profile.family if bio_profile is not None else None
+    heritage = _id_name_or_null(bio_profile.heritage) if bio_profile is not None else None
+    tarot_card = _id_name_or_null(bio_profile.tarot_card) if bio_profile is not None else None
+    origin = _id_name_or_null(bio_profile.origin_realm) if bio_profile is not None else None
 
     pronouns = PronounsData(
         subject=sheet.pronoun_subject,
@@ -149,29 +160,16 @@ def _build_identity(
     )
 
     if not reveal_identity:
-        return IdentitySection(
-            name=name,
-            fullname=name,
-            concept=concept,
-            quote=quote,
-            age=sheet.age,
-            gender=_id_name_or_null(sheet.gender, name_field="display_name"),
-            pronouns=pronouns,
-            species=_id_name_or_null(sheet.species),
-            heritage=None,
-            family=None,
-            tarot_card=None,
-            origin=None,
-            path=None,
-        )
-
-    family = sheet.family
-    # Compose fullname: "FirstName FamilyName" or just the db_key.
-    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
-
-    # Latest path from prefetched path_history (ordered by -selected_at).
-    path_history: list = character.cached_path_history
-    path_value: IdNameRef | None = _id_name(path_history[0].path) if path_history else None
+        # The presented (mask/cover) name is already resolved; never compose the real db_key
+        # with a family name here, and withhold the real progression path.
+        fullname = name
+        path_value: IdNameRef | None = None
+    else:
+        # Compose the real fullname: "FirstName FamilyName" or just the db_key.
+        fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
+        # Latest path from prefetched path_history (ordered by -selected_at).
+        path_history: list = character.cached_path_history
+        path_value = _id_name(path_history[0].path) if path_history else None
 
     return IdentitySection(
         name=name,
@@ -182,10 +180,10 @@ def _build_identity(
         gender=_id_name_or_null(sheet.gender, name_field="display_name"),
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
-        heritage=_id_name_or_null(sheet.heritage),
+        heritage=heritage,
         family=_id_name_or_null(family),
-        tarot_card=_id_name_or_null(sheet.tarot_card),
-        origin=_id_name_or_null(sheet.origin_realm),
+        tarot_card=tarot_card,
+        origin=origin,
         path=path_value,
     )
 
@@ -713,7 +711,16 @@ _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
 _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "personas",
-        queryset=Persona.objects.select_related("thumbnail", "profile").prefetch_related(
+        queryset=Persona.objects.select_related(
+            "thumbnail",
+            # #1270 — a cover persona presents its own profile's bio + lineage; pull the
+            # lineage FKs so the identity builder reads them without extra queries.
+            "profile",
+            "profile__heritage",
+            "profile__family",
+            "profile__tarot_card",
+            "profile__origin_realm",
+        ).prefetch_related(
             # Each persona's per-trait descriptors, so the appearance builder can
             # overlay the active face's descriptors at zero extra queries.
             Prefetch(

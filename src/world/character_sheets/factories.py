@@ -12,7 +12,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
-    _PROFILE_BIO_FIELDS,
+    _PROFILE_FIELDS,
     CharacterSheet,
     Gender,
     Profile,
@@ -71,24 +71,23 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
     age = factory.Faker("random_int", min=18, max=50)
     # gender and pronouns are now FKs - leave null for basic factory
     marital_status = MaritalStatus.SINGLE
-    family = None  # FK to roster.Family
     vocation = factory.Faker("job")
     social_rank = factory.Faker("random_int", min=1, max=20)
     birthday = factory.Faker("date")
-    # Bio fields (concept/quote/personality/background) live on Profile now (#1270); they
-    # are accepted as factory kwargs and routed to true_profile in _create below.
+    # Bio (concept/quote/…) and lineage (family/heritage/tarot/origin) live on Profile now
+    # (#1270); they are accepted as factory kwargs and routed to true_profile in _create below.
 
     @classmethod
     def _create(cls, model_class: type, *args: object, **kwargs: object) -> CharacterSheet:
-        """Route narrative bio kwargs to the sheet's ``true_profile`` (#1270).
+        """Route bio + lineage kwargs to the sheet's ``true_profile`` (#1270).
 
-        Bio (concept/quote/personality/background/…) moved to Profile, so it can't be a
-        CharacterSheet column anymore; pop those kwargs, build the Profile, and link it.
+        Bio and lineage moved to Profile, so they can't be CharacterSheet columns anymore;
+        pop those kwargs, build the Profile, and link it.
         """
-        bio_kwargs = {k: kwargs.pop(k) for k in _PROFILE_BIO_FIELDS if k in kwargs}
+        profile_kwargs = {k: kwargs.pop(k) for k in _PROFILE_FIELDS if k in kwargs}
         sheet: CharacterSheet = super()._create(model_class, *args, **kwargs)
         if sheet.true_profile_id is None:
-            sheet.true_profile = ProfileFactory(**bio_kwargs)
+            sheet.true_profile = ProfileFactory(**profile_kwargs)
             sheet.save()
         return sheet
 

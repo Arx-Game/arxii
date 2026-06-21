@@ -87,7 +87,7 @@
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' — Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' — Select a consequence using an existing check result.`
-- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0) -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
+- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0, *, check_type: 'CheckType | None' = None) -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
 
 
 ## behaviors
@@ -691,12 +691,16 @@
 
 ### Heritage
 **Pointed to by:**
-  - character_sheets <- character_sheets.CharacterSheet
+  - profiles <- character_sheets.Profile
   - beginnings <- character_creation.Beginnings
 
 ### Profile
 **Foreign Keys:**
   - owning_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - heritage -> character_sheets.Heritage [FK] (nullable)
+  - origin_realm -> realms.Realm [FK] (nullable)
+  - family -> roster.Family [FK] (nullable)
+  - tarot_card -> tarot.TarotCard [FK] (nullable)
 **Pointed to by:**
   - personas <- scenes.Persona
 
@@ -713,13 +717,9 @@
   - build -> forms.Build [FK] (nullable)
   - gender -> character_sheets.Gender [FK] (nullable)
   - pronouns -> character_sheets.Pronouns [FK] (nullable)
-  - heritage -> character_sheets.Heritage [FK] (nullable)
-  - origin_realm -> realms.Realm [FK] (nullable)
   - species -> species.Species [FK] (nullable)
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
-  - family -> roster.Family [FK] (nullable)
-  - tarot_card -> tarot.TarotCard [FK] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
@@ -1355,6 +1355,8 @@
 **Foreign Keys:**
   - parent_role -> covenants.CovenantRole [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
@@ -1458,10 +1460,10 @@
 - `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' — A member voluntarily leaves a covenant. Soft-ends the membership, then`
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' — Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`
 - `precedence_role_for_combat(character_sheet: 'CharacterSheet') -> 'CovenantRole | None' — Pick the single covenant role that governs combat for a character.`
-- `promote_to_subrole(*, membership: 'CharacterCovenantRole', target_subrole: 'CovenantRole') -> 'CharacterCovenantRole' — Promote a character from their current parent role to a sub-role.`
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
 - `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' — Rename a rank. Requires can_manage_ranks.`
 - `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' — Rewrite tiers for the given ranks atomically and uniquely.`
+- `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` if the character's`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
@@ -2399,6 +2401,8 @@
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' — Pay XP to unlock an XP-locked level boundary on a thread.`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' — Deduct anima from character, returning the overburn deficit.`
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
+- `get_character_anima_ritual(character) — The character's authored SCENE_ACTION ritual (with check_config), or None.`
+- `get_character_cast_check(character) — The CheckType a character's technique casts roll, or None for fallback.`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
@@ -3154,7 +3158,7 @@
 ### Realm
 **Pointed to by:**
   - families <- roster.Family
-  - character_sheets <- character_sheets.CharacterSheet
+  - profiles <- character_sheets.Profile
   - starting_areas <- character_creation.StartingArea
   - societies <- societies.Society
   - areas <- areas.Area
@@ -3272,7 +3276,7 @@
   - origin_realm -> realms.Realm [FK] (nullable)
 **Pointed to by:**
   - tree_members <- roster.FamilyMember
-  - members <- character_sheets.CharacterSheet
+  - profiles <- character_sheets.Profile
   - character_drafts <- character_creation.CharacterDraft
 
 ### FamilyMember

@@ -14,7 +14,21 @@ class ProfileAdmin(admin.ModelAdmin):
 
     list_display = ["__str__", "concept"]
     search_fields = ["concept", "real_concept"]
-    fields = ("concept", "real_concept", "quote", "personality", "background", "obituary")
+    raw_id_fields = ("heritage", "origin_realm", "family", "tarot_card")
+    fields = (
+        "concept",
+        "real_concept",
+        "quote",
+        "personality",
+        "background",
+        "obituary",
+        # Lineage moved to Profile (#1270 slice 3) — edit it here.
+        "heritage",
+        "origin_realm",
+        "family",
+        "tarot_card",
+        "tarot_reversed",
+    )
 
 
 @admin.register(Gender)
@@ -54,7 +68,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
         "lifecycle_state",
         "is_oc",
     ]
-    search_fields = ["character__db_key", "true_profile__concept", "family"]
+    search_fields = ["character__db_key", "true_profile__concept", "true_profile__family__name"]
     readonly_fields = ["created_date", "updated_date", "decay_tier_display"]
     raw_id_fields = ["true_profile"]
 
@@ -79,15 +93,13 @@ class CharacterSheetAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "true_profile",
-                    "family",
-                    "tarot_card",
-                    "tarot_reversed",
                     "vocation",
                     "social_rank",
                     "marital_status",
                 ),
-                "description": "Narrative bio (concept/quote/background/…) lives on the linked "
-                "Profile (#1270) — edit it there.",
+                "description": "Narrative bio (concept/quote/background/…) AND lineage "
+                "(family/heritage/tarot/origin) live on the linked Profile (#1270) — "
+                "edit them there.",
             },
         ),
         (
