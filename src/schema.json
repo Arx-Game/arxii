@@ -1093,6 +1093,90 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/blocks/:
+    get:
+      operationId: blocks_list
+      description: 'The requesting player''s blocks: list, create (with reason), unblock,
+        share account-wide.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - blocks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBlockList'
+          description: ''
+    post:
+      operationId: blocks_create
+      description: 'The requesting player''s blocks: list, create (with reason), unblock,
+        share account-wide.'
+      tags:
+      - blocks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockCreate'
+          description: ''
+  /api/blocks/{id}/:
+    delete:
+      operationId: blocks_destroy
+      description: Unblock — cron-delayed (the block stays active until the next sweep),
+        so don't delete.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - blocks
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/blocks/{id}/share/:
+    post:
+      operationId: blocks_share_create
+      description: Escalate this block to all of the requesting player's characters
+        (#1278).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - blocks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Block'
+          description: ''
   /api/chapters/:
     get:
       operationId: chapters_list
@@ -3371,6 +3455,40 @@ paths:
 
         Creates a passives-only action with maneuver=FLEE. Flee resolves as
         a check at round resolution; the participant remains ACTIVE until then.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/interpose/:
+    post:
+      operationId: combat_interpose_create
+      description: |-
+        Declare an interposing maneuver, optionally guarding a named ally.
+
+        Creates a passives-only action with maneuver=INTERPOSE. When
+        ``ally_participant_id`` is omitted or null, the participant guards any
+        ally hit this round (``focused_ally_target=None``). When provided, the
+        ally must be an active participant in this encounter.
       parameters:
       - in: path
         name: id
@@ -15308,6 +15426,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/MissionTemplate'
           description: ''
+  /api/mutes/:
+    get:
+      operationId: mutes_list
+      description: 'The requesting player''s mutes: list, create/update (IC/OOC scope),
+        and unmute.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - mutes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMuteList'
+          description: ''
+    post:
+      operationId: mutes_create
+      description: 'The requesting player''s mutes: list, create/update (IC/OOC scope),
+        and unmute.'
+      tags:
+      - mutes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MuteCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MuteCreate'
+          description: ''
+  /api/mutes/{id}/:
+    delete:
+      operationId: mutes_destroy
+      description: 'The requesting player''s mutes: list, create/update (IC/OOC scope),
+        and unmute.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - mutes
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/narrative/deliveries/{id}/acknowledge/:
     post:
       operationId: narrative_deliveries_acknowledge_create
@@ -23450,6 +23630,88 @@ components:
     BlankEnum:
       enum:
       - ''
+    Block:
+      type: object
+      description: A block the requesting player owns.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        blocker_persona:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The face the blocker blocked from; null when account_level
+            (all their faces).
+        blocked_persona:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The face that was blocked (shown on the blocker's block list).
+        blocked_persona_name:
+          type: string
+          readOnly: true
+        account_level:
+          type: boolean
+          readOnly: true
+          description: 'Opt-in: all of the blocker''s characters block the target.'
+        reason:
+          type: string
+          readOnly: true
+          description: Optional reason.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        pending_removal_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When a lifted block finalizes (cron). The block stays active
+            until then; null means it has not been lifted.
+      required:
+      - account_level
+      - blocked_persona
+      - blocked_persona_name
+      - blocker_persona
+      - created_at
+      - id
+      - pending_removal_at
+      - reason
+    BlockCreate:
+      type: object
+      description: 'Create a block: the player''s own face, the target face, and a
+        required reason.'
+      properties:
+        blocker_persona:
+          type: integer
+        blocked_persona:
+          type: integer
+        reason:
+          type: string
+          maxLength: 200
+      required:
+      - blocked_persona
+      - blocker_persona
+      - reason
+    BlockCreateRequest:
+      type: object
+      description: 'Create a block: the player''s own face, the target face, and a
+        required reason.'
+      properties:
+        blocker_persona:
+          type: integer
+        blocked_persona:
+          type: integer
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required:
+      - blocked_persona
+      - blocker_persona
+      - reason
     BodyRegionEnum:
       enum:
       - head
@@ -32735,6 +32997,67 @@ components:
       - category_name
       - id
       - name
+    Mute:
+      type: object
+      description: A mute the requesting player owns.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        muted_persona:
+          type: integer
+          readOnly: true
+          description: The face the muter no longer wants to see.
+        muted_persona_name:
+          type: string
+          readOnly: true
+        mute_ic:
+          type: boolean
+          readOnly: true
+          description: Hide this persona's IC content.
+        mute_ooc:
+          type: boolean
+          readOnly: true
+          description: Hide this persona's OOC content.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - mute_ic
+      - mute_ooc
+      - muted_persona
+      - muted_persona_name
+    MuteCreate:
+      type: object
+      description: Create/update a mute with IC/OOC scope.
+      properties:
+        muted_persona:
+          type: integer
+        mute_ic:
+          type: boolean
+          default: true
+        mute_ooc:
+          type: boolean
+          default: true
+      required:
+      - muted_persona
+    MuteCreateRequest:
+      type: object
+      description: Create/update a mute with IC/OOC scope.
+      properties:
+        muted_persona:
+          type: integer
+        mute_ic:
+          type: boolean
+          default: true
+        mute_ooc:
+          type: boolean
+          default: true
+      required:
+      - muted_persona
     MyBooksRow:
       type: object
       description: One organization whose books the viewer may open.
@@ -33846,6 +34169,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Beat'
+    PaginatedBlockList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Block'
     PaginatedBugReportDetailList:
       type: object
       required:
@@ -34965,6 +35311,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionTemplate'
+    PaginatedMuteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Mute'
     PaginatedNPCRoleList:
       type: object
       required:
@@ -40614,12 +40983,16 @@ components:
         session_references:
           type: string
           readOnly: true
+        participant_fields:
+          type: string
+          readOnly: true
       required:
       - created_at
       - expires_at
       - id
       - initiator_id
       - initiator_name
+      - participant_fields
       - participants
       - participation_rule
       - proposed_terms

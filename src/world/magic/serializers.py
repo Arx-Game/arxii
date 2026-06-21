@@ -2885,6 +2885,7 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
         source="participants_cached", many=True, read_only=True
     )
     session_references = serializers.SerializerMethodField()
+    participant_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = RitualSession
@@ -2900,6 +2901,7 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "participants",
             "session_references",
+            "participant_fields",
         ]
         read_only_fields = fields
 
@@ -2934,6 +2936,14 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
                 entry["ref_covenant_role_id"] = ref.ref_covenant_role_id
             result.append(entry)
         return result
+
+    def get_participant_fields(self, obj: object) -> list[dict[str, object]]:
+        """Return the ritual's authored participant_fields blob (or [])."""
+        schema = getattr(obj.ritual, "input_schema", None)  # noqa: GETATTR_LITERAL
+        if not isinstance(schema, dict):
+            return []
+        fields = schema.get("participant_fields", [])
+        return fields if isinstance(fields, list) else []
 
 
 # Error messages for RitualSessionDraftSerializer.

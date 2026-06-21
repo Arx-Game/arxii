@@ -110,6 +110,24 @@ class TriggerHandler:
         self._by_event.clear()
         self._populated = False
 
+    def refresh(self) -> None:
+        """Synchronously re-read triggers from the DB within the current transaction.
+
+        Unlike ``invalidate`` (which defers ``_reset`` to ``transaction.on_commit``
+        for cross-transaction rollback safety), this drops the cache *now* so that
+        ``triggers_for`` re-populates against rows already visible in the current
+        transaction — including rows just ``bulk_create``d in the same atomic block.
+
+        Use this only when a caller installs a trigger and must dispatch against it
+        *within the same transaction* (e.g. combat's ``resolve_round`` applies a
+        defensive passive, then resolves the NPC attack against it in one atomic
+        block). It is still rollback-safe: it merely clears an in-memory cache, so a
+        rolled-back transaction leaves nothing persisted, and the next access simply
+        re-reads whatever rows did commit. The deferred ``on_commit(_reset)`` from
+        ``invalidate`` remains the cross-transaction safety net.
+        """
+        self._reset()
+
     def on_trigger_added(self, trigger: "Trigger") -> None:
         self.invalidate()
 

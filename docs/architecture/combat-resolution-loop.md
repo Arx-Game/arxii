@@ -1232,3 +1232,70 @@ happens that round.
 None blocking — all design decisions either land in this spec or are
 explicitly deferred in Known limits. If something turns up during
 implementation, surface it before charging ahead.
+
+---
+
+## Implementation addendum — reactive maneuvers (#1273)
+
+**Status: BUILT** (PR #1273 — INTERPOSE maneuver + DEFEND stance)
+
+### resolve_round ordering change
+
+`resolve_round` in `world/combat/services.py` now runs three steps **before** the
+focused-action loop:
+
+```
+_resolve_passive_actions(encounter, pc_actions)   # 1. apply passive techniques → installs conditions
+_refresh_participant_trigger_handlers(encounter)  # 2. sync TriggerHandlers so reactive triggers fire this round
+_ensure_interpose_challenges(encounter, pc_actions)  # 3. mint ChallengeInstances for armed INTERPOSE actions
+# --- focused-action loop (_resolve_actions) ---
+```
+
+Step 2 is new: `_refresh_participant_trigger_handlers` calls `TriggerHandler.refresh()` on
+every active participant, ensuring that reactive triggers installed by passive conditions
+(e.g. the "Shielded" trigger from the DEFEND stance) are live before NPC attacks resolve.
+Without this call, a passive-installed trigger would fire only in the *next* round.
+
+### DAMAGE_PRE_APPLY interpose seam
+
+Inside `apply_damage_to_participant` (the NPC-attack damage write path), before the
+payload reaches vitals, `_try_interpose` fires:
+
+```
+apply_damage_to_participant(participant, pre_payload)
+  → emit_event(DAMAGE_PRE_APPLY, pre_payload)   # DEFEND's Shielded trigger runs here → multiply 0.5
+  → _try_interpose(participant, pre_payload)     # find armed INTERPOSE challenge, dispatch if present
+     → dispatch_interpose(interposer, protected, pre_payload)
+        → dispatch_capability_reaction(...)       # resolve_challenge → CheckOutcome
+        → apply_interpose_outcome(pre_payload, result):
+            SUCCESS  → pre_payload.amount = 0
+            PARTIAL  → pre_payload.amount //= 2
+            FAILURE  → no-op
+  → vitals.health -= pre_payload.amount          # reduced (possibly 0) amount applied
+```
+
+DEFEND and INTERPOSE **compose**: DEFEND's `MODIFY_PAYLOAD multiply 0.5` fires in the
+flows layer (step 1), then `_try_interpose` sees the already-halved amount (step 2).
+A clean INTERPOSE after DEFEND zeroes the remaining half.
+
+### INTERPOSE maneuver
+
+- Declaration: `declare_interpose(participant, ally)` → `CombatRoundAction.maneuver=INTERPOSE`
+  + `focused_ally_target=ally`. Mirrors the COVER maneuver shape.
+- Challenge setup: `_ensure_interpose_challenges` mints one `ChallengeInstance` per armed
+  INTERPOSE per round (idempotent). Challenge template seeded by `ensure_interpose_content()`.
+- Fatigue: charged `INTERPOSE_BASE_FATIGUE_COST` only when the challenge fires, not on declaration.
+- Capability gates: telekinesis, shield, barrier, pull_aside (pure data — adding new capabilities
+  is a `CapabilityType` + `Application` + `ChallengeApproach` row, no engine change).
+
+### DEFEND stance
+
+- Seeded by `ensure_defend_content()` (`src/world/combat/defend_content.py`).
+- Passive `Technique` → `TechniqueAppliedCondition(target_kind=ALLY, condition=Shielded)`.
+- "Shielded" `ConditionTemplate` carries a `reactive_triggers` M2M to a `TriggerDefinition`
+  on `DAMAGE_PRE_APPLY` with `base_filter_condition=_SELF_TARGET_FILTER` (fires only when
+  `payload.target == trigger.obj`, i.e. the shielded ally is the damage target).
+- Flow: `FlowDefinition` with a single `MODIFY_PAYLOAD` step
+  `{"field": "amount", "op": "multiply", "value": 0.5}`.
+- `bulk_apply_conditions` now calls `_install_reactive_side_effects` (was skipped before
+  #1273); passive-applied conditions register their reactive triggers in the same batch.

@@ -14,6 +14,7 @@ job remain follow-up slices.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q, QuerySet
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
-    from world.scenes.models import Persona
+    from world.scenes.models import BlockContactFlag, Persona
 
 
 def _active_blocks() -> QuerySet[Block]:
@@ -192,3 +193,116 @@ def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
             ).values_list("pk", flat=True)
         )
     return hidden
+
+
+def _persona_player(persona: Persona) -> PlayerData | None:
+    """The PlayerData currently playing this persona's character, or None (#1278)."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        roster_entry = persona.character_sheet.roster_entry
+    except ObjectDoesNotExist:
+        return None
+    if roster_entry is None:
+        return None
+    current = roster_entry.current_tenure
+    return current.player_data if current is not None else None
+
+
+def create_block(
+    *,
+    blocker_account: Any,
+    blocker_persona: Persona,
+    blocked_persona: Persona,
+    reason: str,
+) -> Block:
+    """Block ``blocked_persona`` for the requesting account, persona→persona (#1278).
+
+    ``reason`` is required (it's forwarded to staff). Idempotent per
+    (owner, blocked_player, blocker_persona, blocked_persona) — re-blocking the same pair returns
+    the existing row. Raises ValidationError if the target persona has no current player.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    blocker_player, _ = PlayerData.objects.get_or_create(account=blocker_account)
+    blocked_player = _persona_player(blocked_persona)
+    if blocked_player is None:
+        msg = "That character has no current player to block."
+        raise ValidationError(msg)
+    if blocked_player.pk == blocker_player.pk:
+        msg = "You cannot block your own character."
+        raise ValidationError(msg)
+
+    block, _ = Block.objects.get_or_create(
+        owner=blocker_player,
+        blocked_player=blocked_player,
+        blocker_persona=blocker_persona,
+        blocked_persona=blocked_persona,
+        defaults={"reason": reason, "account_level": False, "pending_removal_at": None},
+    )
+    # Re-blocking a pair mid-grace cancels the pending removal (it's active again).
+    if block.pending_removal_at is not None:
+        block.pending_removal_at = None
+        block.save(update_fields=["pending_removal_at"])
+    return block
+
+
+# How long a lifted block stays active before the cron clears it — matches the hourly
+# scenes.block_finalize task, so an unblock takes effect within one cron cycle (#1278).
+_UNBLOCK_GRACE = timedelta(hours=1)
+
+
+def request_unblock(block: Block) -> Block:
+    """Begin unblocking — the block stays active until the next cron clears it (#1278).
+
+    Deliberately delayed (lift → snipe → re-block guard); ``scenes.block_finalize`` removes it.
+    """
+    return lift_block(block, finalize_at=timezone.now() + _UNBLOCK_GRACE)
+
+
+def share_block_account_wide(block: Block) -> Block:
+    """Escalate a block so ALL the blocker's characters block the target (#1278).
+
+    The conscious opt-in: the target may now infer those characters share a player. Persona-scoped
+    on the target side is preserved (only the exact blocked face), per the anti-derivation rule.
+    """
+    if not block.account_level:
+        block.account_level = True
+        block.save(update_fields=["account_level"])
+    return block
+
+
+def flag_blocked_contact_attempt(
+    *,
+    initiator_persona: Persona,
+    target_persona: Persona,
+    scene: Any = None,
+) -> BlockContactFlag | None:
+    """Record a blocked player's attempt to contact the blocker, for staff (#1278).
+
+    Fires when an active block exists where the *target* blocked the *initiator* — i.e. a blocked
+    player is reaching the blocker (typically via a non-blocked identity, since the coded block
+    already stops the exact pair). The anti-derivation rule means we do NOT code-prevent this
+    (that would leak the alt); instead staff — who see real identities — get the flag, with zero
+    signal to either player. Deduped per (blocked, blocker, scene). Returns the flag, or None when
+    there is no such block.
+    """
+    initiator_player = _persona_player(initiator_persona)
+    target_player = _persona_player(target_persona)
+    if initiator_player is None or target_player is None:
+        return None
+    if not _active_blocks().filter(owner=target_player, blocked_player=initiator_player).exists():
+        return None
+
+    from world.scenes.models import BlockContactFlag  # noqa: PLC0415
+
+    # PlayerData's pk is its account_id, so player.pk == the account FK target.
+    flag, _ = BlockContactFlag.objects.get_or_create(
+        blocker_account_id=target_player.pk,
+        blocked_account_id=initiator_player.pk,
+        scene=scene,
+        defaults={"initiator_persona": initiator_persona, "target_persona": target_persona},
+    )
+    return flag

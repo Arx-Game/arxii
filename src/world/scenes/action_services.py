@@ -252,6 +252,17 @@ def create_action_request(  # noqa: PLR0913
         SceneActionTarget.objects.create(action_request=request, target_persona=persona)
     if additional:  # multi-target only — single-target path unchanged
         _auto_resolve_npc_targets(request)
+
+    # #1278 — if the initiator is a blocked player reaching the blocker (via any identity), flag
+    # the attempt for staff. The coded block stops the exact pair; circumvention is not code-
+    # prevented (that would leak the alt), so staff review it instead.
+    from world.scenes.block_services import flag_blocked_contact_attempt  # noqa: PLC0415
+
+    for persona in [target_persona, *additional]:
+        if persona is not None:
+            flag_blocked_contact_attempt(
+                initiator_persona=initiator_persona, target_persona=persona, scene=scene
+            )
     return request
 
 
@@ -435,6 +446,11 @@ def _resolve_action_against_persona(
     target_character = target_persona.character_sheet.character
     context = ResolutionContext(character=character, target=target_character)
 
+    # Effort is a check-roll modifier (not a difficulty delta) applied on BOTH the
+    # technique-enhanced and plain branches (#1293). It is orthogonal to the
+    # technique's anima/intensity/fury levers, which scale cast power; the effort
+    # cost axis is charged separately by apply_fatigue below.
+    check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
     if action_request.technique is not None:
         result = _resolve_enhanced_action(
             character=character,
@@ -443,6 +459,7 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             difficulty=difficulty,
             context=context,
+            effort_modifier=check_modifiers,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
@@ -452,7 +469,6 @@ def _resolve_action_against_persona(
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
         # inside use_technique). The serializer rejects fury_commitment_id on
         # plain actions, so fury_commitment is always None here.
-        check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
         action_resolution = start_action_resolution(
             character=character,
             template=action_template,
@@ -667,6 +683,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     action_key: str,
     difficulty: int,
     context: ResolutionContext,
+    effort_modifier: int = 0,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
@@ -685,6 +702,9 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         action_key: The action key (e.g. "flirt").
         difficulty: The resolved numeric difficulty.
         context: Resolution context carrying character data.
+        effort_modifier: The EFFORT_CHECK_MODIFIER for the action's effort level,
+            applied as a check-roll modifier (extra_modifiers) on the inner
+            start_action_resolution — parity with the plain/area branches (#1293).
         strain_commitment: Optional extra anima the caster commits beyond the
             technique's baseline cost. Forwarded to use_technique so the cost
             calculation accounts for the strain.
@@ -715,6 +735,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             template=action_template,
             target_difficulty=difficulty,
             context=context,
+            extra_modifiers=effort_modifier,
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,

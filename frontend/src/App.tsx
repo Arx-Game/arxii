@@ -14,6 +14,8 @@ import { EmailVerifyPage } from './evennia_replacements/EmailVerifyPage';
 import { AuthCallbackPage } from './evennia_replacements/AuthCallbackPage';
 import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { BlocksSettingsPage } from './social/pages/BlocksSettingsPage';
+import { MutesSettingsPage } from './social/pages/MutesSettingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
 import { CharacterCreationPage } from './character-creation';
@@ -283,6 +285,8 @@ function App() {
               </Suspense>
             }
           />
+          <Route path="blocks" element={<BlocksSettingsPage />} />
+          <Route path="mutes" element={<MutesSettingsPage />} />
           <Route index element={<Navigate to="mail" replace />} />
         </Route>
         <Route path="/roster" element={<RosterListPage />} />

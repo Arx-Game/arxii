@@ -622,6 +622,60 @@ class Mute(SharedMemoryModel):
         return f"{self.owner} mutes {self.muted_persona.name}"
 
 
+class BlockContactFlag(SharedMemoryModel):
+    """A blocked player attempted contact with the blocker — flagged for staff (#1278).
+
+    The coded block prevents the *exact* blocked pair; a blocked player using **another identity**
+    to reach the blocker is circumvention, which the anti-derivation rule deliberately does NOT
+    code-prevent (that would leak the alt). Instead the attempt is recorded here for staff — who
+    see real identities — with **zero signal to either player**. Anchored on accounts + the personas
+    worn so staff can derive the full identity chain.
+    """
+
+    blocker_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The account that did the blocking (the target of the contact attempt).",
+    )
+    blocked_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The blocked account that attempted contact (the initiator).",
+    )
+    initiator_persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The face the blocked player used to attempt contact.",
+    )
+    target_persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="The blocker's face they tried to contact.",
+    )
+    scene = models.ForeignKey(
+        Scene,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The scene the attempt occurred in, if any.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved = models.BooleanField(
+        default=False, help_text="Whether staff have reviewed this flag."
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"contact-flag: {self.blocked_account_id} → {self.blocker_account_id}"
+
+
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 

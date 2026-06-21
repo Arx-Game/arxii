@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0030_sceneactionrequest_engagement_credited_and_more"),
+        ("scenes", "0031_blockcontactflag"),
     ]
 
     operations = [
