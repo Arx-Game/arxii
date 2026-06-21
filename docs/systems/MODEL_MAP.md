@@ -3494,6 +3494,14 @@
   - owner -> evennia_extensions.PlayerData [FK]
   - muted_persona -> scenes.Persona [FK]
 
+### BlockContactFlag
+**Foreign Keys:**
+  - blocker_account -> accounts.AccountDB [FK]
+  - blocked_account -> accounts.AccountDB [FK]
+  - initiator_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+
 ### Interaction
 **Foreign Keys:**
   - action_request_result -> scenes.SceneActionRequest [OneToOne] (nullable)
