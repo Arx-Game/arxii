@@ -14135,6 +14135,11 @@ export interface components {
      *     Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
      *     block showing the requesting user's own active membership capabilities in
      *     the same covenant (or all-False if the viewer has no active membership).
+     *
+     *     ``covenant_role`` is the RESOLVED effective role (the resonance sub-role when
+     *     the character's COVENANT_ROLE thread has crossed the sub-role's unlock threshold;
+     *     the stored parent role otherwise). ``anchor_role`` is always the stored parent
+     *     (anchor) role, providing context for what sub-roles are possible.
      */
     CharacterCovenantRole: {
       readonly id: number;
@@ -14142,6 +14147,7 @@ export interface components {
       readonly character_sheet: number;
       readonly covenant: number;
       readonly covenant_role: components['schemas']['CovenantRole'];
+      readonly anchor_role: components['schemas']['CovenantRole'];
       readonly rank: components['schemas']['CovenantRankNested'];
       /** @description True when the character is currently 'fulfilling' this role for this covenant. At most one engaged active row per (character_sheet, covenant.covenant_type) — service-enforced + clean()-enforced. Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull eligibility. See spec 2026-05-09 §3.6. */
       readonly engaged: boolean;

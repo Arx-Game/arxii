@@ -24386,6 +24386,11 @@ components:
         Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
         block showing the requesting user's own active membership capabilities in
         the same covenant (or all-False if the viewer has no active membership).
+
+        ``covenant_role`` is the RESOLVED effective role (the resonance sub-role when
+        the character's COVENANT_ROLE thread has crossed the sub-role's unlock threshold;
+        the stored parent role otherwise). ``anchor_role`` is always the stored parent
+        (anchor) role, providing context for what sub-roles are possible.
       properties:
         id:
           type: integer
@@ -24398,6 +24403,10 @@ components:
           type: integer
           readOnly: true
         covenant_role:
+          allOf:
+          - $ref: '#/components/schemas/CovenantRole'
+          readOnly: true
+        anchor_role:
           allOf:
           - $ref: '#/components/schemas/CovenantRole'
           readOnly: true
@@ -24437,6 +24446,7 @@ components:
           - $ref: '#/components/schemas/ViewerCapabilities'
           readOnly: true
       required:
+      - anchor_role
       - can_engage
       - character_sheet
       - covenant

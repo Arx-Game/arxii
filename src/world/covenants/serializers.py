@@ -13,6 +13,7 @@ from world.covenants.models import (
     CovenantRole,
     GearArchetypeCompatibility,
 )
+from world.covenants.services import resolve_effective_role
 
 
 class CovenantRoleSerializer(serializers.ModelSerializer):
@@ -112,9 +113,15 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
     Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
     block showing the requesting user's own active membership capabilities in
     the same covenant (or all-False if the viewer has no active membership).
+
+    ``covenant_role`` is the RESOLVED effective role (the resonance sub-role when
+    the character's COVENANT_ROLE thread has crossed the sub-role's unlock threshold;
+    the stored parent role otherwise). ``anchor_role`` is always the stored parent
+    (anchor) role, providing context for what sub-roles are possible.
     """
 
-    covenant_role = CovenantRoleSerializer(read_only=True)
+    covenant_role = serializers.SerializerMethodField()
+    anchor_role = CovenantRoleSerializer(source="covenant_role", read_only=True)
     rank = CovenantRankNestedSerializer(read_only=True)
     is_active = serializers.SerializerMethodField()
     can_engage = serializers.SerializerMethodField()
@@ -128,6 +135,7 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "character_sheet",
             "covenant",
             "covenant_role",
+            "anchor_role",
             "rank",
             "engaged",
             "joined_at",
@@ -138,6 +146,20 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "viewer_capabilities",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(CovenantRoleSerializer)
+    def get_covenant_role(self, obj: CharacterCovenantRole) -> dict:
+        """Return the RESOLVED effective role serialized as CovenantRoleSerializer.
+
+        Falls back to the stored parent role when the membership's character
+        typeclass is unavailable (e.g. unpuppeted / no ObjectDB row yet).
+        """
+        character = obj.character_sheet.character
+        if character is None:
+            effective_role = obj.covenant_role
+        else:
+            effective_role = resolve_effective_role(character=character, role=obj.covenant_role)
+        return CovenantRoleSerializer(effective_role).data
 
     def get_is_active(self, obj: CharacterCovenantRole) -> bool:
         return obj.left_at is None
