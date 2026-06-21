@@ -157,6 +157,32 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # identity in parens so it is never ambiguous which character the mask belongs to.
         assert data["identity"]["name"] == f"stag mask ({sheet.primary_persona.name})"
 
+    def test_cover_persona_with_its_own_profile_shows_the_cover_bio(self) -> None:
+        # #1270 slice 2 — a cover face that has authored its own profile reads as a real person:
+        # its fabricated bio shows, NOT the real one, NOT blank. Lineage stays withheld.
+        from world.character_sheets.factories import ProfileFactory
+
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)  # presents "stag mask"
+        cover = sheet.active_persona
+        cover.profile = ProfileFactory(concept="A kindly merchant", background="Sells fine silks.")
+        cover.save()
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["concept"] == "A kindly merchant"  # the cover's own bio
+        assert data["story"]["background"] == "Sells fine silks."
+        assert data["identity"]["family"] is None  # the real lineage stays hidden
+
+    def test_anonymous_face_without_a_cover_profile_still_redacts_bio(self) -> None:
+        # No authored cover profile → the real bio is never shown to a non-owner (no de-anon).
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)  # mask, no own profile
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["concept"] == ""
+        assert data["story"]["background"] == ""
+
     def _distinction_names(self, data) -> set[str]:
         return {d["name"] for d in data["distinctions"]}
 
