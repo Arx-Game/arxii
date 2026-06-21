@@ -40,6 +40,14 @@ export interface RitualField {
   depends_on?: string;
   /** Hint for server-side filtering when fetching options (e.g. "initiator_active_memberships"). */
   filter?: string;
+  /**
+   * When set, this field's value is emitted as a typed RitualSessionReference
+   * on accept (instead of staying in participant_kwargs). Value is a
+   * ReferenceKind, e.g. "COVENANT_ROLE".
+   */
+  emits_reference?: string;
+  /** Audience gate — e.g. "candidate_only" renders only to non-initiator participants. */
+  applies_to?: string;
 }
 
 export interface FieldProps {

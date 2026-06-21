@@ -29,6 +29,7 @@ import {
 } from '@/rituals/queries';
 import { RitualSessionResponseDialog } from '../components/RitualSessionResponseDialog';
 import type { RitualSessionDetail } from '../api';
+import type { RitualInputSchema } from '../types';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -291,6 +292,12 @@ function RitualSessionDetailInner({ sessionId }: DetailInnerProps) {
             <RitualSessionResponseDialog
               session={session}
               participantId={characterSheetId}
+              participantFieldsSchema={
+                session.participant_fields &&
+                (session.participant_fields as unknown as RitualInputSchema['fields']).length > 0
+                  ? { fields: session.participant_fields as unknown as RitualInputSchema['fields'] }
+                  : null
+              }
               open={respondOpen}
               onOpenChange={setRespondOpen}
               onSuccess={() => {

@@ -22669,6 +22669,7 @@ export interface components {
       readonly created_at: string;
       readonly participants: components['schemas']['RitualSessionParticipantSummary'][];
       readonly session_references: string;
+      readonly participant_fields: string;
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).
