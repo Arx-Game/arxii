@@ -14,11 +14,10 @@ world/combat/tests/test_combat_magic_integration.py but builds the encounter
 in DECLARING status (dispatch_player_action requires is_declaration_open=True)
 and wires a CharacterTechnique row so the command can resolve the technique by name.
 
-DISTINCT-ON / AreaClosure SQLite limitations:
-  The dispatch path calls get_player_actions() → _combat_actions(), which may
-  trigger apply_condition / AreaClosure PG-only SQL.  The test is tagged
-  @tag("postgres") so it runs on CI's PG shard and is skipped by the SQLite
-  fast tier.
+SQLite tier: runs cleanly.  The dispatch path through get_player_actions()
+→ _combat_actions() does not trigger DISTINCT ON or the AreaClosure materialized
+view in this scenario (no apply_condition calls on the DECLARING-phase hot path),
+so no @tag("postgres") is required.
 """
 
 from __future__ import annotations
@@ -152,7 +151,7 @@ class CombatCastTelnetE2ETests(TestCase):
             effect_type=EffectTypeFactory(name="Attack E2E", base_power=20),
             intensity=5,
             control=10,
-            anima_cost=3,
+            anima_cost=10,
             action_category=ActionCategory.PHYSICAL,
             action_template=self.action_template,
         )
@@ -195,12 +194,14 @@ class CombatCastTelnetE2ETests(TestCase):
             mock_perform.return_value = MagicMock(success_level=2)
             resolve_round(self.encounter)
 
-        # Step 4a: anima was spent (current ≤ before, floor is 0).
+        # Step 4a: anima was spent (current < before).
+        # effective cost = max(anima_cost - (control - intensity), 0)
+        #                = max(10 - (10 - 5), 0) = 5 > 0, so deduction is guaranteed.
         self.anima.refresh_from_db()
-        self.assertLessEqual(
+        self.assertLess(
             self.anima.current,
             anima_before,
-            "anima should have been deducted (or stayed the same if control offset cost to 0)",
+            "anima must be deducted: effective cost=5 (anima_cost=10, control=10, intensity=5)",
         )
 
         # Step 4b: the mook took damage.
