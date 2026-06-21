@@ -977,6 +977,10 @@ These two axes are orthogonal — never re-merge them.
   - `CharacterCovenantRole` — per-character membership row; `left_at IS NULL` =
     currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
     boolean, `rank` FK → `CovenantRank`.
+  - `CovenantRole` sub-role fields — `parent_role` (self-FK), `resonance` (FK →
+    `magic.Resonance`), `unlock_thread_level` (PositiveInt, 0 for primary / >0 for sub-roles),
+    `discovery_achievement` (FK → `achievements.Achievement`, nullable, sub-roles only),
+    `codex_entry` (FK → `codex.CodexEntry`, nullable, sub-roles only).
   - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
     compatible with which `GearArchetype` values (read-only authored content)
   - `CovenantRoleBonus` — authored config: one row per
@@ -997,9 +1001,18 @@ These two axes are orthogonal — never re-merge them.
     trail. Custom manager: `.active()` → `dissolved_at__isnull=True`.
 - **Handlers:**
   - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
-    `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns a list),
-    `invalidate()`
+    `currently_held_role_in(covenant)`, `currently_engaged_roles()` (returns resolved
+    sub-roles via `resolve_effective_role`), `anchor_role_in(covenant)` (stored parent
+    role, ignoring sub-role resolution), `invalidate()`
 - **Key Services:**
+  - `resolve_effective_role(*, character, role) -> CovenantRole` (`world.covenants.services`) —
+    derive-on-read sub-role resolution; called by `currently_engaged_roles()` per row.
+  - `fire_subrole_discoveries(*, thread, starting_level, new_level)` (`world.covenants.discovery`)
+    — discovery beat hooked into `spend_resonance_for_imbuing`; grants achievement, unlocks
+    codex entry, sends narrative message on threshold crossing.
+  - `active_player_character_sheets() -> list[CharacterSheet]` (`world.roster.selectors`) —
+    returns all active player character sheets (current RosterTenure with `end_date=None`);
+    used by `fire_subrole_discoveries` for gamewide first-ever recipient selection.
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
   - `kick_member(*, target, actor) -> None` — raises
@@ -1079,13 +1092,17 @@ These two axes are orthogonal — never re-merge them.
   `character-roles` endpoint). The induction `RitualSessionDraftDialog` sets the
   COVENANT reference so `assert_initiator_can_induct` can validate rank at draft time.
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
-  `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate),
+  `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate;
+  `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue),
   mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`),
   items (`gear_archetype` on `ItemTemplate`),
   combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`),
   vitals (`covenant_role_health` in `world.vitals.services` reads `CovenantRoleBonus` rows
   targeting the `max_health` ModifierTarget to compute the covenant-role health armor term
-  in `derive_base_max_health`; recompute triggers fire on role engagement/membership change)
+  in `derive_base_max_health`; recompute triggers fire on role engagement/membership change),
+  achievements (`discovery_achievement` FK; `grant_achievement` on threshold crossing),
+  codex (`codex_entry` FK; `CharacterCodexKnowledge(KNOWN)` on crossing),
+  narrative (`send_narrative_message` for discovery announcements)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
