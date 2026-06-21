@@ -9,6 +9,7 @@ from world.scenes.interaction_views import (
 )
 from world.scenes.place_views import PlaceViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
+from world.scenes.social_control_views import BlockViewSet, MuteViewSet
 from world.scenes.views import (
     PersonaViewSet,
     SceneSummaryRevisionViewSet,
@@ -50,6 +51,8 @@ router.register(
     ReactionWindowViewSet,
     basename="reactionwindow",
 )
+router.register(r"blocks", BlockViewSet, basename="block")
+router.register(r"mutes", MuteViewSet, basename="mute")
 
 urlpatterns = [
     path("api/", include(router.urls)),
