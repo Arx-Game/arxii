@@ -47,22 +47,10 @@ if TYPE_CHECKING:
 _PVP_PARTICIPANT_COUNT = 2  # two PC participants = PvP
 
 
-def _room_is_public(room: ObjectDB) -> bool:
-    """Whether a room is publicly listed. Missing profile -> not public."""
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    try:
-        return room.room_profile.is_public
-    except ObjectDoesNotExist:
-        return False
-
-
 def _scene_for_duel(room: ObjectDB) -> Scene:
-    from world.scenes.constants import ScenePrivacyMode  # noqa: PLC0415
     from world.scenes.place_services import ensure_scene_for_location  # noqa: PLC0415
 
-    privacy = ScenePrivacyMode.PUBLIC if _room_is_public(room) else ScenePrivacyMode.PRIVATE
-    return ensure_scene_for_location(room, privacy_mode=privacy)
+    return ensure_scene_for_location(room)
 
 
 def assert_duel_lethality_valid(encounter: CombatEncounter) -> None:

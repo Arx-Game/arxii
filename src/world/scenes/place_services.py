@@ -24,12 +24,13 @@ def ensure_scene_for_location(
 
     If an active scene already exists for the room, returns it (its existing
     privacy is preserved; ``privacy_mode`` is ignored). Otherwise creates a new
-    scene with ``privacy_mode`` (defaulting to PUBLIC when not supplied).
+    scene with ``privacy_mode`` (derived from the room when not supplied).
 
     Args:
         room: The room to ensure a scene for.
         name: Optional name for a new scene. Defaults to room name.
-        privacy_mode: Privacy for a newly-created scene. Defaults to PUBLIC.
+        privacy_mode: Privacy for a newly-created scene. When omitted, derived
+            from the room — PUBLIC if publicly listed, else PRIVATE.
 
     Returns:
         The active Scene for this room.
@@ -38,11 +39,18 @@ def ensure_scene_for_location(
     if existing is not None:
         return existing
 
+    if privacy_mode is None:
+        from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+
+        privacy_mode = (
+            ScenePrivacyMode.PUBLIC if room_is_publicly_listed(room) else ScenePrivacyMode.PRIVATE
+        )
+
     scene_name = name or f"Scene at {room.key}"
     scene = Scene.objects.create(
         name=scene_name,
         location=room,
-        privacy_mode=privacy_mode or ScenePrivacyMode.PUBLIC,
+        privacy_mode=privacy_mode,
     )
 
     # Auto-engage Durance covenant for room occupants when a new scene starts (Slice B §4.10)
