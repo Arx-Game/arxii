@@ -183,6 +183,31 @@ class SceneListSerializer(serializers.ModelSerializer):
             seen[persona.pk] = persona
         return list(seen.values())
 
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        privacy_mode = attrs.get("privacy_mode") or (
+            self.instance.privacy_mode if self.instance is not None else None
+        )
+        location = attrs.get("location") or (
+            self.instance.location if self.instance is not None else None
+        )
+        if (
+            location is not None
+            and privacy_mode is not None
+            and privacy_mode != ScenePrivacyMode.PUBLIC
+        ):
+            from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+
+            if room_is_publicly_listed(location):
+                raise serializers.ValidationError(
+                    {
+                        "privacy_mode": (
+                            "A non-public scene cannot be created in a publicly-listed room."
+                        )
+                    }
+                )
+        return attrs
+
     def get_is_owner(self, obj):
         request = self.context.get("request")
         if request and request.user.is_authenticated:
