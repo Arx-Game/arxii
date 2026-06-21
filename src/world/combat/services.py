@@ -83,6 +83,7 @@ from world.combat.models import (
     CombatOpponentAction,
     CombatParticipant,
     CombatRoundAction,
+    CombatRoundActionTarget,
     ComboDefinition,
     ComboLearning,
     ComboSlot,
@@ -292,24 +293,69 @@ class CombatTechniqueResolver:
                     pull_bonus += eff.scaled_value
         return pull_bonus
 
+    def _resolved_opponent_targets(self) -> list[CombatOpponent]:
+        """Return the ordered list of CombatOpponents to act on for this action.
+
+        - AREA / FILTERED_GROUP: returns all opponents stored in the
+          ``CombatRoundActionTarget`` join table (written at declaration time).
+          Falls back to the single ``focused_opponent_target`` when no join rows
+          exist (e.g. direct callers that bypass dispatch).
+        - SINGLE / SELF (default): returns a one-element list containing only
+          ``focused_opponent_target``, preserving pre-AoE behavior exactly.
+
+        DEFEATED opponents are NOT filtered here — callers skip them individually
+        so that per-target status checks are fresh after each preceding target's
+        damage write.
+        """
+        from actions.constants import ActionTargetType  # noqa: PLC0415
+
+        technique = self.action.focused_action
+        if technique is None:
+            primary = self.action.focused_opponent_target
+            return [primary] if primary is not None else []
+
+        target_type = technique.target_type
+        if target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+            join_opponents = list(
+                CombatRoundActionTarget.objects.filter(
+                    action=self.action,
+                    opponent__isnull=False,
+                )
+                .select_related("opponent")
+                .order_by("pk")
+            )
+            if join_opponents:
+                return [row.opponent for row in join_opponents]
+            # Fallback: a direct caller that didn't write join rows
+            primary = self.action.focused_opponent_target
+            return [primary] if primary is not None else []
+
+        # SINGLE / SELF: single target only
+        primary = self.action.focused_opponent_target
+        return [primary] if primary is not None else []
+
     def _apply_damage(
         self, check_result: CheckResult, *, eff_intensity: int
     ) -> list[OpponentDamageResult]:
-        """Iterate technique.damage_profiles. For each profile:
-        - skip if SL < minimum_success_level
-        - compute formula budget via compute_damage_budget
-        - apply SL multiplier from DamageSuccessLevelMultiplier lookup
-        - call apply_damage_to_opponent (which subtracts soak + resistance)
-        Returns one OpponentDamageResult per applied component.
-        Breaks on defeated target between components.
+        """Iterate technique.damage_profiles against all resolved opponent targets.
+
+        For AREA / FILTERED_GROUP techniques every opponent in the join table is
+        attacked separately with the same profile contest (per-target soak /
+        resistance applies independently).  SINGLE / SELF techniques are unchanged
+        — only ``focused_opponent_target`` is used.
+
+        Per opponent:
+        - skip if DEFEATED (checked fresh after each preceding write)
+        - for each damage profile: compute budget, apply SL multiplier, call
+          apply_damage_to_opponent (subtracts soak + resistance)
+
+        Returns one OpponentDamageResult per successfully applied profile×target
+        combination.
         """
         from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
 
-        target = self.action.focused_opponent_target
-        if target is None:
-            return []
-        target.refresh_from_db()
-        if target.status == OpponentStatus.DEFEATED:
+        targets = self._resolved_opponent_targets()
+        if not targets:
             return []
 
         technique = self.action.focused_action
@@ -329,24 +375,30 @@ class CombatTechniqueResolver:
         weapon_landed = False
 
         results: list[OpponentDamageResult] = []
-        for profile in profiles:
-            scaled, profile_damage_type = self._profile_damage(
-                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
-            )
-            if scaled <= 0:
-                continue
+        for target in targets:
             target.refresh_from_db()
             if target.status == OpponentStatus.DEFEATED:
-                break
-            results.append(
-                apply_damage_to_opponent(
-                    target,
-                    scaled,
-                    damage_type=profile_damage_type,
-                    source_sheet=self.participant.character_sheet,
+                continue
+            for profile in profiles:
+                scaled, profile_damage_type = self._profile_damage(
+                    profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
                 )
-            )
-            weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
+                if scaled <= 0:
+                    continue
+                target.refresh_from_db()
+                if target.status == OpponentStatus.DEFEATED:
+                    break
+                results.append(
+                    apply_damage_to_opponent(
+                        target,
+                        scaled,
+                        damage_type=profile_damage_type,
+                        source_sheet=self.participant.character_sheet,
+                    )
+                )
+                weapon_landed = weapon_landed or (
+                    profile.uses_equipped_weapon and weapon is not None
+                )
 
         if weapon_landed:
             _wear_equipped_weapon(attacker)
@@ -386,10 +438,13 @@ class CombatTechniqueResolver:
     ) -> list[AppliedConditionResult]:
         """Apply technique-authored conditions to appropriate targets.
 
-        Thin wrapper: resolves each ConditionTargetKind (SELF/ALLY/ENEMY) to a
-        concrete ObjectDB via ``_resolve_condition_target``, builds the
-        ``targets_by_kind`` mapping, and delegates to the shared
-        ``apply_technique_conditions`` service.
+        Resolves each ConditionTargetKind (SELF/ALLY/ENEMY) to a concrete list
+        of ObjectDBs, builds the ``targets_by_kind`` mapping, and delegates to
+        the shared ``apply_technique_conditions`` service.
+
+        For AREA / FILTERED_GROUP techniques the ENEMY slot is expanded to ALL
+        active (non-DEFEATED) opponents in ``_resolved_opponent_targets()`` rather
+        than just the single ``focused_opponent_target``.
 
         ``eff_intensity`` is the combined effective intensity (injected power + pull bumps)
         computed by ``__call__`` and forwarded here.
@@ -403,10 +458,28 @@ class CombatTechniqueResolver:
         caster_od = self.participant.character_sheet.character
 
         targets_by_kind: dict[str, list] = {}
-        for kind in (ConditionTargetKind.SELF, ConditionTargetKind.ALLY, ConditionTargetKind.ENEMY):
+
+        # SELF and ALLY resolve to a single target (unchanged)
+        for kind in (ConditionTargetKind.SELF, ConditionTargetKind.ALLY):
             target = _resolve_condition_target(kind, self.action, caster_od)
             if target is not None:
                 targets_by_kind[kind] = [target]
+
+        # ENEMY: expand to all resolved opponents for AoE; single for SINGLE/SELF
+        all_opponents = self._resolved_opponent_targets()
+        if all_opponents:
+            enemy_objectdbs = []
+            for opp in all_opponents:
+                opp.refresh_from_db()
+                if opp.status != OpponentStatus.DEFEATED and opp.objectdb is not None:
+                    enemy_objectdbs.append(opp.objectdb)
+            if enemy_objectdbs:
+                targets_by_kind[ConditionTargetKind.ENEMY] = enemy_objectdbs
+        else:
+            # No join-table opponents — fall back to the single focused target
+            target = _resolve_condition_target(ConditionTargetKind.ENEMY, self.action, caster_od)
+            if target is not None:
+                targets_by_kind[ConditionTargetKind.ENEMY] = [target]
 
         return apply_technique_conditions(
             technique=technique,
@@ -1911,6 +1984,7 @@ def apply_damage_to_opponent(
             probing_increment=0,
             defeated=defeated,
             kills=kills,
+            opponent_id=opponent.pk,
         )
 
     effective_soak = 0 if bypass_soak else opponent.soak_value
@@ -1950,6 +2024,7 @@ def apply_damage_to_opponent(
         probing_increment=probing_increment,
         defeated=defeated,
         kills=0,
+        opponent_id=opponent.pk,
     )
 
 
