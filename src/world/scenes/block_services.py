@@ -14,6 +14,7 @@ job remain follow-up slices.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q, QuerySet
@@ -206,6 +207,71 @@ def _persona_player(persona: Persona) -> PlayerData | None:
         return None
     current = roster_entry.current_tenure
     return current.player_data if current is not None else None
+
+
+def create_block(
+    *,
+    blocker_account: Any,
+    blocker_persona: Persona,
+    blocked_persona: Persona,
+    reason: str,
+) -> Block:
+    """Block ``blocked_persona`` for the requesting account, persona→persona (#1278).
+
+    ``reason`` is required (it's forwarded to staff). Idempotent per
+    (owner, blocked_player, blocker_persona, blocked_persona) — re-blocking the same pair returns
+    the existing row. Raises ValidationError if the target persona has no current player.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    blocker_player, _ = PlayerData.objects.get_or_create(account=blocker_account)
+    blocked_player = _persona_player(blocked_persona)
+    if blocked_player is None:
+        msg = "That character has no current player to block."
+        raise ValidationError(msg)
+    if blocked_player.pk == blocker_player.pk:
+        msg = "You cannot block your own character."
+        raise ValidationError(msg)
+
+    block, _ = Block.objects.get_or_create(
+        owner=blocker_player,
+        blocked_player=blocked_player,
+        blocker_persona=blocker_persona,
+        blocked_persona=blocked_persona,
+        defaults={"reason": reason, "account_level": False, "pending_removal_at": None},
+    )
+    # Re-blocking a pair mid-grace cancels the pending removal (it's active again).
+    if block.pending_removal_at is not None:
+        block.pending_removal_at = None
+        block.save(update_fields=["pending_removal_at"])
+    return block
+
+
+# How long a lifted block stays active before the cron clears it — matches the hourly
+# scenes.block_finalize task, so an unblock takes effect within one cron cycle (#1278).
+_UNBLOCK_GRACE = timedelta(hours=1)
+
+
+def request_unblock(block: Block) -> Block:
+    """Begin unblocking — the block stays active until the next cron clears it (#1278).
+
+    Deliberately delayed (lift → snipe → re-block guard); ``scenes.block_finalize`` removes it.
+    """
+    return lift_block(block, finalize_at=timezone.now() + _UNBLOCK_GRACE)
+
+
+def share_block_account_wide(block: Block) -> Block:
+    """Escalate a block so ALL the blocker's characters block the target (#1278).
+
+    The conscious opt-in: the target may now infer those characters share a player. Persona-scoped
+    on the target side is preserved (only the exact blocked face), per the anti-derivation rule.
+    """
+    if not block.account_level:
+        block.account_level = True
+        block.save(update_fields=["account_level"])
+    return block
 
 
 def flag_blocked_contact_attempt(
