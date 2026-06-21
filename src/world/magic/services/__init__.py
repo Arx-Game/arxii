@@ -26,7 +26,12 @@ from world.magic.services.alterations import (
     staff_clear_alteration,
     validate_alteration_resolution,
 )
-from world.magic.services.anima import deduct_anima, provision_player_anima_ritual
+from world.magic.services.anima import (
+    deduct_anima,
+    get_character_anima_ritual,
+    get_character_cast_check,
+    provision_player_anima_ritual,
+)
 from world.magic.services.aura import (
     calculate_affinity_breakdown,
     get_aura_percentages,
@@ -94,6 +99,8 @@ __all__ = [
     # anima
     "deduct_anima",
     "get_aura_percentages",
+    "get_character_anima_ritual",
+    "get_character_cast_check",
     "get_library_entries",
     "get_runtime_technique_stats",
     "get_soulfray_warning",

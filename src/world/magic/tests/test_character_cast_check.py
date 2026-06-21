@@ -200,3 +200,131 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
             config.check_type.name,
             character_magic_check_type_name(sheet),
         )
+
+
+class GetCharacterCastCheckTests(TestCase):
+    """Tests for get_character_cast_check resolver."""
+
+    @classmethod
+    def setUpTestData(cls):
+        for stat_name in _PROVISION_STATS:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={"trait_type": TraitType.STAT, "description": stat_name},
+            )
+        Roster.objects.get_or_create(name="Available Characters")
+
+        realm = Realm.objects.create(name="CastCheck Realm", description="Test")
+        area = StartingArea.objects.create(
+            name="CastCheck Area",
+            description="Test",
+            realm=realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        species = Species.objects.create(name="CastCheck Species", description="Test")
+        gender, _ = Gender.objects.get_or_create(
+            key="castcheck_gender",
+            defaults={"display_name": "CastCheck Gender"},
+        )
+        tarot = TarotCard.objects.create(
+            name="CastCheck Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=98,
+            latin_name="Fatui2",
+        )
+        beginnings = Beginnings.objects.create(
+            name="CastCheck Beginnings",
+            description="Test",
+            starting_area=area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        beginnings.allowed_species.add(species)
+        height_band = HeightBand.objects.create(
+            name="cc_band",
+            display_name="CastCheck Band",
+            min_inches=5000,
+            max_inches=5100,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        build = Build.objects.create(
+            name="cc_build",
+            display_name="CastCheck Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+        path = PathFactory(name="CastCheck Path", stage=PathStage.PROSPECT, minimum_level=1)
+        TechniqueStyleFactory()
+        EffectTypeFactory()
+        ResonanceFactory()
+        tradition = TraditionFactory()
+        cls.skill = SkillFactory(trait__name="CCProvisionMelee")
+        cantrip = CantripFactory(requires_facet=False)
+
+        cls.area = area
+        cls.beginnings = beginnings
+        cls.species = species
+        cls.gender = gender
+        cls.tarot = tarot
+        cls.height_band = height_band
+        cls.build = build
+        cls.path = path
+        cls.tradition = tradition
+        cls.cantrip = cantrip
+
+    def setUp(self):
+        CharacterSheet.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+    def test_returns_none_without_ritual(self):
+        from world.magic.services.anima import get_character_cast_check
+
+        sheet = CharacterSheetFactory()
+        self.assertIsNone(get_character_cast_check(sheet.character))
+
+    def test_returns_per_character_check_after_provision(self):
+        from world.character_creation.models import CharacterDraft
+        from world.magic.services.anima import get_character_cast_check
+
+        account = AccountDB.objects.create(username=f"castcheck_run_{id(self)}")
+        draft = CharacterDraft.objects.create(
+            account=account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            age=25,
+            height_band=self.height_band,
+            height_inches=5050,
+            build=self.build,
+            draft_data={
+                "first_name": "CastCheck",
+                "description": "A test character",
+                "stats": _PROVISION_STATS,
+                "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot.name,
+                "tarot_reversed": False,
+                "traits_complete": True,
+                "selected_cantrip_id": self.cantrip.id,
+                "skills": {str(self.skill.pk): 20},
+            },
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        # Puppet the character to the account so db_account is set,
+        # mirroring the runtime path where get_character_anima_ritual queries
+        # author_account=character.db_account.
+        character.db_account = account
+        character.save(update_fields=["db_account"])
+
+        ct = get_character_cast_check(sheet.character)
+        self.assertIsNotNone(ct)
+        self.assertEqual(ct.name, character_magic_check_type_name(sheet))
