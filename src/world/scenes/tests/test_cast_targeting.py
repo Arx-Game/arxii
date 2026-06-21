@@ -5,18 +5,24 @@ Covers:
 (b) Benign non-consent capability buff at another PC → RESOLVED immediately, condition applied.
 (c) Benign behavior-altering cast at another PC → PENDING (consent required).
 (d) Self-only technique cast at another PC → InvalidCastTarget raised.
+(e) FILTERED_GROUP benign capability buff with picked subset → both targets get condition,
+    third ally NOT in list does not (#1321).
+(f) FILTERED_GROUP hostile cast with supplied_personas → InvalidCastTarget (deferred).
+(g) FILTERED_GROUP behavior-altering cast with supplied_personas → InvalidCastTarget (deferred).
 """
 
 from __future__ import annotations
 
 from django.test import tag
 
+from actions.constants import ActionTargetType
 from actions.factories import ActionTemplateFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.conditions.services import get_active_conditions
 from world.magic.factories import (
     BinaryEffectTypeFactory,
+    CharacterAnimaFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
@@ -24,11 +30,14 @@ from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.targeting import InvalidCastTarget
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.cast_services import request_technique_cast
+from world.scenes.factories import InteractionFactory, PersonaFactory
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
+    attach_behavior_altering_condition,
     grant_technique,
 )
 from world.traits.models import CheckOutcome
+from world.vitals.models import CharacterVitals
 
 
 @tag("postgres")
@@ -193,4 +202,125 @@ class TestSelfOnlyTechniqueCastAtOtherRaises(CastScenarioMixin):
                 initiator_persona=self.caster,
                 target_persona=self.target,
                 technique=technique,
+            )
+
+
+# ---------------------------------------------------------------------------
+# FILTERED_GROUP standalone cast — #1321
+# ---------------------------------------------------------------------------
+
+
+@tag("postgres")
+class TestFilteredGroupBenignCast(CastScenarioMixin):
+    """FILTERED_GROUP benign capability buff applies to exactly the picked subset (#1321)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # A third ally in the scene who is NOT in the supplied list.
+        cls.third_ally = PersonaFactory()
+        CharacterVitals.objects.create(
+            character_sheet=cls.third_ally.character_sheet,
+            health=50,
+            max_health=50,
+            base_max_health=50,
+        )
+        CharacterAnimaFactory(
+            character=cls.third_ally.character_sheet.character,
+            current=20,
+            maximum=30,
+        )
+        # Add all three non-caster personas to the scene via Interaction rows so
+        # _collect_scene_personas finds them.
+        InteractionFactory(persona=cls.target, scene=cls.scene)
+        InteractionFactory(persona=cls.third_ally, scene=cls.scene)
+
+    def _make_filtered_group_ally_technique(self):
+        """FILTERED_GROUP, ALLY condition, non-hostile, no behavior-altering."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+            target_type=ActionTargetType.FILTERED_GROUP,
+        )
+        condition_tmpl = ConditionTemplateFactory()
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=condition_tmpl,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=0,
+        )
+        return technique, condition_tmpl
+
+    def test_filtered_group_applies_to_picked_subset_only(self) -> None:
+        """Picked subset [target, caster] → target + caster get condition; third_ally does not."""
+        technique, condition_tmpl = self._make_filtered_group_ally_technique()
+        grant_technique(self.caster, technique)
+
+        # All characters in the scene so _collect_scene_personas finds them.
+        for persona in (self.caster, self.target, self.third_ally):
+            char = persona.character_sheet.character
+            char.location = self.scene.location
+            char.save()
+
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success):
+            cast = request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+                supplied_personas=[self.target, self.caster],
+            )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+
+        target_char = self.target.character_sheet.character
+        third_char = self.third_ally.character_sheet.character
+        self.assertTrue(
+            get_active_conditions(target_char, condition=condition_tmpl).exists(),
+            "target (in supplied list) must receive the ALLY condition.",
+        )
+        self.assertFalse(
+            get_active_conditions(third_char, condition=condition_tmpl).exists(),
+            "third_ally (NOT in supplied list) must NOT receive the condition.",
+        )
+
+
+class TestFilteredGroupDeferredCases(CastScenarioMixin):
+    """FILTERED_GROUP hostile and behavior-altering paths raise InvalidCastTarget (#1321)."""
+
+    def test_hostile_filtered_group_with_supplied_personas_raises(self) -> None:
+        """Hostile FILTERED_GROUP cast with supplied_personas → InvalidCastTarget (deferred)."""
+        # Hostile technique: default TechniqueFactory has base_power > 0 → damage profile.
+        technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(),
+            target_type=ActionTargetType.FILTERED_GROUP,
+        )
+        grant_technique(self.caster, technique)
+
+        with self.assertRaises(InvalidCastTarget):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+                supplied_personas=[self.target],
+            )
+
+    def test_behavior_altering_filtered_group_with_supplied_personas_raises(self) -> None:
+        """Behavior-altering FILTERED_GROUP + supplied_personas → InvalidCastTarget (deferred)."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+            target_type=ActionTargetType.FILTERED_GROUP,
+        )
+        attach_behavior_altering_condition(technique)
+        grant_technique(self.caster, technique)
+
+        with self.assertRaises(InvalidCastTarget):
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                technique=technique,
+                supplied_personas=[self.target],
             )

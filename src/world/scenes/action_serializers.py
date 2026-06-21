@@ -209,6 +209,15 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     initiator_persona = serializers.IntegerField()
     technique_id = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False, allow_null=True)
+    # FILTERED_GROUP casts supply an explicit subset of target persona IDs.
+    # The intersection with the technique's eligible scene-set is computed server-side
+    # by resolve_targets. Omit for SELF / SINGLE / AREA techniques.
+    target_persona_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True,
+        allow_empty=False,
+    )
     strain_commitment = serializers.IntegerField(min_value=0, required=False, default=0)
     fury_commitment_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)

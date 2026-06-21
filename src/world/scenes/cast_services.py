@@ -36,6 +36,7 @@ from world.magic.narration import render_cast_outcome_narration
 from world.magic.services.condition_application import apply_technique_conditions
 from world.magic.services.hostility import is_technique_hostile
 from world.magic.services.targeting import (
+    InvalidCastTarget,
     cast_requires_consent,
     derive_target_relationship,
     resolve_targets,
@@ -216,6 +217,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     fizzle_note: str | None = None,
+    supplied_personas: list[Persona] | None = None,
 ) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
@@ -225,6 +227,10 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     Args:
         fizzle_note: Optional note forwarded to ``create_cast_outcome_pose`` when a
             declared pull could not be charged and fizzled instead.
+        supplied_personas: For FILTERED_GROUP techniques, the player-picked subset of
+            targets already resolved from ``target_persona_ids``. Passed directly to
+            ``resolve_targets`` as ``supplied_personas``. If ``None``, falls back to
+            ``[target_persona]`` (the pre-existing single-target path).
     """
     character = caster_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
@@ -258,11 +264,18 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         # silently drop the condition.
         targets_by_kind: dict[str, list] = {relationship: [character]}
     else:
+        # Use the caller-supplied list when provided (FILTERED_GROUP picks a subset);
+        # fall back to the single-target form for SELF/SINGLE/AREA paths.
+        _supplied = (
+            supplied_personas
+            if supplied_personas is not None
+            else ([target_persona] if target_persona is not None else [])
+        )
         resolved_personas = resolve_targets(
             technique=technique,
             initiator_persona=caster_persona,
             scene=scene,
-            supplied_personas=[target_persona] if target_persona is not None else [],
+            supplied_personas=_supplied,
         )
         targets_by_kind = {relationship: [p.character_sheet.character for p in resolved_personas]}
     apply_technique_conditions(
@@ -428,6 +441,7 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    supplied_personas: list[Persona] | None = None,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -443,6 +457,11 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
             immediate path; persisted as a ``SceneCastPullDeclaration`` on the
             benign consent path; rejected on hostile casts (combat pulls go
             through ``CombatPull``).
+        supplied_personas: For FILTERED_GROUP techniques, the player-picked subset of
+            targets. When provided alongside a FILTERED_GROUP technique, they are
+            forwarded to ``resolve_targets`` for intersection with the eligible set.
+            Only the immediate (benign, consent-free) path is supported; hostile or
+            behavior-altering FILTERED_GROUP raises ``InvalidCastTarget``.
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
@@ -451,7 +470,11 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         ValidationError: If the caster does not know the technique, the
             technique has no action template (not castable standalone), or a
             pull is declared on a hostile cast.
+        InvalidCastTarget: If ``supplied_personas`` is provided for a FILTERED_GROUP
+            technique that requires consent or is hostile (deferred paths).
     """
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+
     knows_technique = CharacterTechnique.objects.filter(
         character_id=initiator_persona.character_sheet_id,
         technique=technique,
@@ -469,6 +492,38 @@ def request_technique_cast(  # noqa: PLR0913 - cohesive cast-routing params
         initiator_persona=initiator_persona,
         target_personas=[target_persona] if target_persona is not None else [],
     )
+
+    # FILTERED_GROUP with a player-supplied list: guard the deferred cases, then
+    # resolve immediately for the benign capability / stat-buff path.
+    if supplied_personas is not None and technique.target_type == ActionTargetType.FILTERED_GROUP:
+        if is_technique_hostile(technique):
+            # TODO(#1321 follow-up): multi-target hostile FILTERED_GROUP needs
+            # per-target combat seeds; not yet supported.
+            msg = (
+                "Multi-target hostile FILTERED_GROUP casts are not yet supported standalone; "
+                "use combat targeting instead."
+            )
+            raise InvalidCastTarget(msg)
+        if cast_requires_consent(technique):
+            # TODO(#1321 follow-up): behavior-altering FILTERED_GROUP requires a
+            # per-target consent state machine; not yet supported.
+            msg = (
+                "Multi-target behavior-altering FILTERED_GROUP casts are not yet supported; "
+                "obtain individual consent before casting."
+            )
+            raise InvalidCastTarget(msg)
+        # Benign, consent-free FILTERED_GROUP → resolve immediately with the full list.
+        return _route_immediate_cast(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=None,  # no single primary target; resolve_targets uses supplied_personas
+            technique=technique,
+            strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
+            cast_pull=cast_pull,
+            supplied_personas=supplied_personas,
+        )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
     # narrow ``target_persona`` to non-None inside the block.
@@ -644,6 +699,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    supplied_personas: list[Persona] | None = None,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
     with transaction.atomic():
@@ -667,6 +723,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
+            supplied_personas=supplied_personas,
         )
 
     return CastResult(
