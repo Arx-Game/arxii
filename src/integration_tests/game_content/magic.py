@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ActionEnhancement
+    from actions.models.action_templates import ActionTemplate
     from actions.models.consequence_pools import ConsequencePool
     from integration_tests.game_content.combat import FleeSeedResult, PenetrationContestResult
     from world.classes.models import Path
@@ -2203,6 +2204,8 @@ class MagicDevSeedResult:
     check-scoped ModifierTarget seeded by seed_penetration_contest() (#767).
     ``flee`` holds the flee CheckType, ModifierTarget, and FleeConfig singleton
     seeded by seed_flee_check() (#878).
+    ``technique_cast_template`` is the shared Technique Cast ActionTemplate seeded
+    by ensure_technique_cast_content() (#1306).
     """
 
     config: MagicConfigResult
@@ -2214,6 +2217,7 @@ class MagicDevSeedResult:
     penetration: PenetrationContestResult
     flee: FleeSeedResult
     magic_checks: MagicCheckContentResult
+    technique_cast_template: ActionTemplate
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2318,6 +2322,9 @@ def seed_magic_dev() -> MagicDevSeedResult:
     penetration = seed_penetration_contest()
     flee = seed_flee_check()
     magic_checks = MagicContent.seed_magic_checks()
+    from world.magic.seeds_cast import ensure_technique_cast_content  # noqa: PLC0415
+
+    technique_cast_template = ensure_technique_cast_content()
 
     return MagicDevSeedResult(
         config=config,
@@ -2329,4 +2336,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         penetration=penetration,
         flee=flee,
         magic_checks=magic_checks,
+        technique_cast_template=technique_cast_template,
     )
