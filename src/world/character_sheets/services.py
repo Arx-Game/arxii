@@ -9,7 +9,7 @@ from django.db import transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.create import create_object
 
-from world.character_sheets.models import _PROFILE_BIO_FIELDS, CharacterSheet, Profile
+from world.character_sheets.models import _PROFILE_FIELDS, CharacterSheet, Profile
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -74,9 +74,9 @@ def create_character_with_sheet(
         # creation (e.g., character_creation sets it from the starting room).
         create_kwargs["nohome"] = True
     character = create_object(**create_kwargs)
-    # #1270 — narrative bio now lives on Profile. Route any bio kwargs (concept, quote, …)
-    # to the sheet's true_profile, which the PRIMARY persona presents.
-    profile_kwargs = {k: sheet_kwargs.pop(k) for k in _PROFILE_BIO_FIELDS if k in sheet_kwargs}
+    # #1270 — narrative bio + lineage now live on Profile. Route those kwargs (concept,
+    # quote, family, heritage, …) to the sheet's true_profile, which the PRIMARY persona presents.
+    profile_kwargs = {k: sheet_kwargs.pop(k) for k in _PROFILE_FIELDS if k in sheet_kwargs}
     profile = Profile.objects.create(**profile_kwargs)
     sheet = CharacterSheet.objects.create(character=character, true_profile=profile, **sheet_kwargs)
     primary_persona = Persona.objects.create(

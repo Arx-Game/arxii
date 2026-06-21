@@ -390,6 +390,49 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   later same-round NPC hits). New `cover` endpoint + web declaration UI
   (Flee/Cover controls in YourTurn). Starter pool is label-only until authored
   condition content lands.
+- ~~**Third-party interposition and ally-defence stance**~~ **DONE (#1273):** two
+  composable reactive mitigation tools shipped together:
+
+  **INTERPOSE maneuver** — a third party readies a capability-gated reactive guard for an
+  ally for the round (`CombatManeuver.INTERPOSE`, mirrors the COVER maneuver shape).
+  Declared via `declare_interpose` / the `interpose` API action; stored as an armed
+  `CombatRoundAction.maneuver=INTERPOSE`. At round resolution:
+
+  1. `_resolve_passive_actions` runs (DEFEND stance installs conditions).
+  2. `_refresh_participant_trigger_handlers(encounter)` — new call; syncs each
+     participant's `TriggerHandler` so passive-installed reactive triggers (e.g. the
+     Shielded condition's `DAMAGE_PRE_APPLY` trigger) fire in the same round. Calls
+     `TriggerHandler.refresh()` (new method on the handler).
+  3. `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints a
+     `ChallengeInstance` for each armed INTERPOSE action, bound to the protected ally.
+  4. During each NPC attack (`apply_damage_to_participant`): `_try_interpose` fires
+     before damage lands, looking for an armed INTERPOSE challenge. If found, it calls
+     `dispatch_interpose` → `dispatch_capability_reaction` (`world/mechanics/reactions.py`,
+     the shared reactive spine) → `resolve_challenge` → `apply_interpose_outcome`:
+     SUCCESS zeroes the payload, PARTIAL halves it, FAILURE is a no-op. The interposer
+     pays `INTERPOSE_BASE_FATIGUE_COST` fatigue only when the challenge fires (not on
+     declaration). Content seeded by `ensure_interpose_content` (`src/world/combat/interpose_content.py`).
+
+  **DEFEND stance** — a passive `Technique` seeded by `ensure_defend_content`
+  (`src/world/combat/defend_content.py`). When a PC declares DEFEND as a passive slot,
+  `_apply_passive_technique` installs a "Shielded" `ConditionInstance` on each ally.
+  Shielded's `reactive_triggers` M2M carries a `TriggerDefinition` on `DAMAGE_PRE_APPLY`
+  with a SELF filter (only fires when the payload's target is the bearer). After
+  `_refresh_participant_trigger_handlers` wires the live triggers, each incoming NPC
+  hit dispatches the DAMAGE_PRE_APPLY event; the Shielded trigger's
+  `MODIFY_PAYLOAD multiply 0.5` step halves the payload before it reaches the vitals
+  write. Deterministic, no roll.
+
+  DEFEND and INTERPOSE compose: both reduce the same hit sequentially (DEFEND's
+  MODIFY_PAYLOAD fires in the flows layer, then `_try_interpose` runs in the damage
+  seam — the interposer sees the already-halved amount).
+
+  **Shared infra fix:** `bulk_apply_conditions` now installs reactive side-effects (it
+  previously skipped `_install_reactive_side_effects`); passive conditions applied in
+  bulk now register their reactive triggers correctly.
+
+  **What remains open (tracked as follow-ups):** INTERPOSE via an ambush / out-of-combat
+  attack; knockback / hazard interposition; frontend declaration UI for INTERPOSE.
 
 **Phase 1 (complete):** Foundation models and core services
 - CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models
@@ -521,7 +564,7 @@ Two deliverables in one branch:
   returns per-action `AvailableEnhancement` lists (anima costs, Soulfray warnings).
   The unified endpoint returns plain `PlayerAction` descriptors without enhancement data.
   `ActionPanel` fetches both and joins client-side. Follow-up: fold enhancement data into
-  `PlayerAction` so the unified endpoint is self-contained. (See magic.md Scope 4 deferred note.)
+  `PlayerAction` so the unified endpoint is self-contained. (See magic-build-history.md Scope 4 deferred note.)
 - **Consequence→challenge spawn not yet wired** — the unified read surfaces spawned
   challenges when that lands; no interface change will be needed.
 - **General (non-combat) turn provider — built (#520).** The `SceneRound` provider in

@@ -47,10 +47,6 @@ class DefenderConsentFields(models.Model):
         default="",
         help_text="Optional active-resistance effort spent by the defender.",
     )
-    engagement_credited = models.BooleanField(
-        default=False,
-        help_text="Whether this consent already accrued good-sport credit.",
-    )
 
     class Meta:
         abstract = True

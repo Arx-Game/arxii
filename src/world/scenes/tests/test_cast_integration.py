@@ -38,6 +38,7 @@ from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
+    attach_behavior_altering_condition,
     grant_technique,
     make_benign_castable_technique,
     make_hostile_castable_technique,
@@ -129,6 +130,7 @@ class TestBenignCastAccept(_BaseCastIntegrationTest):
 
     def _make_pending(self) -> tuple[Technique, CastResult]:
         technique = make_benign_castable_technique()
+        attach_behavior_altering_condition(technique)
         grant_technique(self.caster, technique)
         cast = request_technique_cast(
             scene=self.scene,
@@ -208,6 +210,7 @@ class TestBenignCastDeny(_BaseCastIntegrationTest):
 
     def _make_pending(self) -> CastResult:
         technique = make_benign_castable_technique()
+        attach_behavior_altering_condition(technique)
         grant_technique(self.caster, technique)
         return request_technique_cast(
             scene=self.scene,

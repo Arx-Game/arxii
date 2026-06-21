@@ -22,8 +22,15 @@ class Action:
     """A self-contained action definition.
 
     Actions own their full lifecycle: prerequisites, intent event emission,
-    execution, and result event emission. Commands (telnet) and the web
-    dispatcher both call ``action.run()`` — the action handles everything.
+    execution, and result event emission.
+
+    ``action.run()`` is the entry point for the **REGISTRY** path only.  Plain
+    telnet :class:`~commands.command.ArxCommand` s call it directly; the web
+    frontend and telnet :class:`~commands.command.DispatchCommand` s instead call
+    ``dispatch_player_action()``, which routes by backend: REGISTRY →
+    ``action.run()``, CHALLENGE → ``resolve_challenge()``, COMBAT →
+    ``declare_action()``/``resolve_round()``.  Magic and combat actions never
+    reach ``action.run()`` directly.
 
     Subclasses override ``get_prerequisites()`` and ``execute()`` to define
     what the action checks and does.

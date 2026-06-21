@@ -6,7 +6,7 @@
 
 ### `models.py`
 - **`CharacterSheet`**: Primary character data (age, gender, demographics, appearance). Anchor for character-related FKs. Has `primary_persona` cached property and thin `display_*` delegates that call through to the primary persona.
-- **`Profile`** (#1270): the narrative bio (concept, real_concept, quote, personality, background, obituary), sliced out of CharacterSheet so a cover identity can present its own bio. `CharacterSheet.true_profile` (OneToOne) is the real bio; `Persona.profile` (FK) is what a face presents. `sheet.concept` etc. are forwarding read/write properties → `true_profile` (with a `save()` cascade), so existing access is unchanged. **Set bio via the sheet properties or the profile directly — they're no longer CharacterSheet columns.**
+- **`Profile`** (#1270): the narrative bio (concept, real_concept, quote, personality, background, obituary) **and lineage** (family, heritage, tarot_card, tarot_reversed, origin_realm), sliced out of CharacterSheet so a cover identity can present its own fabricated bio + lineage. `CharacterSheet.true_profile` (OneToOne) is the real one; `Persona.profile` (FK) is what a face presents. `sheet.concept` / `sheet.family` etc. are forwarding read/write properties → `true_profile` (with a `save()` cascade), so existing access — and all **mechanical** lineage reads — stay unchanged (always the real value). **Set bio/lineage via the sheet properties or the profile directly — they're no longer CharacterSheet columns.** Only the display serializer reads a *cover* persona's profile.
 - **`Heritage`**: Origin story types (Sleeper, Misbegotten, Normal) - SharedMemoryModel
 - **`Gender`** / **`Pronouns`**: Canonical lookup tables - SharedMemoryModel
 

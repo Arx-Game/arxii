@@ -2398,6 +2398,7 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
                     "type": "covenant_role_picker",
                     "depends_on": "session.target_covenant.covenant_type",
                     "applies_to": "candidate_only",
+                    "emits_reference": "COVENANT_ROLE",
                     "required": True,
                 },
             ],

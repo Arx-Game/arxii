@@ -38,6 +38,7 @@ from actions.definitions.movement import (
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
+from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -86,6 +87,7 @@ _ALL_ACTIONS: list[Action] = [
     HomeAction(),
     MoveToPositionAction(),
     SetTheStageAction(),
+    PerformRitualAction(),
     StartRoundAction(),
     JoinRoundAction(),
     LeaveRoundAction(),

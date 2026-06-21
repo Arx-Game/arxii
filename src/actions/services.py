@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from actions.models import ConsequencePool
     from actions.models.action_templates import ActionTemplate, ActionTemplateGate
     from actions.models.consequence_pools import ConsequencePoolEntry
+    from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.mechanics.types import AppliedEffect
 
@@ -78,12 +79,14 @@ def _entries_to_weighted(
 # ---------------------------------------------------------------------------
 
 
-def start_action_resolution(
+def start_action_resolution(  # noqa: PLR0913
     character: ObjectDB,
     template: ActionTemplate,
     target_difficulty: int,
     context: ResolutionContext,
     extra_modifiers: int = 0,
+    *,
+    check_type: CheckType | None = None,
 ) -> PendingActionResolution:
     """Start an action resolution pipeline and run it to completion or pause.
 
@@ -133,7 +136,11 @@ def start_action_resolution(
                 return pending
 
     pending.current_phase = ResolutionPhase.MAIN_PENDING
-    main_result = _run_main_step(character, template, target_difficulty, context, extra_modifiers)
+    # Override applies to the immediate main step (SINGLE pipeline); GATED continuation
+    # via advance_resolution keeps template.check_type — no cast uses GATED.
+    main_result = _run_main_step(
+        character, template, target_difficulty, context, extra_modifiers, check_type=check_type
+    )
     pending.main_result = main_result
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
 
@@ -241,16 +248,18 @@ def _run_gate(
     )
 
 
-def _run_main_step(
+def _run_main_step(  # noqa: PLR0913
     character: ObjectDB,
     template: ActionTemplate,
     difficulty: int,
     context: ResolutionContext,
     extra_modifiers: int = 0,
+    *,
+    check_type: CheckType | None = None,
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(
-        character, template.check_type, difficulty, extra_modifiers=extra_modifiers
+        character, check_type or template.check_type, difficulty, extra_modifiers=extra_modifiers
     )
 
     if template.consequence_pool is None:

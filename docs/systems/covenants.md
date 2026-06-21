@@ -159,6 +159,29 @@ axes are orthogonal — never re-merge them.
   participant is mentor vs. sidekick based on band position, and calls
   `establish_mentor_bond`.
 
+## Induction Round-Trip
+
+The covenant induction flow is wired end-to-end through the UI:
+
+1. **Draft** — initiator opens `RitualSessionDraftDialog`; the COVENANT reference is
+   set so `assert_initiator_can_induct` can validate the initiator's rank at draft time.
+2. **Candidate accepts with role** — `RitualSessionResponseDialog` renders the
+   `candidate_only` `CovenantRolePickerField` (from `input_schema.participant_fields`),
+   resolves the COVENANT reference from `session.session_references` to populate the
+   role picker's `covenant_type` filter, and converts the `emits_reference: "COVENANT_ROLE"`
+   field value into a typed `RitualSessionReference` in the accept request's `references`
+   array.
+3. **Initiator fires** — `POST /api/magic/ritual-sessions/{id}/fire/` dispatches the
+   induction service function, which reads the COVENANT_ROLE reference and calls
+   `assign_covenant_role` to create the `CharacterCovenantRole` row.
+
+**Test coverage:** `RitualInductionRoundTripTests`
+(`src/world/magic/tests/test_session_views.py`) covers the full draft → accept-with-role
+→ fire → `CharacterCovenantRole` created backend path. Frontend component tests in
+`frontend/src/rituals/__tests__/RitualSessionPages.test.tsx` cover the role-picker
+rendering, `emits_reference` → `references` conversion on accept, and `candidate_only`
+field hiding for the initiator.
+
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —

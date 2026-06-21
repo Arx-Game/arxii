@@ -295,7 +295,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
-    def cast(self, request: Request) -> Response:  # noqa: C901
+    def cast(self, request: Request) -> Response:  # noqa: C901, PLR0911
         """Submit a standalone technique cast.
 
         Routes per the consent/combat/immediate matrix:
@@ -320,6 +320,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         initiator_persona_id = vd["initiator_persona"]
         technique_id = vd["technique_id"]
         target_persona_id = vd.get("target_persona")
+        target_persona_ids: list[int] | None = vd.get("target_persona_ids") or None
         strain_commitment = vd.get("strain_commitment", 0) or 0
 
         cast_pull = None
@@ -352,6 +353,16 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         if target_persona_id is not None:
             target_persona = get_object_or_404(Persona, pk=target_persona_id)
 
+        # Resolve the FILTERED_GROUP picker list, if provided.
+        supplied_personas: list[Persona] | None = None
+        if target_persona_ids is not None:
+            supplied_personas = list(Persona.objects.filter(pk__in=target_persona_ids))
+            if len(supplied_personas) != len(set(target_persona_ids)):
+                return Response(
+                    {"detail": "One or more target personas not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         technique = get_object_or_404(Technique, pk=technique_id)
 
         try:
@@ -362,6 +373,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 technique=technique,
                 strain_commitment=strain_commitment,
                 cast_pull=cast_pull,
+                supplied_personas=supplied_personas,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]

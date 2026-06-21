@@ -1351,7 +1351,10 @@ def _target_spec_for_action(
        read its ``target_kind`` and ``target_filters`` class fields.
     2. Data-driven social ``ActionTemplate`` (category=="social"): synthesize
        a PERSONA + SINGLE + in_same_scene/exclude_self + consent exclusions.
-    3. Anything else: ``None`` (self-action or shape we don't know yet).
+    3. COMBAT technique action (``ref.technique_id`` set): synthesize from
+       the technique's ``target_type`` and derived relationship. Returns ``None``
+       for SELF-targeting techniques (no frontend picker needed).
+    4. Anything else: ``None`` (self-action or shape we don't know yet).
     """
     if action.ref.registry_key:
         registry_action = get_action(action.ref.registry_key)
@@ -1379,7 +1382,41 @@ def _target_spec_for_action(
             ),
         )
 
+    if action.backend == ActionBackend.COMBAT and action.ref.technique_id is not None:
+        return _target_spec_for_technique_action(action.ref.technique_id)
+
     return None
+
+
+def _target_spec_for_technique_action(technique_id: int) -> TargetSpec | None:
+    """Build a ``TargetSpec`` for a COMBAT technique action.
+
+    Returns ``None`` for SELF-targeting techniques (no picker needed).
+    For all other cardinalities, returns a PERSONA spec with ``in_same_scene=True``
+    and ``exclude_self=True`` when the derived relationship is ENEMY or ALLY.
+    """
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+    from world.magic.models.techniques import ConditionTargetKind, Technique  # noqa: PLC0415
+    from world.magic.services.targeting import derive_target_relationship  # noqa: PLC0415
+
+    try:
+        technique = Technique.objects.get(pk=technique_id)
+    except Technique.DoesNotExist:
+        return None
+
+    if technique.target_type == ActionTargetType.SELF:
+        return None
+
+    relationship = derive_target_relationship(technique)
+    exclude_self = relationship in {ConditionTargetKind.ENEMY, ConditionTargetKind.ALLY}
+    return TargetSpec(
+        kind=TargetKind.PERSONA,
+        cardinality=TargetType(technique.target_type),
+        filters=TargetFilters(
+            in_same_scene=True,
+            exclude_self=exclude_self,
+        ),
+    )
 
 
 def _action_category_for_action(action: PlayerAction) -> ActionCategory | None:

@@ -7,20 +7,41 @@ and service functions.
 ## Architecture
 
 Commands exist for telnet compatibility only. The web frontend bypasses
-commands entirely and calls `action.run()` directly.
+commands entirely and calls `dispatch_player_action()`.
 
 ```
-Telnet: text → command.parse() → command.func() → action.run()
-Web:    frontend → websocket → action dispatcher → action.run()
+Telnet (ArxCommand):      text → command.parse() → command.func() → action.run()
+Telnet (DispatchCommand): text → command.parse() → command.func() → dispatch_player_action()
+Web:                      frontend → websocket → action dispatcher → dispatch_player_action()
 ```
+
+`dispatch_player_action()` routes by backend: REGISTRY → `action.run()`,
+CHALLENGE → `resolve_challenge()`, COMBAT → `declare_action()`/`resolve_round()`.
+Use `DispatchCommand` whenever the command must reach a CHALLENGE or COMBAT backend.
 
 ## Key Files
 
 ### `command.py`
-- **`ArxCommand`**: Base command class
+- **`ArxCommand`**: Base command class for REGISTRY actions
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
+- **`DispatchCommand(ArxCommand)`**: Base class for commands that ride the player-action dispatcher
+  - `resolve_action_ref()`: Override to return an `ActionRef` (backend + params)
+  - `resolve_action_args()`: Override to return extra kwargs passed alongside the ref
+  - `func()`: Calls `dispatch_player_action(caller, ref, kwargs)` — the same seam the web uses
+  - `_report_dispatch_result()`: Sends the caller a deferred-round confirmation or inline result
+
+### When to subclass `DispatchCommand` vs `ArxCommand`
+
+| Use | Base class |
+|---|---|
+| REGISTRY action (most look/say/move/item commands) | `ArxCommand` |
+| CHALLENGE backend (magic attempt, non-combat skill check) | `DispatchCommand` |
+| COMBAT backend (technique declaration into the current round) | `DispatchCommand` |
+
+Both bases stay thin: no business logic in commands — all behavior lives in
+actions, backends, and service functions.
 
 ### Command Files
 - **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
@@ -28,6 +49,8 @@ Web:    frontend → websocket → action dispatcher → action.run()
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
+- **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
+  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE rituals
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

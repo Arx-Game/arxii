@@ -94,6 +94,7 @@ class CombatManeuver(models.TextChoices):
     FLEE = "flee", "Flee"
     COVER = "cover", "Cover"
     YIELD = "yield", "Yield"
+    INTERPOSE = "interpose", "Interpose"
 
 
 class DuelChallengeStatus(models.TextChoices):
@@ -240,6 +241,16 @@ FLEE_COVER_BONUS: int = 10
 # below it the selected pool consequence applies (PARTIAL = escape at a cost;
 # FAILURE/BOTCH = stays in the fight, consequence still lands).
 FLEE_PARTIAL_SUCCESS_LEVEL: int = -1
+
+# ---------------------------------------------------------------------------
+# Interpose
+# ---------------------------------------------------------------------------
+
+# Base fatigue cost charged to the interposer ONLY when the interpose fires
+# (i.e. dispatch_interpose returns a result). Armed-but-never-triggered
+# interpose declarations cost nothing. Scaled by the action's effort_level
+# multiplier inside apply_fatigue (same formula as other combat actions).
+INTERPOSE_BASE_FATIGUE_COST: int = 3
 
 # ---------------------------------------------------------------------------
 # Clash enums

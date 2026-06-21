@@ -157,6 +157,85 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # identity in parens so it is never ambiguous which character the mask belongs to.
         assert data["identity"]["name"] == f"stag mask ({sheet.primary_persona.name})"
 
+    def test_cover_persona_with_its_own_profile_shows_the_cover_bio(self) -> None:
+        # #1270 slice 2 — a cover face that has authored its own profile reads as a real person:
+        # its fabricated bio shows, NOT the real one, NOT blank. With no fabricated family on the
+        # cover profile, family reads as None (the real one is never substituted in).
+        from world.character_sheets.factories import ProfileFactory
+
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)  # presents "stag mask"
+        cover = sheet.active_persona
+        cover.profile = ProfileFactory(concept="A kindly merchant", background="Sells fine silks.")
+        cover.save()
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["concept"] == "A kindly merchant"  # the cover's own bio
+        assert data["story"]["background"] == "Sells fine silks."
+        assert data["identity"]["family"] is None  # no fabricated family → none, never the real
+
+    def test_cover_persona_presents_its_own_fabricated_lineage(self) -> None:
+        # #1270 slice 3 — a cover with a fabricated family/heritage shows THAT lineage to an
+        # outsider (so the cover reads as a real person), while the real lineage stays hidden.
+        from world.character_sheets.factories import ProfileFactory
+        from world.roster.factories import FamilyFactory
+
+        real_family = FamilyFactory(name="Blackmoor")
+        cover_family = FamilyFactory(name="Greenvale")
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)
+        sheet.family = real_family  # the real lineage on true_profile
+        sheet.save()
+        cover = sheet.active_persona
+        cover.profile = ProfileFactory(concept="A kindly merchant", family=cover_family)
+        cover.save()
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        # The outsider sees the cover's fabricated family, never the real "Blackmoor".
+        assert data["identity"]["family"]["name"] == "Greenvale"
+
+    def test_owner_of_a_cover_sees_their_real_lineage_not_the_cover(self) -> None:
+        # The owner is revealed → sees the REAL family on true_profile, not the cover's fake one.
+        from world.character_sheets.factories import ProfileFactory
+        from world.roster.factories import FamilyFactory
+
+        real_family = FamilyFactory(name="Blackmoor")
+        cover_family = FamilyFactory(name="Greenvale")
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=True)
+        sheet.family = real_family
+        sheet.save()
+        cover = sheet.active_persona
+        cover.profile = ProfileFactory(family=cover_family)
+        cover.save()
+
+        data = self._get(sheet, owner).data
+        assert data["identity"]["family"]["name"] == "Blackmoor"  # the real lineage
+
+    def test_anonymous_face_without_a_cover_profile_withholds_lineage(self) -> None:
+        # No cover profile → an outsider sees no lineage at all (never the real one).
+        from world.roster.factories import FamilyFactory
+
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)
+        sheet.family = FamilyFactory(name="Blackmoor")
+        sheet.save()
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["family"] is None
+
+    def test_anonymous_face_without_a_cover_profile_still_redacts_bio(self) -> None:
+        # No authored cover profile → the real bio is never shown to a non-owner (no de-anon).
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)  # mask, no own profile
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["concept"] == ""
+        assert data["story"]["background"] == ""
+
     def _distinction_names(self, data) -> set[str]:
         return {d["name"] for d in data["distinctions"]}
 

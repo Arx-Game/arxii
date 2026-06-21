@@ -56,6 +56,29 @@ _SUCCESS_LEVEL = 1
 _PARTIAL_LEVEL = 0
 
 
+def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
+    """The character's authored SCENE_ACTION ritual (with check_config), or None."""
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+
+    return (
+        Ritual.objects.filter(
+            author_account=character.db_account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        .select_related("check_config")
+        .first()
+    )
+
+
+def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia character
+    """The CheckType a character's technique casts roll, or None for fallback."""
+    ritual = get_character_anima_ritual(character)
+    if ritual is None or not hasattr(ritual, "check_config"):
+        return None
+    return ritual.check_config.check_type
+
+
 @transaction.atomic
 def perform_anima_ritual(
     character_sheet: CharacterSheet,
@@ -68,7 +91,6 @@ def perform_anima_ritual(
     with leftover budget. Crit always tops anima to max regardless.
     """
     from world.checks.services import perform_check  # noqa: PLC0415
-    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         CharacterEngagedForRitual,
         NoRitualConfigured,
@@ -76,24 +98,16 @@ def perform_anima_ritual(
         RitualScenePrerequisiteFailed,
     )
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
-    from world.magic.models.rituals import Ritual  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
-    ritual = (
-        Ritual.objects.filter(
-            author_account=character_sheet.character.db_account,
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-        )
-        .select_related("check_config")
-        .first()
-    )
+    character = character_sheet.character
+    ritual = get_character_anima_ritual(character)
     if ritual is None or not hasattr(ritual, "check_config"):
         raise NoRitualConfigured
 
     config = ritual.check_config
     if config.check_type is None:
         raise NoRitualConfigured
-    character = character_sheet.character
 
     if CharacterEngagement.objects.filter(character=character).exists():
         raise CharacterEngagedForRitual
@@ -277,22 +291,13 @@ def provision_player_anima_ritual(
         author_account=account,
     )
 
-    # 4. Create the config. check_type defaults to the seeded Anima Restoration
-    # CheckType; resonance is left null for the player to set. Provisioning never
-    # blocks finalization — an unseeded environment just leaves check_type NULL.
-    from world.checks.models import CheckType  # noqa: PLC0415
+    # 4. Synthesize the character's personal magic check (#1306) — rolled by this
+    # ritual AND by the character's technique casts. Idempotent.
     from world.magic.seeds_checks import (  # noqa: PLC0415
-        ANIMA_RESTORATION_CHECK_TYPE_NAME,
+        ensure_character_magic_check_type,
     )
 
-    check_type = CheckType.objects.filter(name=ANIMA_RESTORATION_CHECK_TYPE_NAME).first()
-    if check_type is None:
-        logger.warning(
-            "provision_player_anima_ritual: %r CheckType not seeded; leaving "
-            "check_type NULL for character %s",
-            ANIMA_RESTORATION_CHECK_TYPE_NAME,
-            character.pk,
-        )
+    check_type = ensure_character_magic_check_type(character_sheet, stat=stat_trait, skill=skill)
 
     RitualCheckConfig.objects.create(
         ritual=ritual,

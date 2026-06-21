@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.exceptions import TechniqueBudgetExceeded
 from world.magic.factories import (
@@ -15,6 +16,7 @@ from world.magic.models import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
 )
+from world.magic.seeds_cast import TECHNIQUE_CAST_TEMPLATE_NAME
 from world.magic.services.technique_builder import (
     PlayerPolicy,
     StaffPolicy,
@@ -342,3 +344,41 @@ class CapabilityConditionPricingLineTests(TestCase):
             + 2 * cfg.condition_duration_unit_cost
         )
         assert bd.gross_cost == intensity_cost + control_cost + cap_line_cost + cond_line_cost
+
+
+# =============================================================================
+# §10 create_technique default action_template (#1306)
+# =============================================================================
+
+
+class CreateTechniqueDefaultActionTemplateTests(TestCase):
+    """create_technique should default action_template to the shared cast template."""
+
+    def _minimal_kwargs(self):
+        sheet = CharacterSheetFactory()
+        return {
+            "creator": sheet,
+            "name": "Test Cantrip",
+            "gift": GiftFactory(creator=sheet),
+            "style": TechniqueStyleFactory(),
+            "effect_type": EffectTypeFactory(),
+            "intensity": 1,
+            "control": 1,
+            "anima_cost": 1,
+            "level": 1,
+            "action_category": "physical",
+            "description": "",
+        }
+
+    def test_create_technique_defaults_shared_cast_template(self):
+        """No action_template arg → seeds and assigns the shared cast template."""
+        tech = create_technique(**self._minimal_kwargs())
+        self.assertIsNotNone(tech.action_template)
+        self.assertEqual(tech.action_template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
+
+    def test_explicit_action_template_wins(self):
+        """Explicit action_template overrides the default; the shared template is not used."""
+        custom = ActionTemplateFactory(name="Bespoke Cast")
+        tech = create_technique(**self._minimal_kwargs(), action_template=custom)
+        self.assertEqual(tech.action_template_id, custom.pk)
+        self.assertEqual(tech.action_template.name, "Bespoke Cast")

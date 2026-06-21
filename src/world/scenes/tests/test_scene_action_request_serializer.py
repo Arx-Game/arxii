@@ -19,6 +19,7 @@ from world.scenes.factories import (
 from world.scenes.models import Scene
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
+    attach_behavior_altering_condition,
     grant_technique,
     make_benign_castable_technique,
     make_hostile_castable_technique,
@@ -63,6 +64,10 @@ class SceneActionRequestSerializerRiskLevelTests(CastScenarioMixin):
         technique = (
             make_hostile_castable_technique() if hostile else make_benign_castable_technique()
         )
+        if not hostile:
+            # Behavior-altering condition makes cast_requires_consent return True,
+            # so the benign cast routes to PENDING (consent) rather than immediate resolution.
+            attach_behavior_altering_condition(technique)
         grant_technique(self.caster, technique)
         return request_technique_cast(
             scene=self.scene,
@@ -156,6 +161,8 @@ class SceneActionTargetSerializerRiskLevelTests(CastScenarioMixin):
         """A benign (non-hostile) cast's additional target carries no risk level."""
         self._make_encounter(RiskLevel.LETHAL)
         technique = make_benign_castable_technique()
+        # Behavior-altering condition makes cast_requires_consent return True → PENDING.
+        attach_behavior_altering_condition(technique)
         grant_technique(self.caster, technique)
         cast = request_technique_cast(
             scene=self.scene,

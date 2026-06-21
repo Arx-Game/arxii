@@ -7,14 +7,20 @@ from typing import TYPE_CHECKING, Any
 
 from evennia.commands.command import Command
 
+from actions.errors import ActionDispatchError
+from actions.player_interface import dispatch_player_action
+from actions.result_extraction import extract_dispatch_message_data
+from actions.types import ActionResult
 from commands.consts import HelpFileViewMode
 from commands.descriptors import CommandDescriptor
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
 from commands.types import Kwargs
+from world.mechanics.types import ChallengeResolutionResult
 
 if TYPE_CHECKING:
     from actions.base import Action
+    from actions.types import ActionRef, DispatchResult
 
 
 class ArxCommand(Command):
@@ -189,3 +195,46 @@ class ArxCommand(Command):
             descriptors=descriptors,
         )
         return descriptor.to_dict()
+
+
+class DispatchCommand(ArxCommand):
+    """Telnet base for commands that route through the player-action dispatcher.
+
+    Unlike :class:`ArxCommand` (which calls ``action.run()`` directly — the
+    REGISTRY path), this builds an :class:`~actions.types.ActionRef` and calls
+    ``dispatch_player_action()``, the same seam the web frontend uses. That lets
+    a telnet command ride the CHALLENGE/COMBAT backends (round-gated
+    declarations) with no per-domain refactor. Subclasses override
+    :meth:`resolve_action_ref` and :meth:`resolve_action_args`.
+    """
+
+    def resolve_action_ref(self) -> ActionRef:
+        """Build the typed dispatch reference. Override in subclasses."""
+        raise NotImplementedError
+
+    def func(self) -> None:
+        """Execute the command by routing through the player-action dispatcher."""
+        try:
+            ref = self.resolve_action_ref()
+            kwargs = self.resolve_action_args()
+            result = dispatch_player_action(self.caller, ref, kwargs)
+        except ActionDispatchError as err:
+            self.msg(err.user_message)
+            return
+        except CommandError as err:
+            self.msg(str(err))
+            self.msg(
+                command_error={"error": str(err), "command": self.raw_string or ""},
+            )
+            return
+        self._report_dispatch_result(result)
+
+    def _report_dispatch_result(self, result: DispatchResult) -> None:
+        """Send a user-facing confirmation for the dispatched action."""
+        if result.deferred:
+            self.msg("You ready your action for this round.")
+            return
+        if isinstance(result.detail, (ActionResult, ChallengeResolutionResult)):
+            message, _ = extract_dispatch_message_data(result.detail)
+            if message:
+                self.msg(message)

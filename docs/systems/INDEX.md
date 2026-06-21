@@ -42,6 +42,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     seeded via `seed_thread_survivability_tuning()`, staff-tunable in admin, #1175)
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
+  - **Combat AoE targeting (#1321, in `world/combat`):** `CombatRoundActionTarget` (join
+    table; per-`CombatOpponent` row for AREA/FILTERED_GROUP technique actions)
   - **Dramatic moment tagging (#545 / #1139):**
     `DramaticMomentType` (inherits `RenownAwardConfig`; staff-authored catalog —
     `label`, `resonance` FK, `resonance_amount`, `per_scene_cap`),
@@ -133,6 +135,37 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Standalone casting (#1306):
+    `ensure_technique_cast_content()` (`seeds_cast.py`) — idempotent seed: shared
+    "Technique Cast" `ActionTemplate` + fallback `CheckType` + graded "Magic: Technique
+    Cast" `ConsequencePool`; called by the magic dev seed.
+    `get_standalone_cast_template()` (`seeds_cast.py`) — retrieves the shared
+    ActionTemplate; used as default by `create_technique`.
+    `ensure_character_magic_check_type(character_sheet, *, stat, skill)` (`seeds_checks.py`)
+    — synthesizes a per-character `CheckType` (name from `character_magic_check_type_name()`)
+    for the character's stat + skill.
+    `get_character_cast_check(character)` (`services/anima.py`) — resolves the
+    per-character CheckType for cast resolution.
+    `get_character_anima_ritual(character)` (`services/anima.py`) — retrieves the
+    character's personal SCENE_ACTION `Ritual` (their anima ritual).
+    `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
+    `RitualCheckConfig.check_type` at the per-character check so ritual and technique
+    casts roll the same personal check.
+  - Technique targeting (#1321):
+    `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
+    — ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF.
+    `technique_alters_behavior(technique) -> bool` — True if any applied condition's
+    `category.alters_behavior` is True (compulsion, charm, fear).
+    `cast_requires_consent(technique) -> bool` — True iff `technique_alters_behavior`; **behavior
+    only**, not blanket benign (capability/stat buffs on other PCs are consent-free).
+    `validate_cast_target(*, technique, initiator_persona, target_personas)` — raises
+    `InvalidCastTarget` on cardinality or relationship violations.
+    `resolve_targets(*, technique, initiator_persona, scene, supplied_personas) -> list[Persona]` —
+    expands `Technique.target_type` to concrete personas (SELF→caster; SINGLE→one;
+    AREA→all eligible in scene; FILTERED_GROUP→supplied ∩ eligible).
+    `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind,
+    source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
+    — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -145,11 +178,17 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
   MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect),
   `VitalBonusTarget`, `RitualExecutionKind`, `AnimaRitualCategory`,
-  `PendingAlterationStatus`, `AlterationTier`
+  `PendingAlterationStatus`, `AlterationTier`,
+  `ConditionTargetKind` (SELF/ALLY/ENEMY — `world/magic/models/techniques.py`; derived
+  relationship axis for targeting, distinct from `ActionTargetType` cardinality),
+  `ActionTargetType` (SELF/SINGLE/AREA/FILTERED_GROUP — `actions/constants.py`; per-technique
+  cardinality field `Technique.target_type`)
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
   `XPInsufficient`, `RitualComponentError`,
-  `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item) —
+  `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
+  `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
+  on cardinality/relationship violations) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
@@ -169,7 +208,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     lifetime_earned rows
   - `POST /api/magic/thread-pull-preview/` — read-only preview of a pull's
     resonance/anima cost and resolved effects
-  - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
+  - `POST /api/magic/rituals/perform/` — dispatches the `perform_ritual` action (`PerformRitualAction.run()`, shared with telnet `CmdRitual`, #1331)
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
@@ -240,14 +279,20 @@ Check resolution engine — converts trait values to ranks and rolls against res
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
-- **Models:** `ConditionCategory`, `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`, `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`, `ConditionDamageInteraction`, `ConditionConditionInteraction`
+- **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
+  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent),
+  `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`,
+  `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
+  `ConditionDamageInteraction`, `ConditionConditionInteraction`
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
 - **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
   `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()`
   wired into all `world/conditions/services.py` mutation sites.
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
-- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment boon/injury application), progression (interactions)
+- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment
+  boon/injury application, behavior-consent gating via `ConditionCategory.alters_behavior`),
+  progression (interactions)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
@@ -447,6 +492,28 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
   (`Character.at_post_move` trigger hook)
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
+
+### Secrets (#1334)
+Hidden facts about a character — cover identities, crimes, private distinctions, secret
+relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
+info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
+primitive alongside Distinction / Condition / Resonance. *Slice 1 (this commit) owns the
+content model; discovery (clue-target wiring), the per-knower held record, display, and
+action-anchored minting are later slices.*
+
+- **Models:** `Secret` (subject-anchored to a `CharacterSheet`; `level` 1–4 / `category` FK /
+  `consequences` — each may be Unknown; `provenance` ∈ GM / action / player-flavor;
+  `author_persona` for OOC attribution; `second_party_sheet` for two-party affair/blackmail),
+  `SecretCategory` (staff-editable lookup; null category = Unknown)
+- **Invariant:** anchor-scales-with-level — only Level-1 player-flavor may be free-authored
+  (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
+  action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
+- **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`
+- **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
+  Secret = self-serve hidden fact about a concrete entity. Shared substrate = the clue/
+  discovery loop (a SECRET clue target is planned, #1143)
+- **Source:** `src/world/secrets/`
+- **Details:** [secrets.md](secrets.md)
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
 content sharing and social action targeting (#1141).
@@ -524,7 +591,7 @@ Character lifecycle management with web-first applications and player anonymity.
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, and social action consent flow.
 
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`, `SceneCastPullDeclaration`
-- **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance), `engagement_credited`.
+- **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
 - **Key Functions:**
@@ -1096,6 +1163,12 @@ These two axes are orthogonal — never re-merge them.
   `viewer_capabilities.can_invite` is true (read from the first member row of the
   `character-roles` endpoint). The induction `RitualSessionDraftDialog` sets the
   COVENANT reference so `assert_initiator_can_induct` can validate rank at draft time.
+  `RitualSessionResponseDialog` renders `candidate_only` participant fields (role picker),
+  resolves the COVENANT reference from `session.session_references` to filter the role
+  picker, and converts `emits_reference: "COVENANT_ROLE"` into a typed reference on
+  accept — completing the draft → accept-with-role → fire → `CharacterCovenantRole`
+  round-trip. Covered by `RitualInductionRoundTripTests` (backend) + `RitualSessionPages`
+  component tests (frontend).
 - **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`;
   `MentorsVowRitualFactory`; `Ritual.draft_validator_path` for induction gate;
   `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue),
@@ -1110,6 +1183,59 @@ These two axes are orthogonal — never re-merge them.
   narrative (`send_narrative_message` for discovery announcements)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
+
+### Combat
+Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,
+reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
+
+- **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE),
+  `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
+  `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
+- **Key Services (`world/combat/services.py`):**
+  - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
+    interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
+  - `declare_interpose(participant, ally)` — arm an INTERPOSE `CombatRoundAction` for the round
+  - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
+    an armed interpose challenge and dispatches it
+  - `dispatch_interpose(interposer, protected, pre_payload, approach)` — thin wrapper over
+    `dispatch_capability_reaction`; calls `apply_interpose_outcome` to mutate the payload
+  - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
+    FAILURE is a no-op
+  - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
+    `ChallengeInstance` rows for armed INTERPOSE actions each round
+  - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
+    `TriggerHandler.refresh()` on each active participant so passive-installed reactive
+    triggers (e.g. Shielded) fire in the same round
+- **Key Services (`world/mechanics/reactions.py`):**
+  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn)`
+    — shared reactive spine; used by INTERPOSE and the catch-faller seam
+- **Reactive content seeds:**
+  - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
+    seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
+    (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
+    consequence
+  - `ensure_defend_content()` (`src/world/combat/defend_content.py`) — idempotent seed for
+    the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
+    filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
+    with `TechniqueAppliedCondition(target_kind=ALLY)`
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `EncounterStatus`,
+  `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
+- **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
+  participant, add opponent, pause), player actions (declare, ready, interpose, cover,
+  yield, flee, my_action, available_combos), duel challenge endpoints
+- **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
+  vitals (`apply_damage_to_participant`, `process_damage_consequences`),
+  conditions (`bulk_apply_conditions` — now installs reactive side-effects),
+  mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
+  flows (`DAMAGE_PRE_APPLY` event; `MODIFY_PAYLOAD` flow action for DEFEND),
+  covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
+  magic (technique use pipeline, `CombatPull`)
+- **Source:** `src/world/combat/`
+- **Details:** `docs/roadmap/combat.md` · architecture:
+  `docs/architecture/combat-magic-integration.md`,
+  `docs/architecture/damage-scaling.md`,
+  `docs/architecture/combat-conditions.md`
 
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.

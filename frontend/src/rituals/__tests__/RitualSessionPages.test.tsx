@@ -21,8 +21,18 @@ import { RitualSessionInboxPage } from '../pages/RitualSessionInboxPage';
 import { RitualSessionDetailPage } from '../pages/RitualSessionDetailPage';
 import { RitualSessionDraftDialog } from '../components/RitualSessionDraftDialog';
 import { RitualSessionResponseDialog } from '../components/RitualSessionResponseDialog';
-import type { RitualWithSchema } from '../types';
+import type { RitualWithSchema, RitualInputSchema } from '../types';
 import type { RitualSessionList, RitualSessionDetail } from '../api';
+
+// ---------------------------------------------------------------------------
+// Mock apiFetch (used by CovenantRolePickerField and useTargetCovenantType)
+// ---------------------------------------------------------------------------
+
+vi.mock('@/evennia_replacements/api', () => ({
+  apiFetch: vi.fn(),
+}));
+
+import { apiFetch } from '@/evennia_replacements/api';
 
 // ---------------------------------------------------------------------------
 // Mock react-query hooks (rituals)
@@ -123,6 +133,7 @@ const sampleSessionDetail: RitualSessionDetail = {
     },
   ],
   session_references: '',
+  participant_fields: '',
 };
 
 const sampleRitual: RitualWithSchema = {
@@ -528,5 +539,140 @@ describe('RitualSessionResponseDialog', () => {
         expect.objectContaining({ onSuccess: expect.any(Function) })
       );
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Induction accept: covenant_role_picker → COVENANT_ROLE reference
+  // ---------------------------------------------------------------------------
+
+  /**
+   * participant_fields schema for a covenant induction ritual:
+   * - chosen_covenant_role: covenant_role_picker
+   *   emits_reference: "COVENANT_ROLE"
+   *   applies_to: "candidate_only"
+   *   depends_on: "session.target_covenant.covenant_type"
+   *   required: true
+   */
+  const inductionParticipantFieldsSchema: RitualInputSchema = {
+    fields: [
+      {
+        name: 'chosen_covenant_role',
+        label: 'Covenant Role',
+        type: 'covenant_role_picker',
+        emits_reference: 'COVENANT_ROLE',
+        applies_to: 'candidate_only',
+        depends_on: 'session.target_covenant.covenant_type',
+        required: true,
+      },
+    ],
+  };
+
+  const COVENANT_ID = 55;
+  const SESSION_ID = 1;
+
+  // Session with a COVENANT session-reference so the dialog can resolve covenant_type
+  const inductionSession: RitualSessionDetail = {
+    ...sampleSessionDetail,
+    id: SESSION_ID,
+    // Cast: runtime shape is reference array, generated type is string
+    session_references: [{ kind: 'COVENANT', ref_covenant_id: COVENANT_ID }] as unknown as string,
+  };
+
+  it('renders covenant role picker as candidate and accept emits COVENANT_ROLE reference', async () => {
+    // Stub apiFetch for covenant detail + roles list
+    vi.mocked(apiFetch).mockImplementation((url: string) => {
+      if (url === `/api/covenants/covenants/${COVENANT_ID}/`) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ id: COVENANT_ID, covenant_type: 'DURANCE', name: 'Test Covenant' }),
+        } as Response);
+      }
+      if (url.includes('/api/covenants/roles/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 7, name: 'Adept', covenant_type: 'DURANCE' }],
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    const acceptMutate = vi.fn();
+    mockUseAcceptRitualSession.mockReturnValue({ ...idleMutation, mutate: acceptMutate });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RitualSessionResponseDialog
+            session={inductionSession}
+            // participantId 42 is NOT the initiator (99), so candidate_only field shows
+            participantId={42}
+            open={true}
+            onOpenChange={vi.fn()}
+            participantFieldsSchema={inductionParticipantFieldsSchema}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Assertion 1: the role picker combobox renders
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+
+    // Wait for covenant_type to resolve and the roles query to load, enabling the combobox
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).not.toBeDisabled();
+    });
+
+    // Drive the Radix Select: open the dropdown and pick 'Adept'
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(await screen.findByText('Adept'));
+
+    // Click Accept (button enabled once the required field has a value)
+    await waitFor(() => {
+      expect(screen.getByTestId('accept-button')).not.toBeDisabled();
+    });
+    await userEvent.click(screen.getByTestId('accept-button'));
+
+    // Assertion 2: accept mutation was called with the COVENANT_ROLE reference
+    await waitFor(() => {
+      expect(acceptMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: SESSION_ID,
+          body: expect.objectContaining({
+            references: [{ kind: 'COVENANT_ROLE', ref_covenant_role_id: 7 }],
+          }),
+        }),
+        expect.anything()
+      );
+    });
+  });
+
+  it('hides chosen_covenant_role picker when rendered as the initiator', () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    // inductionSession.initiator_id is 99; render as participant 99 (the initiator)
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <RitualSessionResponseDialog
+            session={inductionSession}
+            participantId={99}
+            open={true}
+            onOpenChange={vi.fn()}
+            participantFieldsSchema={inductionParticipantFieldsSchema}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Assertion 3: applies_to=candidate_only gate hides the picker from the initiator
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Covenant Role')).not.toBeInTheDocument();
   });
 });

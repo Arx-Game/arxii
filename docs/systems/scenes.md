@@ -249,7 +249,10 @@ owns the full lifecycle (dispatch → consent → resolution → result recordin
   default `"medium"`). This is forwarded from `create_action_request` → stored on
   `SceneActionRequest.effort_level`. At resolution `_resolve_action_against_persona`
   reads `EFFORT_CHECK_MODIFIER[effort_level]` and adds it to the check pool, then
-  charges the initiator social fatigue via `apply_fatigue`.
+  charges the initiator social fatigue via `apply_fatigue`. This applies on **both**
+  the plain and the technique-enhanced (`_resolve_enhanced_action` → `use_technique`)
+  branches (#1293): effort is a check-roll modifier, orthogonal to the technique's
+  anima/intensity/fury levers (which scale cast power).
 - **Defender authors difficulty** via a plausibility band (`DifficultyChoice`) at consent
   time — not the initiator. The defender's choice is stored as `difficulty_choice` on
   the per-target row (`DefenderConsentFields.difficulty_choice`, default `NORMAL`).
@@ -269,7 +272,7 @@ owns the full lifecycle (dispatch → consent → resolution → result recordin
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `DefenderConsentFields` | Abstract base — per-defender consent fields shared by primary and additional targets | `difficulty_choice` (DifficultyChoice), `resolved_difficulty`, `resist_effort_level` (EffortLevel), `engagement_credited` |
+| `DefenderConsentFields` | Abstract base — per-defender consent fields shared by primary and additional targets | `difficulty_choice` (DifficultyChoice), `resolved_difficulty`, `resist_effort_level` (EffortLevel) |
 | `SceneActionRequest` | Primary targeted (or area) social action request | `scene`, `initiator_persona`, `target_persona` (nullable), `action_key`, `action_template`, `technique`, `status` (ActionRequestStatus), `effort_level` (EffortLevel), `delivery`, `pose_text`, `created_at`, `resolved_at` — plus all `DefenderConsentFields` columns |
 | `SceneActionTarget` | One additional non-primary target in a multi-target request | `action_request` (FK → SceneActionRequest), `target_persona`, `status`, `result_interaction`, `resolved_at` — plus all `DefenderConsentFields` columns |
 | `SceneCastPullDeclaration` | Paid thread-pull declared alongside a benign standalone cast | `request` (OneToOne), `resonance`, `tier`, `threads` (M2M) |

@@ -17,7 +17,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
 
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.models import CharacterSheet, Profile
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
@@ -111,11 +111,13 @@ _CAN_EDIT_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "gender",
     "species",
-    "heritage",
-    "family",
-    "tarot_card",
-    "origin_realm",
-    "true_profile",  # #1270 — concept/quote now read through the profile
+    # #1270 — concept/quote + lineage (heritage/family/tarot/origin) now read through the
+    # presented face's profile; the revealed case reads them off true_profile.
+    "true_profile",
+    "true_profile__heritage",
+    "true_profile__family",
+    "true_profile__tarot_card",
+    "true_profile__origin_realm",
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -125,17 +127,31 @@ def _build_identity(
     *,
     display_name: str | None = None,
     reveal_identity: bool = True,
+    bio_profile: Profile | None = None,
 ) -> IdentitySection:
-    """Build the identity section (#1109-aware).
+    """Build the identity section (#1109/#1270-aware).
 
     ``display_name`` is the name resolved for the viewer (the presented persona / sdesc / reveal);
-    defaults to the character's key. When ``reveal_identity`` is False — a non-privileged viewer
-    of a character presenting an anonymous face — only the presented name and the physically
-    observable traits (age, gender, pronouns, species) are returned; every identifying / lore
-    field (real fullname, concept, quote, family, heritage, tarot, origin, path) is withheld.
+    defaults to the character's key. ``bio_profile`` is the **presented face's** bio (#1270): the
+    real ``true_profile`` for a revealed identity, a cover persona's own (fabricated) profile when
+    presenting an anonymous face that has authored one, or None (concept/quote blank). When
+    ``reveal_identity`` is False — a non-privileged viewer of an anonymous face — the **real
+    fullname** and **path** are withheld, but the presented face's own concept/quote AND lineage
+    (#1270 slice 3: a cover persona's *fabricated* family/heritage/tarot/origin) DO show, so a
+    cover identity reads as a real person. A non-revealed face with no cover profile shows none.
     """
     character = sheet.character
     name = display_name if display_name is not None else character.db_key
+    concept = bio_profile.concept if bio_profile is not None else ""
+    quote = bio_profile.quote if bio_profile is not None else ""
+
+    # Lineage follows the presented bio profile (#1270 slice 3): a revealed viewer gets the real
+    # lineage (bio_profile is true_profile); an outsider viewing a cover gets the cover's
+    # fabricated lineage; an anonymous face with no cover profile gets none.
+    family = bio_profile.family if bio_profile is not None else None
+    heritage = _id_name_or_null(bio_profile.heritage) if bio_profile is not None else None
+    tarot_card = _id_name_or_null(bio_profile.tarot_card) if bio_profile is not None else None
+    origin = _id_name_or_null(bio_profile.origin_realm) if bio_profile is not None else None
 
     pronouns = PronounsData(
         subject=sheet.pronoun_subject,
@@ -144,43 +160,30 @@ def _build_identity(
     )
 
     if not reveal_identity:
-        return IdentitySection(
-            name=name,
-            fullname=name,
-            concept="",
-            quote="",
-            age=sheet.age,
-            gender=_id_name_or_null(sheet.gender, name_field="display_name"),
-            pronouns=pronouns,
-            species=_id_name_or_null(sheet.species),
-            heritage=None,
-            family=None,
-            tarot_card=None,
-            origin=None,
-            path=None,
-        )
-
-    family = sheet.family
-    # Compose fullname: "FirstName FamilyName" or just the db_key.
-    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
-
-    # Latest path from prefetched path_history (ordered by -selected_at).
-    path_history: list = character.cached_path_history
-    path_value: IdNameRef | None = _id_name(path_history[0].path) if path_history else None
+        # The presented (mask/cover) name is already resolved; never compose the real db_key
+        # with a family name here, and withhold the real progression path.
+        fullname = name
+        path_value: IdNameRef | None = None
+    else:
+        # Compose the real fullname: "FirstName FamilyName" or just the db_key.
+        fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
+        # Latest path from prefetched path_history (ordered by -selected_at).
+        path_history: list = character.cached_path_history
+        path_value = _id_name(path_history[0].path) if path_history else None
 
     return IdentitySection(
         name=name,
         fullname=fullname,
-        concept=sheet.concept,
-        quote=sheet.quote,
+        concept=concept,
+        quote=quote,
         age=sheet.age,
         gender=_id_name_or_null(sheet.gender, name_field="display_name"),
         pronouns=pronouns,
         species=_id_name_or_null(sheet.species),
-        heritage=_id_name_or_null(sheet.heritage),
+        heritage=heritage,
         family=_id_name_or_null(family),
-        tarot_card=_id_name_or_null(sheet.tarot_card),
-        origin=_id_name_or_null(sheet.origin_realm),
+        tarot_card=tarot_card,
+        origin=origin,
         path=path_value,
     )
 
@@ -212,6 +215,28 @@ def _resolve_active_persona(sheet: CharacterSheet) -> Persona | None:
     if active_id is not None:
         return next((p for p in personas if p.pk == active_id), None)
     return next((p for p in personas if p.persona_type == PersonaType.PRIMARY), None)
+
+
+def _presented_bio_profile(
+    sheet: CharacterSheet, active: Persona | None, *, reveal_identity: bool
+) -> Profile | None:
+    """The bio (concept/quote/story) source for the presented face (#1270).
+
+    - **Revealed** (owner/staff/primary-public/discovered) → the real ``true_profile``.
+    - **Anonymous face with its own authored cover profile** → that cover profile (a fabricated
+      bio shown as if real, so the cover doesn't out itself with an empty one).
+    - **Anonymous face with no cover profile** → None (concept/quote/story blank). Never the real
+      ``true_profile`` for a non-revealed face — that would de-anonymize.
+    """
+    if reveal_identity:
+        return sheet.true_profile
+    if (
+        active is not None
+        and active.profile_id is not None
+        and active.profile_id != sheet.true_profile_id
+    ):
+        return active.profile
+    return None
 
 
 def _viewer_is_privileged(sheet: CharacterSheet, user: Any) -> bool:
@@ -644,11 +669,18 @@ _STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — backgrou
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _build_story(sheet: CharacterSheet) -> StorySection:
-    """Build the story section from CharacterSheet text fields."""
+def _build_story(*, bio_profile: Profile | None = None) -> StorySection:
+    """Build the story section from the presented face's bio profile (#1270).
+
+    ``bio_profile`` is the real ``true_profile`` for a revealed identity, a cover persona's own
+    (fabricated) profile when presenting one, or None (empty story) — so a cover shows its own
+    story and a bare anonymous figure shows nothing.
+    """
+    if bio_profile is None:
+        return StorySection(background="", personality="")
     return StorySection(
-        background=sheet.background,
-        personality=sheet.personality,
+        background=bio_profile.background,
+        personality=bio_profile.personality,
     )
 
 
@@ -679,7 +711,16 @@ _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
 _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "personas",
-        queryset=Persona.objects.select_related("thumbnail").prefetch_related(
+        queryset=Persona.objects.select_related(
+            "thumbnail",
+            # #1270 — a cover persona presents its own profile's bio + lineage; pull the
+            # lineage FKs so the identity builder reads them without extra queries.
+            "profile",
+            "profile__heritage",
+            "profile__family",
+            "profile__tarot_card",
+            "profile__origin_realm",
+        ).prefetch_related(
             # Each persona's per-trait descriptors, so the appearance builder can
             # overlay the active face's descriptors at zero extra queries.
             Prefetch(
@@ -870,12 +911,18 @@ class CharacterSheetSerializer(serializers.Serializer):
         show_skills = _section_visible(access, sheet.skills_visibility)
         show_magic = _section_visible(access, sheet.magic_visibility)
         show_goals = _section_visible(access, sheet.goals_visibility)
+        # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
+        # one when revealed, a cover persona's own when presenting one, else blank.
+        bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
 
         return {
             "id": sheet.pk,
             "can_edit": can_edit_character_sheet(user, roster_entry) if user else False,
             "identity": _build_identity(
-                sheet, display_name=display_name, reveal_identity=reveal_identity
+                sheet,
+                display_name=display_name,
+                reveal_identity=reveal_identity,
+                bio_profile=bio_profile,
             ),
             "appearance": _build_appearance(sheet),
             "stats": _build_stats(sheet) if show_stats else {},
@@ -883,13 +930,8 @@ class CharacterSheetSerializer(serializers.Serializer):
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
             "magic": _build_magic(sheet) if show_magic else None,
-            # Story is public by default, but withheld from a non-revealed (anonymous /
-            # hidden-link) figure — a cover identity's fake story is a future Guise Sheet.
-            "story": (
-                _build_story(sheet)
-                if reveal_identity
-                else StorySection(background="", personality="")
-            ),
+            # Story reads from the presented face's profile (cover identities show their own).
+            "story": _build_story(bio_profile=bio_profile),
             "goals": _build_goals(sheet) if show_goals else [],
             "personas": _build_personas(
                 sheet,

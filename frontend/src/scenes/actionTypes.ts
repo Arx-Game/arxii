@@ -216,6 +216,12 @@ export interface CastableTechnique {
   control: number;
   /** True if casting this against another PC will seed/feed a combat encounter. */
   hostile: boolean;
+  /** Cardinality of target selection: "self" | "single" | "area" | "filtered_group". */
+  target_type: string;
+  /** Positional reach constraint: "same" | "adjacent" | "any". */
+  reach: string;
+  /** Target picker spec — null for SELF-targeting techniques. */
+  target_spec: TargetSpec | null;
 }
 
 export interface CastPullRequestBody {
@@ -229,6 +235,8 @@ export interface CastRequestBody {
   initiator_persona: number;
   technique_id: number;
   target_persona?: number | null;
+  /** For FILTERED_GROUP casts: the subset of personas selected by the player. */
+  target_persona_ids?: number[];
   strain_commitment?: number;
   pull?: CastPullRequestBody;
 }

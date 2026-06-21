@@ -205,6 +205,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
         queryset=Restriction.objects.all(),
         required=False,
     )
+    target_spec = serializers.SerializerMethodField()
 
     class Meta:
         model = Technique
@@ -221,8 +222,32 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "anima_cost",
             "description",
             "source_cantrip",
+            "target_type",
+            "reach",
             "tier",
+            "target_spec",
         ]
+
+    def get_target_spec(self, obj: Technique) -> dict | None:
+        """Derive and serialize the TargetSpec for this technique.
+
+        Returns None for SELF-targeting techniques (no picker needed). For other
+        cardinalities, returns the same shape as TargetSpecSerializer.
+        """
+        from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
+
+        spec = _target_spec_for_technique_action(obj.pk)
+        if spec is None:
+            return None
+        return {
+            "kind": spec.kind,
+            "cardinality": spec.cardinality,
+            "filters": {
+                "in_same_scene": spec.filters.in_same_scene,
+                "exclude_self": spec.filters.exclude_self,
+                "must_be_conscious": spec.filters.must_be_conscious,
+            },
+        }
 
 
 # =============================================================================
@@ -2885,6 +2910,7 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
         source="participants_cached", many=True, read_only=True
     )
     session_references = serializers.SerializerMethodField()
+    participant_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = RitualSession
@@ -2900,6 +2926,7 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "participants",
             "session_references",
+            "participant_fields",
         ]
         read_only_fields = fields
 
@@ -2934,6 +2961,14 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
                 entry["ref_covenant_role_id"] = ref.ref_covenant_role_id
             result.append(entry)
         return result
+
+    def get_participant_fields(self, obj: object) -> list[dict[str, object]]:
+        """Return the ritual's authored participant_fields blob (or [])."""
+        schema = getattr(obj.ritual, "input_schema", None)  # noqa: GETATTR_LITERAL
+        if not isinstance(schema, dict):
+            return []
+        fields = schema.get("participant_fields", [])
+        return fields if isinstance(fields, list) else []
 
 
 # Error messages for RitualSessionDraftSerializer.

@@ -2107,7 +2107,7 @@ class TestPrefetchCompleteness(TestCase):
     def test_story_zero_queries(self) -> None:
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_story(sheet)
+            _build_story(bio_profile=sheet.true_profile)
 
     def test_goals_zero_queries(self) -> None:
         sheet = self._get_sheet()

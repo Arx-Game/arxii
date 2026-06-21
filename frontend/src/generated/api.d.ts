@@ -716,6 +716,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/blocks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting player's blocks: list, create (with reason), unblock, share account-wide. */
+    get: operations['blocks_list'];
+    put?: never;
+    /** @description The requesting player's blocks: list, create (with reason), unblock, share account-wide. */
+    post: operations['blocks_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/blocks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Unblock — cron-delayed (the block stays active until the next sweep), so don't delete. */
+    delete: operations['blocks_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/blocks/{id}/share/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Escalate this block to all of the requesting player's characters (#1278). */
+    post: operations['blocks_share_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -2351,6 +2403,30 @@ export interface paths {
      *     a check at round resolution; the participant remains ACTIVE until then.
      */
     post: operations['combat_flee_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/interpose/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare an interposing maneuver, optionally guarding a named ally.
+     *
+     *     Creates a passives-only action with maneuver=INTERPOSE. When
+     *     ``ally_participant_id`` is omitted or null, the participant guards any
+     *     ally hit this round (``focused_ally_target=None``). When provided, the
+     *     ally must be an active participant in this encounter.
+     */
+    post: operations['combat_interpose_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -9437,6 +9513,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/mutes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting player's mutes: list, create/update (IC/OOC scope), and unmute. */
+    get: operations['mutes_list'];
+    put?: never;
+    /** @description The requesting player's mutes: list, create/update (IC/OOC scope), and unmute. */
+    post: operations['mutes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mutes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description The requesting player's mutes: list, create/update (IC/OOC scope), and unmute. */
+    delete: operations['mutes_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/narrative/deliveries/{id}/acknowledge/': {
     parameters: {
       query?: never;
@@ -13706,6 +13817,38 @@ export interface components {
     };
     /** @enum {unknown} */
     BlankEnum: '';
+    /** @description A block the requesting player owns. */
+    Block: {
+      readonly id: number;
+      /** @description The face the blocker blocked from; null when account_level (all their faces). */
+      readonly blocker_persona: number | null;
+      /** @description The face that was blocked (shown on the blocker's block list). */
+      readonly blocked_persona: number | null;
+      readonly blocked_persona_name: string;
+      /** @description Opt-in: all of the blocker's characters block the target. */
+      readonly account_level: boolean;
+      /** @description Optional reason. */
+      readonly reason: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When a lifted block finalizes (cron). The block stays active until then; null means it has not been lifted.
+       */
+      readonly pending_removal_at: string | null;
+    };
+    /** @description Create a block: the player's own face, the target face, and a required reason. */
+    BlockCreate: {
+      blocker_persona: number;
+      blocked_persona: number;
+      reason: string;
+    };
+    /** @description Create a block: the player's own face, the target face, and a required reason. */
+    BlockCreateRequest: {
+      blocker_persona: number;
+      blocked_persona: number;
+      reason: string;
+    };
     /**
      * @description * `head` - Head
      *     * `face` - Face
@@ -18117,6 +18260,35 @@ export interface components {
       /** @description Whether this modifier target is currently active in the game */
       is_active?: boolean;
     };
+    /** @description A mute the requesting player owns. */
+    Mute: {
+      readonly id: number;
+      /** @description The face the muter no longer wants to see. */
+      readonly muted_persona: number;
+      readonly muted_persona_name: string;
+      /** @description Hide this persona's IC content. */
+      readonly mute_ic: boolean;
+      /** @description Hide this persona's OOC content. */
+      readonly mute_ooc: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Create/update a mute with IC/OOC scope. */
+    MuteCreate: {
+      muted_persona: number;
+      /** @default true */
+      mute_ic: boolean;
+      /** @default true */
+      mute_ooc: boolean;
+    };
+    /** @description Create/update a mute with IC/OOC scope. */
+    MuteCreateRequest: {
+      muted_persona: number;
+      /** @default true */
+      mute_ic: boolean;
+      /** @default true */
+      mute_ooc: boolean;
+    };
     /** @description One organization whose books the viewer may open. */
     MyBooksRow: {
       organization_id: number;
@@ -18666,6 +18838,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Beat'][];
+    };
+    PaginatedBlockList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Block'][];
     };
     PaginatedBugReportDetailList: {
       /** @example 123 */
@@ -19371,6 +19558,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['MissionTemplate'][];
+    };
+    PaginatedMuteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Mute'][];
     };
     PaginatedNPCRoleList: {
       /** @example 123 */
@@ -21141,6 +21343,23 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -22085,6 +22304,13 @@ export interface components {
      */
     RatingEnum: -2 | -1 | 0 | 1 | 2;
     /**
+     * @description * `same` - Same position
+     *     * `adjacent` - Adjacent position
+     *     * `any` - Anywhere in room
+     * @enum {string}
+     */
+    ReachEnum: 'same' | 'adjacent' | 'any';
+    /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed
      *     * `episode_reached` - Episode reached or passed
@@ -22491,6 +22717,7 @@ export interface components {
       readonly created_at: string;
       readonly participants: components['schemas']['RitualSessionParticipantSummary'][];
       readonly session_references: string;
+      readonly participant_fields: string;
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).
@@ -24017,7 +24244,33 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
       readonly tier: number;
+      /**
+       * @description Derive and serialize the TargetSpec for this technique.
+       *
+       *     Returns None for SELF-targeting techniques (no picker needed). For other
+       *     cardinalities, returns the same shape as TargetSpecSerializer.
+       */
+      readonly target_spec: {
+        [key: string]: unknown;
+      } | null;
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
@@ -24042,6 +24295,23 @@ export interface components {
       description?: string;
       /** @description The cantrip template this technique was created from, if any. */
       source_cantrip?: number | null;
+      /**
+       * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
+       *
+       *     * `self` - Self
+       *     * `single` - Single Target
+       *     * `area` - Area
+       *     * `filtered_group` - Filtered Group
+       */
+      target_type?: components['schemas']['TechniqueTargetTypeEnum'];
+      /**
+       * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
+       *
+       *     * `same` - Same position
+       *     * `adjacent` - Adjacent position
+       *     * `any` - Anywhere in room
+       */
+      reach?: components['schemas']['ReachEnum'];
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {
@@ -24051,6 +24321,14 @@ export interface components {
       /** @description Description of this technique style. */
       readonly description: string;
     };
+    /**
+     * @description * `self` - Self
+     *     * `single` - Single Target
+     *     * `area` - Area
+     *     * `filtered_group` - Filtered Group
+     * @enum {string}
+     */
+    TechniqueTargetTypeEnum: 'self' | 'single' | 'area' | 'filtered_group';
     /** @description Serializer for interaction bindings with flavor text. */
     TemplateInteraction: {
       readonly interaction_type: components['schemas']['InteractionType'];
@@ -25714,6 +25992,92 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  blocks_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBlockList'];
+        };
+      };
+    };
+  };
+  blocks_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BlockCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BlockCreate'];
+        };
+      };
+    };
+  };
+  blocks_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  blocks_share_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Block'];
         };
       };
     };
@@ -27809,6 +28173,32 @@ export interface operations {
     };
   };
   combat_flee_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_interpose_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -37845,6 +38235,71 @@ export interface operations {
         content: {
           'application/json': components['schemas']['MissionTemplate'];
         };
+      };
+    };
+  };
+  mutes_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedMuteList'];
+        };
+      };
+    };
+  };
+  mutes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MuteCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MuteCreate'];
+        };
+      };
+    };
+  };
+  mutes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

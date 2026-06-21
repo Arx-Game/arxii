@@ -60,6 +60,15 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         help_text="Are conditions in this category generally harmful?",
     )
 
+    alters_behavior = models.BooleanField(
+        default=False,
+        help_text=(
+            "Conditions in this category change how a character BEHAVES "
+            "(compulsion, charm, fear) rather than only their capabilities/stats. "
+            "Behavior-altering effects on another PC require that PC's consent."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
