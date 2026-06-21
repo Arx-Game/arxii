@@ -34,7 +34,7 @@
  * participant_kwargs). COVENANT_ROLE → ref_covenant_role_id; COVENANT → ref_covenant_id.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -131,6 +131,16 @@ function useTargetCovenantType(session: RitualSessionDetail): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Module-level constants
+// ---------------------------------------------------------------------------
+
+/** Maps emits_reference kind to the correct id key for the reference object. */
+const REF_ID_KEY: Record<string, 'ref_covenant_id' | 'ref_covenant_role_id'> = {
+  COVENANT: 'ref_covenant_id',
+  COVENANT_ROLE: 'ref_covenant_role_id',
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -142,11 +152,22 @@ export function RitualSessionResponseDialog({
   participantFieldsSchema,
   onSuccess,
 }: RitualSessionResponseDialogProps) {
+  // Gate fields by applies_to: the initiator does not see candidate_only fields.
+  // Hoisted above useState so the initial seed uses the same filtered field set.
+  const isInitiator = participantId === session.initiator_id;
+  const effectiveSchema = useMemo(() => {
+    if (!participantFieldsSchema) return participantFieldsSchema;
+    const visibleFields = participantFieldsSchema.fields.filter(
+      (f) => !(f.applies_to === 'candidate_only' && isInitiator)
+    );
+    return { ...participantFieldsSchema, fields: visibleFields };
+  }, [participantFieldsSchema, isInitiator]);
+
   const [participantValues, setParticipantValues] = useState<
     Record<string, string | number | null>
   >(() => {
-    if (!participantFieldsSchema) return {};
-    return Object.fromEntries(participantFieldsSchema.fields.map((f) => [f.name, null]));
+    if (!effectiveSchema) return {};
+    return Object.fromEntries(effectiveSchema.fields.map((f) => [f.name, null]));
   });
 
   const acceptMutation = useAcceptRitualSession();
@@ -157,15 +178,6 @@ export function RitualSessionResponseDialog({
   // depends_on key. CovenantRolePickerField reads formValues[field.depends_on] which
   // is the full string "session.target_covenant.covenant_type" — so the key must match.
   const targetCovenantType = useTargetCovenantType(session);
-
-  // Gate fields by applies_to: the initiator does not see candidate_only fields.
-  const isInitiator = participantId === session.initiator_id;
-  const visibleFields = (participantFieldsSchema?.fields ?? []).filter(
-    (f) => !(f.applies_to === 'candidate_only' && isInitiator)
-  );
-  const effectiveSchema = participantFieldsSchema
-    ? { ...participantFieldsSchema, fields: visibleFields }
-    : participantFieldsSchema;
 
   /**
    * Build the formValues passed to RitualForm, injecting the resolved covenant_type
@@ -199,12 +211,6 @@ export function RitualSessionResponseDialog({
       },
     });
   }
-
-  // Maps emits_reference kind to the correct id key for the reference object.
-  const REF_ID_KEY: Record<string, 'ref_covenant_id' | 'ref_covenant_role_id'> = {
-    COVENANT: 'ref_covenant_id',
-    COVENANT_ROLE: 'ref_covenant_role_id',
-  };
 
   function handleAccept() {
     // Split form values: fields with emits_reference become references entries;
