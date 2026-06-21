@@ -1,13 +1,38 @@
-from django.test import TestCase
+from decimal import Decimal
 
+from django.test import TestCase
+from evennia.accounts.models import AccountDB
+
+from world.character_creation.models import Beginnings, StartingArea
+from world.character_creation.services import finalize_character
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet, Gender
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
+from world.forms.models import Build, HeightBand
+from world.magic.constants import RitualExecutionKind
+from world.magic.factories import (
+    CantripFactory,
+    EffectTypeFactory,
+    ResonanceFactory,
+    TechniqueStyleFactory,
+    TraditionFactory,
+)
+from world.magic.models.ritual_check_config import RitualCheckConfig
+from world.magic.models.rituals import Ritual
 from world.magic.seeds_checks import (
     MAGIC_CHECK_CATEGORY_NAME,
+    character_magic_check_type_name,
     ensure_character_magic_check_type,
 )
+from world.realms.models import Realm
+from world.roster.models import Roster
 from world.skills.factories import SkillFactory
+from world.species.models import Species
+from world.tarot.constants import ArcanaType
+from world.tarot.models import TarotCard
 from world.traits.factories import TraitFactory
-from world.traits.models import TraitType
+from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
 class CharacterMagicCheckTypeTests(TestCase):
@@ -31,3 +56,147 @@ class CharacterMagicCheckTypeTests(TestCase):
         b = ensure_character_magic_check_type(self.other, stat=self.willpower, skill=self.skill)
         self.assertEqual(a1.pk, a2.pk)
         self.assertNotEqual(a1.pk, b.pk)
+
+
+_PROVISION_STATS = {
+    "strength": 2,
+    "agility": 2,
+    "stamina": 2,
+    "charm": 2,
+    "presence": 2,
+    "composure": 2,
+    "intellect": 2,
+    "wits": 2,
+    "stability": 2,
+    "luck": 2,
+    "perception": 2,
+    "willpower": 2,
+}
+
+
+class ProvisionUsesPerCharacterCheckTests(TestCase):
+    """Provisioned anima ritual's check_config points to the per-character CheckType."""
+
+    @classmethod
+    def setUpTestData(cls):
+        for stat_name in _PROVISION_STATS:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={"trait_type": TraitType.STAT, "description": stat_name},
+            )
+        Roster.objects.get_or_create(name="Available Characters")
+
+        realm = Realm.objects.create(name="ProvisionCheck Realm", description="Test")
+        area = StartingArea.objects.create(
+            name="ProvisionCheck Area",
+            description="Test",
+            realm=realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        species = Species.objects.create(name="ProvisionCheck Species", description="Test")
+        gender, _ = Gender.objects.get_or_create(
+            key="provisioncheck_gender",
+            defaults={"display_name": "ProvisionCheck Gender"},
+        )
+        tarot = TarotCard.objects.create(
+            name="ProvCheck Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=99,
+            latin_name="Fatui",
+        )
+        beginnings = Beginnings.objects.create(
+            name="ProvisionCheck Beginnings",
+            description="Test",
+            starting_area=area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        beginnings.allowed_species.add(species)
+        height_band = HeightBand.objects.create(
+            name="pc_band",
+            display_name="ProvisionCheck Band",
+            min_inches=4000,
+            max_inches=4100,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        build = Build.objects.create(
+            name="pc_build",
+            display_name="ProvisionCheck Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+        path = PathFactory(name="ProvisionCheck Path", stage=PathStage.PROSPECT, minimum_level=1)
+        TechniqueStyleFactory()
+        EffectTypeFactory()
+        ResonanceFactory()
+        tradition = TraditionFactory()
+
+        # Skill needed so provision_player_anima_ritual doesn't log + skip.
+        cls.skill = SkillFactory(trait__name="PCProvisionMelee")
+
+        cantrip = CantripFactory(requires_facet=False)
+        cls.area = area
+        cls.beginnings = beginnings
+        cls.species = species
+        cls.gender = gender
+        cls.tarot = tarot
+        cls.height_band = height_band
+        cls.build = build
+        cls.path = path
+        cls.tradition = tradition
+        cls.cantrip = cantrip
+
+    def setUp(self):
+        CharacterSheet.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+    def test_provisioned_ritual_uses_per_character_check_type(self):
+        """provision_player_anima_ritual wires check_type to the per-character CheckType."""
+        from world.character_creation.models import CharacterDraft
+
+        account = AccountDB.objects.create(username=f"provcheck_run_{id(self)}")
+        draft = CharacterDraft.objects.create(
+            account=account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            age=25,
+            height_band=self.height_band,
+            height_inches=4050,
+            build=self.build,
+            draft_data={
+                "first_name": "ProvCheck",
+                "description": "A test character",
+                "stats": _PROVISION_STATS,
+                "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot.name,
+                "tarot_reversed": False,
+                "traits_complete": True,
+                "selected_cantrip_id": self.cantrip.id,
+                "skills": {str(self.skill.pk): 20},
+            },
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        ritual = Ritual.objects.filter(
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        ).first()
+        self.assertIsNotNone(ritual, "Expected a SCENE_ACTION Ritual authored by the account")
+
+        config = RitualCheckConfig.objects.filter(ritual=ritual).first()
+        self.assertIsNotNone(config)
+        self.assertIsNotNone(config.check_type)
+        self.assertEqual(
+            config.check_type.name,
+            character_magic_check_type_name(sheet),
+        )

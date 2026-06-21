@@ -277,22 +277,13 @@ def provision_player_anima_ritual(
         author_account=account,
     )
 
-    # 4. Create the config. check_type defaults to the seeded Anima Restoration
-    # CheckType; resonance is left null for the player to set. Provisioning never
-    # blocks finalization — an unseeded environment just leaves check_type NULL.
-    from world.checks.models import CheckType  # noqa: PLC0415
+    # 4. Synthesize the character's personal magic check (#1306) — rolled by this
+    # ritual AND by the character's technique casts. Idempotent.
     from world.magic.seeds_checks import (  # noqa: PLC0415
-        ANIMA_RESTORATION_CHECK_TYPE_NAME,
+        ensure_character_magic_check_type,
     )
 
-    check_type = CheckType.objects.filter(name=ANIMA_RESTORATION_CHECK_TYPE_NAME).first()
-    if check_type is None:
-        logger.warning(
-            "provision_player_anima_ritual: %r CheckType not seeded; leaving "
-            "check_type NULL for character %s",
-            ANIMA_RESTORATION_CHECK_TYPE_NAME,
-            character.pk,
-        )
+    check_type = ensure_character_magic_check_type(character_sheet, stat=stat_trait, skill=skill)
 
     RitualCheckConfig.objects.create(
         ritual=ritual,

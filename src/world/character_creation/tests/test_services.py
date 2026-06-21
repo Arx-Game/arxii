@@ -1412,18 +1412,14 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
         assert "RitualKTest" in ritual.name
 
     def test_finalize_creates_ritual_check_config(self) -> None:
-        """finalize_character creates RitualCheckConfig with the seeded default check_type."""
+        """finalize_character creates RitualCheckConfig pointing at the per-character CheckType."""
         from world.magic.constants import RitualExecutionKind
         from world.magic.models.ritual_check_config import RitualCheckConfig
         from world.magic.models.rituals import Ritual
-        from world.magic.seeds_checks import (
-            ANIMA_RESTORATION_CHECK_TYPE_NAME,
-            ensure_magic_check_types,
-        )
+        from world.magic.seeds_checks import character_magic_check_type_name
 
-        ensure_magic_check_types()
         draft = self._create_complete_draft()
-        finalize_character(draft, add_to_roster=True)
+        character = finalize_character(draft, add_to_roster=True)
 
         ritual = Ritual.objects.filter(
             author_account=self.account,
@@ -1433,9 +1429,9 @@ class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
         config = RitualCheckConfig.objects.filter(ritual=ritual).first()
         assert config is not None, "Expected a RitualCheckConfig for the player anima ritual"
         assert config.check_type is not None, (
-            "Provisioning should default check_type to the seeded Anima Restoration row"
+            "Provisioning should wire check_type to the per-character CheckType"
         )
-        assert config.check_type.name == ANIMA_RESTORATION_CHECK_TYPE_NAME
+        assert config.check_type.name == character_magic_check_type_name(character.sheet_data)
 
     def test_finalize_creates_ritual_knowledge_row(self) -> None:
         """finalize_character creates CharacterRitualKnowledge for the player anima ritual."""
