@@ -64,9 +64,17 @@ def create_technique(  # noqa: PLR0913
     action_category,
     description,
     source_cantrip=None,
+    action_template=None,
 ) -> Technique:
     """Low-level Technique row writer. Shared by cantrip finalization and
-    build_technique. Does NOT create a CharacterTechnique."""
+    build_technique. Does NOT create a CharacterTechnique.
+
+    Defaults action_template to the shared 'Technique Cast' template so every
+    technique is castable standalone; pass an explicit template to override."""
+    if action_template is None:
+        from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+
+        action_template = get_standalone_cast_template()
     return Technique.objects.create(
         name=name,
         gift=gift,
@@ -80,6 +88,7 @@ def create_technique(  # noqa: PLR0913
         description=description,
         source_cantrip=source_cantrip,
         creator=creator,
+        action_template=action_template,
     )
 
 
