@@ -49,7 +49,7 @@ _SHIELDED_FLOW_NAME: str = "shielded_halve_damage"
 _SHIELDED_TRIGGER_NAME: str = "shielded_damage_pre_apply"
 
 #: Filter: trigger fires only when payload.target == trigger.obj (the shielded ally).
-_SELF_TARGET_FILTER: dict = {"path": "target", "op": "==", "value": "self"}
+_SELF_TARGET_FILTER: dict[str, object] = {"path": "target", "op": "==", "value": "self"}
 
 
 # ---------------------------------------------------------------------------
@@ -65,9 +65,10 @@ def ensure_defend_content() -> None:
     1. A ``FlowDefinition`` (name ``shielded_halve_damage``) with a single
        ``MODIFY_PAYLOAD`` step ``{"field": "amount", "op": "multiply", "value": 0.5}``.
     2. A ``TriggerDefinition`` (name ``shielded_damage_pre_apply``) on
-       ``DAMAGE_PRE_APPLY`` with a ``base_filter_condition`` that restricts
+       ``DAMAGE_PRE_APPLY`` with ``base_filter_condition=_SELF_TARGET_FILTER``
+       (``{"path": "target", "op": "==", "value": "self"}``), which restricts
        firing to events where ``payload.target`` is the trigger's bearer (the
-       protected ally). ``base_filter_condition=None`` would fire for any target
+       protected ally). Without this filter it would fire for any target
        in the room — the SELF filter ensures per-ally specificity.
     3. A "Shielded" ``ConditionTemplate`` with ``reactive_triggers`` wired to the
        trigger above.

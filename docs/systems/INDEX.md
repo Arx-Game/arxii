@@ -1111,6 +1111,59 @@ These two axes are orthogonal — never re-merge them.
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
+### Combat
+Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,
+reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
+
+- **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE),
+  `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
+  `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
+- **Key Services (`world/combat/services.py`):**
+  - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
+    interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
+  - `declare_interpose(participant, ally)` — arm an INTERPOSE `CombatRoundAction` for the round
+  - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
+    an armed interpose challenge and dispatches it
+  - `dispatch_interpose(interposer, protected, pre_payload, approach)` — thin wrapper over
+    `dispatch_capability_reaction`; calls `apply_interpose_outcome` to mutate the payload
+  - `apply_interpose_outcome(pre_payload, result)` — SUCCESS zeroes payload, PARTIAL halves,
+    FAILURE is a no-op
+  - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
+    `ChallengeInstance` rows for armed INTERPOSE actions each round
+  - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
+    `TriggerHandler.refresh()` on each active participant so passive-installed reactive
+    triggers (e.g. Shielded) fire in the same round
+- **Key Services (`world/mechanics/reactions.py`):**
+  - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn)`
+    — shared reactive spine; used by INTERPOSE and the catch-faller seam
+- **Reactive content seeds:**
+  - `ensure_interpose_content()` (`src/world/combat/interpose_content.py`) — idempotent
+    seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
+    (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
+    consequence
+  - `ensure_defend_content()` (`src/world/combat/defend_content.py`) — idempotent seed for
+    the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
+    filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
+    with `TechniqueAppliedCondition(target_kind=ALLY)`
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `EncounterStatus`,
+  `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
+- **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
+  participant, add opponent, pause), player actions (declare, ready, interpose, cover,
+  yield, flee, my_action, available_combos), duel challenge endpoints
+- **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
+  vitals (`apply_damage_to_participant`, `process_damage_consequences`),
+  conditions (`bulk_apply_conditions` — now installs reactive side-effects),
+  mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
+  flows (`DAMAGE_PRE_APPLY` event; `MODIFY_PAYLOAD` flow action for DEFEND),
+  covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
+  magic (technique use pipeline, `CombatPull`)
+- **Source:** `src/world/combat/`
+- **Details:** `docs/roadmap/combat.md` · architecture:
+  `docs/architecture/combat-magic-integration.md`,
+  `docs/architecture/damage-scaling.md`,
+  `docs/architecture/combat-conditions.md`
+
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.
 

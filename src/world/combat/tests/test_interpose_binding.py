@@ -225,7 +225,7 @@ class EnsureInterposeChallengesToAllAlliesTest(TestCase):
         )
 
 
-class EnsureInterposeChallengIdempotencyTest(TestCase):
+class EnsureInterposeChallengeIdempotencyTest(TestCase):
     """Calling _ensure_interpose_challenges twice creates no duplicates."""
 
     def setUp(self) -> None:

@@ -796,7 +796,10 @@ class CombatRoundAction(SharedMemoryModel):
         choices=CombatManeuver.choices,
         null=True,
         blank=True,
-        help_text="Special maneuver this declaration is (flee/cover); null = normal action.",
+        help_text=(
+            "Special maneuver this declaration is "
+            "(flee/cover/yield/interpose); null = normal action."
+        ),
     )
 
     physical_passive = models.ForeignKey(
