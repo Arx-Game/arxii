@@ -376,6 +376,19 @@ class DefendAndInterposeBothReduceDamageTest(TestCase):
         shielded_template = ConditionTemplate.objects.get(name="Shielded")
         apply_condition(self.ally, shielded_template)
 
+        # apply_condition installs the Shielded reactive Trigger and calls
+        # TriggerHandler.on_trigger_added → invalidate(), which defers the cache
+        # reset to transaction.on_commit. Inside this TestCase's never-committed
+        # atomic transaction that callback never runs, so the ally's already-
+        # populated (empty) trigger cache would hide the new trigger from the
+        # DAMAGE_PRE_APPLY emit below — and DEFEND's ×0.5 would never fire.
+        # Production avoids this via resolve_round's _refresh_participant_trigger_
+        # handlers; mirror that here with a synchronous refresh so the freshly
+        # installed trigger is visible within this same transaction.
+        ally_trigger_handler = getattr(self.ally, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if ally_trigger_handler is not None:
+            ally_trigger_handler.refresh()
+
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_defend_and_interpose_partial_compose(self, mock_check) -> None:
         """DEFEND (×0.5) then INTERPOSE partial (//2) both reduce ally health.
