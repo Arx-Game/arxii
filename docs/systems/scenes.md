@@ -149,6 +149,38 @@ from world.scenes.place_services import ensure_scene_for_location
 scene = ensure_scene_for_location(room, privacy_mode=ScenePrivacyMode.PRIVATE)
 ```
 
+### Frictionless / Implicit Scene Start + Auto-Close (#1309)
+
+Players should never have to manually open a scene before they can act. The
+lifecycle is bookended around `ensure_scene_for_location` (the get-or-create
+primitive above):
+
+- **Start-or-join on action.** `start_or_join_scene(room, *, owner_account=None,
+  name=None, privacy_mode=None)` (`place_services.py`) wraps
+  `ensure_scene_for_location_created` (which returns a `(scene, created)` tuple).
+  When *this* call created the scene and an `owner_account` is supplied, that
+  account is recorded as the scene owner via a `SceneParticipation(is_owner=True)`
+  (mirroring `SceneViewSet.perform_create`). If the scene already existed, no owner
+  is changed — the actor simply joins. It is idempotent: a second actor in the same
+  room joins the **same** scene and is **not** made owner. Privacy is auto-derived
+  from room publicness (PUBLIC if publicly listed, else PRIVATE), honoring the
+  invariant below.
+
+  Wired at the player action seams that previously dead-ended with a 404 when no
+  active scene existed: `SceneActionRequestViewSet.create` and the
+  `…/cast` action (`action_views.py`) — both now take an **optional** `scene`
+  field; when omitted they resolve the scene from the initiator persona's current
+  room via `_resolve_action_scene`. `record_interaction` (`interaction_services.py`)
+  likewise implicitly starts a scene when a pose lands in a room with no active
+  scene (owner = the posing character's account).
+
+- **Auto-close when the room empties.** `maybe_finish_empty_scene(room, *,
+  leaving=None)` (`interaction_services.py`) is called from
+  `Room.at_object_leave` (a thin Evennia-hook delegator). It finds the room's
+  active scene and calls `scene.finish_scene()` when no scene-participating
+  character remains present (walking `room.contents`, excluding `leaving` — which
+  may still be in contents at hook time). Returns the finished `Scene` or `None`.
+
 ### Scene Privacy ↔ Room-Publicness Invariant (#1287)
 
 **The rule (one-directional):** a `Scene` whose `location` is a publicly-listed

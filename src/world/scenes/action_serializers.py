@@ -205,7 +205,9 @@ def _validate_cast_pull(attrs: dict) -> dict:
 class TechniqueCastCreateSerializer(serializers.Serializer):
     """Validate input for the standalone technique cast endpoint."""
 
-    scene = serializers.IntegerField()
+    # Frictionless scene start (#1309): omit ``scene`` to implicitly start/join
+    # the scene at the initiator's current room.
+    scene = serializers.IntegerField(required=False, allow_null=True)
     initiator_persona = serializers.IntegerField()
     technique_id = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False, allow_null=True)
@@ -347,7 +349,9 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
 
 
 class SceneActionRequestCreateSerializer(serializers.Serializer):
-    scene = serializers.IntegerField()
+    # Frictionless scene start (#1309): omit ``scene`` to implicitly start/join
+    # the scene at the initiator's current room.
+    scene = serializers.IntegerField(required=False, allow_null=True)
     initiator_persona = serializers.IntegerField()
     target_persona = serializers.IntegerField(required=False)
     target_persona_ids = serializers.ListField(

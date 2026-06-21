@@ -46,6 +46,44 @@ from world.scenes.models import Persona, Scene
 # SonarCloud smell (python:S1192).
 _NO_PERSONAS_DETAIL = "No personas found for your account."
 _INITIATOR_NOT_FOUND_DETAIL = "Initiator persona not found for your account."
+_NO_LOCATION_DETAIL = "Initiator has no location to start a scene in."
+
+
+def _resolve_action_scene(
+    *,
+    scene_id: int | None,
+    initiator_persona: Persona,
+    account: Any,
+) -> Scene | Response:
+    """Resolve the scene for an action request / cast.
+
+    Frictionless scene start (#1309): when ``scene_id`` is given, fetch that
+    active scene (404 if missing). When omitted, implicitly start-or-join the
+    scene at the initiator's current room, recording ``account`` as owner if
+    this call created it.
+
+    Returns the resolved ``Scene`` on success, or a DRF ``Response`` carrying the
+    error to return to the caller.
+    """
+    if scene_id is not None:
+        try:
+            return Scene.objects.get(pk=scene_id, is_active=True)
+        except Scene.DoesNotExist:
+            return Response(
+                {"detail": "Active scene not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    from world.scenes.place_services import start_or_join_scene  # noqa: PLC0415
+
+    character = initiator_persona.character_sheet.character
+    location = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
+    if location is None:
+        return Response(
+            {"detail": _NO_LOCATION_DETAIL},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return start_or_join_scene(location, owner_account=account)
 
 
 class SceneActionRequestPagination(PageNumberPagination):
@@ -101,7 +139,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        scene_id = serializer.validated_data["scene"]
+        scene_id = serializer.validated_data.get("scene")
         initiator_persona_id = serializer.validated_data["initiator_persona"]
         action_key = serializer.validated_data["action_key"]
         target_ids: list[int] = serializer.validated_data["target_ids"]
@@ -125,14 +163,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         if cardinality == TargetType.SELF and target_ids:
             raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
 
-        try:
-            scene = Scene.objects.get(pk=scene_id, is_active=True)
-        except Scene.DoesNotExist:
-            return Response(
-                {"detail": "Active scene not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
         # Caller must explicitly specify which persona initiates the action.
         if initiator_persona_id not in persona_ids:
             return Response(
@@ -140,6 +170,14 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+
+        scene = _resolve_action_scene(
+            scene_id=scene_id,
+            initiator_persona=initiator_persona,
+            account=request.user,
+        )
+        if isinstance(scene, Response):
+            return scene
 
         primary_id = target_ids[0] if target_ids else None
         target_persona = (
@@ -316,7 +354,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             )
 
         vd = serializer.validated_data
-        scene_id = vd["scene"]
+        scene_id = vd.get("scene")
         initiator_persona_id = vd["initiator_persona"]
         technique_id = vd["technique_id"]
         target_persona_id = vd.get("target_persona")
@@ -334,20 +372,20 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 threads=tuple(pull_data["threads"]),
             )
 
-        try:
-            scene = Scene.objects.get(pk=scene_id, is_active=True)
-        except Scene.DoesNotExist:
-            return Response(
-                {"detail": "Active scene not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
         if initiator_persona_id not in persona_ids:
             return Response(
                 {"detail": _INITIATOR_NOT_FOUND_DETAIL},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
+
+        scene = _resolve_action_scene(
+            scene_id=scene_id,
+            initiator_persona=initiator_persona,
+            account=request.user,
+        )
+        if isinstance(scene, Response):
+            return scene
 
         target_persona: Persona | None = None
         if target_persona_id is not None:

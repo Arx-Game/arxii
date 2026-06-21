@@ -117,4 +117,7 @@ class Room(ObjectParent, DefaultRoom):
             **kwargs: Arbitrary keyword arguments.
         """
         super().at_object_leave(obj, target_location, **kwargs)
+        from world.scenes.interaction_services import maybe_finish_empty_scene
+
+        maybe_finish_empty_scene(self, leaving=obj)
         self._broadcast_room_state(exclude=obj)

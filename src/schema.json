@@ -41515,6 +41515,7 @@ components:
       properties:
         scene:
           type: integer
+          nullable: true
         initiator_persona:
           type: integer
         target_persona:
@@ -41556,7 +41557,6 @@ components:
       required:
       - action_key
       - initiator_persona
-      - scene
     SceneActionRequestRequest:
       type: object
       properties:

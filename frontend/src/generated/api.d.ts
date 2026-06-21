@@ -22941,7 +22941,7 @@ export interface components {
       readonly resolved_at: string | null;
     };
     SceneActionRequestCreateRequest: {
-      scene: number;
+      scene?: number | null;
       initiator_persona: number;
       target_persona?: number;
       target_persona_ids?: number[];

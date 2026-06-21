@@ -63,6 +63,54 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
         del location._active_scene_cache  # noqa: SLF001
 
 
+def maybe_finish_empty_scene(
+    room: ObjectDB,
+    *,
+    leaving: ObjectDB | None = None,
+) -> Scene | None:
+    """Auto-close the room's active scene when no participating character remains.
+
+    Frictionless scene end (#1309): when a character leaves a room, finish the
+    active scene if no scene-participating character is still present. The
+    leaving object is excluded — at the ``at_object_leave`` hook it may still be
+    in ``room.contents``.
+
+    Args:
+        room: The room the character is leaving.
+        leaving: The departing object, excluded from the presence check.
+
+    Returns:
+        The finished Scene, or None if there was no active scene or a
+        participant is still present.
+    """
+    if room is None:
+        return None
+
+    scene = Scene.objects.filter(location=room, is_active=True).first()
+    if scene is None:
+        return None
+
+    participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
+
+    for obj in room.contents:
+        if obj is leaving:
+            continue
+        # A character sheet marks a real character (skip items, exits, etc.).
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if sheet is None:
+            continue
+        account_id = _get_account_for_character(obj.pk)
+        if account_id is not None and account_id in participant_account_ids:
+            return None  # a participating character is still present
+
+    scene.finish_scene()
+    invalidate_active_scene_cache(room)
+    return scene
+
+
 def reassign_persona_interactions(
     *,
     source_persona: Persona,
@@ -653,6 +701,20 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
 
     if scene is None:
         scene = _get_active_scene(character.location)
+
+    # Frictionless scene start (#1309): a pose in a room with no active scene
+    # implicitly starts one (owner = the posing character's account).
+    if scene is None and character.location is not None:
+        from world.scenes.place_services import start_or_join_scene  # noqa: PLC0415
+
+        account_id = _get_account_for_character(character.pk)
+        owner_account = None
+        if account_id is not None:
+            from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+            owner_account = AccountDB.objects.filter(pk=account_id).first()
+        scene = start_or_join_scene(character.location, owner_account=owner_account)
+        invalidate_active_scene_cache(character.location)
 
     # Ephemeral scenes: push in real-time but never persist
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:

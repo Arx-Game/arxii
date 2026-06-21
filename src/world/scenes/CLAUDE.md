@@ -41,6 +41,13 @@ Captures and manages roleplay sessions with participant tracking, interaction re
 - Participation-based access control
 - Privacy controls for disguised participation
 
+### `place_services.py`
+- **`ensure_scene_for_location(room, *, name, privacy_mode)`**: get-or-create the room's active scene; privacy auto-derived from room publicness when omitted (PUBLIC if publicly listed, else PRIVATE). Thin wrapper over `ensure_scene_for_location_created`, which returns `(scene, created)`.
+- **`start_or_join_scene(room, *, owner_account, name, privacy_mode)`**: frictionless scene start (#1309). Get-or-creates the active scene; records `owner_account` as `SceneParticipation(is_owner=True)` ONLY when this call created the scene (a later actor just joins, no owner change). Idempotent.
+
+### `interaction_services.py`
+- **`maybe_finish_empty_scene(room, *, leaving=None)`**: auto-close (#1309). Finishes the room's active scene when no scene-participating character remains present (walks `room.contents`, excluding `leaving`, which may still be in contents at the `at_object_leave` hook). Called from `Room.at_object_leave`. Implicit scene start on a pose lives in `record_interaction`'s no-active-scene branch.
+
 ## Key Classes
 
 - **`Scene`**: Contains participants and interactions
