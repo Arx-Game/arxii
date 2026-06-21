@@ -139,8 +139,9 @@ class EventLifecycleTest(TestCase):
     def test_start_private_event_in_public_room_rejected(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED, is_public=False)
         # event.location.is_public defaults True (publicly listed)
-        with self.assertRaises(EventError):
+        with self.assertRaises(EventError) as ctx:
             start_event(event)
+        self.assertEqual(ctx.exception.user_message, EventError.PRIVATE_IN_PUBLIC_ROOM)
         self.assertFalse(Scene.objects.filter(event=event).exists())
         event.refresh_from_db()
         self.assertEqual(event.status, EventStatus.SCHEDULED)  # transaction rolled back
