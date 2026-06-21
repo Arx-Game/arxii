@@ -52,6 +52,7 @@ Tasks registered in `tasks.py` via `register_all_tasks()`, called at server star
 | Relationship weekly reset | daily sweep | relationships |
 | Form expiration cleanup | hourly | forms |
 | Condition expiration cleanup | hourly | conditions |
+| Block finalize (lifted-block clear) | hourly | scenes (#1278) |
 
 ## API Endpoints
 

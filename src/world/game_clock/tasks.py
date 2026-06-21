@@ -356,6 +356,17 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.scenes.tasks import block_finalize_task
+
+    register_task(
+        CronDefinition(
+            task_key="scenes.block_finalize",
+            callable=block_finalize_task,
+            interval=timedelta(hours=1),
+            description="Finalize player blocks whose lift grace period has elapsed (#1278).",
+        )
+    )
+
     from world.projects.services import scan_active_projects
 
     register_task(
