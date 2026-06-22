@@ -111,7 +111,8 @@ class TelnetConsentJourneyTests(TestCase):
         self.assertEqual(req.status, ActionRequestStatus.RESOLVED)
         self.target_char.msg.assert_called()
 
-    def test_intimidate_then_deny_marks_denied(self) -> None:
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_intimidate_then_deny_marks_denied(self, mock_resolve: MagicMock) -> None:
         """Target denies via telnet → DENIED; start_action_resolution never called."""
         self._run(CmdIntimidate, self.initiator_char, self.target_char.key)
 
@@ -122,3 +123,4 @@ class TelnetConsentJourneyTests(TestCase):
 
         req.refresh_from_db()
         self.assertEqual(req.status, ActionRequestStatus.DENIED)
+        mock_resolve.assert_not_called()

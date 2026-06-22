@@ -606,7 +606,7 @@ def _make_pc_persona():
     """Create a Persona backed by a Character that has a db_account (a real player).
 
     The result passes ``_persona_is_npc`` as False.  Mirrors the pattern used in
-    test_targeted_action_e2e.py: CharacterSheet → primary_persona + wired account.
+    integration-test consent flows: CharacterSheet → primary_persona + wired account.
     """
     account = AccountFactory()
     character = CharacterFactory()

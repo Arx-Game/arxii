@@ -18,7 +18,7 @@ No Postgres-only paths are exercised here — seed_or_feed_encounter_from_cast
 uses only standard FK lookups that SQLite handles fine. The apply_condition
 (Soulfray) DISTINCT ON path is NOT triggered in these tests because the
 technique factories used by the routing branches don't activate Soulfray
-accruement; that path lives in the postgres-tagged test_targeted_action_e2e.py.
+accruement; that path lives in postgres-tagged tests elsewhere.
 
 FactoryBoy chains below are written readably so they double as seed-data
 documentation for a "new player who knows a benign castable technique and a
