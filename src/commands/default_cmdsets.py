@@ -64,6 +64,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.weave import CmdWeaveThread
 
 
@@ -145,6 +146,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdMute())
         self.add(CmdUnmute())
         self.add(CmdBlockList())
+        # Soul Tether lifecycle commands (#1343)
+        self.add(CmdTether())
+        self.add(CmdSineater())
         # Combat commands
         self.add(CmdDeclareTechnique())
 
