@@ -56,6 +56,14 @@ actions, backends, and service functions.
   parses `weave resonance=<name> trait=<id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
   issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
+  `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
+  `poses <char>` lists endorseable poses in the current scene.
+  `endorse pose/entry/style <char> resonance=<name> [confirm]` dispatches to the
+  appropriate action. Both derive the active scene from the caller's room via
+  `_get_active_scene` (#1340).
+- **`fashion.py`**: `CmdJudgePresentation` (`judge`) — telnet face of
+  `JudgePresentationAction`; parses `judge <presentation_id>` (#1340).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
