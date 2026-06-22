@@ -3433,12 +3433,17 @@ class EntryFlourishRespondSerializer(serializers.Serializer):
         """Delegate to resolve_entry_flourish_offer; surface typed errors as 400."""
         from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
         from world.magic.exceptions import EntryFlourishOfferError  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
 
-        offer = validated_data["offer_id"]
+        offer = validated_data[
+            "offer_id"
+        ]  # already resolved to the PendingEntryFlourishOffer object
+        resonance = Resonance.objects.filter(pk=validated_data["resonance_id"]).first()
+        if resonance is None:
+            msg = "Resonance not found."
+            raise serializers.ValidationError(msg)
         try:
-            return resolve_entry_flourish_offer(
-                offer.pk, resonance_id=validated_data["resonance_id"]
-            )
+            return resolve_entry_flourish_offer(offer, resonance=resonance)
         except EntryFlourishOfferError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 

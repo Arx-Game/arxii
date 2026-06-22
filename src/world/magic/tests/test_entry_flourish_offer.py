@@ -67,7 +67,7 @@ class ResolveOfferTest(TestCase):
         offer = PendingEntryFlourishOffer.objects.create(
             character_sheet=self.sheet, scene=self.scene
         )
-        result = resolve_entry_flourish_offer(offer.pk, resonance_id=self.claimed.resonance_id)
+        result = resolve_entry_flourish_offer(offer, resonance=self.claimed.resonance)
         self.assertEqual(result.resonance_id, self.claimed.resonance_id)
         self.assertFalse(PendingEntryFlourishOffer.objects.filter(pk=offer.pk).exists())
         self.assertTrue(
@@ -85,15 +85,8 @@ class ResolveOfferTest(TestCase):
             character_sheet=self.sheet, scene=self.scene
         )
         with self.assertRaises(EntryFlourishOfferStaleError):
-            resolve_entry_flourish_offer(offer.pk, resonance_id=other.pk)
+            resolve_entry_flourish_offer(offer, resonance=other)
         self.assertFalse(PendingEntryFlourishOffer.objects.filter(pk=offer.pk).exists())
-
-    def test_resolve_missing_offer_raises_not_found(self):
-        from world.magic.entry_flourish import resolve_entry_flourish_offer
-        from world.magic.exceptions import EntryFlourishOfferNotFoundError
-
-        with self.assertRaises(EntryFlourishOfferNotFoundError):
-            resolve_entry_flourish_offer(999999, resonance_id=self.claimed.resonance_id)
 
 
 class EntryFlourishRecordUniquenessTest(TestCase):
