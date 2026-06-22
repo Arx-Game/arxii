@@ -55,6 +55,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.fashion import CmdJudgePresentation
 from commands.ritual import CmdRitual
 from commands.social.blocking import (
     CmdBlock,
@@ -128,6 +129,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdFlourish())
         self.add(CmdEndorse())
         self.add(CmdPoses())
+        self.add(CmdJudgePresentation())
         self.add(CmdIntimidate())
         self.add(CmdAccept())
         self.add(CmdDeny())
