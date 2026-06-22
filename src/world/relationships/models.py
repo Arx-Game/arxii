@@ -240,6 +240,47 @@ class HybridRequirement(SharedMemoryModel):
         return f"{self.hybrid_type.name} requires {self.track.name} >= Tier {self.minimum_tier}"
 
 
+class GrievanceOption(SharedMemoryModel):
+    """An authored preset a wronged character may register against whoever harmed them (#1429).
+
+    When a secret's victim learns who wronged them, they pick one of these (or enter a custom
+    value) and it applies a one-sided relationship capstone toward the perpetrator. The ``label``
+    is player-facing flavor; ``track`` + ``points`` are the mechanical swing — both staff-editable
+    data, so the menu can be tuned without code. Grievances are negative by construction: ``track``
+    must be a NEGATIVE-sign track (``clean`` enforces it).
+    """
+
+    label = models.CharField(
+        max_length=60,
+        unique=True,
+        help_text="Player-facing flavor, e.g. 'Furious Revelation'. PLACEHOLDER (author pass).",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.CASCADE,
+        related_name="grievance_options",
+        help_text="The negative-sign track this grievance lands on.",
+    )
+    points = models.PositiveIntegerField(
+        help_text="Magnitude of the capstone swing applied to the track.",
+    )
+    display_order = models.PositiveSmallIntegerField(
+        default=0, help_text="Order in the victim's menu."
+    )
+    is_active = models.BooleanField(default=True, help_text="Offer this option to victims.")
+
+    class Meta:
+        ordering = ["display_order", "label"]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.track.name} +{self.points})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.track_id and self.track.sign != TrackSign.NEGATIVE:
+            raise ValidationError({"track": "A grievance must land on a negative-sign track."})
+
+
 class CharacterRelationship(SharedMemoryModel):
     """
     One character's relationship toward another, tracked across multiple dimensions.

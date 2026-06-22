@@ -3202,6 +3202,7 @@
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - tiers <- relationships.RelationshipTier
   - hybridrequirement_set <- relationships.HybridRequirement
+  - grievance_options <- relationships.GrievanceOption
   - relationshiptrackprogress_set <- relationships.RelationshipTrackProgress
   - relationshipupdate_set <- relationships.RelationshipUpdate
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
@@ -3220,6 +3221,10 @@
 ### HybridRequirement
 **Foreign Keys:**
   - hybrid_type -> relationships.HybridRelationshipType [FK]
+  - track -> relationships.RelationshipTrack [FK]
+
+### GrievanceOption
+**Foreign Keys:**
   - track -> relationships.RelationshipTrack [FK]
 
 ### CharacterRelationship
@@ -3287,6 +3292,7 @@
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' — Get the account currently playing this character via roster tenure.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
+- `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
 
 
 ## world.roster

@@ -35,6 +35,10 @@ Three ways to add points:
 - **RelationshipTrack** — Feeling categories with sign (positive/negative)
 - **RelationshipTier** — Intensity levels per track with point thresholds
 - **HybridRelationshipType** — Combination types with HybridRequirement entries
+- **GrievanceOption** (#1429) — Staff-authored preset swings a wronged character may register
+  against whoever harmed them (label + negative `track` + `points`). Used by the secret-victim
+  flow: the victim picks one (or a custom value) and `register_grievance` applies it. `clean`
+  enforces a NEGATIVE-sign track.
 
 ### Character Data
 - **CharacterRelationship** — Core relationship between two CharacterSheets. Tracks
@@ -62,8 +66,17 @@ Three ways to add points:
 - Deceit mechanic: displayed vs real designation with OOC warning flag
 - Easy de-escalation to inactive at any time
 
+## Services
+- **`register_grievance(*, source, target, option=None, custom_points=None, custom_track=None, …)`**
+  (#1429) — a wronged character's **one-sided** grievance: resolves a `GrievanceOption` (or a
+  custom points+track) and applies it as a `create_capstone` on the (source→target) relationship.
+  Unilateral — never needs the target's consent; the relationship stays `is_pending` until/unless
+  reciprocated. Track must be NEGATIVE-sign. The secret-victim prompt is the caller (web slice).
+
 ## Integration
 - Achievement stats fired via `world.achievements.services.increment_stat()`
 - Mechanical bonus: cube root of developed absolute value (modest)
 - Magical tethers (future PR): XP-gated power built around capstones
 - Conditions gate modifier application in checks
+- **Secret reputation consequences (#1429):** a secret's persona-victim, on learning who wronged
+  them, registers a grievance via `register_grievance` (the relationship effect they *decide*).
