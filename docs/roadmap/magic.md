@@ -121,6 +121,25 @@ mapping for the per-character check (today all magic checks use the Arcana aspec
 The targeting model gaps (validity enforcement, AoE, frontend picker, standalone condition
 application) were resolved in #1321 — see the #1321 entry above.
 
+## Ritual of the Durance (#1352 — BUILT)
+
+The within-tier class-level advancement ceremony is complete. Magic's contribution:
+
+- **`RitualLiturgy`** (`models/liturgy.py`) — OneToOne on `Ritual`; `opening_call` TextField
+  holds the authored officiant invocation (public, non-spoiler).
+- **`RitualOfTheDuranceFactory`** (`factories.py`) — seeds the `Ritual` row (SERVICE /
+  INDUCTION, `service_function_path` → `world.progression.services.advancement.advance_class_level_via_session`,
+  `min_participants=2`) and its companion `RitualLiturgy` via a `@post_generation` hook.
+- `AudereMajoraCrossing` now inherits `AbstractClassLevelAdvancement` (from
+  `world.progression.models.advancement`), sharing shape with `ClassLevelAdvancement`.
+  `cross_threshold` calls `apply_class_level_advance` (the shared spine) instead of
+  inlining a level write.
+
+**Open follow-up:** telnet drivability of `RitualSession` dispatch (REST-only today;
+session-layer `action.run` / `CmdRitual` convergence is a tracked follow-up).
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

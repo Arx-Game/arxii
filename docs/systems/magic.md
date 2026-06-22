@@ -322,6 +322,67 @@ moment.
 **Exceptions:** `EntryFlourishOfferError`, `EntryFlourishOfferNotFoundError`,
 `EntryFlourishOfferStaleError` (all in `exceptions.py`; carry `user_message`).
 
+### Ritual Liturgy (models/liturgy.py — #1352)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `RitualLiturgy` | Player-facing authored words for a Ritual | `ritual` (OneToOne → `Ritual`), `opening_call` TextField |
+
+`RitualLiturgy` holds the officiant's ceremonial language for a Ritual row. Each Ritual
+has at most one `RitualLiturgy`. Content here is public and non-spoiler; spoiler-private
+ceremony text (e.g. Audere Majora vision/manifestation wording) lives on
+`AudereMajoraThreshold` and is kept denormalized from this model.
+
+The Ritual of the Durance is seeded with a `RitualLiturgy` whose `opening_call`
+carries the induction invocation. See "Ritual of the Durance" section below.
+
+---
+
+### Ritual of the Durance (#1352)
+
+The **Ritual of the Durance** is the in-person, out-of-combat ceremony that marks
+each **within-tier** class-level advance (1→2 … 4→5, 6→7 … 9→10, etc.). Narratively,
+"the Durance" is a character's entire life arc; this ceremony is *one rite within it*.
+Backend surfaces stay Class/Level-named; the narrative vocabulary is surface-only.
+
+**Advancement gate.** The character must meet the authored `ClassLevelUnlock` requirements
+for the next level. `LegendRequirement` + `ClassLevelUnlock` accumulate the character's
+legend total and gate advancement — legend qualifies; **legend is never spent**, and there
+is **no XP spend** for a within-tier advance.
+
+**Tier-crossing refusal.** Steps that would cross a tier boundary (5→6, 10→11, 15→16,
+20→21) are blocked by `TierBoundaryRequiresCrossing`. Those crossings are **Audere Majora**
+territory only. The two advancement paths share `apply_class_level_advance` and
+`AbstractClassLevelAdvancement` (see `docs/systems/progression.md`).
+
+**Session mechanics.** The rite dispatches through the existing multi-participant
+`RitualSession` machinery (`participation_rule=INDUCTION`). Flow:
+`draft_session` → inductees `accept_session` → `fire_session` calls
+`advance_class_level_via_session`. Several inductees may advance in one scene; each
+receives its own `ClassLevelAdvancement` receipt, and the session records the **scene**
+and the **declaration interaction** (the testament pose).
+
+**Officiant.** Must be a higher-level character (`officiant_sheet.current_level > target_level`)
+on the **same Path lineage** as the inductee (same Path, or the officiant evolved from the
+inductee's current Path). PC or academy NPC. Validated by `assert_can_officiate`.
+
+**Testament.** The inductee's `participant_kwargs["testament"]` string is their player-composed
+oration. The service appends a citation of their qualifying `LegendEntry` deeds (up to 3,
+by `base_value`) and posts the combined text as a POSE in the active scene via `_post_testament`.
+**No `LegendEntry` is minted** for within-tier advances. No resonance plumbing is added
+(a Ritual of the Durance is just a Scene → normal social-scene benefits apply). No boons are stacked on
+the inductee.
+
+**Factory.** `RitualOfTheDuranceFactory` (`src/world/magic/factories.py`) seeds the
+`Ritual` row (SERVICE / INDUCTION, `min_participants=2`, no upper-bound). The `@post_generation`
+hook creates the companion `RitualLiturgy` via `RitualLiturgyFactory`.
+
+**Telnet follow-up.** `RitualSession` dispatch is REST-only today
+(`POST /api/magic/ritual-sessions/draft/`, `accept/`, `fire/`). Telnet drivability
+(session-layer `action.run` / `CmdRitual` convergence) is a tracked follow-up.
+
+---
+
 ### Audere & Audere Majora (models/audere.py, audere_majora.py, models/renown_config.py)
 
 **`RenownAwardConfig`** (`models/renown_config.py`) — abstract base (SharedMemoryModel)
@@ -334,7 +395,7 @@ creates no `LegendEntry` — the invariant that gates deed creation.
 |-------|---------|------------|
 | `AudereMajoraThreshold` | One row per boundary level (5/10/15/20). Inherits `RenownAwardConfig`. | `boundary_level`, `target_stage`, `minimum_intensity_tier` FK, `minimum_warp_stage` FK, `requires_active_audere`, `deed_title` (public — non-spoiler), `vision_text`/`manifestation_text` (spoiler-private — DB-only) |
 | `PendingAudereMajoraOffer` | Poll-able Crossing offer, one per character | `character_sheet` FK, `threshold` FK |
-| `AudereMajoraCrossing` | Irreversible receipt of a completed crossing | `character_sheet` FK, `threshold` FK, `chosen_path` FK, `scene` FK, `declaration_interaction` FK, `level_before`, `level_after`, `legend_entry` OneToOneField → `societies.LegendEntry` (related_name `audere_majora_crossing`; null when no deed was minted) |
+| `AudereMajoraCrossing` | Irreversible receipt of a completed crossing (inherits `AbstractClassLevelAdvancement`) | `character_sheet` FK, `threshold` FK, `chosen_path` FK, `scene` FK, `declaration_interaction` FK, `level_before`, `level_after`, `legend_entry` OneToOneField → `societies.LegendEntry` (related_name `audere_majora_crossing`; null when no deed was minted) |
 
 **Deed minting.** `cross_threshold` calls `_mint_crossing_deed(crossing)` after writing
 the receipt. This resolves the character's primary persona, calls `fire_renown_award`

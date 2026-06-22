@@ -2,6 +2,7 @@
 Progression models package.
 
 This package organizes progression models into logical modules:
+- advancement: Class-level advancement receipts and shared abstract base
 - rewards: XP and development point models
 - kudos: Kudos "good sport" currency models
 - unlocks: Unlock types, requirements, and XP cost system
@@ -12,6 +13,10 @@ This package organizes progression models into logical modules:
 """
 
 # Import all models from submodules for convenience
+from world.progression.models.advancement import (
+    AbstractClassLevelAdvancement,
+    ClassLevelAdvancement,
+)
 from world.progression.models.character_xp import (
     CharacterXP,
     CharacterXPTransaction,
@@ -67,12 +72,14 @@ from world.progression.models.voting import (
 
 # For backwards compatibility, make all models available at package level
 __all__ = [
+    "AbstractClassLevelAdvancement",
     "AbstractClassLevelRequirement",
     "AchievementRequirement",
     "CharacterPathHistory",
     "CharacterUnlock",
     "CharacterXP",
     "CharacterXPTransaction",
+    "ClassLevelAdvancement",
     "ClassLevelRequirement",
     "ClassLevelUnlock",
     "ClassXPCost",

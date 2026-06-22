@@ -18,6 +18,7 @@ from world.magic.audere import (
     soulfray_stage_order_snapshot,
 )
 from world.magic.models.renown_config import RenownAwardConfig
+from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
 
 
@@ -112,7 +113,7 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
         )
 
 
-class AudereMajoraCrossing(SharedMemoryModel):
+class AudereMajoraCrossing(AbstractClassLevelAdvancement, SharedMemoryModel):
     """Irreversible receipt: this character crossed this threshold. Survives death."""
 
     character_sheet = models.ForeignKey(
@@ -131,29 +132,6 @@ class AudereMajoraCrossing(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="audere_majora_crossings",
     )
-    scene = models.ForeignKey(
-        "scenes.Scene",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    declaration_interaction = models.ForeignKey(
-        "scenes.Interaction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        db_constraint=False,
-        # db_constraint=False: scenes_interaction is partitioned by timestamp.
-        help_text="The declaration pose. Soft FK — partitioned table.",
-    )
-    level_before = models.PositiveSmallIntegerField(
-        help_text="Character level immediately before the crossing.",
-    )
-    level_after = models.PositiveSmallIntegerField(
-        help_text="Character level granted by the crossing.",
-    )
     legend_entry = models.OneToOneField(
         "societies.LegendEntry",
         on_delete=models.SET_NULL,
@@ -162,7 +140,6 @@ class AudereMajoraCrossing(SharedMemoryModel):
         related_name="audere_majora_crossing",
         help_text="The legend deed minted for this crossing. Receipt stays source of truth.",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -434,13 +411,15 @@ class AudereMajoraCrossingResult:
 
 
 def _primary_class_level(character: ObjectDB):
-    """Return the primary CharacterClassLevel, or the highest-level one if none is primary."""
-    from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+    """Return the primary CharacterClassLevel, or the highest-level one if none is primary.
 
-    primary = CharacterClassLevel.objects.filter(character=character, is_primary=True).first()
-    if primary is not None:
-        return primary
-    return CharacterClassLevel.objects.filter(character=character).order_by("-level").first()
+    Thin alias for ``progression.services.advancement.primary_class_level``; kept for
+    backward compatibility with any callers in this module.
+    Deferred import avoids a circular import through world.progression.services.__init__.
+    """
+    from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
+
+    return primary_class_level(character)
 
 
 def _post_declaration(character: ObjectDB, text: str):
@@ -488,6 +467,9 @@ def cross_threshold(
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
     from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+    from world.progression.services.advancement import (  # noqa: PLC0415
+        apply_class_level_advance,
+    )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
     character = sheet.character
@@ -502,12 +484,7 @@ def cross_threshold(
     level_before = threshold.boundary_level
     level_after = threshold.boundary_level + 1
 
-    class_level = _primary_class_level(character)
-    if class_level is not None:
-        class_level.level = level_after
-        class_level.save(update_fields=["level"])
-
-    sheet.invalidate_class_level_cache()
+    apply_class_level_advance(sheet, level_after=level_after)
 
     CharacterPathHistory.objects.create(character=character, path=chosen_path)
 

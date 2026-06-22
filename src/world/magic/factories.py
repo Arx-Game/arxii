@@ -63,6 +63,7 @@ from world.magic.models import (
     Ritual,
     RitualCheckConfig,
     RitualComponentRequirement,
+    RitualLiturgy,
     SoulfrayConfig,
     StandingCapBand,
     Technique,
@@ -3037,3 +3038,74 @@ class ThreadSurvivabilityTuningFactory(factory.django.DjangoModelFactory):
     coefficient = 1
     cap = 20
     half_saturation = 8
+
+
+# =============================================================================
+# Ritual of the Durance (#1352)
+# =============================================================================
+
+
+class RitualOfTheDuranceFactory(factory.django.DjangoModelFactory):
+    """Seed factory for the Ritual of the Durance.
+
+    SERVICE-dispatched advancement ritual: an officiant (trainer) conducts a
+    class-level advancement session for at least one inductee.  Uses
+    INDUCTION participation rule so one officiating actor invites one or more
+    inductees to accept the session.
+
+    min_participants=2 (officiant + at least one inductee); max_participants
+    left null (no upper bound authored at the ritual level).
+
+    service_function_path points to the Task-4 target; the function does not
+    yet exist but the STRING is set now so the model constraint is satisfied.
+
+    Uses django_get_or_create so repeated calls return the same row.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Ritual of the Durance"
+    description = (
+        "A formal class-level advancement session conducted by a trained officiant. "
+        "The inductee stands before the assembly, names themselves, and bears witness "
+        "to the rite that marks their crossing to the next level of their class."
+    )
+    narrative_prose = (
+        "The officiant raises their voice in the Durance call.  One steps forward — "
+        "the inductee who has proven their readiness.  The assembly bears witness as "
+        "the rite is spoken, and the inductee's level rises to meet the moment.  "
+        "When the last words fall, those present know the crossing is complete."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.progression.services.advancement.advance_class_level_via_session"
+    flow = None
+    hedge_accessible = False
+    glimpse_eligible = False
+    participation_rule = ParticipationRule.INDUCTION
+    min_participants = 2
+    max_participants = None
+
+    @factory.post_generation
+    def liturgy(self, create: bool, extracted: object, **kwargs: object) -> None:
+        """Create the companion RitualLiturgy row after the Ritual is saved."""
+        if not create:
+            return
+        if extracted is not None:
+            return
+        RitualLiturgyFactory(ritual=self)
+
+
+class RitualLiturgyFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualLiturgy — the authored ceremonial words for a Ritual.
+
+    Default opening_call is the public, non-spoiler induction call for the
+    Ritual of the Durance.
+    """
+
+    class Meta:
+        model = RitualLiturgy
+
+    ritual = factory.SubFactory(RitualOfTheDuranceFactory)
+    opening_call = "One stands before us in Durance. Speak thy name and testament."

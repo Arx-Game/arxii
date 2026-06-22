@@ -56,15 +56,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     partial UniqueConstraint `(character_sheet, scene) WHERE scene IS NOT NULL`).
     `ResonanceGainConfig.entry_flourish_grant` (default 10). The #904
     reaction-window framework is peer-only and was rejected for this use.
+  - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
+    TextField — the officiant's authored ceremonial words; public, non-spoiler).
+    Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
   - **Audere Majora + legend-deed minting (#953):**
     `RenownAwardConfig` (abstract base — `models/renown_config.py`; shared by
     `AudereMajoraThreshold` and `DramaticMomentType`; carries `magnitude` /
     `risk` / `reach` / `archetypes`; provides `as_renown_award_kwargs()`),
     `AudereMajoraThreshold` (inherits `RenownAwardConfig`; adds `deed_title`
     public field),
-    `AudereMajoraCrossing.legend_entry` (OneToOneField → `societies.LegendEntry`,
-    related_name `audere_majora_crossing`; null when `risk == NONE` or no primary
-    persona). Deed minting fires via `_mint_crossing_deed` in `cross_threshold`.
+    `AudereMajoraCrossing` (inherits `AbstractClassLevelAdvancement` from
+    `world.progression.models.advancement`; adds `chosen_path`, `legend_entry`
+    OneToOneField → `societies.LegendEntry`; null when `risk == NONE` or no
+    primary persona). Deed minting fires via `_mint_crossing_deed` in `cross_threshold`.
   - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
     tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
     `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
@@ -539,7 +543,8 @@ content sharing and social action targeting (#1141).
 ### Progression
 XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
-- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`)
+- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
+  **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -564,8 +569,14 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
   - `KudosDifficultyWeight.weight_for(band) -> Decimal` — returns configured multiplier for the difficulty band; falls back to `Decimal("1.0")` when no row exists.
+- **Class-level advancement spine (#1352 — `services/advancement.py`):**
+  - `primary_class_level(character) -> CharacterClassLevel | None` — primary (or highest-level) class level row; None when absent.
+  - `apply_class_level_advance(sheet, *, level_after) -> None` — shared level-write + cache invalidation; no receipt, no scene side-effects. Called by both `cross_threshold` and the Durance service.
+  - `assert_can_officiate(*, officiant_sheet, inductee_sheet, target_level) -> None` — raises `OfficiantIneligibleError` when level gate or Path-lineage gate fails.
+  - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, writes receipts.
+- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all carry `user_message`.
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
-- **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
+- **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`; `advance_class_level_via_session` dispatched from `fire_session` on the Ritual of the Durance; `AudereMajoraCrossing` inherits `AbstractClassLevelAdvancement`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
 - **Source:** `src/world/progression/`
 - **Details:** [progression.md](progression.md)
 

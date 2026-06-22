@@ -139,6 +139,7 @@ def check_requirements_for_unlock(
     from world.progression.models import (
         AchievementRequirement,
         ClassLevelRequirement,
+        LegendRequirement,
         LevelRequirement,
         MultiClassRequirement,
         RelationshipRequirement,
@@ -159,6 +160,7 @@ def check_requirements_for_unlock(
             AchievementRequirement,
             RelationshipRequirement,
             MultiClassRequirement,
+            LegendRequirement,
         ]
 
         for req_type in requirement_types:

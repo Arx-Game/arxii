@@ -723,6 +723,8 @@
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
+  - class_level_advancements <- progression.ClassLevelAdvancement
+  - officiated_advancements <- progression.ClassLevelAdvancement
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
@@ -936,6 +938,7 @@
 **Pointed to by:**
   - character_assignments <- classes.CharacterClassLevel
   - stage_health_rates <- classes.ClassStageHealthRate
+  - durance_advancements <- progression.ClassLevelAdvancement
   - xp_costs <- progression.ClassXPCost
   - level_unlocks <- progression.ClassLevelUnlock
   - classlevelrequirement_set <- progression.ClassLevelRequirement
@@ -1798,11 +1801,11 @@
 
 ### AudereMajoraCrossing
 **Foreign Keys:**
+  - scene -> scenes.Scene [FK] (nullable)
+  - declaration_interaction -> scenes.Interaction [FK] (nullable)
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - threshold -> magic.AudereMajoraThreshold [FK]
   - chosen_path -> classes.Path [FK]
-  - scene -> scenes.Scene [FK] (nullable)
-  - declaration_interaction -> scenes.Interaction [FK] (nullable)
   - legend_entry -> societies.LegendEntry [OneToOne] (nullable)
 
 ### PendingEntryFlourishOffer
@@ -2147,6 +2150,10 @@
   - ritual -> magic.Ritual [FK]
   - learned_from -> roster.RosterTenure [FK] (nullable)
 
+### RitualLiturgy
+**Foreign Keys:**
+  - ritual -> magic.Ritual [OneToOne]
+
 ### Facet
 **Foreign Keys:**
   - parent -> magic.Facet [FK] (nullable)
@@ -2230,12 +2237,14 @@
 
 ### Ritual
 **Foreign Keys:**
+  - liturgy -> magic.RitualLiturgy [OneToOne] (nullable)
   - check_config -> magic.RitualCheckConfig [OneToOne] (nullable)
   - covenant_rite -> covenants.CovenantRite [OneToOne] (nullable)
   - flow -> flows.FlowDefinition [FK] (nullable)
   - author_account -> accounts.AccountDB [FK] (nullable)
   - site_property -> mechanics.Property [FK] (nullable)
 **Pointed to by:**
+  - class_level_advancements <- progression.ClassLevelAdvancement
   - performances <- magic.AnimaRitualPerformance
   - known_by_records <- magic.CharacterRitualKnowledge
   - requirements <- magic.RitualComponentRequirement
@@ -2905,6 +2914,15 @@
 
 
 ## world.progression
+
+### ClassLevelAdvancement
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK] (nullable)
+  - declaration_interaction -> scenes.Interaction [FK] (nullable)
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - character_class -> classes.CharacterClass [FK]
+  - officiant -> character_sheets.CharacterSheet [FK] (nullable)
+  - ritual -> magic.Ritual [FK] (nullable)
 
 ### CharacterXP
 **Foreign Keys:**

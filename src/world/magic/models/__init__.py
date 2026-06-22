@@ -95,6 +95,7 @@ from world.magic.models.grants import (
     TraditionRitualGrant,
 )
 from world.magic.models.knowledge import CharacterRitualKnowledge
+from world.magic.models.liturgy import RitualLiturgy
 from world.magic.models.motifs import (
     Facet,
     FacetManager,
@@ -267,6 +268,7 @@ __all__ = [
     "Ritual",
     "RitualCheckConfig",
     "RitualComponentRequirement",
+    "RitualLiturgy",
     # sessions (Slice B §4.2–§4.4)
     "RitualSession",
     "RitualSessionParticipant",
