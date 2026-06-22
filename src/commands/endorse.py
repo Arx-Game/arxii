@@ -185,15 +185,11 @@ class CmdEndorse(ArxCommand):
         return scene
 
     def _send_result(self, result: Any) -> None:
-        if result.message:
-            self.msg(result.message)
-        if not result.success:
-            self.msg(
-                command_error={
-                    "error": result.message or "",
-                    "command": self.raw_string or "",
-                },
-            )
+        if result.success:
+            if result.message:
+                self.msg(result.message)
+        else:
+            raise CommandError(result.message or "Action failed")
 
     # ------------------------------------------------------------------
     # Per-subtype handlers
