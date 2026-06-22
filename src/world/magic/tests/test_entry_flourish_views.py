@@ -130,7 +130,7 @@ class EntryFlourishRespondViewTests(APITestCase):
         self.assertTrue(EntryFlourishRecord.objects.filter(character_sheet=sheet).exists())
 
     def test_respond_rejects_non_owned_offer(self) -> None:
-        """An offer belonging to another account returns 400; the row survives."""
+        """An offer belonging to another account returns 404; the row survives."""
         # Re-create other_offer each time (other tests may delete it)
         _, other_offer, _ = _make_tenure_with_offer()
         self.client.force_authenticate(user=self.my_account)
@@ -139,7 +139,7 @@ class EntryFlourishRespondViewTests(APITestCase):
             {"offer_id": other_offer.pk, "resonance_id": self.my_char_resonance.resonance_id},
             format="json",
         )
-        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.status_code, 404, response.content)
         self.assertTrue(PendingEntryFlourishOffer.objects.filter(pk=other_offer.pk).exists())
 
     def test_respond_rejects_unclaimed_resonance(self) -> None:
@@ -155,15 +155,15 @@ class EntryFlourishRespondViewTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400, response.content)
 
-    def test_respond_nonexistent_offer_returns_400(self) -> None:
-        """A non-existent offer_id returns 400."""
+    def test_respond_nonexistent_offer_returns_404(self) -> None:
+        """A non-existent offer_id returns 404."""
         self.client.force_authenticate(user=self.my_account)
         response = self.client.post(
             _RESPOND_URL,
             {"offer_id": 999999, "resonance_id": self.my_char_resonance.resonance_id},
             format="json",
         )
-        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.status_code, 404, response.content)
 
     def test_respond_unauthenticated_rejected(self) -> None:
         """Unauthenticated POST returns 401 or 403."""

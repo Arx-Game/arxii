@@ -1637,10 +1637,30 @@ class EntryFlourishRespondView(APIView):
         responses={200: EntryFlourishResultSerializer},
     )
     def post(self, request: Request) -> Response:
-        """Validate ownership + dispatch resolve_entry_flourish_offer; return the result."""
-        return _dispatch_respond(
-            request, EntryFlourishRespondSerializer, EntryFlourishResultSerializer
+        """Resolve the entry-flourish offer via action dispatch (telnet + web converge)."""
+        from actions.definitions.social import ResolveFlourishOfferAction  # noqa: PLC0415
+        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
+
+        serializer = EntryFlourishRespondSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        offer_id = serializer.validated_data["offer_id"]
+        resonance_id = serializer.validated_data["resonance_id"]
+
+        sheets = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=request.user,
+            roster_entry__tenures__end_date__isnull=True,
         )
+        offer = get_object_or_404(
+            PendingEntryFlourishOffer, pk=offer_id, character_sheet__in=sheets
+        )
+        resonance = get_object_or_404(Resonance, pk=resonance_id)
+
+        actor = offer.character_sheet.character
+        result = ResolveFlourishOfferAction().run(actor=actor, offer=offer, resonance=resonance)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        entry_result = result.data["entry_flourish_result"]
+        return Response(EntryFlourishResultSerializer(entry_result).data)
 
 
 # =============================================================================

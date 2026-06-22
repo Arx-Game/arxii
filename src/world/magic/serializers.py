@@ -3412,40 +3412,14 @@ class PendingEntryFlourishOfferSerializer(serializers.ModelSerializer):
 
 
 class EntryFlourishRespondSerializer(serializers.Serializer):
-    """Write serializer for the player's entry-flourish resonance pick."""
+    """Request shape for the player's entry-flourish resonance pick.
+
+    Validation-only — the view resolves and ownership-checks the objects
+    directly via get_object_or_404 and delegates to ResolveFlourishOfferAction.
+    """
 
     offer_id = serializers.IntegerField()
     resonance_id = serializers.IntegerField()
-
-    def validate_offer_id(self, value: int) -> object:
-        """Resolve + ownership-check via the offer's character sheet."""
-        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
-
-        try:
-            offer = PendingEntryFlourishOffer.objects.get(pk=value)
-        except PendingEntryFlourishOffer.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_NO_PENDING_ENTRY_FLOURISH) from exc
-        request = self.context.get("request")
-        _resolve_account_sheet(offer.character_sheet_id, request)
-        return offer
-
-    def create(self, validated_data: dict) -> object:
-        """Delegate to resolve_entry_flourish_offer; surface typed errors as 400."""
-        from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
-        from world.magic.exceptions import EntryFlourishOfferError  # noqa: PLC0415
-        from world.magic.models import Resonance  # noqa: PLC0415
-
-        offer = validated_data[
-            "offer_id"
-        ]  # already resolved to the PendingEntryFlourishOffer object
-        resonance = Resonance.objects.filter(pk=validated_data["resonance_id"]).first()
-        if resonance is None:
-            msg = "Resonance not found."
-            raise serializers.ValidationError(msg)
-        try:
-            return resolve_entry_flourish_offer(offer, resonance=resonance)
-        except EntryFlourishOfferError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
 
 
 class EntryFlourishResultSerializer(serializers.Serializer):
