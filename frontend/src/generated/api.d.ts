@@ -42123,6 +42123,7 @@ export interface operations {
       query?: {
         /** @description A page number within the paginated result set. */
         page?: number;
+        subject?: number;
       };
       header?: never;
       path?: never;
@@ -42145,7 +42146,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Secret knowledge. */
+        id: number;
       };
       cookie?: never;
     };

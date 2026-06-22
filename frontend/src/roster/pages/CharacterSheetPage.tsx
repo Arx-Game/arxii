@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { useAppSelector } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
 import {
   CharacterPortrait,
@@ -27,6 +28,10 @@ export function CharacterSheetPage() {
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
+  // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
+  // resolve the active character's roster entry. Null when no character is active → no secrets.
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
@@ -96,7 +101,7 @@ export function CharacterSheetPage() {
           {/* The character sheet shares its pk with the ObjectDB, so character.id is the
               CharacterSheet pk the secret-tab API filters by. Radix unmounts inactive tab
               content, so the query only fires when this tab is opened. */}
-          <SecretsTab subjectId={entry.character.id} />
+          <SecretsTab subjectId={entry.character.id} viewerId={viewerEntryId} />
         </TabsContent>
       </Tabs>
     </div>

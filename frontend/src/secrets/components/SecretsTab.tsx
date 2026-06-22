@@ -32,11 +32,23 @@ function SecretCard({ secret }: { secret: KnownSecret }) {
   );
 }
 
-/** The secret tab on a character's profile: the secrets the viewer knows about this person,
- * with any layer they haven't unlocked shown as "Unknown" (#1334). */
-export function SecretsTab({ subjectId }: { subjectId: number }) {
-  const { data, isLoading, isError } = useKnownSecretsQuery(subjectId);
+/** The secret tab on a character's profile: the secrets the **active viewing character** knows
+ * about this person, with any layer they haven't unlocked shown as "Unknown" (#1334). IC
+ * knowledge is per active character — `viewerId` is the viewer's active RosterEntry, or null. */
+export function SecretsTab({
+  subjectId,
+  viewerId,
+}: {
+  subjectId: number;
+  viewerId: number | null;
+}) {
+  const { data, isLoading, isError } = useKnownSecretsQuery(subjectId, viewerId);
 
+  if (viewerId === null) {
+    return (
+      <p className="text-muted-foreground">Select a character to see the secrets they know.</p>
+    );
+  }
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (isError) return <p className="text-destructive">Failed to load secrets.</p>;
 

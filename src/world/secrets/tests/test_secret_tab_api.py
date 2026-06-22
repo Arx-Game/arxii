@@ -17,12 +17,15 @@ URL = "/api/secrets/known/"
 
 
 class SecretTabAPITests(APITestCase):
-    def _viewer_with_character(self):
-        account = AccountFactory()
+    def _add_character(self, account):
         player_data, _ = PlayerData.objects.get_or_create(account=account)
         entry = RosterEntryFactory()
         RosterTenureFactory(player_data=player_data, roster_entry=entry)
-        return account, entry
+        return entry
+
+    def _viewer_with_character(self):
+        account = AccountFactory()
+        return account, self._add_character(account)
 
     def setUp(self) -> None:
         self.account, self.knower = self._viewer_with_character()
@@ -31,6 +34,8 @@ class SecretTabAPITests(APITestCase):
         self.client.force_authenticate(user=self.account)
 
     def _results(self, **params):
+        # IC knowledge scopes to the active character; default the viewer to the test's knower.
+        params.setdefault("viewer", self.knower.pk)
         return self.client.get(URL, params).data["results"]
 
     def test_known_secret_appears_on_the_subject_tab(self) -> None:
@@ -103,6 +108,30 @@ class SecretTabAPITests(APITestCase):
         authors = {r["id"]: r["author"] for r in self._results(subject=self.subject.pk)}
         assert authors[player_secret.pk] == self.subject.primary_persona.name
         assert authors[gm_secret.pk] == "GM/Staff"
+
+    def test_scoped_to_the_active_character_not_the_account(self) -> None:
+        # A second character on the SAME account knows a secret. Viewing as the first character
+        # must NOT surface it — IC knowledge is per active character, never account-aggregate.
+        alt = self._add_character(self.account)
+        secret = SecretFactory(subject_sheet=self.subject)
+        grant_secret_knowledge(roster_entry=alt, secret=secret)
+        assert self._results(subject=self.subject.pk, viewer=self.knower.pk) == []
+        # Viewing as the alt, it shows.
+        ids = {r["id"] for r in self._results(subject=self.subject.pk, viewer=alt.pk)}
+        assert ids == {secret.pk}
+
+    def test_no_active_character_returns_empty(self) -> None:
+        secret = SecretFactory(subject_sheet=self.subject)
+        grant_secret_knowledge(roster_entry=self.knower, secret=secret)
+        # No viewer → no secrets (never an account-wide aggregate).
+        assert self.client.get(URL, {"subject": self.subject.pk}).data["results"] == []
+
+    def test_cannot_view_as_another_accounts_character(self) -> None:
+        _, other_entry = self._viewer_with_character()
+        secret = SecretFactory(subject_sheet=self.subject)
+        grant_secret_knowledge(roster_entry=other_entry, secret=secret)
+        # Passing a roster entry the requester doesn't own → empty (for_account confines it).
+        assert self._results(subject=self.subject.pk, viewer=other_entry.pk) == []
 
     def test_requires_authentication(self) -> None:
         self.client.force_authenticate(user=None)

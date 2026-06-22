@@ -44,28 +44,34 @@ function secret(overrides: Partial<KnownSecret>): KnownSecret {
 describe('SecretsTab', () => {
   it('shows a known secret with its fact and level', () => {
     mockResults([secret({ content: 'She poisoned the duke.', level: 'Dangerous Secret' })]);
-    render(<SecretsTab subjectId={5} />);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
     expect(screen.getByText('She poisoned the duke.')).toBeInTheDocument();
     expect(screen.getByText('Dangerous Secret')).toBeInTheDocument();
   });
 
   it('renders locked layers as "Unknown"', () => {
     mockResults([secret({ category: 'Unknown', consequences: 'Unknown' })]);
-    render(<SecretsTab subjectId={5} />);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
     // Both the category and consequences layers read "Unknown".
     expect(screen.getAllByText('Unknown')).toHaveLength(2);
   });
 
   it('shows the unlocked values when the viewer knows the layers', () => {
     mockResults([secret({ category: 'Scandal', consequences: 'Execution if proven.' })]);
-    render(<SecretsTab subjectId={5} />);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
     expect(screen.getByText('Scandal')).toBeInTheDocument();
     expect(screen.getByText('Execution if proven.')).toBeInTheDocument();
   });
 
   it('shows an empty state when no secrets are known', () => {
     mockResults([]);
-    render(<SecretsTab subjectId={5} />);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
     expect(screen.getByText(/know no secrets/i)).toBeInTheDocument();
+  });
+
+  it('prompts to pick a character when none is active', () => {
+    mockResults([]);
+    render(<SecretsTab subjectId={5} viewerId={null} />);
+    expect(screen.getByText(/select a character/i)).toBeInTheDocument();
   });
 });

@@ -81,17 +81,19 @@ clue.
 
 ## Display — the secret tab
 
-`GET /api/secrets/known/?subject=<CharacterSheet pk>` returns the secrets the **viewer's
-account** holds about that character (newest first), paginated. `KnownSecretViewSet` scopes to
-`RosterEntry.objects.for_account` and the serializer renders each held secret with locked layers
-as **"Unknown"**: the fact (`content`) always shows, but `category` / `consequences` read
-"Unknown" when the viewer hasn't unlocked that layer *or* the secret leaves it unplaced. The
-frontend `SecretsTab` (a tab on `CharacterSheetPage`) renders the list; Radix unmounts inactive
-tab content, so the query only fires when the tab is opened.
+`GET /api/secrets/known/?subject=<CharacterSheet pk>&viewer=<RosterEntry pk>` returns the secrets
+the **active viewing character** holds about that subject (newest first), paginated. The
+serializer renders each held secret with locked layers as **"Unknown"**: the fact (`content`)
+always shows, but `category` / `consequences` read "Unknown" when the viewer hasn't unlocked that
+layer *or* the secret leaves it unplaced. The frontend `SecretsTab` (a tab on
+`CharacterSheetPage`) renders the list; Radix unmounts inactive tab content, so the query only
+fires when the tab is opened.
 
-> Scope note: the tab is account-aggregate (any of the viewer's characters' knowledge) — an OOC
-> "what you've learned about this person" view. Knowledge itself stays roster-scoped; narrowing
-> the tab to the active character is a possible refinement.
+> **IC scope invariant:** IC knowledge scopes to the **active character**, never the account.
+> `KnownSecretViewSet` scopes to the single `viewer` RosterEntry the caller passes, validated
+> via `RosterEntry.objects.for_account` (so the param can't reach another account's knowledge);
+> no/unowned `viewer` → no secrets. The frontend resolves the active character from
+> `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
 ## Boundary with Codex
 
