@@ -95,6 +95,24 @@ class Secret(SharedMemoryModel):
         related_name="authored_secrets",
         help_text="The narrating persona (player-authored). Null for GM/staff-authored.",
     )
+    # --- Reputation payload (#1429): how this fact reads when it becomes known. ---
+    # The diffuse channel — a vector of moral framings dot-producted against each aware society's
+    # principles, so the same fact reads positive to one society and negative to another. Empty =
+    # no diffuse reputational impact. Authored, or generated (e.g. a mission seeds them by act).
+    archetypes = models.ManyToManyField(
+        "societies.PhilosophicalArchetype",
+        blank=True,
+        related_name="secrets",
+        help_text="Moral framings that drive the diffuse per-society reputation hit on reveal.",
+    )
+    # One-shot tracking: societies this secret has already been exposed to, so re-exposure never
+    # double-fires the reputation hit (mirrors LegendEntry.societies_aware).
+    societies_exposed = models.ManyToManyField(
+        "societies.Society",
+        blank=True,
+        related_name="exposed_secrets",
+        help_text="Societies already exposed to this secret (so reveal fires once per society).",
+    )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
@@ -121,6 +139,64 @@ class Secret(SharedMemoryModel):
         ):
             msg = "Player-authored secrets above Level 1 must be GM- or action-anchored."
             raise ValidationError({"level": msg})
+
+
+class SecretVictim(SharedMemoryModel):
+    """A specific entity directly harmed by a secret's underlying fact (#1429).
+
+    The **relational / targeted** reputation channel, distinct from the diffuse archetype reading:
+    a named victim is hit directly and **independently of their own philosophy** (an org that
+    prizes cunning still turns on you for killing its head). Exactly one of ``organization`` /
+    ``persona`` is set.
+
+    On reveal the bridge fires an ``OrganizationReputation`` hit for **organization** victims.
+    **Persona** victims are recorded but their effect (a personal grudge) is a deferred follow-up:
+    the relationship system is consent-gated, so the right home for persona enmity is an open
+    design decision — see the bridge service.
+    """
+
+    secret = models.ForeignKey(
+        Secret,
+        on_delete=models.CASCADE,
+        related_name="victims",
+        help_text="The secret whose underlying fact harmed this entity.",
+    )
+    organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="secret_victimhoods",
+        help_text="The victim organization (collective victim).",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="secret_victimhoods",
+        help_text="The victim persona (individual victim).",
+    )
+    severity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional magnitude of the direct standing hit. Null = derive from secret level.",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(organization__isnull=False, persona__isnull=True)
+                    | models.Q(organization__isnull=True, persona__isnull=False)
+                ),
+                name="secret_victim_exactly_one_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        target = self.organization_id or f"persona {self.persona_id}"
+        return f"victim {target} of secret {self.secret_id}"
 
 
 class SecretKnowledge(SharedMemoryModel):

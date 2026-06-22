@@ -94,6 +94,31 @@ fires when the tab is opened.
 > no/unowned `viewer` → no secrets. The frontend resolves the active character from
 > `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
+## Reputation consequences — the reveal bridge (#1429)
+
+A secret is an **unrevealed fact**; revealing it feeds the existing renown/reputation engine
+(`world/societies/`). `expose_secret(secret, *, societies)` (the reveal→reputation bridge) fires
+two channels, one-shot:
+
+- **Diffuse / philosophical.** The secret's `archetypes` (M2M → `societies.PhilosophicalArchetype`)
+  are dot-producted against each newly-exposed society's principles — so the *same* fact reads
+  positive to an ambition-prizing society and negative to a pious one. Tracked per society via
+  `Secret.societies_exposed` so re-exposure never double-fires. Reuses
+  `societies.renown.apply_archetype_society_reputation`.
+- **Relational / targeted.** A `SecretVictim` names an entity directly harmed; on first exposure
+  it takes a hit **independent of its philosophy** (an org that prizes cunning still turns on you
+  for killing its head). **Organization** victims get an `OrganizationReputation` delta
+  (`severity`, or the level default from `DEFAULT_VICTIM_SEVERITY_BY_LEVEL`) via
+  `societies.renown.bump_organization_reputation` — the first gameplay writer of org reputation.
+  **Persona** victims are recorded only; their personal-grudge effect is deferred (the
+  relationship system is consent-gated, so its home is an open decision).
+
+Reputation attaches to the subject's **primary persona** (only established/primary identities
+accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
+trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
+slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
+propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
+
 ## Boundary with Codex
 
 Cut on **authorship**, not topic. **Codex** = canon lore (subjects, history, world) authored

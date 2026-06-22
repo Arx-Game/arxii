@@ -62,6 +62,13 @@ Hidden -1000 to +1000 values displayed as named tiers:
 | Honored | +500 to +749 |
 | Revered | +750 to +1000 |
 
+Reputation is normally driven by deeds (`fire_renown_award`). Two **public application seams** in
+`renown.py` let other systems (e.g. the secret reveal→reputation bridge, #1429) feed it directly:
+- `apply_archetype_society_reputation(persona, societies, archetypes)` — the diffuse channel:
+  archetype dot-product against each society's principles; one delta per society.
+- `bump_organization_reputation(persona, organization, delta)` — the relational channel: a direct
+  clamped `OrganizationReputation` hit, independent of the org's philosophy.
+
 ## Organization Types
 
 Six standard types with default rank titles (1=highest, 5=lowest):

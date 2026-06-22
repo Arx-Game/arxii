@@ -562,6 +562,47 @@ def _bump_society_reputation(persona: Persona, society, rep_delta: int) -> None:
     reputation.save(update_fields=["value"])
 
 
+def apply_archetype_society_reputation(persona: Persona, societies, archetypes) -> dict[int, int]:
+    """Apply archetype reputation deltas to a set of societies (#1429).
+
+    Public seam reused by the secret reveal→reputation bridge: for each society the delta is the
+    archetype vector dot-producted against that society's principles (so the *same* fact reads
+    positive to one society and negative to another). Zero deltas are skipped. Only
+    established/primary personas accrue reputation. Returns ``{society_pk: delta}``.
+    """
+    archetype_list = list(archetypes)
+    if not archetype_list or not persona.is_established_or_primary:
+        return {}
+    applied: dict[int, int] = {}
+    for society in societies:
+        delta = _archetype_dot_product(archetype_list, society)
+        if delta == 0:
+            continue
+        _bump_society_reputation(persona, society, delta)
+        applied[society.pk] = delta
+    return applied
+
+
+def bump_organization_reputation(persona: Persona, organization, delta: int) -> int | None:
+    """Apply a clamped reputation delta to (persona, organization) (#1429).
+
+    The relational / targeted channel: a direct hit to a specific organization (e.g. the victim
+    of a crime), **independent of that org's philosophy**. The first gameplay writer of
+    ``OrganizationReputation``. No-op for non-established personas or a zero delta; otherwise
+    returns the new clamped value.
+    """
+    if delta == 0 or not persona.is_established_or_primary:
+        return None
+    from world.societies.models import OrganizationReputation  # noqa: PLC0415
+
+    reputation, _ = OrganizationReputation.objects.get_or_create(
+        persona=persona, organization=organization, defaults={"value": 0}
+    )
+    reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + delta))
+    reputation.save(update_fields=["value"])
+    return reputation.value
+
+
 # ---------------------------------------------------------------------------
 # Phase C — Org inflow + persona outflow
 #

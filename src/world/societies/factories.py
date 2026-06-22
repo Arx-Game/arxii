@@ -22,9 +22,28 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationReputation,
     OrganizationType,
+    PhilosophicalArchetype,
     Society,
     SocietyReputation,
 )
+
+
+class PhilosophicalArchetypeFactory(factory_django.DjangoModelFactory):
+    """Factory for PhilosophicalArchetype — a named six-axis moral framing."""
+
+    class Meta:
+        model = PhilosophicalArchetype
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Archetype {n}")
+    description = factory.Faker("sentence")
+    # Axis deltas default to 0; tests set the ones they exercise.
+    mercy_delta = 0
+    method_delta = 0
+    status_delta = 0
+    change_delta = 0
+    allegiance_delta = 0
+    power_delta = 0
 
 
 class SocietyFactory(factory_django.DjangoModelFactory):

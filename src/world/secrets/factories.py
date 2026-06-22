@@ -4,7 +4,7 @@ import factory.django as factory_django
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory
 from world.secrets.constants import SecretLevel, SecretProvenance
-from world.secrets.models import Secret, SecretCategory, SecretKnowledge
+from world.secrets.models import Secret, SecretCategory, SecretKnowledge, SecretVictim
 
 
 class SecretCategoryFactory(factory_django.DjangoModelFactory):
@@ -36,3 +36,14 @@ class SecretKnowledgeFactory(factory_django.DjangoModelFactory):
 
     roster_entry = factory.SubFactory(RosterEntryFactory)
     secret = factory.SubFactory(SecretFactory)
+
+
+class SecretVictimFactory(factory_django.DjangoModelFactory):
+    """Victim of a secret's fact. Pass ``organization=`` or ``persona=`` (exactly one)."""
+
+    class Meta:
+        model = SecretVictim
+
+    secret = factory.SubFactory(SecretFactory)
+    organization = factory.SubFactory("world.societies.factories.OrganizationFactory")
+    persona = None

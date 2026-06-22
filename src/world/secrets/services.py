@@ -7,18 +7,26 @@ murder/affair/crime → Secret + Evidence) are later slices.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 
-from world.secrets.constants import SecretLevel, SecretProvenance
+from world.secrets.constants import (
+    DEFAULT_VICTIM_SEVERITY_BY_LEVEL,
+    SecretLevel,
+    SecretProvenance,
+)
 from world.secrets.models import Secret, SecretKnowledge
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.secrets.models import SecretCategory
+    from world.societies.models import Society
 
 
 class SecretError(Exception):
@@ -115,3 +123,77 @@ def grant_secret_knowledge(
 def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
     """Whether this character already holds the fact of this secret (#1334)."""
     return SecretKnowledge.objects.filter(secret=secret, roster_entry=roster_entry).exists()
+
+
+# --- Reputation bridge (#1429) ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SecretExposureResult:
+    """What a secret's exposure did to reputation (#1429).
+
+    ``society_reputation_deltas`` is the **diffuse** channel (archetype · each society's
+    principles); ``organization_victim_deltas`` is the **relational** channel (direct hits to
+    victim orgs, independent of their philosophy). ``persona_victim_ids`` are recorded victims
+    whose personal-grudge effect is a deferred follow-up (the relationship system is
+    consent-gated — its right home is an open decision).
+    """
+
+    newly_exposed_society_ids: tuple[int, ...] = ()
+    society_reputation_deltas: dict[int, int] = field(default_factory=dict)
+    organization_victim_deltas: dict[int, int] = field(default_factory=dict)
+    persona_victim_ids: tuple[int, ...] = ()
+
+
+def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExposureResult:
+    """Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).
+
+    The reveal→reputation bridge. A secret is just an unrevealed fact; exposing it to a society
+    feeds the existing renown engine:
+
+    - **Diffuse channel** — each newly-exposed society reads the secret's ``archetypes`` through
+      its own principles (so an ambition-prizing society and a pious one net opposite signs).
+      Fired one-shot per society via ``societies_exposed`` (re-exposure never double-fires).
+    - **Relational channel** — on the *first* exposure, each victim takes a direct hit
+      **independent of their philosophy**: organization victims get an ``OrganizationReputation``
+      delta (``severity`` or, if null, the level default); persona victims are recorded only
+      (their personal-grudge effect is deferred — see ``SecretVictim``).
+
+    Reputation is attributed to the subject's primary persona (only established/primary identities
+    accrue reputation, enforced downstream). Idempotent across re-exposure.
+    """
+    from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid import cycle at load
+        apply_archetype_society_reputation,
+        bump_organization_reputation,
+    )
+
+    persona = secret.subject_sheet.primary_persona
+    already_exposed = set(secret.societies_exposed.values_list("pk", flat=True))
+    newly = [society for society in societies if society.pk not in already_exposed]
+    first_exposure = not already_exposed and bool(newly)
+
+    society_deltas: dict[int, int] = {}
+    if newly:
+        secret.societies_exposed.add(*newly)
+        society_deltas = apply_archetype_society_reputation(persona, newly, secret.archetypes.all())
+
+    org_deltas: dict[int, int] = {}
+    persona_victim_ids: list[int] = []
+    if first_exposure:
+        default_severity = DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(secret.level, 0)
+        for victim in secret.victims.select_related("organization", "persona"):
+            severity = victim.severity if victim.severity is not None else default_severity
+            if victim.organization_id:
+                new_value = bump_organization_reputation(persona, victim.organization, -severity)
+                if new_value is not None:
+                    org_deltas[victim.organization_id] = new_value
+            elif victim.persona_id:
+                # Recorded only — a persona victim's grudge has no reputation home yet (#1429).
+                persona_victim_ids.append(victim.persona_id)
+
+    return SecretExposureResult(
+        newly_exposed_society_ids=tuple(society.pk for society in newly),
+        society_reputation_deltas=society_deltas,
+        organization_victim_deltas=org_deltas,
+        persona_victim_ids=tuple(persona_victim_ids),
+    )
