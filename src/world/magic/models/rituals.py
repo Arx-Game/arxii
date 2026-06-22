@@ -144,6 +144,13 @@ class Ritual(SharedMemoryModel):
                         & models.Q(service_function_path="")
                         & models.Q(flow__isnull=True)
                     )
+                    | (
+                        # CEREMONY: no service path, no flow. Creates a
+                        # PendingRitualEffect awaiting a finisher command.
+                        models.Q(execution_kind="CEREMONY")
+                        & models.Q(service_function_path="")
+                        & models.Q(flow__isnull=True)
+                    )
                 ),
                 name="ritual_execution_payload",
             ),
@@ -152,32 +159,33 @@ class Ritual(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    def _clean_no_service_path(self, kind: str) -> None:
+        if self.service_function_path:
+            raise ValidationError(
+                {"service_function_path": f"{kind} rituals must not set service_function_path."}
+            )
+
+    def _clean_no_flow(self, kind: str) -> None:
+        if self.flow is not None:
+            raise ValidationError({"flow": f"{kind} rituals must not set flow."})
+
     def _clean_execution_payload(self) -> None:
         """Validate that execution payload fields match the execution_kind."""
         kind = self.execution_kind
         if kind == RitualExecutionKind.SERVICE:
             if not self.service_function_path:
                 raise ValidationError({"service_function_path": "SERVICE rituals require a path."})
-            if self.flow is not None:
-                raise ValidationError({"flow": "SERVICE rituals must not set flow."})
+            self._clean_no_flow("SERVICE")
         elif kind == RitualExecutionKind.FLOW:
             if self.flow is None:
                 raise ValidationError({"flow": "FLOW rituals require a FlowDefinition."})
-            if self.service_function_path:
-                raise ValidationError(
-                    {"service_function_path": "FLOW rituals must not set service_function_path."}
-                )
+            self._clean_no_service_path("FLOW")
         elif kind == RitualExecutionKind.SCENE_ACTION:
-            if self.service_function_path:
-                raise ValidationError(
-                    {
-                        "service_function_path": (
-                            "SCENE_ACTION rituals must not set service_function_path."
-                        )
-                    }
-                )
-            if self.flow is not None:
-                raise ValidationError({"flow": "SCENE_ACTION rituals must not set flow."})
+            self._clean_no_service_path("SCENE_ACTION")
+            self._clean_no_flow("SCENE_ACTION")
+        elif kind == RitualExecutionKind.CEREMONY:
+            self._clean_no_service_path("CEREMONY")
+            self._clean_no_flow("CEREMONY")
 
     def _clean_sidecar_invariant(self) -> None:
         """SCENE_ACTION rituals require a RitualCheckConfig; other kinds may carry one.
@@ -228,3 +236,36 @@ class RitualComponentRequirement(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"
+
+
+class PendingRitualEffect(SharedMemoryModel):
+    """In-progress ritual ceremony awaiting a finisher command (weave / imbue).
+
+    Created by PerformRitualAction for CEREMONY-kind rituals. Consumed and
+    deleted by the finisher action (WeaveThreadAction, ImbueAction) on success.
+    UniqueConstraint prevents stacking the same ceremony twice before finishing.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="pending_ritual_effects",
+    )
+    ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.PROTECT,
+        related_name="pending_effects",
+    )
+    stage = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character", "ritual"],
+                name="pending_ritual_effect_unique_per_char_ritual",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"PendingRitualEffect({self.character_id}, {self.ritual.name!r})"
