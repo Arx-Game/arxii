@@ -6962,7 +6962,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Validate ownership + dispatch resolve_entry_flourish_offer; return the result. */
+    /** @description Resolve the entry-flourish offer via action dispatch (telnet + web converge). */
     post: operations['magic_entry_flourish_respond_create'];
     delete?: never;
     options?: never;
@@ -15852,7 +15852,12 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
-    /** @description Write serializer for the player's entry-flourish resonance pick. */
+    /**
+     * @description Request shape for the player's entry-flourish resonance pick.
+     *
+     *     Validation-only — the view resolves and ownership-checks the objects
+     *     directly via get_object_or_404 and delegates to ResolveFlourishOfferAction.
+     */
     EntryFlourishRespondRequest: {
       offer_id: number;
       resonance_id: number;

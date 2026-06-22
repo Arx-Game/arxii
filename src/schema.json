@@ -11060,8 +11060,8 @@ paths:
   /api/magic/entry-flourish/respond/:
     post:
       operationId: magic_entry_flourish_respond_create
-      description: Validate ownership + dispatch resolve_entry_flourish_offer; return
-        the result.
+      description: Resolve the entry-flourish offer via action dispatch (telnet +
+        web converge).
       tags:
       - magic
       requestBody:
@@ -28163,7 +28163,11 @@ components:
         * `duel` - Duel
     EntryFlourishRespondRequest:
       type: object
-      description: Write serializer for the player's entry-flourish resonance pick.
+      description: |-
+        Request shape for the player's entry-flourish resonance pick.
+
+        Validation-only — the view resolves and ownership-checks the objects
+        directly via get_object_or_404 and delegates to ResolveFlourishOfferAction.
       properties:
         offer_id:
           type: integer
