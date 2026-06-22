@@ -20,6 +20,7 @@ from world.roster.models import RosterEntry
 from world.secrets.filters import KnownSecretFilter
 from world.secrets.models import SecretKnowledge
 from world.secrets.serializers import KnownSecretSerializer
+from world.secrets.services import known_secrets_for
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -42,16 +43,8 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         viewer = self._viewer_entry()
         if viewer is None:
             return SecretKnowledge.objects.none()
-        return (
-            SecretKnowledge.objects.filter(roster_entry=viewer)
-            .select_related(
-                "secret",
-                "secret__category",
-                "secret__author_persona",
-                "secret__subject_sheet__character",
-            )
-            .order_by("-found_at")
-        )
+        # Shared with the telnet +secrets command; the `subject` FilterSet narrows to one tab.
+        return known_secrets_for(viewer)
 
     def _viewer_entry(self) -> RosterEntry | None:
         """The active (viewing) character, validated as owned by the requester (#1334).

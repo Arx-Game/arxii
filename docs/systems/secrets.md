@@ -95,6 +95,20 @@ fires when the tab is opened.
 > no/unowned `viewer` → no secrets. The frontend resolves the active character from
 > `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
+### Telnet — `+secrets`
+
+The telnet face of the tab (`commands/social/secrets.py`, thin over the services). On telnet the
+caller **is** the active character, so scoping is automatic — no viewer param:
+
+- `+secrets` → your *own* secrets (`secrets_owned_by` — you own them, shown in full, no Unknown).
+- `+secrets <character>` → secrets you know about them (`known_secrets_for`, locked layers
+  rendered "Unknown").
+- `+secrets all` → every secret you know about others.
+- `+secrets/<sort>` → sort by `level` (default) / `recent` / `category` / `subject`.
+
+The command and the web viewset share one query path (`known_secrets_for` / `secrets_owned_by`)
+so they can't drift.
+
 ## Originating systems — the back-reference pattern
 
 A `Secret` is a **uniform free-text fact about one `subject_sheet`**; it carries no knowledge of
