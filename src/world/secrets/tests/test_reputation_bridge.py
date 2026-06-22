@@ -8,16 +8,31 @@ reputation delta, independent of that org's philosophy). Persona victims are rec
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
+from world.narrative.models import NarrativeMessageDelivery
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.secrets.constants import DEFAULT_VICTIM_SEVERITY_BY_LEVEL, SecretLevel
 from world.secrets.factories import SecretFactory, SecretVictimFactory
-from world.secrets.services import expose_secret
+from world.secrets.services import expose_secret, grant_secret_knowledge, secret_known_to
 from world.societies.factories import (
     OrganizationFactory,
     PhilosophicalArchetypeFactory,
     SocietyFactory,
 )
 from world.societies.models import OrganizationReputation, SocietyReputation
+
+
+def _piloted_character():
+    """A roster entry whose character is actively run by an account (a 'piloted' PC)."""
+    entry = RosterEntryFactory()
+    player_data = PlayerDataFactory(account=AccountFactory())
+    RosterTenureFactory(roster_entry=entry, player_data=player_data)
+    return entry
+
+
+def _victim_notified(sheet) -> bool:
+    return NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet).exists()
 
 
 class SecretReputationBridgeTests(TestCase):
@@ -60,15 +75,52 @@ class SecretReputationBridgeTests(TestCase):
 
         assert OrganizationReputation.objects.get(persona=persona, organization=org).value == -42
 
-    def test_persona_victim_is_recorded_but_not_effected(self) -> None:
+    def test_npc_persona_victim_is_not_prompted(self) -> None:
+        # A persona victim with no PC behind it (no roster entry / account) has no one to decide
+        # a relationship effect — nothing fires.
         secret = SecretFactory()
-        victim_persona = PersonaFactory()
+        victim_persona = PersonaFactory()  # no roster entry → not piloted
         SecretVictimFactory(secret=secret, organization=None, persona=victim_persona)
 
         result = expose_secret(secret, societies=[SocietyFactory()])
 
-        assert victim_persona.pk in result.persona_victim_ids
-        assert result.organization_victim_deltas == {}
+        assert result.notified_persona_victim_ids == ()
+        assert not _victim_notified(victim_persona.character_sheet)
+
+    def test_pc_persona_victim_is_granted_knowledge_and_prompted_on_public_exposure(self) -> None:
+        # Going public reaches the victim too: a PC victim learns the secret and is prompted to
+        # decide a relationship effect of their own (never auto-applied).
+        secret = SecretFactory()
+        victim_entry = _piloted_character()
+        victim_persona = victim_entry.character_sheet.primary_persona
+        SecretVictimFactory(secret=secret, organization=None, persona=victim_persona)
+
+        result = expose_secret(secret, societies=[SocietyFactory()])
+
+        assert victim_persona.pk in result.notified_persona_victim_ids
+        assert secret_known_to(secret, victim_entry)
+        assert _victim_notified(victim_entry.character_sheet)
+
+    def test_victim_is_prompted_on_personal_discovery_too(self) -> None:
+        # The high-drama path: the victim learns it personally (investigation / sharing /
+        # confession) — grant_secret_knowledge is the chokepoint, so the prompt fires there too.
+        secret = SecretFactory()
+        victim_entry = _piloted_character()
+        SecretVictimFactory(
+            secret=secret, organization=None, persona=victim_entry.character_sheet.primary_persona
+        )
+
+        grant_secret_knowledge(roster_entry=victim_entry, secret=secret)
+
+        assert _victim_notified(victim_entry.character_sheet)
+
+    def test_a_non_victim_learner_is_not_prompted(self) -> None:
+        secret = SecretFactory()
+        learner = _piloted_character()  # piloted, but not a victim of this secret
+
+        grant_secret_knowledge(roster_entry=learner, secret=secret)
+
+        assert not _victim_notified(learner.character_sheet)
 
     def test_diffuse_fires_one_shot_per_society(self) -> None:
         secret = SecretFactory()

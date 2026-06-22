@@ -110,14 +110,24 @@ two channels, one-shot:
   for killing its head). **Organization** victims get an `OrganizationReputation` delta
   (`severity`, or the level default from `DEFAULT_VICTIM_SEVERITY_BY_LEVEL`) via
   `societies.renown.bump_organization_reputation` — the first gameplay writer of org reputation.
-  **Persona** victims are recorded only; their personal-grudge effect is deferred (the
-  relationship system is consent-gated, so its home is an open decision).
+
+**Persona victims — the victim decides.** A persona victim's effect is **never auto-applied**
+(the relationship system is consent-gated and player-driven). Instead, when the victim *learns
+the secret* — through personal discovery / sharing / a confession, or because it went **public**
+(public knowledge reaches the victim too) — they are **prompted** to decide a relationship effect
+of their own toward the perpetrator via the normal relationship flow. The hook lives in
+`grant_secret_knowledge` (the single point a character learns a secret): on first learn, if the
+learner is a registered `SecretVictim.persona` **and** the character is run by an account
+(`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them. NPC victims
+have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge so the
+same hook prompts them when the secret goes public.
 
 Reputation attaches to the subject's **primary persona** (only established/primary identities
-accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
-trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
-slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
-propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
+accrue reputation). A *guided* one-click grievance prompt, the `magnitude`/fame axis, org-level
+diffuse interpretation, the *exposure trigger* (how individual `SecretKnowledge` propagates to
+society-level exposure — the gossip slice), enforcement (wanted/blood-feud conditions,
+hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
+**later slices** of the #1429 sub-epic.
 
 ## Boundary with Codex
 
