@@ -48,6 +48,13 @@ class ConsentRequestCommand(ArxCommand):
     action = None
 
     def func(self) -> None:
+        # ValidationError is imported as DjangoValidationError to avoid colliding
+        # with DRF's ValidationError; the service raises Django's (e.g. technique
+        # validation or a TABLE_TALK delivery without a place). Subclasses that
+        # pass a technique/delivery can trip it, so the base converts it to a
+        # clean message rather than a raw traceback — mirroring the web viewset.
+        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
         from world.scenes.action_services import create_action_request  # noqa: PLC0415
 
         try:
@@ -57,12 +64,17 @@ class ConsentRequestCommand(ArxCommand):
             self.msg(str(err))
             return
 
-        request = create_action_request(
-            scene=scene,
-            initiator_persona=initiator_persona,
-            target_persona=target_persona,
-            action_key=self.action_key,
-        )
+        try:
+            request = create_action_request(
+                scene=scene,
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                action_key=self.action_key,
+            )
+        except DjangoValidationError as err:
+            self.msg("; ".join(err.messages))
+            return
+
         self.msg(
             f"You move to {self.action_key} {target_persona.name}. "
             f"Awaiting their response (request #{request.pk})."
