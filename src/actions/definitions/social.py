@@ -77,7 +77,7 @@ class IntimidateAction(_SocialTemplateAction):
     name: str = "Intimidate"
     icon: str = "skull"
     template_name: str = "Intimidate"
-    description = "Coerce through force of presence, threats, or physical dominance."
+    description: str = "Coerce through force of presence, threats, or physical dominance."
 
 
 @dataclass
@@ -86,7 +86,7 @@ class PersuadeAction(_SocialTemplateAction):
     name: str = "Persuade"
     icon: str = "handshake"
     template_name: str = "Persuade"
-    description = "Convince through reasoned argument, charm, and social grace."
+    description: str = "Convince through reasoned argument, charm, and social grace."
 
 
 @dataclass
@@ -95,7 +95,7 @@ class DeceiveAction(_SocialTemplateAction):
     name: str = "Deceive"
     icon: str = "mask"
     template_name: str = "Deceive"
-    description = "Mislead through misdirection, half-truths, or outright lies."
+    description: str = "Mislead through misdirection, half-truths, or outright lies."
 
 
 @dataclass
@@ -104,7 +104,7 @@ class FlirtAction(_SocialTemplateAction):
     name: str = "Flirt"
     icon: str = "heart"
     template_name: str = "Flirt"
-    description = "Beguile through charm, allure, and romantic suggestion."
+    description: str = "Beguile through charm, allure, and romantic suggestion."
 
 
 @dataclass
@@ -113,7 +113,7 @@ class PerformAction(_SocialTemplateAction):
     name: str = "Perform"
     icon: str = "music"
     template_name: str = "Perform"
-    description = "Captivate an audience through music, oration, or storytelling."
+    description: str = "Captivate an audience through music, oration, or storytelling."
 
 
 @dataclass
@@ -122,7 +122,7 @@ class EntranceAction(_SocialTemplateAction):
     name: str = "Entrance"
     icon: str = "sparkles"
     template_name: str = "Entrance"
-    description = "Command attention through sheer force of personality on entering."
+    description: str = "Command attention through sheer force of personality on entering."
 
     def execute(
         self,
@@ -184,7 +184,7 @@ class RestoreSenseAction(_SocialTemplateAction):
     name: str = "Restore to Sense"
     icon: str = "heart-pulse"
     template_name: str = "Restore to Sense"
-    description = "Talk a berserk ally down through force of personality and connection."
+    description: str = "Talk a berserk ally down through force of personality and connection."
 
     def dispatch_effects(
         self,

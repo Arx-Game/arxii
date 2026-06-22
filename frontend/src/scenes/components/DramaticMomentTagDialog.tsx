@@ -59,7 +59,7 @@ export function DramaticMomentTagDialog({
         interaction: interactionId,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
+      queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] });
       onClose();
       setSelectedTypeId('');
     },

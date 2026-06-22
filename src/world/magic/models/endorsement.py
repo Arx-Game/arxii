@@ -5,6 +5,10 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
+RESONANCE_FK = "magic.Resonance"
+SCENE_FK = "scenes.Scene"
+
 
 class EndorsementBase(SharedMemoryModel):
     """Shared identity fields for peer-endorsement records (#514).
@@ -17,12 +21,12 @@ class EndorsementBase(SharedMemoryModel):
     """
 
     endorser_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="%(class)s_given",
     )
     endorsee_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="%(class)s_received",
     )
@@ -60,7 +64,7 @@ class PoseEndorsement(EndorsementBase):
         "with partitioned table",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        RESONANCE_FK,
         on_delete=models.PROTECT,
     )
     settled_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -98,7 +102,7 @@ class SceneEntryEndorsement(EndorsementBase):
     """
 
     scene = models.ForeignKey(
-        "scenes.Scene",
+        SCENE_FK,
         on_delete=models.CASCADE,
         related_name="entry_endorsements",
     )
@@ -119,7 +123,7 @@ class SceneEntryEndorsement(EndorsementBase):
         "FK with partitioned table",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        RESONANCE_FK,
         on_delete=models.PROTECT,
     )
     granted_amount = models.PositiveIntegerField(
@@ -180,12 +184,12 @@ class StylePresentationEndorsement(EndorsementBase):
     """
 
     scene = models.ForeignKey(
-        "scenes.Scene",
+        SCENE_FK,
         on_delete=models.CASCADE,
         related_name="style_presentation_endorsements",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        RESONANCE_FK,
         on_delete=models.PROTECT,
     )
     granted_amount = models.PositiveIntegerField(
@@ -218,17 +222,17 @@ class EntryFlourishRecord(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="entry_flourish_records",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        RESONANCE_FK,
         on_delete=models.PROTECT,
         related_name="entry_flourish_records",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        SCENE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

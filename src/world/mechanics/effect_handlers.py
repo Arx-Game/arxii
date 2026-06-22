@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SKIP_ATTACK = "Attack system not yet implemented."
+_NO_SHEET_DESCRIPTION = "Target has no character sheet"
+_NO_SHEET_SKIP_REASON = "Target has no CharacterSheet"
 
 # Role constants for _resolve_position — discriminate named-lookup variants.
 _ROLE_DESTINATION = "destination"
@@ -381,9 +383,9 @@ def _apply_magical_scars(
     except (AttributeError, ObjectDoesNotExist):
         return AppliedEffect(
             effect_type=EffectType.MAGICAL_SCARS,
-            description="Target has no character sheet",
+            description=_NO_SHEET_DESCRIPTION,
             applied=False,
-            skip_reason="Target has no CharacterSheet",
+            skip_reason=_NO_SHEET_SKIP_REASON,
         )
 
     affinity, resonance = _derive_alteration_origin(target)
@@ -453,9 +455,9 @@ def _apply_capture(
     except (AttributeError, ObjectDoesNotExist):
         return AppliedEffect(
             effect_type=EffectType.CAPTURE,
-            description="Target has no character sheet",
+            description=_NO_SHEET_DESCRIPTION,
             applied=False,
-            skip_reason="Target has no CharacterSheet",
+            skip_reason=_NO_SHEET_SKIP_REASON,
         )
 
     # Per-capture override layered over the one CaptivityConfig default — cell flavor,
@@ -742,9 +744,9 @@ def _apply_escape_captivity(
     except (AttributeError, ObjectDoesNotExist):
         return AppliedEffect(
             effect_type=EffectType.ESCAPE_CAPTIVITY,
-            description="Target has no character sheet",
+            description=_NO_SHEET_DESCRIPTION,
             applied=False,
-            skip_reason="Target has no CharacterSheet",
+            skip_reason=_NO_SHEET_SKIP_REASON,
         )
 
     if not escape_captivity(sheet):

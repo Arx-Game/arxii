@@ -55,6 +55,7 @@ CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 TECHNIQUE_MODEL = "magic.Technique"
 COMBAT_PARTICIPANT_MODEL = "combat.CombatParticipant"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
+OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
 
 
 class CombatEncounter(SharedMemoryModel):
@@ -71,7 +72,7 @@ class CombatEncounter(SharedMemoryModel):
         related_name="combat_encounters",
     )
     room = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTS_OBJECTDB_MODEL,
         on_delete=models.PROTECT,
         related_name="combat_encounters",
         null=True,
@@ -369,7 +370,7 @@ class CombatOpponent(SharedMemoryModel):
         "instead; this is the fallback when persona is None.",
     )
     objectdb = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTS_OBJECTDB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2206,7 +2207,7 @@ class DuelChallenge(SharedMemoryModel):
         help_text="The PC who was challenged.",
     )
     room = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTS_OBJECTDB_MODEL,
         on_delete=models.PROTECT,
         related_name="duel_challenges",
         null=True,

@@ -210,9 +210,9 @@ class PassRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
         if sheet is None:
-            return ActionResult(success=False, message="No character sheet found.")
+            return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
         rnd = _active_round_for_room(room)
         if rnd is None:
@@ -264,7 +264,7 @@ class ForceResolveRoundAction(Action):
         room = actor.location
 
         if room is None:
-            return ActionResult(success=False, message="You are not in a room.")
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
 
         rnd = _active_round_for_room(room)
         if rnd is None:

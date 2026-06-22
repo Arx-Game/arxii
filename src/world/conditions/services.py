@@ -2252,6 +2252,35 @@ def decay_all_conditions_tick() -> DecayTickSummary:
     )
 
 
+def _compute_chronic_damage(instance: "ConditionInstance") -> int:
+    """Sum long-term DoT damage for one condition instance.
+
+    Applies per-row severity and stacks scaling; rows that resolve to ≤0 are ignored.
+    """
+    total = 0
+    long_term_rows = ConditionDamageOverTime.objects.filter(
+        condition=instance.condition,
+        is_long_term=True,
+    )
+    for dot in long_term_rows:
+        damage = dot.base_damage
+        if dot.scales_with_severity:
+            damage = int(damage * instance.effective_severity)
+        if dot.scales_with_stacks:
+            damage = damage * instance.stacks
+        if damage > 0:
+            total += damage
+    return total
+
+
+def _chronic_tick_sheet(instance: "ConditionInstance") -> "object | None":
+    """Return the character sheet for the instance's target, or None if absent."""
+    try:
+        return instance.target.sheet_data
+    except ObjectDoesNotExist:
+        return None
+
+
 def batch_chronic_effect_tick() -> ChronicTickSummary:
     """Scheduler entry point. Advance long-term (chronic) DoT by one tick.
 
@@ -2291,28 +2320,12 @@ def batch_chronic_effect_tick() -> ChronicTickSummary:
     for instance in instances:
         summary.examined += 1
 
-        try:
-            sheet = instance.target.sheet_data
-        except ObjectDoesNotExist:
-            sheet = None
+        sheet = _chronic_tick_sheet(instance)
         if sheet is not None and get_active_round_context(sheet) is not None:
             summary.active_round_skipped += 1
             continue
 
-        total = 0
-        long_term_rows = ConditionDamageOverTime.objects.filter(
-            condition=instance.condition,
-            is_long_term=True,
-        )
-        for dot in long_term_rows:
-            damage = dot.base_damage
-            if dot.scales_with_severity:
-                damage = int(damage * instance.effective_severity)
-            if dot.scales_with_stacks:
-                damage = damage * instance.stacks
-            if damage > 0:
-                total += damage
-
+        total = _compute_chronic_damage(instance)
         if total > 0 and sheet is not None:
             removed = apply_clamped_chronic_damage(sheet, total)
             if removed > 0:

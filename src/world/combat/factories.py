@@ -61,6 +61,7 @@ from world.magic.constants import EffectKind
 # multiple factories below. Centralized to avoid the duplicated-literal
 # SonarCloud smell (python:S1192).
 _CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+_ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
 
 class CombatEncounterFactory(factory_django.DjangoModelFactory):
@@ -77,7 +78,7 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
     def room(self) -> object:
         from evennia import create_object
 
-        return create_object("typeclasses.rooms.Room", key="Test Combat Room", nohome=True)
+        return create_object(_ROOM_TYPECLASS, key="Test Combat Room", nohome=True)
 
     @factory.lazy_attribute
     def scene(self) -> object:
@@ -833,7 +834,7 @@ class DuelChallengeFactory(factory_django.DjangoModelFactory):
     def room(self) -> object:
         from evennia import create_object
 
-        return create_object("typeclasses.rooms.Room", key="Duel Challenge Room", nohome=True)
+        return create_object(_ROOM_TYPECLASS, key="Duel Challenge Room", nohome=True)
 
 
 class PvpDuelFactory:
@@ -867,7 +868,7 @@ class PvpDuelFactory:
         if challenged_sheet is None:
             challenged_sheet = CharacterSheetFactory()
         if room is None:
-            room = create_object("typeclasses.rooms.Room", key="Duel Room", nohome=True)
+            room = create_object(_ROOM_TYPECLASS, key="Duel Room", nohome=True)
         return create_pvp_duel(challenger_sheet, challenged_sheet, room, risk_level=risk_level)
 
 
@@ -910,7 +911,7 @@ class LethalDuelFactory:
         if pc_sheet is None:
             pc_sheet = CharacterSheetFactory()
         if room is None:
-            room = create_object("typeclasses.rooms.Room", key="Lethal Duel Room", nohome=True)
+            room = create_object(_ROOM_TYPECLASS, key="Lethal Duel Room", nohome=True)
         if opponent_kwargs is None:
             opponent_kwargs = {
                 "name": "Dueling Master",

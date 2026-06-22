@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 _NO_IDENTITY = "You have no character identity to act with."
+_LOCK_ALL = "cmd:all()"
 
 
 def _caller_persona(command: ArxCommand) -> Persona:
@@ -46,7 +47,7 @@ class CmdBlock(ArxCommand):
     """
 
     key = "+block"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:
@@ -86,7 +87,7 @@ class CmdUnblock(ArxCommand):
     """
 
     key = "+unblock"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:
@@ -116,7 +117,7 @@ class CmdShareBlock(ArxCommand):
     """
 
     key = "+shareblock"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:
@@ -146,7 +147,7 @@ class CmdMute(ArxCommand):
     """
 
     key = "+mute"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:
@@ -178,7 +179,7 @@ class CmdUnmute(ArxCommand):
     """
 
     key = "+unmute"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:
@@ -203,7 +204,7 @@ class CmdBlockList(ArxCommand):
     """
 
     key = "+blocklist"
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     action = None
 
     def func(self) -> None:

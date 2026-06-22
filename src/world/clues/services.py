@@ -168,6 +168,25 @@ def clear_rescue_clues(captivity: Captivity) -> None:
     Clue.objects.filter(target_captivity=captivity).delete()
 
 
+def _placement_passes_eligibility(
+    placement: RoomClue,
+    character: ObjectDB,
+    context_holder: list,
+) -> bool:
+    """Return True if character passes the placement's eligibility gate.
+
+    ``context_holder`` is a one-element list used to lazily build and cache the
+    predicate context across calls within a single search sweep.
+    """
+    from world.predicates.predicates import evaluate  # noqa: PLC0415
+
+    if not placement.eligibility_rule:
+        return True
+    if not context_holder:
+        context_holder.append(_predicate_context(character))
+    return evaluate(placement.eligibility_rule, context_holder[0])
+
+
 def search_room(
     character: ObjectDB,
     room_profile: RoomProfile,
@@ -181,7 +200,6 @@ def search_room(
     Returns the clues found this search (empty if the searcher has no roster entry).
     """
     from world.checks.services import perform_check  # noqa: PLC0415
-    from world.predicates.predicates import evaluate  # noqa: PLC0415
 
     roster_entry = _roster_entry_for(character)
     if roster_entry is None:
@@ -190,7 +208,7 @@ def search_room(
         CharacterClue.objects.filter(roster_entry=roster_entry).values_list("clue_id", flat=True)
     )
     found: list[Clue] = []
-    context = None  # CharacterPredicateContext, built lazily only when a clue is gated
+    context_holder: list = []
     placements = RoomClue.objects.filter(room_profile=room_profile, is_active=True).select_related(
         "clue"
     )
@@ -198,13 +216,8 @@ def search_room(
         clue = placement.clue
         if clue.pk in held_ids:
             continue
-        # Access gate: a placement may restrict WHO can discover it (identity / org /
-        # resonance) via a predicate rule. Empty rule = open to anyone (the default).
-        if placement.eligibility_rule:
-            if context is None:
-                context = _predicate_context(character)
-            if not evaluate(placement.eligibility_rule, context):
-                continue
+        if not _placement_passes_eligibility(placement, character, context_holder):
+            continue
         result = perform_check(
             character, search_check_type, target_difficulty=placement.detect_difficulty
         )

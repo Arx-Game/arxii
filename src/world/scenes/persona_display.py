@@ -48,6 +48,39 @@ def compose_sdesc(persona: Persona) -> str:
     return f"a {noun} wearing a {persona.name}"
 
 
+def _build_revealed_map(
+    fake_ids: list[int],
+    viewer_sheet_ids: set[int],
+) -> dict[int, Persona]:
+    """Query PersonaDiscovery rows and return a mapping of fake persona pk → revealed persona."""
+    if not fake_ids or not viewer_sheet_ids:
+        return {}
+    rows = PersonaDiscovery.objects.filter(
+        Q(persona_id__in=fake_ids) | Q(linked_to_id__in=fake_ids),
+        discovered_by_id__in=viewer_sheet_ids,
+    ).select_related("persona", "linked_to")
+    revealed: dict[int, Persona] = {}
+    for discovery in rows:
+        if discovery.persona_id in fake_ids:
+            revealed[discovery.persona_id] = discovery.linked_to
+        if discovery.linked_to_id in fake_ids:
+            revealed[discovery.linked_to_id] = discovery.persona
+    return revealed
+
+
+def _resolve_single_display(
+    persona: Persona,
+    viewer_persona_ids: set[int],
+    revealed: dict[int, Persona],
+) -> tuple[str, bool]:
+    """Return ``(display_name, is_discovered)`` for one persona given the revealed map."""
+    if persona.pk in viewer_persona_ids or not persona.is_fake_name:
+        return persona.name, False
+    if persona.pk in revealed:
+        return f"{persona.name} ({revealed[persona.pk].name})", True
+    return compose_sdesc(persona), False
+
+
 def build_persona_display_map(
     personas: Iterable[Persona],
     *,
@@ -62,29 +95,11 @@ def build_persona_display_map(
     unique = {p.pk: p for p in personas}
     # Owned faces are never restricted — resolved as the real name without a discovery lookup.
     fake_ids = [p.pk for p in unique.values() if p.is_fake_name and p.pk not in viewer_persona_ids]
-
-    revealed: dict[int, Persona] = {}
-    if fake_ids and viewer_sheet_ids:
-        rows = PersonaDiscovery.objects.filter(
-            Q(persona_id__in=fake_ids) | Q(linked_to_id__in=fake_ids),
-            discovered_by_id__in=viewer_sheet_ids,
-        ).select_related("persona", "linked_to")
-        for discovery in rows:
-            # A discovery links two faces; map the masked one to the other (the revealed one).
-            if discovery.persona_id in fake_ids:
-                revealed[discovery.persona_id] = discovery.linked_to
-            if discovery.linked_to_id in fake_ids:
-                revealed[discovery.linked_to_id] = discovery.persona
-
-    display: dict[int, tuple[str, bool]] = {}
-    for persona in unique.values():
-        if persona.pk in viewer_persona_ids or not persona.is_fake_name:
-            display[persona.pk] = (persona.name, False)
-        elif persona.pk in revealed:
-            display[persona.pk] = (f"{persona.name} ({revealed[persona.pk].name})", True)
-        else:
-            display[persona.pk] = (compose_sdesc(persona), False)
-    return display
+    revealed = _build_revealed_map(fake_ids, viewer_sheet_ids)
+    return {
+        persona.pk: _resolve_single_display(persona, viewer_persona_ids, revealed)
+        for persona in unique.values()
+    }
 
 
 def resolve_display_for_viewer(
