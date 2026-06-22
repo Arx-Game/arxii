@@ -485,3 +485,43 @@ class AdvanceViaSessionLegendGatePGTests(TestCase):
         receipts = advance_class_level_via_session(session=session)
         assert len(receipts) == 1
         assert receipts[0].level_after == 3
+
+
+class LegendRequirementWiredIntoUnlockCheckTests(TestCase):
+    """`check_requirements_for_unlock` must actually enforce `LegendRequirement`.
+
+    Regression guard: `LegendRequirement` was omitted from the requirement_types list in
+    `check_requirements_for_unlock`, so the legend gate was silently bypassed (only the
+    PG matview integration test caught it). This runs on the SQLite fast tier by mocking
+    the PG-only legend total, so the wiring can't regress without PG.
+    """
+
+    def _make_unlock_with_legend_req(self):
+        from world.progression.models import ClassLevelUnlock, LegendRequirement
+
+        cc = CharacterClassFactory()
+        unlock = ClassLevelUnlock.objects.create(character_class=cc, target_level=3)
+        LegendRequirement.objects.create(
+            class_level_unlock=unlock, minimum_legend=50, is_active=True
+        )
+        return unlock
+
+    def test_legend_requirement_blocks_when_total_below_minimum(self) -> None:
+        from world.progression.services.spends import check_requirements_for_unlock
+
+        sheet = CharacterSheetFactory()
+        unlock = self._make_unlock_with_legend_req()
+        with mock.patch("world.societies.services.get_character_legend_total", return_value=10):
+            met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        assert met is False
+        assert failed
+
+    def test_legend_requirement_passes_when_total_meets_minimum(self) -> None:
+        from world.progression.services.spends import check_requirements_for_unlock
+
+        sheet = CharacterSheetFactory()
+        unlock = self._make_unlock_with_legend_req()
+        with mock.patch("world.societies.services.get_character_legend_total", return_value=75):
+            met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        assert met is True
+        assert failed == []
