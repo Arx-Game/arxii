@@ -7,11 +7,11 @@ loop.
 **Source:** `src/world/secrets/`
 **Umbrella issue / design:** #1334
 
-> **Build status:** Slices 1–2 built — the content model + authoring (slice 1) and **discovery**
-> (slice 2: the per-knower held/partial-knowledge record + the SECRET clue-target wiring). The
-> profile secret-tab display, action-anchored minting (blackmail/murder/affair/crime → Secret +
-> Evidence), the Deed↔Secret cross-link, the #1269 distinction migration, and the CG nudge are
-> **later slices** of #1334.
+> **Build status:** Slices 1–3 built — content model + authoring (slice 1), **discovery**
+> (slice 2: the held/partial-knowledge record + the SECRET clue-target), and the **secret-tab
+> display** (slice 3: the known-secrets API + the React tab, locked layers shown as "Unknown").
+> Action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the Deed↔Secret
+> cross-link, the #1269 distinction migration, and the CG nudge are **later slices** of #1334.
 
 ---
 
@@ -78,6 +78,20 @@ gained a `SECRET` `target_kind` + `target_secret` FK (#1334); `grant_clue_target
 secret's fact via `grant_secret_knowledge`, and `target_already_known` reflects held knowledge.
 So a planted/searched SECRET clue grants the secret on acquisition exactly like a CODEX or RESCUE
 clue.
+
+## Display — the secret tab
+
+`GET /api/secrets/known/?subject=<CharacterSheet pk>` returns the secrets the **viewer's
+account** holds about that character (newest first), paginated. `KnownSecretViewSet` scopes to
+`RosterEntry.objects.for_account` and the serializer renders each held secret with locked layers
+as **"Unknown"**: the fact (`content`) always shows, but `category` / `consequences` read
+"Unknown" when the viewer hasn't unlocked that layer *or* the secret leaves it unplaced. The
+frontend `SecretsTab` (a tab on `CharacterSheetPage`) renders the list; Radix unmounts inactive
+tab content, so the query only fires when the tab is opened.
+
+> Scope note: the tab is account-aggregate (any of the viewer's characters' knowledge) — an OOC
+> "what you've learned about this person" view. Knowledge itself stays roster-scoped; narrowing
+> the tab to the active character is a possible refinement.
 
 ## Boundary with Codex
 

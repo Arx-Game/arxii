@@ -11653,6 +11653,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/secrets/known/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A viewer's known secrets — the data behind the profile secret tab (#1334). */
+    get: operations['secrets_known_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/secrets/known/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description A viewer's known secrets — the data behind the profile secret tab (#1334). */
+    get: operations['secrets_known_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/session-requests/': {
     parameters: {
       query?: never;
@@ -17544,6 +17578,20 @@ export interface components {
       compass_rooms: string[];
       compass_anywhere: boolean;
     };
+    /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
+    KnownSecret: {
+      readonly id: number;
+      readonly level: string;
+      readonly content: string;
+      readonly provenance: string;
+      /** Format: date-time */
+      readonly found_at: string;
+      readonly subject: string;
+      readonly second_party: string | null;
+      readonly category: string;
+      readonly consequences: string;
+      readonly author: string;
+    };
     LedgerRow: {
       id: number;
       amount: number;
@@ -19440,6 +19488,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['JournalEntry'][];
+    };
+    PaginatedKnownSecretList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['KnownSecret'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -42051,6 +42114,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  secrets_known_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedKnownSecretList'];
+        };
+      };
+    };
+  };
+  secrets_known_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['KnownSecret'];
         };
       };
     };
