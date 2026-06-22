@@ -38,7 +38,7 @@ class ResolveResonanceTests(TestCase):
         self.assertEqual(result, self.frost)
 
     def test_numeric_falls_back_to_name_on_pk_miss(self) -> None:
-        # A non-existent PK that happens to match no name either → error listing claimed resonances
+        # Non-existent PK that matches no name either → error listing claimed resonances
         with self.assertRaises(CommandError) as ctx:
             _resolve_resonance("999999", self.sheet)
         self.assertIn("Embers", ctx.exception.msg)

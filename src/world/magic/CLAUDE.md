@@ -592,7 +592,7 @@ the complementary half of the entrance moment).
 - `EntranceAction` calls `maybe_create_entry_flourish_offer` on success; gated by
   `ActionTemplate.grants_entry_flourish`. When an offer is created, the actor receives
   a telnet prompt: `"Use |wflourish <resonance>|n to declare your entrance."`
-- `ResolveFlourishOfferAction` (key `"resolve_flourish_offer"`) — telnet + web converge
+- `ResolveFlourishOfferAction` (key `"resolve_entry_flourish"`) — telnet + web converge
   here; calls `resolve_entry_flourish_offer(offer, resonance=resonance)` and stores the
   result under `ActionResult.data["entry_flourish_result"]`.
 
