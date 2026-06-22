@@ -38,7 +38,6 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
     category: SecretCategory | None = None,
     consequences: str = "",
     author_persona: Persona | None = None,
-    second_party_sheet: CharacterSheet | None = None,
 ) -> Secret:
     """Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.
 
@@ -54,7 +53,6 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
         category=category,
         consequences=consequences,
         author_persona=author_persona,
-        second_party_sheet=second_party_sheet,
     )
     try:
         secret.full_clean()

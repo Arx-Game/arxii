@@ -24,17 +24,12 @@ class KnownSecretSerializer(serializers.Serializer):
     provenance = serializers.CharField(source="secret.get_provenance_display", read_only=True)
     found_at = serializers.DateTimeField(read_only=True)
     subject = serializers.SerializerMethodField()
-    second_party = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
     consequences = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
 
     def get_subject(self, obj: SecretKnowledge) -> str:
         return obj.secret.subject_sheet.character.db_key
-
-    def get_second_party(self, obj: SecretKnowledge) -> str | None:
-        other = obj.secret.second_party_sheet
-        return other.character.db_key if other is not None else None
 
     def get_category(self, obj: SecretKnowledge) -> str:
         secret = obj.secret

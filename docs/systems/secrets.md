@@ -30,8 +30,7 @@ A hidden fact, anchored to a subject.
 
 | Field | Purpose |
 |---|---|
-| `subject_sheet` | FK `CharacterSheet` — who the secret is about |
-| `second_party_sheet` | FK `CharacterSheet`, null — the named other for a two-party secret (affair, blackmail). Ownership follows consequence; a mutually-damning secret names both |
+| `subject_sheet` | FK `CharacterSheet` — who the secret is about, **and its sole owner** |
 | `level` | 1–4 (`SecretLevel`) — narrative weight + default share-scope. **Names are PLACEHOLDER** (spec §10 fork; values are load-bearing, labels are provisional) |
 | `category` | FK `SecretCategory`, null — what it's about. **Null = Unknown** (first-class) |
 | `consequences` | Text, blank = Unknown |

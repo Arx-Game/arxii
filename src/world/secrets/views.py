@@ -49,7 +49,6 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
                 "secret__category",
                 "secret__author_persona",
                 "secret__subject_sheet__character",
-                "secret__second_party_sheet__character",
             )
             .order_by("-found_at")
         )
