@@ -3690,6 +3690,7 @@
 
 ### Secret
 **Foreign Keys:**
+  - distinction -> distinctions.CharacterDistinction [OneToOne] (nullable)
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)
