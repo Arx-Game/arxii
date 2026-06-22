@@ -15,7 +15,22 @@ from typing import Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from world.magic.constants import SoulTetherRole as _SoulTetherRoleDB, TargetKind
 from world.magic.exceptions import SoulTetherError
+from world.magic.models import Thread
+from world.magic.models.affinity import Resonance
+from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
+from world.magic.services.soul_tether import (
+    accept_soul_tether,
+    dissolve_soul_tether,
+    perform_soul_tether_rescue,
+    request_sineating,
+    resolve_sineating_from_db,
+    resolve_stage_advance_prompt_from_db,
+)
+from world.magic.types.soul_tether import SoulTetherRole as _SoulTetherRoleEnum
+from world.relationships.models import CharacterRelationship
+from world.scenes.interaction_services import _get_active_scene
 
 _RESONANCE_KWARG = "resonance"
 _SINS_KWARG = "sins"
@@ -72,15 +87,11 @@ def _resolve_tether_resonance(sinner_sheet: Any, sineater_sheet: Any) -> Any:
     non-retired RELATIONSHIP_CAPSTONE Thread → Thread.resonance.
     Raises ``CommandError`` when any step is missing.
     """
-    from world.magic.constants import SoulTetherRole, TargetKind  # noqa: PLC0415
-    from world.magic.models import Thread  # noqa: PLC0415
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
-
     rel = CharacterRelationship.objects.filter(
         source=sinner_sheet,
         target=sineater_sheet,
         is_soul_tether=True,
-        soul_tether_role=SoulTetherRole.SINNER,
+        soul_tether_role=_SoulTetherRoleDB.SINNER,
     ).first()
     if rel is None:
         msg = "No active Soul Tether exists between you and that character."
@@ -159,63 +170,36 @@ class CmdTether(ArxCommand):
 
     def _do_burden(self, args: str) -> None:
         """Form the tether as the Sinner."""
-        from world.magic.models.affinity import Resonance  # noqa: PLC0415
-        from world.magic.services.soul_tether import accept_soul_tether  # noqa: PLC0415
-        from world.magic.types.soul_tether import SoulTetherRole as _Role  # noqa: PLC0415
-
-        if not args.strip():
-            msg = (
-                "Burden a partner with shared sin.\n"
-                "  tether burden <partner> resonance=<name> writeup=<narrative>"
-            )
-            raise CommandError(msg)
-        partner_name, rest = _split_first(args)
-        kwargs = _parse_kwargs(rest)
-
-        partner_char = self.search_or_raise(partner_name)
-        partner_sheet = _get_sheet(partner_char)
-        caller_sheet = _get_sheet(self.caller)
-
-        resonance_name = kwargs.get(_RESONANCE_KWARG, "").strip()
-        if not resonance_name:
-            msg = "Specify a resonance: resonance=<name>."
-            raise CommandError(msg)
-
-        writeup = kwargs.get(_WRITEUP_KWARG, "").strip()
-        if not writeup:
-            msg = "Describe the bond: writeup=<narrative>."
-            raise CommandError(msg)
-
-        resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
-        if resonance is None:
-            msg = f"No resonance named '{resonance_name}'."
-            raise CommandError(msg)
-
-        try:
-            accept_soul_tether(
-                initiator_sheet=caller_sheet,
-                partner_sheet=partner_sheet,
-                sinner_role=_Role.SINNER,
-                resonance=resonance,
-                writeup=writeup,
-                ritual_components=[],
-            )
-        except SoulTetherError as exc:
-            raise CommandError(exc.user_message) from exc
-
-        self.msg(f"The burden is bound. A Soul Tether forms between you and {partner_char}.")
+        self._form_tether(
+            args,
+            verb="burden",
+            usage="  tether burden <partner> resonance=<name> writeup=<narrative>",
+            sinner_role=_SoulTetherRoleEnum.SINNER,
+            success_fmt="The burden is bound. A Soul Tether forms between you and {partner}.",
+        )
 
     def _do_bear(self, args: str) -> None:
         """Form the tether as the Sineater."""
-        from world.magic.models.affinity import Resonance  # noqa: PLC0415
-        from world.magic.services.soul_tether import accept_soul_tether  # noqa: PLC0415
-        from world.magic.types.soul_tether import SoulTetherRole as _Role  # noqa: PLC0415
+        self._form_tether(
+            args,
+            verb="bear",
+            usage="  tether bear <partner> resonance=<name> writeup=<narrative>",
+            sinner_role=_SoulTetherRoleEnum.SINEATER,
+            success_fmt="You bear the burden. A Soul Tether forms between you and {partner}.",
+        )
 
+    def _form_tether(
+        self,
+        args: str,
+        *,
+        verb: str,
+        usage: str,
+        sinner_role: _SoulTetherRoleEnum,
+        success_fmt: str,
+    ) -> None:
+        """Shared core for ``burden`` and ``bear`` — only role and messages differ."""
         if not args.strip():
-            msg = (
-                "Bear another's sins as Sineater.\n"
-                "  tether bear <partner> resonance=<name> writeup=<narrative>"
-            )
+            msg = f"{verb.capitalize()} a partner to form a Soul Tether.\n{usage}"
             raise CommandError(msg)
         partner_name, rest = _split_first(args)
         kwargs = _parse_kwargs(rest)
@@ -243,7 +227,7 @@ class CmdTether(ArxCommand):
             accept_soul_tether(
                 initiator_sheet=caller_sheet,
                 partner_sheet=partner_sheet,
-                sinner_role=_Role.SINEATER,
+                sinner_role=sinner_role,
                 resonance=resonance,
                 writeup=writeup,
                 ritual_components=[],
@@ -251,13 +235,10 @@ class CmdTether(ArxCommand):
         except SoulTetherError as exc:
             raise CommandError(exc.user_message) from exc
 
-        self.msg(f"You bear the burden. A Soul Tether forms between you and {partner_char}.")
+        self.msg(success_fmt.format(partner=partner_char))
 
     def _do_dissolve(self, args: str) -> None:
         """Sever the Soul Tether bond."""
-        from world.magic.services.soul_tether import dissolve_soul_tether  # noqa: PLC0415
-        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
-
         caller_sheet = _get_sheet(self.caller)
 
         if args.strip():
@@ -303,9 +284,6 @@ class CmdTether(ArxCommand):
 
     def _do_entreat(self, args: str) -> None:
         """Request your Sineater consume sins from your Hollow."""
-        from world.magic.services.soul_tether import request_sineating  # noqa: PLC0415
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-
         if not args.strip():
             msg = (
                 "Entreat your Sineater to consume your sins.\n  tether entreat <sineater> sins=<n>"
@@ -405,9 +383,6 @@ class CmdSineater(ArxCommand):
 
     def _do_consume(self, args: str) -> None:
         """Accept or decline a pending sineat plea."""
-        from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
-        from world.magic.services.soul_tether import resolve_sineating_from_db  # noqa: PLC0415
-
         if not args.strip():
             msg = "Consume whose sins?\n  sineater consume <sinner> [sins=<n>]  (sins=0 to decline)"
             raise CommandError(msg)
@@ -450,11 +425,6 @@ class CmdSineater(ArxCommand):
 
     def _do_mire(self, args: str) -> None:
         """Respond to a stage-advance bonus offer."""
-        from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
-        from world.magic.services.soul_tether import (  # noqa: PLC0415
-            resolve_stage_advance_prompt_from_db,
-        )
-
         if not args.strip():
             msg = (
                 "Pledge against whose darkening?\n"
@@ -504,9 +474,6 @@ class CmdSineater(ArxCommand):
 
     def _do_rescue(self, args: str) -> None:
         """Perform the stage-3+ corruption rescue ritual."""
-        from world.magic.services.soul_tether import perform_soul_tether_rescue  # noqa: PLC0415
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-
         if not args.strip():
             msg = "Rescue whom from the Mire?\n  sineater rescue <sinner>"
             raise CommandError(msg)
@@ -542,8 +509,6 @@ class CmdSineater(ArxCommand):
 
     def _do_pleas(self, args: str) -> None:
         """List pending sineat pleas awaiting your response."""
-        from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
-
         _ = args  # unused; subcommand takes no arguments
         caller_sheet = _get_sheet(self.caller)
         offers = SineatingPendingOffer.objects.filter(
