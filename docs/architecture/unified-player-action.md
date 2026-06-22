@@ -340,7 +340,69 @@ CI's fresh DB).
 - Whether specific registry actions (e.g., equip) should cost a combat round —
   pre-existing combat-design question, untouched here.
 
-## 10. Verified Source Anchors
+## 10. Telnet Convergence Convention — Three Player-Action Families (ratified #1337)
+
+Sections 1–9 design **Family 1**: the unified `dispatch_player_action()` interface
+and its three dispatch backends (REGISTRY / CHALLENGE / COMBAT). That is the seam
+for *most* player actions, but it is not the only one. The
+[telnet-driveability audit](../audits/2026-06-21-telnet-driveability-ui-parity.md)
+identified **three distinct player-action dispatch families**, each with its own
+shared seam. The invariant — ratified in #1337 — is that **telnet converges with
+the web on each family's own seam; there is never a forked telnet-only path**. The
+correct seam differs by family; "use `action.run()`" is *not* the universal answer.
+
+### Family 1 — Unified dispatch (REGISTRY / CHALLENGE / COMBAT)
+
+- **Seam:** `dispatch_player_action()` (`src/actions/player_interface.py`). Routes by
+  backend: REGISTRY → `action.run()`, CHALLENGE → `resolve_challenge()`, COMBAT →
+  `declare_action()` (deferred, resolved by `resolve_round()`).
+- **Telnet face:** `DispatchCommand` (`src/commands/command.py`) carries an
+  `ActionRef` to `dispatch_player_action()` — the same entry the web's
+  `DispatchActionView` uses. Pure-REGISTRY actions may instead use the simpler
+  `ArxCommand` → `action.run()` shim (REGISTRY is the one backend `action.run()`
+  reaches directly). Worked examples: `CmdDeclareTechnique` (combat cast/declare).
+
+### Family 2 — Consent (two-party targeted social actions)
+
+- **Seam: the consent SERVICE functions** `create_action_request()` /
+  `respond_to_action_request()` (`src/world/scenes/action_services.py`) — **not**
+  `action.run()` or `dispatch_player_action()`. The web's `SceneActionRequestViewSet`
+  calls exactly these services; telnet calls the same ones.
+- **Telnet face:** `ConsentRequestCommand` / `CmdIntimidate` (request half) plus the
+  generic `CmdAccept` / `CmdDeny` (response half), all in `src/commands/consent.py`.
+- **Why it stays at the service seam (not resolution / `action.run()`):** consent is
+  an inherently **two-party async protocol** — request, then a *separate* accept/deny
+  by the target — whose response half cannot be a single dispatch call. Whether an
+  action "needs consent" is a property of `ActionTemplate.consent_category`, not of
+  the `Action`. Convergence here is at the **service seam**, deliberately *before*
+  resolution; a naive telnet command calling `action.run()` would resolve
+  immediately and skip consent — a different semantic than the web.
+
+### Family 3 — Direct-viewset player mutations (weave / pull / endorse / membership …)
+
+- **Seam: a real `Action` on `action.run()`** (the #1331 ritual-as-Action template).
+  Where the web historically reached a service directly through a dedicated viewset,
+  the convention is to introduce a real `Action`, then re-point the web serializer at
+  `action.run()` so web + telnet converge on the same action machinery
+  (prerequisites, AP/fatigue, enhancements, events).
+- **Worked example:** `WeaveThreadAction` (`src/actions/definitions/threads.py`). The
+  web `ThreadSerializer.create()` (`src/world/magic/serializers.py`) now calls
+  `WeaveThreadAction().run(...)` instead of `weave_thread()` directly; the telnet face
+  is `CmdWeaveThread` (`src/commands/weave.py`). (Ritual performance — imbue/pull via
+  `PerformRitualAction`, #1331 — is the other landed instance of this family.)
+- **Family-3 classification rule (verbatim):** *a player-facing state mutation with
+  costs/prerequisites becomes an `Action`; GM/system-only surfaces (e.g.
+  `resolve_round`, encounter setup) stay raw services with no player UI.*
+
+### Summary
+
+| Family | Seam (telnet == web) | Telnet face | Why this seam |
+|---|---|---|---|
+| 1 — Unified dispatch | `dispatch_player_action()` | `DispatchCommand` (or `ArxCommand`→`action.run()` for pure REGISTRY) | One entry routes REGISTRY/CHALLENGE/COMBAT by backend |
+| 2 — Consent | `create_action_request()` / `respond_to_action_request()` services | `ConsentRequestCommand`/`CmdIntimidate` + `CmdAccept`/`CmdDeny` | Two-party async protocol; response half can't be one dispatch call; "needs consent" lives on `ActionTemplate.consent_category` |
+| 3 — Direct-viewset mutation | a real `Action` via `action.run()` | `CmdWeaveThread` (worked: `WeaveThreadAction`) | Player mutation with costs/prerequisites; GM/system-only surfaces stay raw services |
+
+## 11. Verified Source Anchors
 
 | Concept | Location |
 |---|---|
