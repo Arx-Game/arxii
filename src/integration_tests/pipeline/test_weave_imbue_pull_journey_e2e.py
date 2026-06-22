@@ -1,15 +1,17 @@
 """Telnet E2E: 5-step weave/imbue/pull journey proves the full ceremony/finisher lifecycle.
 
 Steps:
-  1. PerformRitualAction → Rite of Weaving ceremony  → PendingRitualEffect (weaving)
+  1. CmdRitual → Rite of Weaving ceremony  → PendingRitualEffect (weaving)
   2. CmdWeaveThread → weave Ember of Endurance       → Thread row created, effect consumed
-  3. PerformRitualAction → Rite of Imbuing ceremony  → PendingRitualEffect (imbuing)
+  3. CmdRitual → Rite of Imbuing ceremony  → PendingRitualEffect (imbuing)
   4. CmdImbue → imbue thread 5 points               → developed_points advanced, effect consumed
   5. CmdPull → pull tier-1 through thread            → CharacterResonance.balance debited
 
 This covers the happy-path end-to-end through the ceremony/finisher model introduced in
 #1342. Supersedes test_thread_pull_pipeline.py (retired) for the pull step and
 SpendResonanceForImbuingTests (retired from test_resonance_services.py) for the imbue step.
+Steps 1 and 3 use CmdRitual (the real telnet path) to prove CEREMONY-kind rituals are
+reachable from the telnet layer.
 """
 
 from __future__ import annotations
@@ -18,9 +20,9 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from actions.definitions.ritual import PerformRitualAction
 from commands.imbue import CmdImbue
 from commands.pull import CmdPull
+from commands.ritual import CmdRitual
 from commands.weave import CmdWeaveThread
 from integration_tests.game_content.magic import seed_thread_pull_catalog
 from world.character_sheets.factories import CharacterSheetFactory
@@ -93,20 +95,22 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
             maximum=50,
         )
 
+    def _cmd_ritual(self, character: object, ritual_name: str) -> None:
+        """Invoke CmdRitual for the given ritual name — the real telnet path."""
+        cmd = CmdRitual()
+        cmd.caller = character
+        cmd.args = ritual_name
+        cmd.raw_string = f"ritual {ritual_name}"
+        cmd.func()
+
     def test_weave_imbue_pull_journey(self) -> None:
         character = self.sheet.character
         character.msg = MagicMock()
 
         # ------------------------------------------------------------------
-        # Step 1: Rite of Weaving ceremony → PendingRitualEffect created
+        # Step 1: CmdRitual → Rite of Weaving ceremony → PendingRitualEffect
         # ------------------------------------------------------------------
-        action = PerformRitualAction()
-        result = action.run(
-            actor=character,
-            ritual=self.weaving_ritual,
-            components_provided=[],
-        )
-        self.assertTrue(result.success, msg=f"Ceremony failed: {result.message}")
+        self._cmd_ritual(character, self.weaving_ritual.name)
         self.assertTrue(
             PendingRitualEffect.objects.filter(
                 character=self.sheet,
@@ -135,15 +139,9 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         )
 
         # ------------------------------------------------------------------
-        # Step 3: Rite of Imbuing ceremony → PendingRitualEffect created
+        # Step 3: CmdRitual → Rite of Imbuing ceremony → PendingRitualEffect
         # ------------------------------------------------------------------
-        action = PerformRitualAction()
-        result = action.run(
-            actor=character,
-            ritual=self.imbuing_ritual,
-            components_provided=[],
-        )
-        self.assertTrue(result.success, msg=f"Imbuing ceremony failed: {result.message}")
+        self._cmd_ritual(character, self.imbuing_ritual.name)
         self.assertTrue(
             PendingRitualEffect.objects.filter(
                 character=self.sheet,
