@@ -50,12 +50,21 @@ actions, backends, and service functions.
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept`, `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
-- **`ritual.py`**: `CmdRitual` — telnet face of
-  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE rituals
+- **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
+  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
+  CEREMONY rituals. SERVICE rituals execute immediately; CEREMONY rituals create a
+  `PendingRitualEffect` that the matching finisher command (`weave`, `imbue`) consumes.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
   issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
+  parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
+  for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
+- **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
+  mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
+  [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
+  debiting; live mode calls `spend_resonance_for_pull`.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

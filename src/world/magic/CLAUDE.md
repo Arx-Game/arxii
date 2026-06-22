@@ -23,10 +23,15 @@ The magic system for Arx II. Power flows from identity and connection.
   catalog (per anchor scope); `CharacterThreadWeavingUnlock` is the per-character
   purchase record; `ThreadWeavingTeachingOffer` is the teacher-facing offer
   (mirrors `CodexTeachingOffer`).
-- **Ritual**: Authored magical procedures with dual dispatch —
+- **Ritual**: Authored magical procedures with four dispatch kinds —
   `execution_kind=SERVICE` invokes a registered service function path;
-  `execution_kind=FLOW` invokes a `FlowDefinition`. Imbuing is the first
-  SERVICE-dispatched ritual and wraps `spend_resonance_for_imbuing`.
+  `execution_kind=FLOW` invokes a `FlowDefinition`;
+  `execution_kind=CEREMONY` creates a `PendingRitualEffect` that a finisher
+  command (`weave`, `imbue`) later consumes to complete the ritual;
+  `execution_kind=SCENE_ACTION` fires a check via `RitualCheckConfig`.
+  The two canonical CEREMONY rituals are **Rite of Weaving** (finisher:
+  `CmdWeaveThread` / `WeaveThreadAction`) and **Rite of Imbuing** (finisher:
+  `CmdImbue` / `ImbueThreadAction`).
   Ritual *performance* is the `perform_ritual` `Action`
   (`actions/definitions/ritual.py`, key `"perform_ritual"`) — both telnet
   (`commands.ritual.CmdRitual`) and the web (`RitualPerformView`) converge on
@@ -34,8 +39,13 @@ The magic system for Arx II. Power flows from identity and connection.
   action catches the ritual-surface exceptions (`RitualComponentError`,
   `ResonanceInsufficient`, `AnchorCapExceeded`, `InvalidImbueAmount`,
   `XPInsufficient`) and returns a failure `ActionResult` whose `message` the
-  view maps to HTTP 400. Scope: SERVICE + FLOW rituals (Anima/SCENE_ACTION
-  rituals dispatch elsewhere).
+  view maps to HTTP 400.
+- **PendingRitualEffect**: In-progress CEREMONY record. Created by
+  `PerformRitualAction` when `execution_kind=CEREMONY`; unique per
+  `(character, ritual)`. Consumed (deleted) by the finisher action on success.
+  Fields: `character` (FK → `CharacterSheet`), `ritual` (FK → `Ritual`),
+  `created_at`. If a finisher fires without a matching `PendingRitualEffect` the
+  action returns a failure result — no side effects.
 
 ## Models
 
@@ -221,12 +231,17 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   is the only gate at imbue time.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
-- `Ritual` - Authored magical procedure with dual dispatch
-  (`execution_kind=SERVICE` → `service_function_path`; `execution_kind=FLOW` →
-  FK to `FlowDefinition`). `site_property` optionally gates where it can be
-  performed.
+- `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
+  `service_function_path`; `FLOW` → FK to `FlowDefinition`; `CEREMONY` →
+  creates `PendingRitualEffect` (finisher command completes the ritual);
+  `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
+  `site_property` optionally gates where it can be performed.
 - `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
   `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+- `PendingRitualEffect` - In-progress CEREMONY record. Unique per
+  `(character, ritual)`. Created by `PerformRitualAction` on CEREMONY invocation;
+  consumed (deleted) by the finisher action (`WeaveThreadAction`, `ImbueThreadAction`)
+  on success.
 
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
