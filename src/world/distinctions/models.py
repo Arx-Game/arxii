@@ -19,7 +19,8 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import DistinctionOrigin, DistinctionVisibility, OtherStatus
+from world.distinctions.types import DistinctionOrigin, OtherStatus
+from world.secrets.constants import SecretLevel
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -210,14 +211,19 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         help_text="Whether this distinction is available for selection.",
     )
 
-    # Privacy: the default visibility for this kind of distinction on a character's
-    # profile. Most kinds are PUBLIC; criminal / scandalous kinds are authored PRIVATE so
-    # they do not out a player by default. A player can override per character.
-    default_visibility = models.CharField(
-        max_length=10,
-        choices=DistinctionVisibility.choices,
-        default=DistinctionVisibility.PUBLIC,
-        help_text="Default profile visibility for this distinction kind (player-overridable).",
+    # Privacy (#1334): instead of a public/private flag, a sensitive kind *relocates* into a
+    # Secret. Most kinds are public; criminal / scandalous kinds set ``secret_by_default`` so
+    # taking one auto-mints a Secret (at ``default_secret_level``) that drops off the public
+    # distinctions list and is learned through the clue loop. A player may also gate a
+    # normally-public distinction per character (mints a Secret on that CharacterDistinction).
+    secret_by_default = models.BooleanField(
+        default=False,
+        help_text="Taking this kind auto-mints a Secret (criminal/scandalous kinds).",
+    )
+    default_secret_level = models.PositiveSmallIntegerField(
+        choices=SecretLevel.choices,
+        default=SecretLevel.UNCOMMON_KNOWLEDGE,
+        help_text="Level for the auto-minted Secret when secret_by_default.",
     )
 
     objects = DistinctionManager()
@@ -459,16 +465,17 @@ class CharacterDistinction(SharedMemoryModel):
         default=False,
         help_text="Whether this distinction is temporary (e.g., magical effect).",
     )
-    visibility_override = models.CharField(
-        max_length=10,
-        choices=DistinctionVisibility.choices,
+    # Privacy back-reference (#1334): when set, this distinction is *relocated* into the linked
+    # Secret — it drops off the public distinctions list and is learned through the clue loop.
+    # The FK's presence IS the secret-state (see ``is_secret``); there is no separate flag to
+    # drift. SET_NULL so deleting the Secret simply makes the distinction public again.
+    secret = models.OneToOneField(
+        "secrets.Secret",
         null=True,
         blank=True,
-        default=None,
-        help_text=(
-            "Player's per-character privacy gate. When set, overrides the distinction "
-            "kind's default visibility; null inherits the kind default."
-        ),
+        on_delete=models.SET_NULL,
+        related_name="distinction",
+        help_text="The Secret this distinction was relocated into; null = publicly visible.",
     )
     source_description = models.TextField(
         blank=True,
@@ -493,14 +500,13 @@ class CharacterDistinction(SharedMemoryModel):
         return f"{self.distinction.name}{rank_str} on {self.character}"
 
     @property
-    def effective_visibility(self) -> str:
-        """The visibility actually in force: the per-character override, else kind default."""
-        return self.visibility_override or self.distinction.default_visibility
+    def is_secret(self) -> bool:
+        """Whether this distinction has been relocated into a Secret (#1334).
 
-    @property
-    def is_publicly_visible(self) -> bool:
-        """Whether this distinction shows on the profile to other players."""
-        return self.effective_visibility == DistinctionVisibility.PUBLIC
+        The presence of the ``secret`` FK is the source of truth — a secret distinction is
+        hidden from the public distinctions list and surfaces on the secret tab once learned.
+        """
+        return self.secret_id is not None
 
     def calculate_total_cost(self) -> int:
         """

@@ -112,11 +112,11 @@ class JudgePresentationAction(Action):
         judge = actor.sheet_data
 
         try:
-            judge_presentation_service(judge, presentation)
+            endorsement = judge_presentation_service(judge, presentation)
         except FashionPresentationError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(actor_state, "$You() $conj(nod) approvingly at the presentation.")
-        return ActionResult(success=True)
+        return ActionResult(success=True, data={"endorsement": endorsement})

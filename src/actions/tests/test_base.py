@@ -187,7 +187,12 @@ class ActionRegistryTests(TestCase):
             "restore_sense",
             "resolve_entry_flourish",
             "perform_ritual",
+            "imbue_thread",
+            "pull_thread",
             "weave_thread",
+            "endorse_pose",
+            "endorse_scene_entry",
+            "endorse_style_presentation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -29,10 +29,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `ROOM` removed; SANCTUM is the leveled room anchor, cap = sanctum level × 10,
     in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
-    `Ritual` (`service_function_path` dispatches the ritual at fire time;
-    `draft_validator_path` — new CharField, blank — is called inside `draft_session`
-    before the session row is created, letting domain code gate who may initiate the
-    ritual without coupling magic to any specific domain),
+    `Ritual` (four dispatch kinds: SERVICE → `service_function_path`; FLOW →
+    `FlowDefinition`; CEREMONY → `PendingRitualEffect` + finisher command; SCENE_ACTION →
+    `RitualCheckConfig`; `draft_validator_path` — new CharField, blank — is called
+    inside `draft_session` before the session row is created, letting domain code gate
+    who may initiate the ritual without coupling magic to any specific domain),
+    `PendingRitualEffect` (in-progress CEREMONY record; unique per `(character, ritual)`;
+    created by `PerformRitualAction`, consumed by finisher action `WeaveThreadAction`
+    or `ImbueThreadAction`),
     `RitualComponentRequirement`, `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
@@ -501,9 +505,9 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
 Hidden facts about a character — cover identities, crimes, private distinctions, secret
 relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
 info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
-primitive alongside Distinction / Condition / Resonance. *Slices 1–2 own the content model +
-discovery; display, action-anchored minting, the Deed↔Secret cross-link, and the #1269
-distinction migration are later slices.*
+primitive alongside Distinction / Condition / Resonance. *Slices 1–3 (content model, discovery,
+secret-tab display) + the #1269 distinction migration are built; action-anchored minting, the
+Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.*
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
@@ -1272,7 +1276,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `PullThreadAction` (resonance pull with preview mode; calls `spend_resonance_for_pull`)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
@@ -1317,6 +1321,11 @@ Thin telnet compatibility layer that delegates to Actions.
   consent commands `ConsentRequestCommand`/`CmdAccept`/`CmdDeny` (Family 2 → consent
   services), `CmdWeaveThread` (Family 3 → `WeaveThreadAction.run()`). See
   [unified-player-action.md §10](../architecture/unified-player-action.md#10-telnet-convergence-convention--three-player-action-families-ratified-1337).
+- **Magic ceremony/finisher commands (#1342):** `CmdRitual` (supports SERVICE and CEREMONY
+  rituals; CEREMONY creates `PendingRitualEffect`), `CmdWeaveThread` (finisher for Rite of
+  Weaving; consumes pending effect, calls `weave_thread`), `CmdImbue` (finisher for Rite of
+  Imbuing; consumes pending effect, calls `spend_resonance_for_imbuing`), `CmdPull`
+  (resonance pull with `[preview]` mode; calls `spend_resonance_for_pull`).
 - **Source:** `src/commands/`
 - **Details:** [commands.md](commands.md)
 ### Behaviors

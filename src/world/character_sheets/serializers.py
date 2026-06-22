@@ -477,12 +477,13 @@ _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[DistinctionEntry]:
-    """Build the distinctions section: a list of character distinction entries.
+    """Build the distinctions section: the character's *public* distinctions (#1334).
 
-    Most distinctions are public, but criminal / scandalous kinds default to private and a
-    player can gate any of their own per character (#1109). A non-privileged viewer sees only
-    the effective-public ones; the owner / staff see all. Expects ``character.distinctions``
-    prefetched with ``select_related("distinction")`` so visibility resolves query-free.
+    Sensitive distinctions are *relocated* into Secrets (criminal / scandalous kinds, or a
+    player-gated one): they drop off this public list and surface on the secret tab once learned.
+    A non-privileged viewer sees only the non-secret entries; the owner / staff see all, with
+    ``is_secret`` flagging which are gated. Expects ``character.distinctions`` prefetched with
+    ``select_related("distinction")`` so the secret state resolves query-free.
     """
     character = sheet.character
     return [
@@ -491,10 +492,10 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             name=cd.distinction.name,
             rank=cd.rank,
             notes=cd.notes,
-            visibility=cd.effective_visibility,
+            is_secret=cd.is_secret,
         )
         for cd in character.cached_distinctions
-        if privileged or cd.is_publicly_visible
+        if privileged or not cd.is_secret
     ]
 
 

@@ -10,8 +10,9 @@ loop.
 > **Build status:** Slices 1–3 built — content model + authoring (slice 1), **discovery**
 > (slice 2: the held/partial-knowledge record + the SECRET clue-target), and the **secret-tab
 > display** (slice 3: the known-secrets API + the React tab, locked layers shown as "Unknown").
+> The **#1269 distinction migration** is built (see *Originating systems* below).
 > Action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the Deed↔Secret
-> cross-link, the #1269 distinction migration, and the CG nudge are **later slices** of #1334.
+> cross-link, the PersonaDiscovery subsumption, and the CG nudge are **later slices** of #1334.
 
 ---
 
@@ -94,6 +95,31 @@ fires when the tab is opened.
 > no/unowned `viewer` → no secrets. The frontend resolves the active character from
 > `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
+## Originating systems — the back-reference pattern
+
+A `Secret` is a **uniform free-text fact about one `subject_sheet`**; it carries no knowledge of
+*which* system produced it. Instead, each originating system holds a **back-reference FK pointing
+into `Secret`** — dependency flows *specific → general*, so the `secrets` app stays
+dependency-free while consumers (distinctions, later personas/deeds) point in. This is why
+`Secret` has no `kind`/polymorphic-content discriminator: the "different content types, one
+ledger, one loop" goal (spec §6) is met by the back-reference, not by widening `Secret`.
+
+### Distinctions (#1269/#1334) — built
+
+A sensitive distinction is **relocated** into a Secret rather than carrying a public/private flag:
+
+- `Distinction` (kind): `secret_by_default` + `default_secret_level` — taking such a kind
+  (criminal / scandalous) auto-mints a Secret at finalize (`character_creation/services.py`).
+- `CharacterDistinction.secret` → `OneToOneField(Secret, SET_NULL)`. **Its presence *is* the
+  secret-state** (`CharacterDistinction.is_secret`); there is no separate boolean to drift. The
+  old `DistinctionVisibility` enum, `default_visibility`, and `visibility_override` are gone.
+- Services: `world.distinctions.services.mint_distinction_secret` / `clear_distinction_secret`
+  (the single minting authority; a player self-gate passes `PLAYER_FLAVOR` + level 1).
+- Display: the profile distinctions section shows only **non-secret** distinctions to
+  non-privileged viewers (`_build_distinctions`); a relocated one drops off that public list and
+  surfaces on the **secret tab** once learned, through the ordinary `SecretKnowledge` loop. The
+  `DistinctionEntry` payload exposes `is_secret` (not `visibility`).
+
 ## Reputation consequences — the reveal bridge (#1429)
 
 A secret is an **unrevealed fact**; revealing it feeds the existing renown/reputation engine
@@ -115,19 +141,18 @@ two channels, one-shot:
 (the relationship system is consent-gated and player-driven). Instead, when the victim *learns
 the secret* — through personal discovery / sharing / a confession, or because it went **public**
 (public knowledge reaches the victim too) — they are **prompted** to decide a relationship effect
-of their own toward the perpetrator via the normal relationship flow. The hook lives in
-`grant_secret_knowledge` (the single point a character learns a secret): on first learn, if the
-learner is a registered `SecretVictim.persona` **and** the character is run by an account
-(`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them. NPC victims
-have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge so the
-same hook prompts them when the secret goes public.
+of their own toward the perpetrator via the normal relationship flow (`register_grievance`). The
+hook lives in `grant_secret_knowledge` (the single point a character learns a secret): on first
+learn, if the learner is a registered `SecretVictim.persona` **and** the character is run by an
+account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them. NPC
+victims have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge
+so the same hook prompts them when the secret goes public.
 
 Reputation attaches to the subject's **primary persona** (only established/primary identities
-accrue reputation). A *guided* one-click grievance prompt, the `magnitude`/fame axis, org-level
-diffuse interpretation, the *exposure trigger* (how individual `SecretKnowledge` propagates to
-society-level exposure — the gossip slice), enforcement (wanted/blood-feud conditions,
-hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
-**later slices** of the #1429 sub-epic.
+accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
+trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
+slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
+propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
 
 ## Boundary with Codex
 
@@ -141,9 +166,15 @@ consequences (Secret)?"*
 
 ## Planned integration points (later slices)
 
+Each adopts the same **back-reference** pattern as distinctions (the originating system holds the
+FK into `Secret`; `Secret` stays uniform):
+
+- **Action-anchored minting:** blackmail / murder / affair / crime mints a Secret + its evidence
+  clue(s) — "true because it happened."
 - **Deeds:** cross-link a Secret to its sibling `MissionDeedRecord` — one act, two tellings
   (public embellished deed vs. private true secret); earning the secret recontextualizes the legend.
-- **Distinctions (#1269):** replace the PUBLIC/PRIVATE visibility flag with a `secret` flag + level.
-- **Scenes:** `PersonaDiscovery` becomes the PERSONA_LINK kind of secret.
+- **Scenes:** `PersonaDiscovery` (a wired persona-link system) folds into a Secret it points at —
+  reconciling its two-identity shape with the single-owner invariant is its own design slice, and
+  it overlaps TehomCD's appearance/identity work (#1107).
 - **Tehom boundary:** soul/tether/sineater marker known-ness surfaces *via* Secrets (reference,
   not replacement).

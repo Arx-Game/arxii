@@ -53,19 +53,6 @@ class DistinctionOrigin(models.TextChoices):
     GAMEPLAY = "gameplay", "Gameplay"
 
 
-class DistinctionVisibility(models.TextChoices):
-    """Whether a distinction is shown to other players on a character's profile.
-
-    The default lives on the ``Distinction`` kind (most are PUBLIC; criminal or
-    scandalous kinds are authored PRIVATE), and a player may override it per character
-    via the privacy gate. Binary for now; a FRIENDS/whitelist tier can join later when
-    sheet privacy tiers land (#1271).
-    """
-
-    PUBLIC = "public", "Public"
-    PRIVATE = "private", "Private"
-
-
 class OtherStatus(models.TextChoices):
     """Status of a freeform 'Other' distinction entry."""
 
