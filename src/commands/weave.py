@@ -1,12 +1,12 @@
 """Telnet ``weave`` command — the thin shell over WeaveThreadAction (#1337).
 
 Thin telnet face of ``actions.definitions.threads.WeaveThreadAction``. Parses
-``weave resonance=<name> trait=<trait_id> [name=<thread name>]`` into the action's
+``weave resonance=<name> trait=<name or id> [name=<thread name>]`` into the action's
 kwargs and delegates; all eligibility/creation logic lives in the action + the
 ``weave_thread`` service. The web path uses the same action via the thread viewset.
 
 Reference-grammar scope: the worked example supports the **TRAIT** anchor only
-(``trait=<id>``). Other anchor kinds (covenant role, facet, mantle, technique,
+(``trait=<name or id>``). Other anchor kinds (covenant role, facet, mantle, technique,
 relationship track/capstone, sanctum) are extended by the thread-weaving journey
 issue — this command is the direct-viewset→Action telnet pattern proof.
 """
@@ -30,10 +30,11 @@ class CmdWeaveThread(ArxCommand):
     """Weave a new thread anchored to a trait you are unlocked for.
 
     Telnet grammar (TRAIT anchor only; the journey issue extends other kinds):
-        ``weave resonance=<name> trait=<trait_id>``
-        ``weave resonance=<name> trait=<trait_id> name=<thread name>``
+        ``weave resonance=<name> trait=<name or id>``
+        ``weave resonance=<name> trait=<name or id> name=<thread name>``
 
     Example:
+        ``weave resonance=Embers trait=Bravery name=Ember of the First Hearth``
         ``weave resonance=Embers trait=5 name=Ember of the First Hearth``
 
     ``resonance`` and ``trait`` are required; ``name`` is optional and captures
@@ -46,7 +47,7 @@ class CmdWeaveThread(ArxCommand):
     action = WeaveThreadAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
-        """Parse ``weave resonance=<name> trait=<id> [name=<...>]`` into action kwargs."""
+        """Parse ``weave resonance=<name> trait=<name or id> [name=<...>]`` into action kwargs."""
         from world.magic.constants import TargetKind  # noqa: PLC0415
         from world.magic.models import Resonance  # noqa: PLC0415
         from world.traits.models import Trait  # noqa: PLC0415
@@ -65,17 +66,15 @@ class CmdWeaveThread(ArxCommand):
             msg = f"There is no resonance called '{resonance_name}'."
             raise CommandError(msg)
 
-        trait_id = parsed.get(_TRAIT_KWARG, "").strip()
-        if not trait_id:
-            msg = "Specify a trait anchor: trait=<id>."
+        trait_val = parsed.get(_TRAIT_KWARG, "").strip()
+        if not trait_val:
+            msg = "Specify a trait anchor: trait=<name or id>."
             raise CommandError(msg)
-        if not trait_id.isdigit():
-            msg = "The trait anchor must be a numeric id: trait=<id>."
-            raise CommandError(msg)
-        trait = Trait.objects.filter(pk=int(trait_id)).first()
-        if trait is None:
-            msg = f"There is no trait with id {trait_id}."
-            raise CommandError(msg)
+        trait = self.resolve_by_name_or_id(
+            Trait,
+            trait_val,
+            not_found_msg=f"No trait found for '{trait_val}'.",
+        )
 
         return {
             "target_kind": TargetKind.TRAIT,

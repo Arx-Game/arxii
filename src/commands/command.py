@@ -104,6 +104,30 @@ class ArxCommand(Command):
             raise CommandError(msg)
         return target
 
+    def resolve_by_name_or_id(
+        self,
+        model: type[Any],
+        value: str,
+        *,
+        field: str = "name",
+        not_found_msg: str | None = None,
+        **extra_filters: Any,
+    ) -> Any:
+        """Resolve a model instance by name (iexact) or pk (numeric fallback).
+
+        Tries iexact name match first; falls back to pk when value is purely
+        numeric. extra_filters scope the queryset (e.g. owner=sheet).
+        Raises CommandError if no instance is found.
+        """
+        qs = model.objects.filter(**extra_filters)
+        if value.isdigit():
+            instance = qs.filter(pk=int(value)).first()
+        else:
+            instance = qs.filter(**{f"{field}__iexact": value}).first()
+        if instance is None:
+            raise CommandError(not_found_msg or f"Could not find '{value}'.")
+        return instance
+
     def parse_two_args(
         self,
         connector: str,
