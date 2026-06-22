@@ -18,6 +18,11 @@ from actions.definitions.duels import (
     WithdrawChallengeAction,
     YieldAction,
 )
+from actions.definitions.endorsements import (
+    PoseEndorseAction,
+    SceneEntryEndorseAction,
+    StylePresentationEndorseAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -85,6 +90,9 @@ _ALL_ACTIONS: list[Action] = [
     UndressAction(),
     PresentOutfitAction(),
     JudgePresentationAction(),
+    PoseEndorseAction(),
+    SceneEntryEndorseAction(),
+    StylePresentationEndorseAction(),
     TraverseExitAction(),
     HomeAction(),
     MoveToPositionAction(),
