@@ -15,9 +15,12 @@ tier crossing (Audere Majora) — writes through one shared spine:
 apply_class_level_advance(sheet, *, level_after)
 ```
 
-This is the *only* code path that mutates `CharacterClassLevel.level`
-(`world.classes.set_primary_class_level` delegates to it). Never mutate
-`CharacterClassLevel` rows directly.
+This is the **in-play advancement** level-write spine shared by the Ritual of the
+Durance and Audere Majora. A separate path exists for CG/setup time:
+`world.classes.set_primary_class_level` is an independent upsert that also calls
+`recompute_max_health_with_threads` but does **not** delegate to
+`apply_class_level_advance`. Never mutate `CharacterClassLevel` rows directly
+outside these two sanctioned paths.
 
 ### AbstractClassLevelAdvancement (abstract model)
 

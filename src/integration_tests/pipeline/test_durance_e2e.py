@@ -27,6 +27,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import (
     CharacterClassFactory,
@@ -207,8 +208,6 @@ class DuranceE2EMultiInducteeTests(TestCase):
         # Scene at the officiant's location (advance_class_level_via_session uses
         # the inductee's location via _post_declaration → _post_testament; locate
         # all three at the same spot).
-        from evennia_extensions.factories import ObjectDBFactory
-
         shared_room = ObjectDBFactory()
         self.officiant_sheet.character.location = shared_room
         self.officiant_sheet.character.save()

@@ -45,6 +45,25 @@ class ClassLevelAdvancementModelTests(TestCase):
             "created_at",
         } <= fields
 
+        # __str__ should include the level transition.
+        sheet = CharacterSheetFactory()
+        char_class = CharacterClassFactory()
+        CharacterClassLevelFactory(
+            character=sheet.character,
+            character_class=char_class,
+            level=2,
+            is_primary=True,
+        )
+        instance = ClassLevelAdvancement(
+            character_sheet=sheet,
+            character_class=char_class,
+            level_before=2,
+            level_after=3,
+        )
+        result = str(instance)
+        assert "2" in result, f"__str__ should mention level_before (2); got: {result!r}"
+        assert "3" in result, f"__str__ should mention level_after (3); got: {result!r}"
+
 
 class ApplyClassLevelAdvanceTests(TestCase):
     """apply_class_level_advance bumps the primary CharacterClassLevel and invalidates cache."""
@@ -74,6 +93,12 @@ class ApplyClassLevelAdvanceTests(TestCase):
         assert not CharacterClassLevel.objects.filter(character=sheet.character).exists()
         # Must not raise.
         apply_class_level_advance(sheet, level_after=3)
+
+    def test_recompute_max_health_called_on_advance(self) -> None:
+        """apply_class_level_advance calls recompute_max_health_with_threads after level write."""
+        with mock.patch("world.magic.services.threads.recompute_max_health_with_threads") as spy:
+            apply_class_level_advance(self.sheet, level_after=3)
+        spy.assert_called_once_with(self.sheet)
 
 
 class PrimaryClassLevelTests(TestCase):
@@ -299,6 +324,21 @@ class AdvanceViaSessionTests(TestCase):
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             with self.assertRaises(AdvancementRequirementsNotMet):
                 advance_class_level_via_session(session=self.session)
+
+    def test_inductee_with_no_class_level_raises_requirements_not_met(self) -> None:
+        """An inductee with no CharacterClassLevel row raises AdvancementRequirementsNotMet."""
+        from world.classes.models import CharacterClassLevel
+
+        # Build a session where the inductee has no CharacterClassLevel row.
+        no_cl_session, _officiant, inductee_no_cl, _character_class_new = _build_durance_session(
+            officiant_level=10, inductee_level=2
+        )
+        # Delete the CharacterClassLevel that _build_durance_session created for the inductee.
+        CharacterClassLevel.objects.filter(character=inductee_no_cl.character).delete()
+        CharacterClassLevel.flush_instance_cache()
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            with self.assertRaises(AdvancementRequirementsNotMet):
+                advance_class_level_via_session(session=no_cl_session)
 
     def test_officiant_too_low_raises(self) -> None:
         # Officiant at level 3, inductee reaching target_level 3 → gate (current_level

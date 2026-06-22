@@ -370,7 +370,7 @@ inductee's current Path). PC or academy NPC. Validated by `assert_can_officiate`
 oration. The service appends a citation of their qualifying `LegendEntry` deeds (up to 3,
 by `base_value`) and posts the combined text as a POSE in the active scene via `_post_testament`.
 **No `LegendEntry` is minted** for within-tier advances. No resonance plumbing is added
-(a Durance is just a Scene → normal social-scene benefits apply). No boons are stacked on
+(a Ritual of the Durance is just a Scene → normal social-scene benefits apply). No boons are stacked on
 the inductee.
 
 **Factory.** `RitualOfTheDuranceFactory` (`src/world/magic/factories.py`) seeds the

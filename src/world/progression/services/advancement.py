@@ -53,6 +53,13 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
         cl.level = level_after
         cl.save(update_fields=["level"])
     sheet.invalidate_class_level_cache()
+    # Recompute max_health so level-derived base scales immediately. Guard with hasattr
+    # because bare ObjectDB fixtures (used by some tests / non-PC NPCs) don't carry
+    # the threads or combat_pulls handlers that recompute_max_health_with_threads needs.
+    if hasattr(sheet.character, "threads"):
+        from world.magic.services.threads import recompute_max_health_with_threads
+
+        recompute_max_health_with_threads(sheet)
 
 
 # =============================================================================
@@ -190,6 +197,8 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
     for participant in inductees:
         inductee = participant.character_sheet
         cl = primary_class_level(inductee.character)
+        if cl is None:
+            raise AdvancementRequirementsNotMet(["This character has no class level to advance."])
         level_before = cl.level
         target_level = cl.level + 1
         character_class = cl.character_class
