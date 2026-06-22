@@ -941,6 +941,8 @@ class RitualFactory(factory.django.DjangoModelFactory):
 class ImbuingRitualFactory(RitualFactory):
     """Seed factory for the canonical 'Rite of Imbuing' ritual.
 
+    CEREMONY-kind: PerformRitualAction creates a PendingRitualEffect;
+    the ImbueThreadAction finisher consumes it and calls spend_resonance_for_imbuing.
     Uses django_get_or_create so repeated calls in tests return the same row.
     Spec A §4.3 lines 1270-1286.
     """
@@ -950,10 +952,27 @@ class ImbuingRitualFactory(RitualFactory):
         django_get_or_create = ("name",)
 
     name = "Rite of Imbuing"
-    execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.spend_resonance_for_imbuing"
+    execution_kind = RitualExecutionKind.CEREMONY
+    service_function_path = ""
     flow = None
     client_hosted = True
+
+
+class WeavingCeremonyFactory(RitualFactory):
+    """Seed factory for the 'Rite of Weaving' ceremony ritual.
+
+    CEREMONY-kind: PerformRitualAction creates a PendingRitualEffect;
+    WeaveThreadAction finisher consumes it and calls weave_thread.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Weaving"
+    execution_kind = RitualExecutionKind.CEREMONY
+    service_function_path = ""
+    flow = None
 
 
 class AtonementRitualFactory(RitualFactory):

@@ -3,7 +3,12 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.magic.constants import RitualExecutionKind
-from world.magic.factories import CharacterResonanceFactory, RitualFactory
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    ImbuingRitualFactory,
+    RitualFactory,
+    WeavingCeremonyFactory,
+)
 from world.magic.models import PendingRitualEffect
 
 
@@ -33,3 +38,20 @@ class PendingRitualEffectTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             ritual.full_clean()
+
+
+class RitualCeremonyFactoryTests(TestCase):
+    def test_imbuing_factory_is_ceremony(self):
+        ritual = ImbuingRitualFactory()
+        self.assertEqual(ritual.execution_kind, RitualExecutionKind.CEREMONY)
+        self.assertEqual(ritual.service_function_path, "")
+
+    def test_weaving_ceremony_factory(self):
+        ritual = WeavingCeremonyFactory()
+        self.assertEqual(ritual.name, "Rite of Weaving")
+        self.assertEqual(ritual.execution_kind, RitualExecutionKind.CEREMONY)
+
+    def test_imbuing_factory_is_idempotent(self):
+        r1 = ImbuingRitualFactory()
+        r2 = ImbuingRitualFactory()
+        self.assertEqual(r1.pk, r2.pk)
