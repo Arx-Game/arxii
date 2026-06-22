@@ -226,8 +226,8 @@ def create_pose_endorsement(  # noqa: C901
     1. Interaction author (persona field) has a character sheet
     2. Endorser != endorsee (no self-endorsement)
     3. Endorser's account != endorsee's account (no alt-endorsement)
-    4. Interaction is not a whisper
-    5. Interaction is not VERY_PRIVATE
+    4. WHISPER: endorser must be the direct recipient (InteractionReceiver row)
+    5. VERY_PRIVATE: endorser must have SceneParticipation (allowed by participants)
     6. Endorser was present (scene participation OR interaction receiver)
     7. Endorsee has claimed this resonance
     8. No duplicate (endorser × interaction already endorsed)
@@ -264,14 +264,18 @@ def create_pose_endorsement(  # noqa: C901
         raise EndorsementValidationError(msg)
 
     if interaction.mode == InteractionMode.WHISPER:
-        msg = "Whispers cannot be endorsed"
-        raise EndorsementValidationError(msg)
-
-    if interaction.visibility == InteractionVisibility.VERY_PRIVATE:
-        msg = "Very-private interactions cannot be endorsed"
-        raise EndorsementValidationError(msg)
-
-    if not _endorser_was_present(endorser_sheet, endorser_account, interaction):
+        # Whispers may only be endorsed by the direct recipient
+        if (
+            endorser_account is None
+            or not InteractionReceiver.objects.filter(
+                interaction=interaction,
+                account=endorser_account,
+            ).exists()
+        ):
+            msg = "Whispers can only be endorsed by the recipient"
+            raise EndorsementValidationError(msg)
+    elif not _endorser_was_present(endorser_sheet, endorser_account, interaction):
+        # VERY_PRIVATE and standard poses both gate on scene participation
         msg = "Endorser was not present for this interaction"
         raise EndorsementValidationError(msg)
 
@@ -321,6 +325,66 @@ def _endorser_was_present(
     return InteractionReceiver.objects.filter(
         interaction=interaction, persona=endorser_persona
     ).exists()
+
+
+def get_endorseable_poses_in_scene(
+    endorser_sheet: CharacterSheet,
+    endorsee_sheet: CharacterSheet,
+    scene: Scene,
+) -> list[tuple[int, Interaction]]:
+    """Return (1-based absolute position, Interaction) pairs visible to the endorser.
+
+    Only POSE and WHISPER interactions are returned — SAY and EMIT interactions
+    are not endorseable as poses.
+
+    Position numbering is stable across all of the endorsee's POSE and WHISPER
+    interactions in the scene (including invisible ones), so a pose's number never
+    shifts when private poses exist earlier in the timeline.
+
+    Visibility rules:
+    - WHISPER: only visible if the endorser has an InteractionReceiver row.
+    - VERY_PRIVATE: only visible if the endorser has SceneParticipation.
+    - All other: visible (endorser is in the scene).
+    """
+    endorser_account = account_for_sheet(endorser_sheet)
+
+    is_participant = (
+        endorser_account is not None
+        and SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists()
+    )
+
+    all_interactions = list(
+        Interaction.objects.filter(
+            scene=scene,
+            persona__character_sheet=endorsee_sheet,
+            mode__in=[InteractionMode.POSE, InteractionMode.WHISPER],
+        )
+        .select_related("persona")
+        .order_by("timestamp", "pk")
+    )
+
+    # Batch-fetch the whisper PKs the endorser received to avoid per-row queries
+    whisper_pks = {iact.pk for iact in all_interactions if iact.mode == InteractionMode.WHISPER}
+    received_whisper_pks: set[int] = set()
+    if whisper_pks and endorser_account is not None:
+        received_whisper_pks = set(
+            InteractionReceiver.objects.filter(
+                interaction_id__in=whisper_pks,
+                account=endorser_account,
+            ).values_list("interaction_id", flat=True)
+        )
+
+    result: list[tuple[int, Interaction]] = []
+    for idx, interaction in enumerate(all_interactions, start=1):
+        if interaction.mode == InteractionMode.WHISPER:
+            if interaction.pk not in received_whisper_pks:
+                continue
+        elif interaction.visibility == InteractionVisibility.VERY_PRIVATE:
+            if not is_participant:
+                continue
+        result.append((idx, interaction))
+
+    return result
 
 
 @transaction.atomic

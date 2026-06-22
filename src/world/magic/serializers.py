@@ -1387,17 +1387,19 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> PoseEndorsement:
-        """Delegate to ``create_pose_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_pose_endorsement  # noqa: PLC0415
+        """Delegate to ``PoseEndorseAction`` (telnet + web converge on action.run())."""
+        from actions.definitions.endorsements import PoseEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        interaction = validated_data["interaction"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_pose_endorsement(endorser_sheet, interaction, resonance)
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = PoseEndorseAction().run(
+            actor=endorser_sheet.character,
+            interaction=validated_data["interaction"],
+            resonance=validated_data["resonance"],
+            confirm=True,
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================
@@ -1439,18 +1441,19 @@ class SceneEntryEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> SceneEntryEndorsement:
-        """Delegate to ``create_scene_entry_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_scene_entry_endorsement  # noqa: PLC0415
+        """Delegate to ``SceneEntryEndorseAction`` (telnet + web converge on action.run())."""
+        from actions.definitions.endorsements import SceneEntryEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        endorsee_sheet = validated_data["endorsee_sheet"]
-        scene = validated_data["scene"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = SceneEntryEndorseAction().run(
+            actor=endorser_sheet.character,
+            endorsee_sheet=validated_data["endorsee_sheet"],
+            scene=validated_data["scene"],
+            resonance=validated_data["resonance"],
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================
@@ -1490,20 +1493,19 @@ class StylePresentationEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> StylePresentationEndorsement:
-        """Delegate to ``create_style_presentation_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_style_presentation_endorsement  # noqa: PLC0415
+        """Delegate to ``StylePresentationEndorseAction`` (telnet + web converge)."""
+        from actions.definitions.endorsements import StylePresentationEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        endorsee_sheet = validated_data["endorsee_sheet"]
-        scene = validated_data["scene"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_style_presentation_endorsement(
-                endorser_sheet, endorsee_sheet, scene, resonance
-            )
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = StylePresentationEndorseAction().run(
+            actor=endorser_sheet.character,
+            endorsee_sheet=validated_data["endorsee_sheet"],
+            scene=validated_data["scene"],
+            resonance=validated_data["resonance"],
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================

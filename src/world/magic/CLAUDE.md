@@ -379,6 +379,28 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
 - `SceneEntryEndorsementViewSet` - POST-only (delete deferred with ResonanceGrantReversal)
 - `ResonanceGrantViewSet` - Read-only, user-scoped. FilterSet on source/resonance/date range.
 
+**Telnet surfaces (`commands/endorse.py`, `commands/fashion.py` — #1340):**
+- `CmdPoses` (`poses <char>`) — lists endorseable poses in the current scene via
+  `get_endorseable_poses_in_scene()`; respects WHISPER receiver and VERY_PRIVATE
+  participation gates.
+- `CmdEndorse` (`endorse pose/entry/style <char> resonance=<name>`) — two-phase pose
+  endorsement (preview → confirm) + one-shot entry/style; converges on the same
+  `PoseEndorseAction` / `SceneEntryEndorseAction` / `StylePresentationEndorseAction`
+  the web serializers use. Active scene resolved from caller's room.
+- `CmdJudgePresentation` (`judge <id>`) — fashion event judgement via
+  `JudgePresentationAction` (now returns `endorsement` in `result.data`).
+
+**Privacy rules (updated):**
+- **WHISPER** poses: endorsable only by the direct recipient
+  (`InteractionReceiver` row for endorser's account). Previously blanket-blocked.
+- **VERY_PRIVATE** poses: endorsable by scene participants (SceneParticipation check).
+  Previously blanket-blocked.
+
+**New service:**
+- `get_endorseable_poses_in_scene(endorser_sheet, endorsee_sheet, scene) → list[tuple[int, Interaction]]` —
+  returns (stable-1-based-position, Interaction) pairs visible to the endorser.
+  Batches whisper-receiver check to avoid per-row queries.
+
 **Related changes:**
 - `CharacterSheet.current_residence` FK to RoomProfile (narrative declaration; mechanical
   trickle fires only when the room has a positive cascade-row LocationValueModifier

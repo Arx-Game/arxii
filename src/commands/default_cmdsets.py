@@ -33,6 +33,7 @@ from commands.consent import (
     CmdRestoreSense,
 )
 from commands.door import CmdLock, CmdUnlock
+from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
     CmdEmit,
@@ -54,6 +55,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.fashion import CmdJudgePresentation
 from commands.imbue import CmdImbue
 from commands.pull import CmdPull
 from commands.ritual import CmdRitual
@@ -134,6 +136,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPull,
             CmdEnter,
             CmdFlourish,
+            CmdEndorse,
+            CmdPoses,
+            CmdJudgePresentation,
             CmdIntimidate,
             CmdAccept,
             CmdDeny,

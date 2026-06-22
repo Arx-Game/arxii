@@ -245,7 +245,7 @@ mechanical is web-only.
 |---|---|---|
 | **Social consent** | `create_action_request` / `respond_to_action_request` (`scenes/action_views.py:55/195`) | G1/G3 |
 | **Entrance + flourish** | `EntranceAction`; `resolve_entry_flourish_offer` (`magic/entry_flourish.py`) | G1/G3 |
-| **Resonance endorsements** | pose / scene-entry / style (`magic/views.py:1053+`); fashion `FashionJudgementViewSet` (`items/views.py:1280`) | G3 |
+| **Resonance endorsements** | pose / scene-entry / style (`magic/views.py:1053+`); fashion `FashionJudgementViewSet` (`items/views.py:1280`) | **RESOLVED — #1340** |
 | **Interaction reactions** | `InteractionFavorite` / `InteractionReaction` / reaction windows (`scenes/`) | G3 |
 | **Thread weave/imbue/pull** | `weave_thread` / `spend_resonance_for_imbuing` / `_for_pull` (`magic/services/`) | G1/G3 |
 | **Soul-tether & sineating** | 8 APIViews: accept/dissolve/request/respond/rescue/stage-advance (`magic/views.py:1206–1461`) | G3 |

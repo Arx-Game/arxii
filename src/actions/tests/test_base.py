@@ -190,6 +190,9 @@ class ActionRegistryTests(TestCase):
             "imbue_thread",
             "pull_thread",
             "weave_thread",
+            "endorse_pose",
+            "endorse_scene_entry",
+            "endorse_style_presentation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
