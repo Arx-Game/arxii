@@ -1489,7 +1489,7 @@ class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
         model = "magic.EntryFlourishRecord"
 
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
     scene = None
     granted_amount = 10
 
@@ -1501,7 +1501,7 @@ class DramaticMomentTypeFactory(factory.django.DjangoModelFactory):
 
     label = factory.Sequence(lambda n: f"DramaticMomentType{n}")
     description = factory.Faker("sentence")
-    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
     resonance_amount = 15
     magnitude = "small"
     risk = "none"
@@ -1779,7 +1779,7 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
     scene = None
-    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
     units_offered = 5
     units_accepted = 5
     anima_cost = 10
@@ -1796,7 +1796,7 @@ class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
     scene = None
-    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
     sinner_stage_at_start = 4
     sinner_stage_at_end = 3
     severity_reduced = 5

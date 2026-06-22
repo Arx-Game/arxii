@@ -30,6 +30,7 @@ from world.items.constants import (
 # duplicated-literal SonarCloud smell (python:S1192).
 _CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
 _PERSONA_FK = "scenes.Persona"
+_ITEM_INSTANCE_FK = "items.ItemInstance"
 SOCIETY_MODEL = "societies.Society"
 CHECK_TYPE_MODEL = "checks.CheckType"
 FACET_MODEL = "magic.Facet"
@@ -942,7 +943,7 @@ class ItemFacet(ItemAttachment):
     """
 
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="item_facets",
     )
@@ -973,7 +974,7 @@ class ItemStyle(ItemAttachment):
     """
 
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="item_styles",
     )
@@ -1328,7 +1329,7 @@ class Mantle(SharedMemoryModel):
     """
 
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.PROTECT,
         related_name="mantle",
         help_text="The unique ItemInstance that is this Mantle.",

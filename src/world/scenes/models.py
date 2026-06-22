@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 INTERACTION_MODEL = "scenes.Interaction"
+PLAYER_DATA_MODEL = "evennia_extensions.PlayerData"
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -529,13 +530,13 @@ class Block(SharedMemoryModel):
     """
 
     owner = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        PLAYER_DATA_MODEL,
         on_delete=models.CASCADE,
         related_name="blocks_made",
         help_text="The player who created the block (the blocker).",
     )
     blocked_player = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        PLAYER_DATA_MODEL,
         on_delete=models.CASCADE,
         related_name="blocks_received",
         help_text="The player being blocked.",
@@ -598,7 +599,7 @@ class Mute(SharedMemoryModel):
     """
 
     owner = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        PLAYER_DATA_MODEL,
         on_delete=models.CASCADE,
         related_name="mutes_made",
         help_text="The player who muted (the muter).",

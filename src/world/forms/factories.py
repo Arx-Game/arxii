@@ -22,6 +22,8 @@ from world.forms.models import (
 )
 from world.species.factories import SpeciesFactory
 
+_TRAIT_SELF_REF = "..trait"
+
 
 class HeightBandFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -101,7 +103,9 @@ class CharacterFormValueFactory(factory.django.DjangoModelFactory):
 
     form = factory.SubFactory(CharacterFormFactory)
     trait = factory.SubFactory(FormTraitFactory)
-    option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    option = factory.SubFactory(
+        FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)
+    )
     natural_option = factory.SelfAttribute("option")
 
 
@@ -120,7 +124,9 @@ class TemporaryFormChangeFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory(CharacterFactory)
     trait = factory.SubFactory(FormTraitFactory)
-    option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    option = factory.SubFactory(
+        FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)
+    )
     source_type = SourceType.SYSTEM
     source_id = None
     duration_type = DurationType.UNTIL_REMOVED
@@ -145,8 +151,12 @@ class AppearanceChangeLogFactory(factory.django.DjangoModelFactory):
     form = factory.SubFactory(CharacterFormFactory)
     persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     trait = factory.SubFactory(FormTraitFactory)
-    from_option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
-    to_option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    from_option = factory.SubFactory(
+        FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)
+    )
+    to_option = factory.SubFactory(
+        FormTraitOptionFactory, trait=factory.SelfAttribute(_TRAIT_SELF_REF)
+    )
     from_text = ""
     to_text = "Crimson"
     actor_persona = factory.SelfAttribute("persona")

@@ -7,6 +7,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.species.models import Species
 
+SCENES_PERSONA_FK = "scenes.Persona"
+
 
 class TraitType(models.TextChoices):
     COLOR = "color", "Color"
@@ -386,7 +388,7 @@ class PersonaTraitDescriptor(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        SCENES_PERSONA_FK,
         on_delete=models.CASCADE,
         related_name="trait_descriptors",
         help_text="The presented face this descriptor belongs to.",
@@ -427,7 +429,7 @@ class AppearanceChangeLog(SharedMemoryModel):
         help_text="The real form whose trait was edited.",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        SCENES_PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -446,7 +448,7 @@ class AppearanceChangeLog(SharedMemoryModel):
     from_text = models.CharField(max_length=120, blank=True, help_text="Prior descriptor.")
     to_text = models.CharField(max_length=120, blank=True, help_text="New descriptor.")
     actor_persona = models.ForeignKey(
-        "scenes.Persona",
+        SCENES_PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

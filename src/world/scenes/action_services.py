@@ -301,6 +301,37 @@ def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
     }
 
 
+def _compute_difficulty_override_for_primary(
+    action_request: SceneActionRequest,
+    resist_effort: str,
+) -> int | None:
+    """Compute the difficulty override for the primary target, applying resist fatigue if needed.
+
+    Returns None when there is no primary target (area/standalone-cast requests).
+    """
+    if action_request.target_persona is None:
+        return None
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    base = DIFFICULTY_VALUES[action_request.difficulty_choice]
+    if resist_effort:
+        increment = compute_resist_increment(
+            action_request.target_persona.character_sheet.character,
+            resist_effort,
+        )
+        apply_fatigue(
+            action_request.target_persona.character_sheet,
+            ActionCategory.SOCIAL,
+            RESIST_FATIGUE_BASE,
+            resist_effort,
+        )
+    else:
+        increment = 0
+    return base + increment
+
+
 def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
@@ -361,29 +392,9 @@ def respond_to_action_request(
 
                 result = resolve_accepted_cast(action_request)
             else:
-                # Compute resistance increment and charge defender fatigue when
-                # resist_effort is declared and there is a primary target.
-                difficulty_override: int | None = None
-                if action_request.target_persona is not None:
-                    from actions.constants import ActionCategory  # noqa: PLC0415
-                    from world.checks.services import compute_resist_increment  # noqa: PLC0415
-                    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
-
-                    base = DIFFICULTY_VALUES[action_request.difficulty_choice]
-                    if resist_effort:
-                        increment = compute_resist_increment(
-                            action_request.target_persona.character_sheet.character,
-                            resist_effort,
-                        )
-                        apply_fatigue(
-                            action_request.target_persona.character_sheet,
-                            ActionCategory.SOCIAL,
-                            RESIST_FATIGUE_BASE,
-                            resist_effort,
-                        )
-                    else:
-                        increment = 0
-                    difficulty_override = base + increment
+                difficulty_override = _compute_difficulty_override_for_primary(
+                    action_request, resist_effort
+                )
                 result = _resolve_standard_action(
                     action_request, difficulty_override=difficulty_override
                 )

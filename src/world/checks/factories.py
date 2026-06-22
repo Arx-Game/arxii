@@ -133,37 +133,42 @@ _ENTRANCE_TEMPLATE_NAME = "Entrance"
 # Pool name prefix for social consequence pools.
 _SOCIAL_POOL_PREFIX = "Social"
 
+# CheckOutcome tier names used in consequence pool entries.
+_OUTCOME_FAILURE = "Failure"
+_OUTCOME_PARTIAL = "Partial Success"
+_OUTCOME_SUCCESS = "Success"
+
 # (action_name, outcome_tier_name, label, weight)
 _SOCIAL_POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
     "Intimidate": [
-        ("Failure", "Intimidation falls flat", 1),
-        ("Partial Success", "Target rattled but holds firm", 2),
-        ("Success", "Target cowed and compliant", 1),
+        (_OUTCOME_FAILURE, "Intimidation falls flat", 1),
+        (_OUTCOME_PARTIAL, "Target rattled but holds firm", 2),
+        (_OUTCOME_SUCCESS, "Target cowed and compliant", 1),
     ],
     "Persuade": [
-        ("Failure", "Argument dismissed outright", 1),
-        ("Partial Success", "Target intrigued but unconvinced", 2),
-        ("Success", "Target fully persuaded", 1),
+        (_OUTCOME_FAILURE, "Argument dismissed outright", 1),
+        (_OUTCOME_PARTIAL, "Target intrigued but unconvinced", 2),
+        (_OUTCOME_SUCCESS, "Target fully persuaded", 1),
     ],
     "Deceive": [
-        ("Failure", "Lie detected immediately", 1),
-        ("Partial Success", "Partial deception holds", 2),
-        ("Success", "Target completely deceived", 1),
+        (_OUTCOME_FAILURE, "Lie detected immediately", 1),
+        (_OUTCOME_PARTIAL, "Partial deception holds", 2),
+        (_OUTCOME_SUCCESS, "Target completely deceived", 1),
     ],
     "Flirt": [
-        ("Failure", "Advance rebuffed", 1),
-        ("Partial Success", "Interest piqued but guarded", 2),
-        ("Success", "Charm lands completely", 1),
+        (_OUTCOME_FAILURE, "Advance rebuffed", 1),
+        (_OUTCOME_PARTIAL, "Interest piqued but guarded", 2),
+        (_OUTCOME_SUCCESS, "Charm lands completely", 1),
     ],
     "Perform": [
-        ("Failure", "Performance falls flat", 1),
-        ("Partial Success", "Audience politely attentive", 2),
-        ("Success", "Audience captivated", 1),
+        (_OUTCOME_FAILURE, "Performance falls flat", 1),
+        (_OUTCOME_PARTIAL, "Audience politely attentive", 2),
+        (_OUTCOME_SUCCESS, "Audience captivated", 1),
     ],
     "Entrance": [
-        ("Failure", "Entrance goes unnoticed", 1),
-        ("Partial Success", "Attention caught briefly", 2),
-        ("Success", "All eyes arrested", 1),
+        (_OUTCOME_FAILURE, "Entrance goes unnoticed", 1),
+        (_OUTCOME_PARTIAL, "Attention caught briefly", 2),
+        (_OUTCOME_SUCCESS, "All eyes arrested", 1),
     ],
 }
 

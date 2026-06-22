@@ -256,6 +256,35 @@ class CombatRoundContext(RoundContext):
                 [CombatRoundActionTarget(action=action, opponent=opp) for opp in aoe_opponents]
             )
 
+    def _resolve_aoe_opponents(
+        self,
+        opponent_ids: list[int],
+    ) -> list[CombatOpponent]:
+        """Validate and order the AoE opponent id list against this encounter.
+
+        Raises ActionDispatchError(UNKNOWN_ACTION_REF) if any id is not in this encounter.
+        """
+        resolved = list(
+            CombatOpponent.objects.filter(pk__in=opponent_ids, encounter=self._encounter)
+        )
+        resolved_map = {o.pk: o for o in resolved}
+        ordered: list[CombatOpponent] = []
+        for oid in opponent_ids:
+            if oid not in resolved_map:
+                raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+            ordered.append(resolved_map[oid])
+        return ordered
+
+    def _resolve_single_opponent(self, opponent_id: int) -> CombatOpponent:
+        """Resolve a single CombatOpponent PK scoped to this encounter.
+
+        Raises ActionDispatchError(UNKNOWN_ACTION_REF) if the id is not found.
+        """
+        try:
+            return CombatOpponent.objects.get(pk=opponent_id, encounter=self._encounter)
+        except CombatOpponent.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
     def _resolve_focused_targets(
         self,
         kwargs: dict[str, Any],
@@ -288,34 +317,16 @@ class CombatRoundContext(RoundContext):
         """
         opponent: CombatOpponent | None = kwargs.get("focused_opponent_target")
         opponent_ids: list[int] | None = kwargs.get("focused_opponent_target_ids")
-
         aoe_opponents: list[CombatOpponent] = []
 
         if opponent_ids:
-            # AoE / FILTERED_GROUP dispatch: validate each id in this encounter.
-            resolved = list(
-                CombatOpponent.objects.filter(
-                    pk__in=opponent_ids,
-                    encounter=self._encounter,
-                )
-            )
-            resolved_map = {o.pk: o for o in resolved}
-            for oid in opponent_ids:
-                if oid not in resolved_map:
-                    raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
-                aoe_opponents.append(resolved_map[oid])
+            aoe_opponents = self._resolve_aoe_opponents(opponent_ids)
             if aoe_opponents and opponent is None:
                 opponent = aoe_opponents[0]
         else:
             opponent_id = kwargs.get("focused_opponent_target_id")
             if opponent is None and opponent_id is not None:
-                try:
-                    opponent = CombatOpponent.objects.get(
-                        pk=opponent_id,
-                        encounter=self._encounter,
-                    )
-                except CombatOpponent.DoesNotExist as exc:
-                    raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+                opponent = self._resolve_single_opponent(opponent_id)
 
         ally: CombatParticipant | None = kwargs.get("focused_ally_target")
         ally_id = kwargs.get("focused_ally_target_id")

@@ -9,6 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+CANNOT_BE_USED_MESSAGE = "That can't be used."
+CANNOT_SEE_MESSAGE = "You can't see that."
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -97,13 +100,50 @@ class ItemUsablePrerequisite(Prerequisite):
         item_obj = (context or {}).get("kwargs", {}).get("item")
         instance = resolve_item_instance(item_obj) if item_obj is not None else None
         if instance is None:
-            return False, "That can't be used."
+            return False, CANNOT_BE_USED_MESSAGE
         template = instance.template
         if not template.is_usable:
-            return False, "That can't be used."
+            return False, CANNOT_BE_USED_MESSAGE
         if template.is_consumable and instance.charges <= 0:
             return False, "There are no uses left."
         return True, ""
+
+
+def _check_item_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, str]:
+    """Validate an ITEM-kind on-use target: must be a resolvable, reachable, visible item."""
+    from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
+    from flows.object_states.item_state import ItemState  # noqa: PLC0415
+
+    target_instance = resolve_item_instance(target)
+    if target_instance is None:
+        return False, "You can't use that on that."
+    if not ItemState(target_instance, context=None).is_reachable_by(actor):
+        return False, "That isn't within reach."
+    if not _is_visible_to(actor, target):
+        return False, CANNOT_SEE_MESSAGE
+    return True, ""
+
+
+def _check_character_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, str]:
+    """Validate a CHARACTER-kind on-use target: must be a character present and visible."""
+    if not target.is_typeclass("typeclasses.characters.Character", exact=False):
+        return False, "That can only be used on a character."
+    if target.location != actor.location:
+        return False, "They aren't here."
+    if not _is_visible_to(actor, target):
+        return False, CANNOT_SEE_MESSAGE
+    return True, ""
+
+
+def _check_room_target(actor: ObjectDB, target: ObjectDB) -> tuple[bool, str]:
+    """Validate a ROOM-kind on-use target: must be a room the actor occupies and can see."""
+    if not target.is_typeclass("typeclasses.rooms.Room", exact=False):
+        return False, "That can only be used on a place."
+    if actor.location not in (target.location, target):
+        return False, "They aren't here."
+    if not _is_visible_to(actor, target):
+        return False, CANNOT_SEE_MESSAGE
+    return True, ""
 
 
 @dataclass
@@ -114,7 +154,7 @@ class OnUseTargetPrerequisite(Prerequisite):
     external target of that kind is required, reachable, and visible.
     """
 
-    def is_met(  # noqa: C901,PLR0911,PLR0912
+    def is_met(  # noqa: PLR0911
         self,
         actor: ObjectDB,
         target: ObjectDB | None = None,
@@ -122,12 +162,11 @@ class OnUseTargetPrerequisite(Prerequisite):
     ) -> tuple[bool, str]:
         from actions.constants import TargetKind  # noqa: PLC0415
         from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
-        from flows.object_states.item_state import ItemState  # noqa: PLC0415
 
         item_obj = (context or {}).get("kwargs", {}).get("item")
         instance = resolve_item_instance(item_obj) if item_obj is not None else None
         if instance is None:
-            return False, "That can't be used."
+            return False, CANNOT_BE_USED_MESSAGE
         kind = instance.template.on_use_target_kind
 
         if kind is None:
@@ -138,34 +177,12 @@ class OnUseTargetPrerequisite(Prerequisite):
         if target is None:
             return False, "Use it on what?"
 
-        # Kind match: ITEM targets use ItemState.is_reachable_by.
         if kind == TargetKind.ITEM:
-            target_instance = resolve_item_instance(target)
-            if target_instance is None:
-                return False, "You can't use that on that."
-            if not ItemState(target_instance, context=None).is_reachable_by(actor):
-                return False, "That isn't within reach."
-            if not _is_visible_to(actor, target):
-                return False, "You can't see that."
-            return True, ""
-
+            return _check_item_target(actor, target)
         if kind == TargetKind.CHARACTER:
-            if not target.is_typeclass("typeclasses.characters.Character", exact=False):
-                return False, "That can only be used on a character."
-            if target.location != actor.location:
-                return False, "They aren't here."
-            if not _is_visible_to(actor, target):
-                return False, "You can't see that."
-            return True, ""
-
+            return _check_character_target(actor, target)
         if kind == TargetKind.ROOM:
-            if not target.is_typeclass("typeclasses.rooms.Room", exact=False):
-                return False, "That can only be used on a place."
-            if actor.location not in (target.location, target):
-                return False, "They aren't here."
-            if not _is_visible_to(actor, target):
-                return False, "You can't see that."
-            return True, ""
+            return _check_room_target(actor, target)
 
         # TargetKind.PERSONA and any future unhandled kinds — fail closed.
         return False, "That can't be used on that."

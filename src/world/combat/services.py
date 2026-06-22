@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models.consequence_pools import ConsequencePool
+    from flows.events.payloads import DamageSource
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
@@ -351,6 +352,43 @@ class CombatTechniqueResolver:
         primary = self.action.focused_opponent_target
         return [primary] if primary is not None else []
 
+    def _apply_profiles_to_target(  # noqa: PLR0913
+        self,
+        target: CombatOpponent,
+        profiles: list[TechniqueDamageProfile],
+        weapon: WeaponContribution | None,
+        *,
+        sl: int,
+        multiplier: Decimal,
+        eff_intensity: int,
+    ) -> tuple[list[OpponentDamageResult], bool]:
+        """Apply each damage profile to a single target, returning results and weapon-hit flag.
+
+        Skips profiles that deal zero damage and aborts early if the target is
+        defeated mid-loop (can happen when a preceding profile triggers a kill).
+        """
+        results: list[OpponentDamageResult] = []
+        weapon_landed = False
+        for profile in profiles:
+            scaled, profile_damage_type = self._profile_damage(
+                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
+            )
+            if scaled <= 0:
+                continue
+            target.refresh_from_db()
+            if target.status == OpponentStatus.DEFEATED:
+                break
+            results.append(
+                apply_damage_to_opponent(
+                    target,
+                    scaled,
+                    damage_type=profile_damage_type,
+                    source_sheet=self.participant.character_sheet,
+                )
+            )
+            weapon_landed = weapon_landed or (profile.uses_equipped_weapon and weapon is not None)
+        return results, weapon_landed
+
     def _apply_damage(
         self, check_result: CheckResult, *, eff_intensity: int
     ) -> list[OpponentDamageResult]:
@@ -389,35 +427,20 @@ class CombatTechniqueResolver:
 
         attacker = self.participant.character_sheet.character
         weapon = effective_weapon_profile(attacker)
-        weapon_landed = False
+        any_weapon_landed = False
 
         results: list[OpponentDamageResult] = []
         for target in targets:
             target.refresh_from_db()
             if target.status == OpponentStatus.DEFEATED:
                 continue
-            for profile in profiles:
-                scaled, profile_damage_type = self._profile_damage(
-                    profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
-                )
-                if scaled <= 0:
-                    continue
-                target.refresh_from_db()
-                if target.status == OpponentStatus.DEFEATED:
-                    break
-                results.append(
-                    apply_damage_to_opponent(
-                        target,
-                        scaled,
-                        damage_type=profile_damage_type,
-                        source_sheet=self.participant.character_sheet,
-                    )
-                )
-                weapon_landed = weapon_landed or (
-                    profile.uses_equipped_weapon and weapon is not None
-                )
+            target_results, weapon_landed = self._apply_profiles_to_target(
+                target, profiles, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
+            )
+            results.extend(target_results)
+            any_weapon_landed = any_weapon_landed or weapon_landed
 
-        if weapon_landed:
+        if any_weapon_landed:
             _wear_equipped_weapon(attacker)
         return results
 
@@ -1136,6 +1159,74 @@ def declare_interpose(
     return action
 
 
+def _resolve_opponent_stat_fields(  # noqa: PLR0913
+    block: object | None,
+    *,
+    soak_value: int | None,
+    probing_threshold: int | None,
+    swarm_count: int | None,
+    body_toughness: int | None,
+    bodies_per_attack: int | None,
+    barrier_strength: int | None,
+) -> tuple[int, int | None, int | None, int | None, int | None, int | None]:
+    """Return resolved (soak, probing, swarm, body_toughness, bodies_per_attack, barrier)
+    from either the auto-scaling block or manual-mode defaults."""
+    if block is not None:
+        return (
+            soak_value if soak_value is not None else block.soak_value,
+            probing_threshold if probing_threshold is not None else block.probing_threshold,
+            swarm_count if swarm_count is not None else block.swarm_count,
+            body_toughness if body_toughness is not None else block.body_toughness,
+            bodies_per_attack if bodies_per_attack is not None else block.bodies_per_attack,
+            barrier_strength if barrier_strength is not None else block.barrier_strength,
+        )
+    return (
+        soak_value if soak_value is not None else 0,
+        probing_threshold,
+        swarm_count,
+        body_toughness,
+        bodies_per_attack,
+        barrier_strength,
+    )
+
+
+def _resolve_objectdb_for_opponent(
+    encounter: CombatEncounter,
+    name: str,
+    persona: Persona | None,
+    existing_objectdb: ObjectDB | None,
+) -> tuple[object, bool]:
+    """Resolve the ObjectDB and ephemeral flag for a new CombatOpponent.
+
+    Three sources (checked in order):
+    - existing_objectdb: pre-existing OD — not ephemeral, must be a Character.
+    - persona: reuses persona's character OD — not ephemeral.
+    - neither: creates a fresh CombatNPC in encounter.room — ephemeral.
+    """
+    from evennia.utils.create import create_object  # noqa: PLC0415
+
+    from typeclasses.characters import Character  # noqa: PLC0415
+    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    if existing_objectdb is not None:
+        if not isinstance(existing_objectdb, Character):
+            msg = (
+                f"existing_objectdb must be a Character typeclass instance "
+                f"(got {type(existing_objectdb).__name__}). "
+                f"Combat damage paths require character.conditions handler access."
+            )
+            raise TypeError(msg)
+        return existing_objectdb, False
+
+    if persona is not None:
+        return persona.character_sheet.character, False
+
+    if encounter.room is None:
+        msg = "Cannot create ephemeral CombatNPC: encounter has no room."
+        raise ValueError(msg)
+    return create_object(CombatNPC, key=name, location=encounter.room, nohome=True), True
+
+
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     encounter: CombatEncounter,
     *,
@@ -1169,73 +1260,34 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     automatic ``BossPhase`` creation for BOSS-tier opponents (manual mode also
     creates no phases, since no block is computed).
     """
-    from evennia.utils.create import create_object  # noqa: PLC0415
-
-    from typeclasses.characters import Character  # noqa: PLC0415
     from world.combat.scaling import compute_opponent_stat_block  # noqa: PLC0415
-    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
 
-    # --- Resolve scaling block when max_health is omitted ---
-    # The formula is triggered by an absent max_health — the primary signal that
-    # the caller wants auto-scaling.  Callers that pass max_health explicitly are
-    # in "manual mode": any unspecified secondary stats fall back to their
-    # pre-scaling defaults (soak=0, probing=None, etc.), preserving backward
-    # compatibility for existing call sites that never seeded OpponentTierTemplate.
+    # The formula is triggered by an absent max_health (auto-scaling mode).
+    # Callers that pass max_health explicitly are in "manual mode": omitted
+    # secondary stats fall back to their legacy defaults (soak=0, etc.).
     block = compute_opponent_stat_block(tier, encounter) if max_health is None else None
-
     resolved_max_health: int = max_health if max_health is not None else block.max_health
-    resolved_soak: int
-    resolved_probing: int | None
-    resolved_swarm: int | None
-    resolved_body_toughness: int | None
-    resolved_bodies_per_attack: int | None
-    resolved_barrier_strength: int | None
 
-    if block is not None:
-        # Auto-scaling mode: fill every omitted field from the formula.
-        resolved_soak = soak_value if soak_value is not None else block.soak_value
-        resolved_probing = (
-            probing_threshold if probing_threshold is not None else block.probing_threshold
-        )
-        resolved_swarm = swarm_count if swarm_count is not None else block.swarm_count
-        resolved_body_toughness = (
-            body_toughness if body_toughness is not None else block.body_toughness
-        )
-        resolved_bodies_per_attack = (
-            bodies_per_attack if bodies_per_attack is not None else block.bodies_per_attack
-        )
-        resolved_barrier_strength = (
-            barrier_strength if barrier_strength is not None else block.barrier_strength
-        )
-    else:
-        # Manual mode: caller provided max_health; apply legacy defaults for unspecified fields.
-        resolved_soak = soak_value if soak_value is not None else 0
-        resolved_probing = probing_threshold
-        resolved_swarm = swarm_count
-        resolved_body_toughness = body_toughness
-        resolved_bodies_per_attack = bodies_per_attack
-        resolved_barrier_strength = barrier_strength
+    (
+        resolved_soak,
+        resolved_probing,
+        resolved_swarm,
+        resolved_body_toughness,
+        resolved_bodies_per_attack,
+        resolved_barrier_strength,
+    ) = _resolve_opponent_stat_fields(
+        block,
+        soak_value=soak_value,
+        probing_threshold=probing_threshold,
+        swarm_count=swarm_count,
+        body_toughness=body_toughness,
+        bodies_per_attack=bodies_per_attack,
+        barrier_strength=barrier_strength,
+    )
 
-    if existing_objectdb is not None and not isinstance(existing_objectdb, Character):
-        msg = (
-            f"existing_objectdb must be a Character typeclass instance "
-            f"(got {type(existing_objectdb).__name__}). "
-            f"Combat damage paths require character.conditions handler access."
-        )
-        raise TypeError(msg)
-
-    if existing_objectdb is not None:
-        objectdb = existing_objectdb
-        is_ephemeral = False
-    elif persona is not None:
-        objectdb = persona.character_sheet.character
-        is_ephemeral = False
-    else:
-        if encounter.room is None:
-            msg = "Cannot create ephemeral CombatNPC: encounter has no room."
-            raise ValueError(msg)
-        objectdb = create_object(CombatNPC, key=name, location=encounter.room, nohome=True)
-        is_ephemeral = True
+    objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
+        encounter, name, persona, existing_objectdb
+    )
 
     opp = CombatOpponent(
         encounter=encounter,
@@ -2208,6 +2260,48 @@ def _resolve_passive_actions(
                 _apply_passive_technique(passive, action.participant, encounter)
 
 
+def _emit_post_damage_events(  # noqa: PLR0913
+    *,
+    character: Character,
+    room: ObjectDB | None,
+    effective_damage: int,
+    damage_type: DamageType | None,
+    damage_source: DamageSource,
+    health_after: int,
+    knockout_eligible: bool,
+    was_in_knockout_band: bool,
+    death_eligible: bool,
+    force_death: bool,
+) -> None:
+    """Emit DAMAGE_APPLIED, CHARACTER_INCAPACITATED, and CHARACTER_KILLED events post-save.
+
+    Called after vitals.save(); no-op when room is None (unlocated characters).
+    """
+    if room is None:
+        return
+    applied_payload = DamageAppliedPayload(
+        target=character,
+        amount_dealt=effective_damage,
+        damage_type=damage_type,
+        source=damage_source,
+        hp_after=health_after,
+    )
+    emit_event(EventName.DAMAGE_APPLIED, applied_payload, location=room)
+
+    will_emit_death_gate = death_eligible or force_death
+    if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
+        emit_event(
+            EventName.CHARACTER_INCAPACITATED,
+            CharacterIncapacitatedPayload(
+                character=character,
+                source_event=EventName.DAMAGE_PRE_APPLY,
+            ),
+            location=room,
+        )
+    if will_emit_death_gate:
+        _emit_death_gate(character, room)
+
+
 def apply_damage_to_participant(  # noqa: PLR0913
     participant: CombatParticipant,
     damage: int,
@@ -2330,40 +2424,18 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # call sites are pre-threaded.
     del source_sheet
 
-    # --- DAMAGE_APPLIED (post-save, frozen) ---
-    applied_payload = DamageAppliedPayload(
-        target=character,
-        amount_dealt=effective_damage,
+    _emit_post_damage_events(
+        character=character,
+        room=room,
+        effective_damage=effective_damage,
         damage_type=pre_payload.damage_type,
-        source=damage_source,
-        hp_after=health_after,
+        damage_source=damage_source,
+        health_after=health_after,
+        knockout_eligible=knockout_eligible,
+        was_in_knockout_band=was_in_knockout_band,
+        death_eligible=death_eligible,
+        force_death=force_death,
     )
-    if room is not None:
-        emit_event(
-            EventName.DAMAGE_APPLIED,
-            applied_payload,
-            location=room,
-        )
-
-        # --- Incapacitation / death gates ---
-        # CHARACTER_INCAPACITATED marks the dramatic beat (the fall), not
-        # per-hit at-risk status: it fires only on the transition INTO the
-        # knockout band, and never alongside the death gate — one narrative
-        # beat, one event. knockout_eligible itself stays per-hit for the
-        # survivability-check pipeline (process_damage_consequences).
-        will_emit_death_gate = death_eligible or force_death
-        if knockout_eligible and not was_in_knockout_band and not will_emit_death_gate:
-            emit_event(
-                EventName.CHARACTER_INCAPACITATED,
-                CharacterIncapacitatedPayload(
-                    character=character,
-                    source_event=EventName.DAMAGE_PRE_APPLY,
-                ),
-                location=room,
-            )
-
-        if will_emit_death_gate:
-            _emit_death_gate(character, room)
 
     return ParticipantDamageResult(
         damage_dealt=effective_damage,
@@ -3142,6 +3214,50 @@ def _resolve_flee(
     return outcome
 
 
+def _record_and_broadcast_pc_action(  # noqa: PLR0913
+    *,
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    technique: Technique,
+    target: CombatOpponent | None,
+    outcome: ActionOutcome,
+    combat_result: CombatTechniqueResult | None,
+) -> None:
+    """Record the ACTION-mode Interaction and broadcast the outcome narration."""
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        create_action_interaction,
+        render_action_declaration_label,
+        render_action_outcome_narration,
+    )
+    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
+
+    interaction = create_action_interaction(
+        participant=participant,
+        round_number=action.round_number,
+        summary_label=render_action_declaration_label(action),
+    )
+    if interaction is not None:
+        action.interaction = interaction
+        action.interaction_timestamp = interaction.timestamp
+        action.save(update_fields=["interaction", "interaction_timestamp"])
+        push_interaction(interaction)
+        if combat_result is not None:
+            from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
+
+            persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
+
+    target_label = target.name if target is not None else None
+    narration = render_action_outcome_narration(
+        actor_label=str(participant),
+        technique_name=technique.name,
+        target_label=target_label,
+        outcome=outcome,
+        power_ledger=combat_result.power_ledger if combat_result is not None else None,
+    )
+    broadcast_action_outcome(encounter=participant.encounter, narration=narration)
+
+
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -3231,43 +3347,14 @@ def _resolve_pc_action(
         action.effort_level,
     )
 
-    # Create the ACTION-mode Interaction, link it, and broadcast it live.
-    from world.combat.interaction_services import (  # noqa: PLC0415
-        broadcast_action_outcome,
-        create_action_interaction,
-        render_action_declaration_label,
-        render_action_outcome_narration,
-    )
-    from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
-
-    interaction = create_action_interaction(
+    _record_and_broadcast_pc_action(
         participant=participant,
-        round_number=action.round_number,
-        summary_label=render_action_declaration_label(action),
-    )
-    if interaction is not None:
-        action.interaction = interaction
-        action.interaction_timestamp = interaction.timestamp
-        action.save(update_fields=["interaction", "interaction_timestamp"])
-        push_interaction(interaction)
-        if combat_result is not None:
-            from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
-
-            persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
-
-    # Broadcast a durable, Narrator-authored OUTCOME line for this action.
-    # The power_ledger is threaded from the combat resolver (magic pipeline) so
-    # narration can fold in ward/environment drama clauses. Combo paths and
-    # unconfirmed casts produce no ledger (combat_result is None).
-    target_label = target.name if target is not None else None
-    narration = render_action_outcome_narration(
-        actor_label=str(participant),
-        technique_name=technique.name,
-        target_label=target_label,
+        action=action,
+        technique=technique,
+        target=target,
         outcome=outcome,
-        power_ledger=combat_result.power_ledger if combat_result is not None else None,
+        combat_result=combat_result,
     )
-    broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
     return outcome
 
@@ -4199,6 +4286,27 @@ def _try_interpose(
         )
 
 
+def _bind_interpose_challenges_any_ally(
+    template: object,
+    room: object,
+    interposer_participant_id: int,
+    active_participants_by_id: dict[int, CombatParticipant],
+) -> None:
+    """Bind a ChallengeInstance to every active participant except the interposer."""
+    from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
+
+    for part_id, part in active_participants_by_id.items():
+        if part_id == interposer_participant_id:
+            continue
+        ally_char = part.character_sheet.character
+        ChallengeInstance.objects.get_or_create(
+            template=template,
+            target_object=ally_char,
+            is_active=True,
+            defaults={"location": room, "is_revealed": True},
+        )
+
+
 def _ensure_interpose_challenges(
     encounter: CombatEncounter,
     pc_actions: dict[int, CombatRoundAction],
@@ -4247,15 +4355,6 @@ def _ensure_interpose_challenges(
     # select_related prevents N+1 when accessing .character_sheet.character below.
     active_participants_by_id: dict[int, CombatParticipant] | None = None
 
-    def _get_active_participants() -> dict[int, CombatParticipant]:
-        return {
-            p.pk: p
-            for p in CombatParticipant.objects.filter(
-                encounter=encounter,
-                status=ParticipantStatus.ACTIVE,
-            ).select_related("character_sheet__character")
-        }
-
     for action in interpose_actions:
         interposer_participant_id = action.participant_id
 
@@ -4271,17 +4370,16 @@ def _ensure_interpose_challenges(
         else:
             # Any-ally path: bind to every active participant except the interposer.
             if active_participants_by_id is None:
-                active_participants_by_id = _get_active_participants()
-            for part_id, part in active_participants_by_id.items():
-                if part_id == interposer_participant_id:
-                    continue
-                ally_char = part.character_sheet.character
-                ChallengeInstance.objects.get_or_create(
-                    template=template,
-                    target_object=ally_char,
-                    is_active=True,
-                    defaults={"location": room, "is_revealed": True},
-                )
+                active_participants_by_id = {
+                    p.pk: p
+                    for p in CombatParticipant.objects.filter(
+                        encounter=encounter,
+                        status=ParticipantStatus.ACTIVE,
+                    ).select_related("character_sheet__character")
+                }
+            _bind_interpose_challenges_any_ally(
+                template, room, interposer_participant_id, active_participants_by_id
+            )
 
 
 def apply_interpose_outcome(
