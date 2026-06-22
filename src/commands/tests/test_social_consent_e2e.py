@@ -88,7 +88,7 @@ class TelnetConsentJourneyTests(TestCase):
         cmd.func()
         return cmd
 
-    @patch("actions.services.start_action_resolution")
+    @patch("world.scenes.action_services.start_action_resolution")
     def test_intimidate_then_accept_resolves_request(self, mock_resolve: MagicMock) -> None:
         """Full telnet journey: intimidate → PENDING → accept → RESOLVED."""
         mock_resolve.return_value = _make_pending_resolution()
