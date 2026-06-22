@@ -1,0 +1,208 @@
+"""Telnet E2E: 5-step weave/imbue/pull journey proves the full ceremony/finisher lifecycle.
+
+Steps:
+  1. PerformRitualAction → Rite of Weaving ceremony  → PendingRitualEffect (weaving)
+  2. CmdWeaveThread → weave Ember of Endurance       → Thread row created, effect consumed
+  3. PerformRitualAction → Rite of Imbuing ceremony  → PendingRitualEffect (imbuing)
+  4. CmdImbue → imbue thread 5 points               → developed_points advanced, effect consumed
+  5. CmdPull → pull tier-1 through thread            → CharacterResonance.balance debited
+
+This covers the happy-path end-to-end through the ceremony/finisher model introduced in
+#1342. Supersedes test_thread_pull_pipeline.py (retired) for the pull step and
+SpendResonanceForImbuingTests (retired from test_resonance_services.py) for the imbue step.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+from django.test import TestCase
+
+from actions.definitions.ritual import PerformRitualAction
+from commands.imbue import CmdImbue
+from commands.pull import CmdPull
+from commands.weave import CmdWeaveThread
+from integration_tests.game_content.magic import seed_thread_pull_catalog
+from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.constants import TargetKind
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterResonanceFactory,
+    CharacterThreadWeavingUnlockFactory,
+    ImbuingRitualFactory,
+    ThreadWeavingUnlockFactory,
+    WeavingCeremonyFactory,
+)
+from world.magic.models import CharacterResonance, PendingRitualEffect, Thread
+from world.traits.factories import CharacterTraitValueFactory, TraitFactory
+
+
+class WeaveImbulePullJourneyE2ETests(TestCase):
+    """5-step journey from ceremony through weave, imbue, and pull.
+
+    All five steps run in a single test method to prove the chained
+    state handoffs: each step's output is the next step's prerequisite.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.trait = TraitFactory()
+
+        # Weaving unlock: TRAIT anchor on cls.trait
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.TRAIT,
+            unlock_trait=cls.trait,
+        )
+        CharacterThreadWeavingUnlockFactory(
+            character=cls.sheet,
+            unlock=unlock,
+            xp_spent=100,
+        )
+
+        # Trait value: anchor cap for the TRAIT thread; controls how high the thread can level.
+        # Value=50 gives anchor_cap=50 so imbuing 5 dp from level 0 can advance 5 levels.
+        CharacterTraitValueFactory(
+            character=cls.sheet.character,
+            trait=cls.trait,
+            value=50,
+        )
+
+        # Ceremonies
+        cls.weaving_ritual = WeavingCeremonyFactory()
+        cls.imbuing_ritual = ImbuingRitualFactory()
+
+        # Seed tier-1 pull catalog (ThreadPullCost + ThreadPullEffect rows)
+        cls.catalog = seed_thread_pull_catalog()
+
+        # Resonance: use the catalog's canonical resonance so ThreadPullEffect rows match
+        cls.resonance = cls.catalog.canonical_resonance
+
+        # Resonance balance: enough to imbue (amount=5) and pull (tier-1 cost=1)
+        CharacterResonanceFactory(
+            character_sheet=cls.sheet,
+            resonance=cls.resonance,
+            balance=20,
+            lifetime_earned=20,
+        )
+
+        # Anima: pull hard-requires a CharacterAnima row
+        CharacterAnimaFactory(
+            character=cls.sheet.character,
+            current=50,
+            maximum=50,
+        )
+
+    def test_weave_imbue_pull_journey(self) -> None:
+        character = self.sheet.character
+        character.msg = MagicMock()
+
+        # ------------------------------------------------------------------
+        # Step 1: Rite of Weaving ceremony → PendingRitualEffect created
+        # ------------------------------------------------------------------
+        action = PerformRitualAction()
+        result = action.run(
+            actor=character,
+            ritual=self.weaving_ritual,
+            components_provided=[],
+        )
+        self.assertTrue(result.success, msg=f"Ceremony failed: {result.message}")
+        self.assertTrue(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.weaving_ritual,
+            ).exists(),
+            "Step 1: PendingRitualEffect for Rite of Weaving must exist after ceremony.",
+        )
+
+        # ------------------------------------------------------------------
+        # Step 2: CmdWeaveThread → Thread created, pending effect consumed
+        # ------------------------------------------------------------------
+        cmd = CmdWeaveThread()
+        cmd.caller = character
+        cmd.args = f"resonance={self.resonance.name} trait={self.trait.pk} name=Ember of Endurance"
+        cmd.raw_string = f"weave {cmd.args}"
+        cmd.func()
+
+        thread = Thread.objects.get(owner=self.sheet, name="Ember of Endurance")
+        self.assertEqual(thread.resonance, self.resonance)
+        self.assertFalse(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.weaving_ritual,
+            ).exists(),
+            "Step 2: PendingRitualEffect for Rite of Weaving must be consumed after weave.",
+        )
+
+        # ------------------------------------------------------------------
+        # Step 3: Rite of Imbuing ceremony → PendingRitualEffect created
+        # ------------------------------------------------------------------
+        action = PerformRitualAction()
+        result = action.run(
+            actor=character,
+            ritual=self.imbuing_ritual,
+            components_provided=[],
+        )
+        self.assertTrue(result.success, msg=f"Imbuing ceremony failed: {result.message}")
+        self.assertTrue(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.imbuing_ritual,
+            ).exists(),
+            "Step 3: PendingRitualEffect for Rite of Imbuing must exist after ceremony.",
+        )
+
+        # ------------------------------------------------------------------
+        # Step 4: CmdImbue → thread level advances, pending effect consumed
+        # ------------------------------------------------------------------
+        # Thread starts at level=0. Sub-10 levels each cost 1 dp. Imbuing 5 dp
+        # → thread advances from level 0 to level 5 (5 levels × 1 dp each).
+        level_before = thread.level  # 0
+        cmd_imbue = CmdImbue()
+        cmd_imbue.caller = character
+        cmd_imbue.args = "thread=Ember of Endurance amount=5"
+        cmd_imbue.raw_string = f"imbue {cmd_imbue.args}"
+        cmd_imbue.func()
+
+        thread.refresh_from_db()
+        self.assertGreater(
+            thread.level,
+            level_before,
+            "Step 4: Thread level must advance after imbuing 5 resonance.",
+        )
+        self.assertFalse(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.imbuing_ritual,
+            ).exists(),
+            "Step 4: PendingRitualEffect for Rite of Imbuing must be consumed after imbue.",
+        )
+
+        # ------------------------------------------------------------------
+        # Step 5: CmdPull → CharacterResonance.balance debited
+        # ------------------------------------------------------------------
+        balance_before = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        ).balance
+
+        cmd_pull = CmdPull()
+        cmd_pull.caller = character
+        cmd_pull.args = (
+            f"resonance={self.resonance.name} "
+            f"tier=1 "
+            f"thread=Ember of Endurance "
+            f"trait={self.trait.name}"
+        )
+        cmd_pull.raw_string = f"pull {cmd_pull.args}"
+        cmd_pull.func()
+
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        self.assertLess(
+            cr.balance,
+            balance_before,
+            "Step 5: CharacterResonance.balance must be debited after pull.",
+        )
