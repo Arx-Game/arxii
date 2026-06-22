@@ -53,6 +53,7 @@ from commands.social.blocking import (
     CmdUnblock,
     CmdUnmute,
 )
+from commands.social.secrets import CmdSecrets
 from commands.weave import CmdWeaveThread
 
 
@@ -126,6 +127,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdMute())
         self.add(CmdUnmute())
         self.add(CmdBlockList())
+        # #1334 — the telnet face of the secret tab.
+        self.add(CmdSecrets())
         # Combat commands
         self.add(CmdDeclareTechnique())
 
