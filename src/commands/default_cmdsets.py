@@ -101,56 +101,63 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         ):
             self.remove(cmdname)
 
-        self.add(CmdLook())
-        self.add(CmdGet())
-        self.add(CmdDrop())
-        self.add(CmdGive())
-        self.add(CmdWear())
-        self.add(CmdRemove())
-        self.add(CmdUndress())
-        self.add(CmdPut())
-        self.add(CmdWithdraw())
-        self.add(CmdUse())
-        self.add(CmdHome())
-        self.add(CmdInventory())
-        self.add(CmdSay())
-        self.add(CmdWhisper())
-        self.add(CmdPose())
-        self.add(CmdEmit())
-        self.add(CmdPemit())
-        self.add(CmdMutter())
-        self.add(CmdTabletalk())
-        self.add(CmdLock())
-        self.add(CmdUnlock())
-        self.add(CmdRitual())
-        self.add(CmdWeaveThread())
-        self.add(CmdEnter())
-        self.add(CmdFlourish())
-        self.add(CmdIntimidate())
-        self.add(CmdAccept())
-        self.add(CmdDeny())
-        self.add(CmdPersuade())
-        self.add(CmdDeceive())
-        self.add(CmdFlirt())
-        self.add(CmdPerform())
-        self.add(CmdEntrance())
-        self.add(CmdRestoreSense())
-        self.add(CmdDig())
-        self.add(CmdOpen())
-        self.add(CmdLink())
-        self.add(CmdUnlink())
-        # #1278 — block/mute social controls (the telnet face of the persona menu).
-        self.add(CmdBlock())
-        self.add(CmdUnblock())
-        self.add(CmdShareBlock())
-        self.add(CmdMute())
-        self.add(CmdUnmute())
-        self.add(CmdBlockList())
-        # Soul Tether lifecycle commands (#1343)
-        self.add(CmdTether())
-        self.add(CmdSineater())
-        # Combat commands
-        self.add(CmdDeclareTechnique())
+        # Each command is a thin telnet shell; register them by iterating a
+        # tuple so this method stays well under ruff's statement ceiling
+        # (PLR0915) as the command roster grows.
+        command_classes = (
+            CmdLook,
+            CmdGet,
+            CmdDrop,
+            CmdGive,
+            CmdWear,
+            CmdRemove,
+            CmdUndress,
+            CmdPut,
+            CmdWithdraw,
+            CmdUse,
+            CmdHome,
+            CmdInventory,
+            CmdSay,
+            CmdWhisper,
+            CmdPose,
+            CmdEmit,
+            CmdPemit,
+            CmdMutter,
+            CmdTabletalk,
+            CmdLock,
+            CmdUnlock,
+            CmdRitual,
+            CmdWeaveThread,
+            CmdEnter,
+            CmdFlourish,
+            CmdIntimidate,
+            CmdAccept,
+            CmdDeny,
+            CmdPersuade,
+            CmdDeceive,
+            CmdFlirt,
+            CmdPerform,
+            CmdEntrance,
+            CmdRestoreSense,
+            CmdDig,
+            CmdOpen,
+            CmdLink,
+            CmdUnlink,
+            # #1278 — block/mute social controls (the telnet face of the persona menu).
+            CmdBlock,
+            CmdUnblock,
+            CmdShareBlock,
+            CmdMute,
+            CmdUnmute,
+            CmdBlockList,
+            # Soul Tether lifecycle commands (#1343)
+            CmdTether,
+            CmdSineater,
+            # Combat commands
+            CmdDeclareTechnique,
+        )
+        for command_cls in command_classes:
+            self.add(command_cls())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
