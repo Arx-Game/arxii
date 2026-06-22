@@ -552,6 +552,15 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
     _create_distinction_modifiers_bulk(character.sheet_data, created_distinctions)
 
+    # #1334 — a ``secret_by_default`` kind (criminal / scandalous) relocates into a Secret on
+    # grant, so it never shows on the public distinctions list. One-time finalize over a handful
+    # of distinctions, so the per-mint query is fine; reuses the single minting authority.
+    from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
+
+    for cd in created_distinctions:
+        if cd.distinction.secret_by_default:
+            mint_distinction_secret(cd)
+
 
 def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions: list) -> None:
     """

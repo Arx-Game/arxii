@@ -563,16 +563,17 @@ class FashionJudgementSerializer(serializers.Serializer):
     )
 
     def create(self, validated_data: dict) -> PresentationEndorsement:
-        """Delegate to ``judge_presentation``; surface service errors as 400."""
-        from world.items.exceptions import FashionPresentationError  # noqa: PLC0415
-        from world.items.services.fashion_presentation import judge_presentation  # noqa: PLC0415
+        """Delegate to ``JudgePresentationAction`` (telnet + web converge on action.run())."""
+        from actions.definitions.fashion import JudgePresentationAction  # noqa: PLC0415
 
         judge = validated_data.pop("judge")
-        presentation = validated_data["presentation"]
-        try:
-            return judge_presentation(judge, presentation)
-        except FashionPresentationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = JudgePresentationAction().run(
+            actor=judge.character,
+            presentation_id=validated_data["presentation"].pk,
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 class PresentationEndorsementSerializer(serializers.ModelSerializer):

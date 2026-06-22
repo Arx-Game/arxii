@@ -23,10 +23,15 @@ The magic system for Arx II. Power flows from identity and connection.
   catalog (per anchor scope); `CharacterThreadWeavingUnlock` is the per-character
   purchase record; `ThreadWeavingTeachingOffer` is the teacher-facing offer
   (mirrors `CodexTeachingOffer`).
-- **Ritual**: Authored magical procedures with dual dispatch —
+- **Ritual**: Authored magical procedures with four dispatch kinds —
   `execution_kind=SERVICE` invokes a registered service function path;
-  `execution_kind=FLOW` invokes a `FlowDefinition`. Imbuing is the first
-  SERVICE-dispatched ritual and wraps `spend_resonance_for_imbuing`.
+  `execution_kind=FLOW` invokes a `FlowDefinition`;
+  `execution_kind=CEREMONY` creates a `PendingRitualEffect` that a finisher
+  command (`weave`, `imbue`) later consumes to complete the ritual;
+  `execution_kind=SCENE_ACTION` fires a check via `RitualCheckConfig`.
+  The two canonical CEREMONY rituals are **Rite of Weaving** (finisher:
+  `CmdWeaveThread` / `WeaveThreadAction`) and **Rite of Imbuing** (finisher:
+  `CmdImbue` / `ImbueThreadAction`).
   Ritual *performance* is the `perform_ritual` `Action`
   (`actions/definitions/ritual.py`, key `"perform_ritual"`) — both telnet
   (`commands.ritual.CmdRitual`) and the web (`RitualPerformView`) converge on
@@ -34,8 +39,13 @@ The magic system for Arx II. Power flows from identity and connection.
   action catches the ritual-surface exceptions (`RitualComponentError`,
   `ResonanceInsufficient`, `AnchorCapExceeded`, `InvalidImbueAmount`,
   `XPInsufficient`) and returns a failure `ActionResult` whose `message` the
-  view maps to HTTP 400. Scope: SERVICE + FLOW rituals (Anima/SCENE_ACTION
-  rituals dispatch elsewhere).
+  view maps to HTTP 400.
+- **PendingRitualEffect**: In-progress CEREMONY record. Created by
+  `PerformRitualAction` when `execution_kind=CEREMONY`; unique per
+  `(character, ritual)`. Consumed (deleted) by the finisher action on success.
+  Fields: `character` (FK → `CharacterSheet`), `ritual` (FK → `Ritual`),
+  `created_at`. If a finisher fires without a matching `PendingRitualEffect` the
+  action returns a failure result — no side effects.
 
 ## Models
 
@@ -221,12 +231,17 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   is the only gate at imbue time.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
-- `Ritual` - Authored magical procedure with dual dispatch
-  (`execution_kind=SERVICE` → `service_function_path`; `execution_kind=FLOW` →
-  FK to `FlowDefinition`). `site_property` optionally gates where it can be
-  performed.
+- `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
+  `service_function_path`; `FLOW` → FK to `FlowDefinition`; `CEREMONY` →
+  creates `PendingRitualEffect` (finisher command completes the ritual);
+  `SCENE_ACTION` → fires a check via `RitualCheckConfig`.
+  `site_property` optionally gates where it can be performed.
 - `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
   `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+- `PendingRitualEffect` - In-progress CEREMONY record. Unique per
+  `(character, ritual)`. Created by `PerformRitualAction` on CEREMONY invocation;
+  consumed (deleted) by the finisher action (`WeaveThreadAction`, `ImbueThreadAction`)
+  on success.
 
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
@@ -363,6 +378,28 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
 - `PoseEndorsementViewSet` - POST /api/magic/pose-endorsements/ + DELETE-if-unsettled
 - `SceneEntryEndorsementViewSet` - POST-only (delete deferred with ResonanceGrantReversal)
 - `ResonanceGrantViewSet` - Read-only, user-scoped. FilterSet on source/resonance/date range.
+
+**Telnet surfaces (`commands/endorse.py`, `commands/fashion.py` — #1340):**
+- `CmdPoses` (`poses <char>`) — lists endorseable poses in the current scene via
+  `get_endorseable_poses_in_scene()`; respects WHISPER receiver and VERY_PRIVATE
+  participation gates.
+- `CmdEndorse` (`endorse pose/entry/style <char> resonance=<name>`) — two-phase pose
+  endorsement (preview → confirm) + one-shot entry/style; converges on the same
+  `PoseEndorseAction` / `SceneEntryEndorseAction` / `StylePresentationEndorseAction`
+  the web serializers use. Active scene resolved from caller's room.
+- `CmdJudgePresentation` (`judge <id>`) — fashion event judgement via
+  `JudgePresentationAction` (now returns `endorsement` in `result.data`).
+
+**Privacy rules (updated):**
+- **WHISPER** poses: endorsable only by the direct recipient
+  (`InteractionReceiver` row for endorser's account). Previously blanket-blocked.
+- **VERY_PRIVATE** poses: endorsable by scene participants (SceneParticipation check).
+  Previously blanket-blocked.
+
+**New service:**
+- `get_endorseable_poses_in_scene(endorser_sheet, endorsee_sheet, scene) → list[tuple[int, Interaction]]` —
+  returns (stable-1-based-position, Interaction) pairs visible to the endorser.
+  Batches whisper-receiver check to avoid per-row queries.
 
 **Related changes:**
 - `CharacterSheet.current_residence` FK to RoomProfile (narrative declaration; mechanical
@@ -581,7 +618,7 @@ the complementary half of the entrance moment).
 **Services:**
 - `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) — called on
   Entrance success; skips if already flourished this scene or no claimed resonances.
-- `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult`
+- `resolve_entry_flourish_offer(offer: PendingEntryFlourishOffer, *, resonance: Resonance) -> EntryFlourishResult`
   (`entry_flourish.py`) — two-phase, mirrors `resolve_audere_offer`.
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None)` (`services/gain.py`) —
   checks claimed-resonance, creates `EntryFlourishRecord`, writes
@@ -590,13 +627,23 @@ the complementary half of the entrance moment).
 
 **Action wiring (`actions/definitions/social.py`):**
 - `EntranceAction` calls `maybe_create_entry_flourish_offer` on success; gated by
-  `ActionTemplate.grants_entry_flourish`.
+  `ActionTemplate.grants_entry_flourish`. When an offer is created, the actor receives
+  a telnet prompt: `"Use |wflourish <resonance>|n to declare your entrance."`
+- `ResolveFlourishOfferAction` (key `"resolve_entry_flourish"`) — telnet + web converge
+  here; calls `resolve_entry_flourish_offer(offer, resonance=resonance)` and stores the
+  result under `ActionResult.data["entry_flourish_result"]`.
+
+**Telnet commands (`commands/social/entrance_flourish.py`):**
+- `CmdEnter` — thin telnet wrapper that dispatches `EntranceAction`.
+- `CmdFlourish` — thin telnet wrapper that resolves a pending offer via
+  `ResolveFlourishOfferAction`.
 
 **REST endpoints (`/api/magic/entry-flourish/`):**
 - `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` —
   `PendingEntryFlourishOfferViewSet` (account-scoped, read-only).
 - `POST /api/magic/entry-flourish/respond/` — `EntryFlourishRespondView`; body
-  `{offer_id, resonance_id}`; picker data reuses `CharacterResonanceViewSet`.
+  `{offer_id, resonance_id}`; dispatches through `ResolveFlourishOfferAction` (same
+  seam as the telnet `flourish` command); picker data reuses `CharacterResonanceViewSet`.
 
 **Exceptions (`exceptions.py`):**
 - `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError`,

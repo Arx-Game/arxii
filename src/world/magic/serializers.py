@@ -1387,17 +1387,19 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> PoseEndorsement:
-        """Delegate to ``create_pose_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_pose_endorsement  # noqa: PLC0415
+        """Delegate to ``PoseEndorseAction`` (telnet + web converge on action.run())."""
+        from actions.definitions.endorsements import PoseEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        interaction = validated_data["interaction"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_pose_endorsement(endorser_sheet, interaction, resonance)
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = PoseEndorseAction().run(
+            actor=endorser_sheet.character,
+            interaction=validated_data["interaction"],
+            resonance=validated_data["resonance"],
+            confirm=True,
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================
@@ -1439,18 +1441,19 @@ class SceneEntryEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> SceneEntryEndorsement:
-        """Delegate to ``create_scene_entry_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_scene_entry_endorsement  # noqa: PLC0415
+        """Delegate to ``SceneEntryEndorseAction`` (telnet + web converge on action.run())."""
+        from actions.definitions.endorsements import SceneEntryEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        endorsee_sheet = validated_data["endorsee_sheet"]
-        scene = validated_data["scene"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = SceneEntryEndorseAction().run(
+            actor=endorser_sheet.character,
+            endorsee_sheet=validated_data["endorsee_sheet"],
+            scene=validated_data["scene"],
+            resonance=validated_data["resonance"],
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================
@@ -1490,20 +1493,19 @@ class StylePresentationEndorsementSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> StylePresentationEndorsement:
-        """Delegate to ``create_style_presentation_endorsement``; surface errors as 400."""
-        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
-        from world.magic.services.gain import create_style_presentation_endorsement  # noqa: PLC0415
+        """Delegate to ``StylePresentationEndorseAction`` (telnet + web converge)."""
+        from actions.definitions.endorsements import StylePresentationEndorseAction  # noqa: PLC0415
 
         endorser_sheet = validated_data.pop("endorser_sheet")
-        endorsee_sheet = validated_data["endorsee_sheet"]
-        scene = validated_data["scene"]
-        resonance = validated_data["resonance"]
-        try:
-            return create_style_presentation_endorsement(
-                endorser_sheet, endorsee_sheet, scene, resonance
-            )
-        except EndorsementValidationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = StylePresentationEndorseAction().run(
+            actor=endorser_sheet.character,
+            endorsee_sheet=validated_data["endorsee_sheet"],
+            scene=validated_data["scene"],
+            resonance=validated_data["resonance"],
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["endorsement"]
 
 
 # =============================================================================
@@ -2570,18 +2572,12 @@ class ThreadPullCommitRequestSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data: dict) -> object:
-        """Build PullActionContext, fetch threads, dispatch spend_resonance_for_pull.
+        """Build PullActionContext, fetch threads, dispatch PullThreadAction.
 
-        Catches all expected service exceptions and re-raises as
-        ``serializers.ValidationError`` so the view stays thin.
+        Delegates to PullThreadAction.run() so exception handling lives in the
+        action layer; maps a failure ActionResult to a ValidationError so the
+        view stays thin.
         """
-        from world.magic.exceptions import (  # noqa: PLC0415
-            InvalidImbueAmount,
-            NoMatchingWornFacetItemsError,
-            ProtagonismLockedError,
-            ResonanceInsufficient,
-        )
-        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
         from world.magic.types import PullActionContext  # noqa: PLC0415
 
         sheet: CharacterSheet = validated_data["character_sheet_id"]
@@ -2634,22 +2630,18 @@ class ThreadPullCommitRequestSerializer(serializers.Serializer):
             involved_objects=tuple(ctx_dict.get("involved_object_ids") or []),
         )
 
-        try:
-            return spend_resonance_for_pull(
-                character_sheet=sheet,
-                resonance=resonance,
-                tier=tier,
-                threads=threads,
-                action_context=action_context,
-            )
-        except ProtagonismLockedError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except ResonanceInsufficient as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except InvalidImbueAmount as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        except NoMatchingWornFacetItemsError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
+        from actions.definitions.pull import PullThreadAction  # noqa: PLC0415
+
+        pull_result = PullThreadAction().run(
+            actor=sheet.character,
+            pull_action_context=action_context,
+            resonance=resonance,
+            tier=tier,
+            threads=threads,
+        )
+        if not pull_result.success:
+            raise serializers.ValidationError({"detail": pull_result.message})
+        return pull_result.data["pull_result"]
 
 
 class ResolvedPullEffectCommitSerializer(serializers.Serializer):
@@ -3412,35 +3404,14 @@ class PendingEntryFlourishOfferSerializer(serializers.ModelSerializer):
 
 
 class EntryFlourishRespondSerializer(serializers.Serializer):
-    """Write serializer for the player's entry-flourish resonance pick."""
+    """Request shape for the player's entry-flourish resonance pick.
+
+    Validation-only — the view resolves and ownership-checks the objects
+    directly via get_object_or_404 and delegates to ResolveFlourishOfferAction.
+    """
 
     offer_id = serializers.IntegerField()
     resonance_id = serializers.IntegerField()
-
-    def validate_offer_id(self, value: int) -> object:
-        """Resolve + ownership-check via the offer's character sheet."""
-        from world.magic.entry_flourish import PendingEntryFlourishOffer  # noqa: PLC0415
-
-        try:
-            offer = PendingEntryFlourishOffer.objects.get(pk=value)
-        except PendingEntryFlourishOffer.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_NO_PENDING_ENTRY_FLOURISH) from exc
-        request = self.context.get("request")
-        _resolve_account_sheet(offer.character_sheet_id, request)
-        return offer
-
-    def create(self, validated_data: dict) -> object:
-        """Delegate to resolve_entry_flourish_offer; surface typed errors as 400."""
-        from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
-        from world.magic.exceptions import EntryFlourishOfferError  # noqa: PLC0415
-
-        offer = validated_data["offer_id"]
-        try:
-            return resolve_entry_flourish_offer(
-                offer.pk, resonance_id=validated_data["resonance_id"]
-            )
-        except EntryFlourishOfferError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
 
 
 class EntryFlourishResultSerializer(serializers.Serializer):

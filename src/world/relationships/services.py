@@ -12,7 +12,11 @@ from world.achievements.services import increment_stat
 from world.progression.constants import FIRST_IMPRESSION_AUTHOR_XP, FIRST_IMPRESSION_TARGET_XP
 from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionReason
-from world.relationships.constants import MAX_DEVELOPMENTS_PER_WEEK
+from world.relationships.constants import (
+    MAX_DEVELOPMENTS_PER_WEEK,
+    TrackSign,
+    UpdateVisibility,
+)
 from world.relationships.models import (
     CharacterRelationship,
     RelationshipCapstone,
@@ -25,8 +29,8 @@ from world.roster.selectors import get_account_for_character
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
-    from world.relationships.models import RelationshipTrack
+    from world.relationships.constants import FirstImpressionColoring
+    from world.relationships.models import GrievanceOption, RelationshipTrack
     from world.scenes.models import Scene
 
 
@@ -279,3 +283,49 @@ def create_capstone(  # noqa: PLR0913
             visibility=visibility,
             linked_scene=linked_scene,
         )
+
+
+def register_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinct grievance field
+    *,
+    source: CharacterSheet,
+    target: CharacterSheet,
+    option: GrievanceOption | None = None,
+    custom_points: int | None = None,
+    custom_track: RelationshipTrack | None = None,
+    writeup: str = "",
+    visibility: UpdateVisibility = UpdateVisibility.PRIVATE,
+) -> RelationshipCapstone:
+    """Register a wronged character's one-sided grievance against whoever harmed them (#1429).
+
+    Resolves the swing from a ``GrievanceOption`` preset, or a ``custom_points`` + ``custom_track``
+    pair, then applies it as a relationship **capstone** on the (source→target) relationship.
+    Unilateral: it never needs the target's consent — the relationship simply stays ``is_pending``
+    until/unless the target reciprocates, while the victim's feelings are recorded immediately.
+    The track must be NEGATIVE-sign (a grievance is, by definition, negative).
+    """
+    if option is not None:
+        track, points, title = option.track, option.points, option.label
+    elif custom_points is not None and custom_track is not None:
+        track, points, title = custom_track, custom_points, "A personal grievance"
+    else:
+        msg = "Provide either a GrievanceOption or both custom_points and custom_track."
+        raise ValidationError(msg)
+    if points <= 0:
+        msg = "A grievance swing must be a positive magnitude."
+        raise ValidationError(msg)
+    if track.sign != TrackSign.NEGATIVE:
+        msg = "A grievance must land on a negative-sign track."
+        raise ValidationError(msg)
+
+    relationship, _ = CharacterRelationship.objects.get_or_create(
+        source=source, target=target, defaults={"is_pending": True}
+    )
+    return create_capstone(
+        relationship=relationship,
+        author=source,
+        title=title,
+        writeup=writeup,
+        track=track,
+        points=points,
+        visibility=visibility,
+    )

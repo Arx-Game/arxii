@@ -203,3 +203,36 @@ class RespondCommandTests(TestCase):
             self._run(CmdAccept, self.target_char)
 
         self.assertEqual(respond.call_args.kwargs["action_request"], newest)
+
+
+class AllSocialCommandsRegisteredTests(TestCase):
+    """Every social-action singleton maps to a ConsentRequestCommand subclass."""
+
+    def test_all_social_keys_have_commands(self) -> None:
+        from commands.consent import (
+            CmdDeceive,
+            CmdEntrance,
+            CmdFlirt,
+            CmdPerform,
+            CmdPersuade,
+            CmdRestoreSense,
+        )
+
+        expected = {
+            "intimidate": CmdIntimidate,
+            "persuade": CmdPersuade,
+            "deceive": CmdDeceive,
+            "flirt": CmdFlirt,
+            "perform": CmdPerform,
+            "entrance": CmdEntrance,
+            "restore_sense": CmdRestoreSense,
+        }
+        for action_key, cls in expected.items():
+            with self.subTest(action_key=action_key):
+                self.assertEqual(cls.action_key, action_key)
+                self.assertTrue(issubclass(cls, ConsentRequestCommand))
+
+    def test_ritual_command_has_no_perform_alias(self) -> None:
+        from commands.ritual import CmdRitual
+
+        self.assertNotIn("perform", getattr(CmdRitual, "aliases", []))  # noqa: GETATTR_LITERAL

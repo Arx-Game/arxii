@@ -261,8 +261,9 @@ class CreatePoseEndorsementTests(TestCase):
         with self.assertRaises(EndorsementValidationError):
             create_pose_endorsement(endorser, interaction, resonance)
 
-    def test_blocks_very_private(self) -> None:
-        from world.magic.exceptions import EndorsementValidationError
+    def test_very_private_allowed_for_participant(self) -> None:
+        """VERY_PRIVATE is no longer a blanket block — participants can endorse."""
+        from world.magic.models import PoseEndorsement
         from world.magic.services.gain import create_pose_endorsement
         from world.scenes.constants import InteractionVisibility
 
@@ -270,8 +271,9 @@ class CreatePoseEndorsementTests(TestCase):
         interaction.visibility = InteractionVisibility.VERY_PRIVATE
         interaction.save(update_fields=["visibility"])
 
-        with self.assertRaises(EndorsementValidationError):
-            create_pose_endorsement(endorser, interaction, resonance)
+        result = create_pose_endorsement(endorser, interaction, resonance)
+        self.assertIsNotNone(result.pk)
+        self.assertEqual(PoseEndorsement.objects.count(), 1)
 
     def test_blocks_non_participant(self) -> None:
         from world.magic.exceptions import EndorsementValidationError

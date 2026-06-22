@@ -4,12 +4,10 @@ Proves a telnet two-party social action reaches the SAME consent services the
 web viewset uses (``create_action_request`` / ``respond_to_action_request``) and
 drives them through to full resolution.
 
-The web equivalent is ``world/scenes/tests/test_targeted_action_e2e.py``
-(``TargetedActionE2EWithStrainTests``): it POSTs the action-request endpoints to
-exercise create -> respond. This test reuses the SAME fixture shape (scene +
-two characters/personas + the "Intimidate" ``ActionTemplate``) but derives the
+This test exercises the full fixture shape (scene +
+two characters/personas + the "Intimidate" ``ActionTemplate``) and derives the
 arguments the telnet way — scene from the caller's room, personas from
-``active_persona_for_sheet`` — and drives the real ``CmdIntimidate`` /
+``active_persona_for_sheet`` — then drives the real ``CmdIntimidate`` /
 ``CmdAccept`` commands.
 
 ``respond_to_action_request`` does NOT merely flip status to ACCEPTED: on accept

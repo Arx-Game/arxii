@@ -169,3 +169,33 @@ class OnUseTargetPrerequisite(Prerequisite):
 
         # TargetKind.PERSONA and any future unhandled kinds — fail closed.
         return False, "That can't be used on that."
+
+
+@dataclass
+class PendingRitualEffectPrerequisite(Prerequisite):
+    """Actor must have a PendingRitualEffect for the named ritual.
+
+    Used by WeaveThreadAction (requires 'Rite of Weaving') and ImbueAction
+    (requires 'Rite of Imbuing'). The finisher action consumes the pending
+    effect on success.
+    """
+
+    ritual_name: str
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from world.magic.models import PendingRitualEffect, Ritual  # noqa: PLC0415
+
+        ritual = Ritual.objects.filter(name__iexact=self.ritual_name).first()
+        if not ritual:
+            return False, f"You must perform {self.ritual_name} first."
+        exists = PendingRitualEffect.objects.filter(
+            character=actor.sheet_data, ritual=ritual
+        ).exists()
+        if not exists:
+            return False, f"You must perform {self.ritual_name} first."
+        return True, ""

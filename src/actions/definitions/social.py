@@ -156,7 +156,10 @@ class EntranceAction(_SocialTemplateAction):
 
             loc = actor.location
             scene = loc.active_scene if loc is not None and hasattr(loc, "active_scene") else None
-            maybe_create_entry_flourish_offer(actor, scene)
+            offer = maybe_create_entry_flourish_offer(actor, scene)
+            if offer is not None:
+                prompt = "Use |wflourish <resonance>|n to declare your entrance."
+                result.message = f"{result.message}\n{prompt}" if result.message else prompt
 
         return result
 
@@ -224,6 +227,50 @@ class RestoreSenseAction(_SocialTemplateAction):
             apply_effects(enh, effect_ctx)
 
 
+@dataclass
+class ResolveFlourishOfferAction(Action):
+    """Resolve a pending entry-flourish offer by declaring a resonance."""
+
+    key: str = "resolve_entry_flourish"
+    name: str = "Declare Flourish"
+    icon: str = "sparkles"
+    category: str = "social"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        offer: object,
+        resonance: object,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+        from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            EntryFlourishOfferNotFoundError,
+            EntryFlourishOfferStaleError,
+        )
+
+        try:
+            entry_result = resolve_entry_flourish_offer(offer, resonance=resonance)
+        except EntryFlourishOfferNotFoundError:
+            return _ActionResult(success=False, message="You have no pending flourish offer.")
+        except EntryFlourishOfferStaleError:
+            return _ActionResult(
+                success=False,
+                message="That resonance is no longer yours to broadcast.",
+            )
+        return _ActionResult(
+            success=True,
+            message=(
+                f"Your {entry_result.resonance_name} fills the room as you announce your arrival."
+            ),
+            data={"entry_flourish_result": entry_result},
+        )
+
+
 # Module-level singletons — registered in actions/registry.py
 intimidate = IntimidateAction()
 persuade = PersuadeAction()
@@ -232,3 +279,4 @@ flirt = FlirtAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()
+resolve_entry_flourish = ResolveFlourishOfferAction()

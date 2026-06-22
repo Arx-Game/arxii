@@ -164,6 +164,12 @@ Database design:
   when ObjectDB is genuinely right. Lint scope expands one app at a time (the
   `files:` regex in `.pre-commit-config.yaml`); new code in in-scope modules must
   pass clean.
+- **FK direction — depend specific→general.** When a link joins two systems, decide
+  which side the FK belongs on *deliberately*: it lives on the more specific/dependent
+  system and points at the reusable primitive, **never** on the primitive. Don't anchor
+  it on whichever app you happen to be editing — a general model (e.g. `Secret`) must not
+  end up importing every system that references it. (e.g. `CharacterDistinction.secret →
+  Secret`, so `secrets` stays dependency-free while consumers point into it.)
 
 Code quality (always-on; full list in `django_notes.md`):
 
