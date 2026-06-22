@@ -54,6 +54,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.imbue import CmdImbue
 from commands.ritual import CmdRitual
 from commands.social.blocking import (
     CmdBlock,
@@ -123,6 +124,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdUnlock())
         self.add(CmdRitual())
         self.add(CmdWeaveThread())
+        self.add(CmdImbue())
         self.add(CmdEnter())
         self.add(CmdFlourish())
         self.add(CmdIntimidate())

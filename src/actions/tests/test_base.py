@@ -187,6 +187,7 @@ class ActionRegistryTests(TestCase):
             "restore_sense",
             "resolve_entry_flourish",
             "perform_ritual",
+            "imbue_thread",
             "weave_thread",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys

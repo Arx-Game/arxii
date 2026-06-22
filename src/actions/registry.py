@@ -19,6 +19,7 @@ from actions.definitions.duels import (
     YieldAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
+from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
     ActivatePermitAction,
@@ -90,6 +91,7 @@ _ALL_ACTIONS: list[Action] = [
     MoveToPositionAction(),
     SetTheStageAction(),
     PerformRitualAction(),
+    ImbueAction(),
     WeaveThreadAction(),
     StartRoundAction(),
     JoinRoundAction(),
