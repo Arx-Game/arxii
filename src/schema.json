@@ -29091,11 +29091,13 @@ components:
       - SERVICE
       - FLOW
       - SCENE_ACTION
+      - CEREMONY
       type: string
       description: |-
         * `SERVICE` - Service
         * `FLOW` - Flow
         * `SCENE_ACTION` - Scene Action
+        * `CEREMONY` - Ceremony
     Facet:
       type: object
       description: Serializer for Facet model with hierarchy info.
