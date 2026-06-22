@@ -135,6 +135,78 @@ class CmdIntimidate(ConsentRequestCommand):
     action_key = "intimidate"
 
 
+class CmdPersuade(ConsentRequestCommand):
+    """Attempt to persuade another character (they must accept or deny).
+
+    Usage:
+        persuade <character>
+    """
+
+    key = "persuade"
+    action_key = "persuade"
+
+
+class CmdDeceive(ConsentRequestCommand):
+    """Attempt to deceive another character (they must accept or deny).
+
+    Usage:
+        deceive <character>
+    """
+
+    key = "deceive"
+    action_key = "deceive"
+
+
+class CmdFlirt(ConsentRequestCommand):
+    """Flirt with another character (they must accept or deny).
+
+    Usage:
+        flirt <character>
+    """
+
+    key = "flirt"
+    action_key = "flirt"
+
+
+class CmdPerform(ConsentRequestCommand):
+    """Captivate another character through music, oration, or storytelling.
+
+    They must accept or deny.
+
+    Usage:
+        perform <character>
+    """
+
+    key = "perform"
+    action_key = "perform"
+
+
+class CmdEntrance(ConsentRequestCommand):
+    """Command another character's attention through sheer force of personality.
+
+    They must accept or deny.
+
+    Usage:
+        entrance <character>
+    """
+
+    key = "entrance"
+    action_key = "entrance"
+
+
+class CmdRestoreSense(ConsentRequestCommand):
+    """Talk a berserk ally down through force of personality and connection.
+
+    They must accept or deny.
+
+    Usage:
+        restore_sense <character>
+    """
+
+    key = "restore_sense"
+    action_key = "restore_sense"
+
+
 _NO_PENDING_MSG = "You have no pending action to respond to."
 
 

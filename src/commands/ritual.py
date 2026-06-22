@@ -37,7 +37,6 @@ class CmdRitual(ArxCommand):
     """
 
     key = "ritual"
-    aliases = ["perform"]
     locks = "cmd:all()"
     action = PerformRitualAction()
 

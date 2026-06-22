@@ -180,7 +180,7 @@ class RestoreSenseConsentE2ETests(TestCase):
             action_key="restore_sense",
         )
         # The fix makes create resolve the template — no manual attach (cf. the old
-        # test_targeted_action_e2e which had to set request.action_template by hand).
+        # test_social_consent_e2e which had to set request.action_template by hand).
         self.assertEqual(request.action_template.name, "Restore to Sense")
 
         respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
