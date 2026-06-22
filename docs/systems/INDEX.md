@@ -501,9 +501,9 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
 Hidden facts about a character — cover identities, crimes, private distinctions, secret
 relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
 info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
-primitive alongside Distinction / Condition / Resonance. *Slices 1–2 own the content model +
-discovery; display, action-anchored minting, the Deed↔Secret cross-link, and the #1269
-distinction migration are later slices.*
+primitive alongside Distinction / Condition / Resonance. *Slices 1–3 (content model, discovery,
+secret-tab display) + the #1269 distinction migration are built; action-anchored minting, the
+Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.*
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;

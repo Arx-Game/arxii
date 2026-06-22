@@ -817,6 +817,39 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
         assert ranked.rank == 2
         assert ranked.notes == "Test note"
 
+    def test_secret_by_default_distinction_is_relocated_into_a_secret(self):
+        """A ``secret_by_default`` kind auto-mints + links a Secret on finalize (#1334)."""
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.secrets.constants import SecretLevel
+
+        criminal = DistinctionFactory(
+            name="Wanted Criminal",
+            category=self.dist_category,
+            secret_by_default=True,
+            default_secret_level=SecretLevel.DANGEROUS,
+        )
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": criminal.id,
+                "distinction_name": criminal.name,
+                "distinction_slug": criminal.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 1,
+                "cost": 5,
+                "notes": "",
+            },
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        cd = CharacterDistinction.objects.get(character=character, distinction=criminal)
+        assert cd.is_secret is True
+        assert cd.secret.level == SecretLevel.DANGEROUS
+        assert cd.secret.subject_sheet_id == character.sheet_data.pk
+
     def test_creates_modifiers_for_distinction_effects(self):
         """Distinction effects create CharacterModifier records."""
         from world.mechanics.models import CharacterModifier

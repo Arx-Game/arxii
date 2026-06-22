@@ -15,7 +15,6 @@ Part of CG Stage 6 (Traits).
 from world.distinctions.types import (
     EffectType,            # STAT_MODIFIER, AFFINITY_MODIFIER, RESONANCE_MODIFIER, ROLL_MODIFIER, CODE_HANDLED
     DistinctionOrigin,     # CHARACTER_CREATION, GAMEPLAY
-    DistinctionVisibility, # PUBLIC, PRIVATE (profile visibility; default on kind, player-overridable)
     OtherStatus,           # PENDING_REVIEW, APPROVED, MAPPED
 )
 
@@ -36,7 +35,7 @@ from world.distinctions.types import (
 |-------|---------|------------|
 | `DistinctionCategory` | Categories like Physical, Mental, Social | `name`, `slug`, `description`, `display_order` |
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
-| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `default_visibility` |
+| `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `effect_type`, `target`, `value_per_rank`, `scaling_values` |
 | `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
 | `DistinctionMutualExclusion` | Incompatible pairs | `distinction_a`, `distinction_b` |
@@ -45,27 +44,32 @@ from world.distinctions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `visibility_override` |
+| `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character`, `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
 
 ---
 
-## Profile Visibility (#1109)
+## Profile Visibility — relocated into Secrets (#1109 → #1334)
 
-Whether a distinction shows on a character's profile to *other* players is two-layered:
+A sensitive distinction is no longer flagged public/private; it is **relocated into a Secret**
+(the privacy primitive of the mystery loop — see [secrets.md](secrets.md)):
 
-- **Kind default** — `Distinction.default_visibility` (`DistinctionVisibility`, default `PUBLIC`).
-  Most distinctions are public; criminal / scandalous kinds are authored `PRIVATE` so they
-  don't out a player by default. (Which kinds are private is a content/author pass.)
-- **Per-character gate** — `CharacterDistinction.visibility_override` (nullable). When set, the
-  player's choice wins over the kind default; `null` inherits it.
+- **Kind default** — `Distinction.secret_by_default` + `default_secret_level`. Taking a
+  criminal / scandalous kind auto-mints a `Secret` at finalize, so it never lands on the public
+  list. (Which kinds are secret is a content/author pass.)
+- **Per-grant state** — `CharacterDistinction.secret` (`OneToOneField(secrets.Secret, SET_NULL)`).
+  **The FK's presence *is* the secret-state** — `CharacterDistinction.is_secret` reads it; there
+  is no separate boolean. A player self-gating an otherwise-public distinction mints a
+  player-flavor secret on that grant.
 
-`CharacterDistinction.effective_visibility` resolves the two (override else default), and
-`is_publicly_visible` is the boolean the profile serializer filters on: a non-owner (not staff,
-not the playing account) receives only effective-`PUBLIC` distinctions; the owner and staff see
-all. The character-sheet `DistinctionEntry` payload carries the effective `visibility` so the
-owner's privacy-gate UI can show the current setting. The player-facing toggle endpoint is a
-follow-up.
+Minting/clearing go through `world.distinctions.services.mint_distinction_secret` /
+`clear_distinction_secret` (the single authority). The profile serializer filters on
+`is_secret`: a non-owner (not staff, not the playing account) receives only **non-secret**
+distinctions; the owner and staff see all, and the `DistinctionEntry` payload carries `is_secret`
+so the owner's gate UI can show which are relocated. A relocated distinction surfaces for a
+*learner* on the **secret tab** (via the ordinary `SecretKnowledge` loop), not back on this list.
+The old `DistinctionVisibility` enum / `default_visibility` / `visibility_override` /
+`effective_visibility` / `is_publicly_visible` are removed.
 
 ---
 
