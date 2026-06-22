@@ -17587,7 +17587,6 @@ export interface components {
       /** Format: date-time */
       readonly found_at: string;
       readonly subject: string;
-      readonly second_party: string | null;
       readonly category: string;
       readonly consequences: string;
       readonly author: string;

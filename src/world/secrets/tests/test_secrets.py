@@ -65,12 +65,10 @@ class SecretModelTests(TestCase):
         secret = SecretFactory(subject_sheet=self.subject, category=None)
         assert secret.category is None  # Unknown is a first-class state
 
-    def test_two_party_secret_names_the_other(self) -> None:
-        other = CharacterSheetFactory()
-        secret = SecretFactory(subject_sheet=self.subject, second_party_sheet=other)
-        assert secret.second_party_sheet_id == other.pk
-        # Reverse accessor reaches the implicated party's secrets.
-        assert secret in other.implicating_secrets.all()
+    def test_a_secret_is_owned_by_exactly_one_subject(self) -> None:
+        # Single-owner policy: a secret belongs to exactly one character (no shared/group rows).
+        secret = SecretFactory(subject_sheet=self.subject)
+        assert secret in self.subject.secrets.all()
 
 
 class AuthorSecretServiceTests(TestCase):

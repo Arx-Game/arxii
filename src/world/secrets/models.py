@@ -43,10 +43,12 @@ class SecretCategory(SharedMemoryModel):
 class Secret(SharedMemoryModel):
     """A hidden fact about a character, with a level, a category, and consequences.
 
-    Subject-anchored: ``subject_sheet`` is who the secret is *about*. ``second_party_sheet`` is
-    the named other for a two-party secret (an affair, a blackmail hold) — ownership follows
-    consequence, so a mutually-damning secret simply names both. ``category`` and
-    ``consequences`` may be left blank/null to mean **Unknown** (a deliberate puzzle state).
+    Subject-anchored and **always single-owner**: ``subject_sheet`` is who the secret is *about*
+    and owns it (authorship ≠ ownership — a GM-written secret *for* a character is owned by that
+    character, who knows it; others discover it). There are no group/shared secrets: a multi-party
+    situation (affair, blackmail) is two *distinct* secrets, one owned by each character — never a
+    shared row. ``category`` and ``consequences`` may be left blank/null to mean **Unknown** (a
+    deliberate puzzle state).
 
     Provenance + the anchor-scales-with-level invariant (``clean``) keep player-flavor from
     masquerading as canon: only Level-1 player-flavor secrets may be free-authored; anything
@@ -57,15 +59,7 @@ class Secret(SharedMemoryModel):
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="secrets",
-        help_text="The character this secret is about.",
-    )
-    second_party_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="implicating_secrets",
-        help_text="The named other party for a two-party secret (affair, blackmail). Null if solo.",
+        help_text="The character this secret is about — and its sole owner.",
     )
     level = models.PositiveSmallIntegerField(
         choices=SecretLevel.choices,

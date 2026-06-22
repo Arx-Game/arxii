@@ -31756,10 +31756,6 @@ components:
         subject:
           type: string
           readOnly: true
-        second_party:
-          type: string
-          nullable: true
-          readOnly: true
         category:
           type: string
           readOnly: true
@@ -31778,7 +31774,6 @@ components:
       - id
       - level
       - provenance
-      - second_party
       - subject
     LedgerRow:
       type: object

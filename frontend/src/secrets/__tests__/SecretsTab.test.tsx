@@ -33,7 +33,6 @@ function secret(overrides: Partial<KnownSecret>): KnownSecret {
     provenance: 'GM/Staff authored (canon)',
     found_at: '2026-06-22T00:00:00Z',
     subject: 'Lady Vyper',
-    second_party: null,
     category: 'Scandal',
     consequences: 'Execution if proven.',
     author: 'GM/Staff',

@@ -25,7 +25,6 @@ function SecretCard({ secret }: { secret: KnownSecret }) {
         <span className="text-xs text-muted-foreground">{secret.author}</span>
       </div>
       <p>{secret.content}</p>
-      {secret.second_party && <Layer label="Also implicates" value={secret.second_party} />}
       <Layer label="Category" value={secret.category} />
       <Layer label="Consequences" value={secret.consequences} />
     </div>

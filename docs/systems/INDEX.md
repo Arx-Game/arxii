@@ -505,12 +505,12 @@ primitive alongside Distinction / Condition / Resonance. *Slices 1–2 own the c
 discovery; display, action-anchored minting, the Deed↔Secret cross-link, and the #1269
 distinction migration are later slices.*
 
-- **Models:** `Secret` (subject-anchored to a `CharacterSheet`; `level` 1–4 / `category` FK /
-  `consequences` — each may be Unknown; `provenance` ∈ GM / action / player-flavor;
-  `author_persona` for OOC attribution; `second_party_sheet` for two-party affair/blackmail),
+- **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
+  no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
+  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution),
   `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
   (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
-  `knows_consequences`, monotonic)
+  `knows_consequences`, monotonic; tracks *others* learning a secret)
 - **Invariant:** anchor-scales-with-level — only Level-1 player-flavor may be free-authored
   (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
   action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
