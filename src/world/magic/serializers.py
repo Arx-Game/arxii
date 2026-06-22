@@ -865,12 +865,13 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg) from exc
 
     def create(self, validated_data: dict) -> Thread:
-        """Delegate thread creation to ``weave_thread``."""
-        from world.magic.exceptions import (  # noqa: PLC0415
-            MantleNotClearedError,
-            WeavingUnlockMissing,
-        )
-        from world.magic.services import weave_thread  # noqa: PLC0415
+        """Delegate thread creation to ``WeaveThreadAction`` (telnet + web converge).
+
+        The action wraps the ``weave_thread`` service (still the source of truth)
+        so the web POST path runs through the same ``action.run()`` machinery as
+        telnet. Eligibility failures surface as a 400 with the action's message.
+        """
+        from actions.definitions.threads import WeaveThreadAction  # noqa: PLC0415
 
         # character_sheet_id was replaced by the CharacterSheet instance in
         # validate_character_sheet_id — pop it before building kwargs.
@@ -878,19 +879,17 @@ class ThreadSerializer(serializers.ModelSerializer):
         target = validated_data.pop("_target")
         validated_data.pop("target_id", None)
 
-        from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
-
-        try:
-            return weave_thread(
-                character_sheet=character_sheet,
-                target_kind=validated_data["target_kind"],
-                target=target,
-                resonance=validated_data["resonance"],
-                name=validated_data.get("name", ""),
-                description=validated_data.get("description", ""),
-            )
-        except (WeavingUnlockMissing, CovenantRoleNeverHeldError, MantleNotClearedError) as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        result = WeaveThreadAction().run(
+            actor=character_sheet.character,
+            target_kind=validated_data["target_kind"],
+            target=target,
+            resonance=validated_data["resonance"],
+            name=validated_data.get("name", ""),
+            description=validated_data.get("description", ""),
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.data["thread"]
 
 
 class RitualCheckConfigSerializer(serializers.ModelSerializer):
