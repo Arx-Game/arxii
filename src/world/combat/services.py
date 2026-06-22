@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from world.combat.models import ClashConfig, StrainConfig
     from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
+    from world.conditions.types import AppliedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import Technique, TechniqueDamageProfile
@@ -97,7 +98,6 @@ from world.combat.models import (
 )
 from world.combat.types import (
     ActionOutcome,
-    AppliedConditionResult,
     AvailableCombo,
     ClashRoundResult,
     CombatTechniqueResolution,

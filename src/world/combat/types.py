@@ -11,8 +11,6 @@ from world.vitals.types import DamageConsequenceResult
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from evennia.objects.models import ObjectDB
-
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
     from world.checks.types import CheckResult
@@ -25,7 +23,8 @@ if TYPE_CHECKING:
         CombatRoundAction,
         ComboDefinition,
     )
-    from world.conditions.models import ConditionTemplate, DamageType
+    from world.conditions.models import DamageType
+    from world.conditions.types import AppliedConditionResult
     from world.magic.models import Affinity
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
@@ -122,17 +121,6 @@ class RoundResolutionResult:
 def _empty_ledger() -> PowerLedger:
     """Return an empty PowerLedger suitable as a default for CombatTechniqueResolution."""
     return PowerLedger(entries=(), total=0)
-
-
-@dataclass(frozen=True)
-class AppliedConditionResult:
-    """Per-condition apply outcome from CombatTechniqueResolver._apply_conditions."""
-
-    target: ObjectDB
-    condition: ConditionTemplate
-    severity_applied: int
-    duration_rounds: int | None
-    success: bool
 
 
 @dataclass(frozen=True)

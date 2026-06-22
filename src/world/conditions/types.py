@@ -49,6 +49,17 @@ class BulkConditionApplication:
     stack_count: int = 1
 
 
+@dataclass(frozen=True)
+class AppliedConditionResult:
+    """Per-condition apply outcome from a technique cast (combat or standalone)."""
+
+    target: "ObjectDB"
+    condition: "ConditionTemplate"
+    severity_applied: int
+    duration_rounds: int | None
+    success: bool
+
+
 @dataclass
 class ApplyConditionResult:
     """Result of attempting to apply a condition."""

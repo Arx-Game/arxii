@@ -14,9 +14,8 @@ from django.test import TestCase
 from django.test.utils import tag
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.types import AppliedConditionResult
 from world.conditions.factories import ConditionTemplateFactory
-from world.conditions.types import ApplyConditionResult
+from world.conditions.types import AppliedConditionResult, ApplyConditionResult
 from world.magic.factories import (
     GiftFactory,
     TechniqueAppliedConditionFactory,

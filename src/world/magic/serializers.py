@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from actions.serializers import TargetSpecSerializer
 from world.character_sheets.models import CharacterSheet
 
 if TYPE_CHECKING:
@@ -227,7 +228,9 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "tier",
             "target_spec",
         ]
+        read_only_fields = ["target_type"]
 
+    @extend_schema_field(TargetSpecSerializer)
     def get_target_spec(self, obj: Technique) -> dict | None:
         """Derive and serialize the TargetSpec for this technique.
 
