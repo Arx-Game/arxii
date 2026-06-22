@@ -13,8 +13,9 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    WeavingCeremonyFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import PendingRitualEffect, Thread
 from world.traits.factories import TraitFactory
 
 
@@ -26,10 +27,13 @@ class CmdWeaveThreadTests(TestCase):
         cls.trait = TraitFactory()
         unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=cls.trait)
         CharacterThreadWeavingUnlockFactory(character=cls.sheet, unlock=unlock, xp_spent=100)
+        cls.weaving_ritual = WeavingCeremonyFactory()
 
     def setUp(self) -> None:
         self.character = self.sheet.character
         self.character.msg = MagicMock()
+        # Each test needs a fresh PendingRitualEffect since the action consumes it.
+        PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.weaving_ritual)
 
     def _run(self, args: str) -> None:
         cmd = CmdWeaveThread()
@@ -62,3 +66,21 @@ class CmdWeaveThreadTests(TestCase):
         self._run("resonance=Embers trait=99999")
         self.assertFalse(Thread.objects.filter(owner=self.sheet).exists())
         self.character.msg.assert_called()
+
+    def test_weave_fails_without_pending_effect(self) -> None:
+        PendingRitualEffect.objects.filter(
+            character=self.sheet, ritual=self.weaving_ritual
+        ).delete()
+        self._run(f"resonance=Embers trait={self.trait.pk}")
+        self.assertFalse(Thread.objects.filter(owner=self.sheet).exists())
+        self.character.msg.assert_called()
+
+    def test_resolve_trait_by_name(self) -> None:
+        self._run(f"resonance=Embers trait={self.trait.name}")
+        self.assertTrue(Thread.objects.filter(owner=self.sheet, resonance=self.resonance).exists())
+
+    def test_resolve_trait_by_pk(self) -> None:
+        # Re-create the effect because the name test above consumed it.
+        PendingRitualEffect.objects.get_or_create(character=self.sheet, ritual=self.weaving_ritual)
+        self._run(f"resonance=Embers trait={self.trait.pk}")
+        self.assertTrue(Thread.objects.filter(owner=self.sheet, resonance=self.resonance).exists())

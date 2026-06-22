@@ -895,10 +895,10 @@ class TestDistinctionsSection(TestCase):
         assert len(distinctions) == 2
 
     def test_distinction_entry_keys(self) -> None:
-        """Each distinction entry has id, name, rank, notes, visibility."""
+        """Each distinction entry has id, name, rank, notes, is_secret (#1334)."""
         distinctions = self._get_distinctions()
         for entry in distinctions:
-            assert set(entry.keys()) == {"id", "name", "rank", "notes", "visibility"}
+            assert set(entry.keys()) == {"id", "name", "rank", "notes", "is_secret"}
 
     def test_distinction_entry_values(self) -> None:
         """Distinction entries contain correct values from the models."""

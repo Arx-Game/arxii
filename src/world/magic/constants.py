@@ -127,6 +127,7 @@ class RitualExecutionKind(models.TextChoices):
     SERVICE = "SERVICE", "Service"
     FLOW = "FLOW", "Flow"
     SCENE_ACTION = "SCENE_ACTION", "Scene Action"
+    CEREMONY = "CEREMONY", "Ceremony"
 
 
 class ParticipationRule(models.TextChoices):

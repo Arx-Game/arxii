@@ -24,6 +24,7 @@ from actions.definitions.endorsements import (
     StylePresentationEndorseAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
+from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
     ActivatePermitAction,
@@ -43,6 +44,7 @@ from actions.definitions.movement import (
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
+from actions.definitions.pull import PullThreadAction
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
@@ -98,6 +100,8 @@ _ALL_ACTIONS: list[Action] = [
     MoveToPositionAction(),
     SetTheStageAction(),
     PerformRitualAction(),
+    ImbueAction(),
+    PullThreadAction(),
     WeaveThreadAction(),
     StartRoundAction(),
     JoinRoundAction(),

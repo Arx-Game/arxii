@@ -754,6 +754,7 @@
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
+  - pending_ritual_effects <- magic.PendingRitualEffect
   - founded_sanctums <- magic.SanctumDetails
   - sanctum_pending_payouts <- magic.SanctumPendingPayout
   - ritualsession_set <- magic.RitualSession
@@ -2247,6 +2248,7 @@
   - performances <- magic.AnimaRitualPerformance
   - known_by_records <- magic.CharacterRitualKnowledge
   - requirements <- magic.RitualComponentRequirement
+  - pending_effects <- magic.PendingRitualEffect
   - ritualsession_set <- magic.RitualSession
   - capstone_events <- relationships.RelationshipCapstone
   - installs_room_features <- room_features.RoomFeatureKindInstallRitual
@@ -2256,6 +2258,11 @@
   - ritual -> magic.Ritual [FK]
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### PendingRitualEffect
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - ritual -> magic.Ritual [FK]
 
 ### SanctumDetails
 **Foreign Keys:**
@@ -3690,6 +3697,7 @@
 
 ### Secret
 **Foreign Keys:**
+  - distinction -> distinctions.CharacterDistinction [OneToOne] (nullable)
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)

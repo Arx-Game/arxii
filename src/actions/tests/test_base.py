@@ -187,6 +187,8 @@ class ActionRegistryTests(TestCase):
             "restore_sense",
             "resolve_entry_flourish",
             "perform_ritual",
+            "imbue_thread",
+            "pull_thread",
             "weave_thread",
             "endorse_pose",
             "endorse_scene_entry",

@@ -56,6 +56,8 @@ from commands.evennia_overrides.items import (
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
+from commands.imbue import CmdImbue
+from commands.pull import CmdPull
 from commands.ritual import CmdRitual
 from commands.social.blocking import (
     CmdBlock,
@@ -66,6 +68,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.weave import CmdWeaveThread
 
 
@@ -78,7 +81,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
 
     key = "DefaultCharacter"
 
-    def at_cmdset_creation(self) -> None:  # noqa: PLR0915
+    def at_cmdset_creation(self) -> None:
         """
         Populates the cmdset
         """
@@ -102,56 +105,68 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         ):
             self.remove(cmdname)
 
-        self.add(CmdLook())
-        self.add(CmdGet())
-        self.add(CmdDrop())
-        self.add(CmdGive())
-        self.add(CmdWear())
-        self.add(CmdRemove())
-        self.add(CmdUndress())
-        self.add(CmdPut())
-        self.add(CmdWithdraw())
-        self.add(CmdUse())
-        self.add(CmdHome())
-        self.add(CmdInventory())
-        self.add(CmdSay())
-        self.add(CmdWhisper())
-        self.add(CmdPose())
-        self.add(CmdEmit())
-        self.add(CmdPemit())
-        self.add(CmdMutter())
-        self.add(CmdTabletalk())
-        self.add(CmdLock())
-        self.add(CmdUnlock())
-        self.add(CmdRitual())
-        self.add(CmdWeaveThread())
-        self.add(CmdEnter())
-        self.add(CmdFlourish())
-        self.add(CmdEndorse())
-        self.add(CmdPoses())
-        self.add(CmdJudgePresentation())
-        self.add(CmdIntimidate())
-        self.add(CmdAccept())
-        self.add(CmdDeny())
-        self.add(CmdPersuade())
-        self.add(CmdDeceive())
-        self.add(CmdFlirt())
-        self.add(CmdPerform())
-        self.add(CmdEntrance())
-        self.add(CmdRestoreSense())
-        self.add(CmdDig())
-        self.add(CmdOpen())
-        self.add(CmdLink())
-        self.add(CmdUnlink())
-        # #1278 — block/mute social controls (the telnet face of the persona menu).
-        self.add(CmdBlock())
-        self.add(CmdUnblock())
-        self.add(CmdShareBlock())
-        self.add(CmdMute())
-        self.add(CmdUnmute())
-        self.add(CmdBlockList())
-        # Combat commands
-        self.add(CmdDeclareTechnique())
+        # Each command is a thin telnet shell; register them by iterating a
+        # tuple so this method stays well under ruff's statement ceiling
+        # (PLR0915) as the command roster grows.
+        command_classes = (
+            CmdLook,
+            CmdGet,
+            CmdDrop,
+            CmdGive,
+            CmdWear,
+            CmdRemove,
+            CmdUndress,
+            CmdPut,
+            CmdWithdraw,
+            CmdUse,
+            CmdHome,
+            CmdInventory,
+            CmdSay,
+            CmdWhisper,
+            CmdPose,
+            CmdEmit,
+            CmdPemit,
+            CmdMutter,
+            CmdTabletalk,
+            CmdLock,
+            CmdUnlock,
+            CmdRitual,
+            CmdWeaveThread,
+            CmdImbue,
+            CmdPull,
+            CmdEnter,
+            CmdFlourish,
+            CmdEndorse,
+            CmdPoses,
+            CmdJudgePresentation,
+            CmdIntimidate,
+            CmdAccept,
+            CmdDeny,
+            CmdPersuade,
+            CmdDeceive,
+            CmdFlirt,
+            CmdPerform,
+            CmdEntrance,
+            CmdRestoreSense,
+            CmdDig,
+            CmdOpen,
+            CmdLink,
+            CmdUnlink,
+            # #1278 — block/mute social controls (the telnet face of the persona menu).
+            CmdBlock,
+            CmdUnblock,
+            CmdShareBlock,
+            CmdMute,
+            CmdUnmute,
+            CmdBlockList,
+            # Soul Tether lifecycle commands (#1343)
+            CmdTether,
+            CmdSineater,
+            # Combat commands
+            CmdDeclareTechnique,
+        )
+        for command_cls in command_classes:
+            self.add(command_cls())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

@@ -16315,9 +16315,10 @@ export interface components {
      * @description * `SERVICE` - Service
      *     * `FLOW` - Flow
      *     * `SCENE_ACTION` - Scene Action
+     *     * `CEREMONY` - Ceremony
      * @enum {string}
      */
-    ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION';
+    ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;

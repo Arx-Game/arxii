@@ -12,7 +12,7 @@ from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.character_sheets.models import Gender
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
-from world.distinctions.types import DistinctionVisibility
+from world.distinctions.services import mint_distinction_secret
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaDiscoveryFactory, PersonaFactory
@@ -239,22 +239,20 @@ class ProfileIdentityPrivacyTests(APITestCase):
     def _distinction_names(self, data) -> set[str]:
         return {d["name"] for d in data["distinctions"]}
 
-    def test_a_kind_private_distinction_is_hidden_from_a_non_owner(self) -> None:
-        # Most distinctions are public, but a scandalous/criminal kind is authored PRIVATE and
-        # must not out the player to a passer-by — while the owner still sees it.
+    def test_a_secret_distinction_is_relocated_off_the_public_list(self) -> None:
+        # A scandalous/criminal distinction is relocated into a Secret (#1334): it drops off the
+        # public distinctions list so it can't out a passer-by — while the owner / staff still see
+        # it. It surfaces for a learner on the secret tab, not here.
         sheet = self._character_sheet(AccountFactory(), fake_active=False)
         CharacterDistinctionFactory(
             character=sheet.character,
-            distinction=DistinctionFactory(
-                name="Renowned Duelist", default_visibility=DistinctionVisibility.PUBLIC
-            ),
+            distinction=DistinctionFactory(name="Renowned Duelist"),
         )
-        CharacterDistinctionFactory(
+        secret_cd = CharacterDistinctionFactory(
             character=sheet.character,
-            distinction=DistinctionFactory(
-                name="Wanted Criminal", default_visibility=DistinctionVisibility.PRIVATE
-            ),
+            distinction=DistinctionFactory(name="Wanted Criminal"),
         )
+        mint_distinction_secret(secret_cd)
         viewer = AccountFactory()
         self._character_sheet(viewer)
 
@@ -264,28 +262,26 @@ class ProfileIdentityPrivacyTests(APITestCase):
             "Wanted Criminal",
         }
 
-    def test_owner_sees_every_distinction_including_private(self) -> None:
+    def test_owner_sees_every_distinction_including_secret(self) -> None:
         owner = AccountFactory()
         sheet = self._character_sheet(owner, fake_active=False)
-        CharacterDistinctionFactory(
+        secret_cd = CharacterDistinctionFactory(
             character=sheet.character,
-            distinction=DistinctionFactory(
-                name="Wanted Criminal", default_visibility=DistinctionVisibility.PRIVATE
-            ),
+            distinction=DistinctionFactory(name="Wanted Criminal"),
         )
-        assert self._distinction_names(self._get(sheet, owner).data) == {"Wanted Criminal"}
+        mint_distinction_secret(secret_cd)
+        data = self._get(sheet, owner).data["distinctions"]
+        assert {(d["name"], d["is_secret"]) for d in data} == {("Wanted Criminal", True)}
 
-    def test_player_privacy_gate_overrides_a_public_default(self) -> None:
-        # The per-character gate: a player hides an otherwise-public distinction. The override
-        # wins over the kind default, so a non-owner no longer sees it.
+    def test_player_gate_relocates_an_otherwise_public_distinction(self) -> None:
+        # A player self-gating a normally-public distinction mints a Secret on that grant, so a
+        # non-owner no longer sees it on the public list.
         sheet = self._character_sheet(AccountFactory(), fake_active=False)
-        CharacterDistinctionFactory(
+        gated = CharacterDistinctionFactory(
             character=sheet.character,
-            distinction=DistinctionFactory(
-                name="Secret Affair", default_visibility=DistinctionVisibility.PUBLIC
-            ),
-            visibility_override=DistinctionVisibility.PRIVATE,
+            distinction=DistinctionFactory(name="Secret Affair"),
         )
+        mint_distinction_secret(gated)
         viewer = AccountFactory()
         self._character_sheet(viewer)
 
