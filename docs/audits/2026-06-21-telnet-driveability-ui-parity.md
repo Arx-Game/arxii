@@ -32,6 +32,16 @@ The docstring at `src/actions/base.py:25-26` — *"Commands (telnet) and the web
 both call `action.run()`"* — is therefore **misleading**: it is true only for REGISTRY
 actions. Magic and combat never touch `action.run()`. **Fix-on-sight target.**
 
+> **[ALREADY CORRECT — audit claim stale, verified #1337]** The `Action` class
+> docstring (`src/actions/base.py`, ~lines 27–33) **already** describes the real seam
+> and the three dispatch backends; it no longer says telnet calls `action.run()`
+> universally. It reads: *"`action.run()` is the entry point for the **REGISTRY** path
+> only. … the web frontend and telnet `DispatchCommand`s instead call
+> `dispatch_player_action()`, which routes by backend: REGISTRY → `action.run()`,
+> CHALLENGE → `resolve_challenge()`, COMBAT → `declare_action()`/`resolve_round()`.
+> Magic and combat actions never reach `action.run()` directly."* No fix is needed; the
+> "fix-on-sight" call above is itself stale. (History preserved; do not act on it.)
+
 ### There are three web dispatch families; telnet implements a slice of one
 
 | # | Web dispatch family | Entry | Reaches | Telnet today |
@@ -162,8 +172,12 @@ web. Minimal fix: a `CmdDeclareAction` plus a GM-only `start encounter` for test
    `weave_thread`/`spend_resonance_for_*` for threads) — not `action.run()`.
 3. **No magic/combat story is telnet-driveable today**, so none can yet serve as a telnet E2E
    regression. The service-layer pipeline tests remain the only proof for those loops.
-4. **The `action.run` docstring is stale** and should be corrected to describe the real
-   `dispatch_player_action` seam and the three dispatch families.
+4. ~~**The `action.run` docstring is stale** and should be corrected to describe the real
+   `dispatch_player_action` seam and the three dispatch families.~~
+   **[ALREADY CORRECT — audit claim stale, verified #1337]** The `Action` docstring
+   (`src/actions/base.py`, ~lines 27–33) already describes the REGISTRY-only role of
+   `action.run()` and the three backends routed by `dispatch_player_action()`. No
+   correction is needed.
 
 ## Recommended direction (for the build phase, not yet ratified)
 
@@ -179,10 +193,25 @@ web. Minimal fix: a `CmdDeclareAction` plus a GM-only `start encounter` for test
 
 ## Open questions (for design)
 
-- Should thread imbue/pull and similar direct-viewset mutations **become actions** (so
-  prerequisites/AP/enhancements/events apply uniformly), or stay plain service calls?
-- Should the **consent flow be reachable through `dispatch_player_action`** (a unified entry
-  for *all* player actions), or remain a distinct viewset that telnet shells call directly?
+- **RESOLVED (#1337):** Should thread imbue/pull and similar direct-viewset mutations
+  **become actions** (so prerequisites/AP/enhancements/events apply uniformly), or stay
+  plain service calls? **Answer:** they become **real `Action`s on `action.run()`** (the
+  #1331 ritual template). The classification rule: *a player-facing state mutation with
+  costs/prerequisites becomes an `Action`; GM/system-only surfaces (e.g. `resolve_round`,
+  encounter setup) stay raw services with no player UI.* Worked example: `WeaveThreadAction`
+  (`src/actions/definitions/threads.py`); `ThreadSerializer.create()` now calls
+  `action.run()` so web + telnet converge (`CmdWeaveThread`, `src/commands/weave.py`). See
+  Family 3 in [unified-player-action.md](../architecture/unified-player-action.md#10-telnet-convergence-convention--three-player-action-families-ratified-1337).
+- **RESOLVED (#1337):** Should the **consent flow be reachable through
+  `dispatch_player_action`** (a unified entry for *all* player actions), or remain a distinct
+  viewset that telnet shells call directly? **Answer:** it stays at the **consent SERVICE
+  seam** — telnet's `ConsentRequestCommand`/`CmdIntimidate` + generic `CmdAccept`/`CmdDeny`
+  (`src/commands/consent.py`) call the same `create_action_request()` /
+  `respond_to_action_request()` services the `SceneActionRequestViewSet` calls — **not**
+  `dispatch_player_action()`/`action.run()`. Consent is an inherently two-party async
+  protocol whose response half can't be a single dispatch call, and "needs consent" is a
+  property of `ActionTemplate.consent_category`, not the Action. See Family 2 in
+  [unified-player-action.md](../architecture/unified-player-action.md#10-telnet-convergence-convention--three-player-action-families-ratified-1337).
 - For combat/magic seed prerequisites, which belong in a shared **combat seed module** so the
   E2E is writable without bespoke per-test wiring?
 

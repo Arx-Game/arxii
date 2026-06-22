@@ -1277,6 +1277,10 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
 - **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Telnet convergence convention (ratified #1337):** the three player-action dispatch
+  families and the seam each telnet command must converge on with the web — Family 1
+  `dispatch_player_action()`, Family 2 consent services, Family 3 a real `Action` on
+  `action.run()`. See [unified-player-action.md §10](../architecture/unified-player-action.md#10-telnet-convergence-convention--three-player-action-families-ratified-1337).
 - **Source:** `src/actions/`
 
 ### Flows
@@ -1309,6 +1313,10 @@ Thin telnet compatibility layer that delegates to Actions.
 - **Pattern:** Telnet text → `command.func()` → `resolve_action_args()` → `action.run()`. Web bypasses commands entirely.
 - **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates for room state.
 - **Non-action commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands
+- **Dispatch families (#1337):** `DispatchCommand` (Family 1 → `dispatch_player_action()`),
+  consent commands `ConsentRequestCommand`/`CmdAccept`/`CmdDeny` (Family 2 → consent
+  services), `CmdWeaveThread` (Family 3 → `WeaveThreadAction.run()`). See
+  [unified-player-action.md §10](../architecture/unified-player-action.md#10-telnet-convergence-convention--three-player-action-families-ratified-1337).
 - **Source:** `src/commands/`
 - **Details:** [commands.md](commands.md)
 ### Behaviors

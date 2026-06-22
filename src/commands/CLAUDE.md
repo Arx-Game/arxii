@@ -51,6 +51,10 @@ actions, backends, and service functions.
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE rituals
+- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
+  parses `weave resonance=<name> trait=<id> [name=<...>]` (TRAIT anchor only — the
+  reference grammar; other anchor kinds are extended by the thread-weaving journey
+  issue). Proves the direct-viewset→Action telnet pattern (#1337)
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

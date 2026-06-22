@@ -56,6 +56,7 @@ from actions.definitions.social import (
     persuade,
     restore_sense,
 )
+from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
 
@@ -88,6 +89,7 @@ _ALL_ACTIONS: list[Action] = [
     MoveToPositionAction(),
     SetTheStageAction(),
     PerformRitualAction(),
+    WeaveThreadAction(),
     StartRoundAction(),
     JoinRoundAction(),
     LeaveRoundAction(),
