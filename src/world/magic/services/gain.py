@@ -226,8 +226,8 @@ def create_pose_endorsement(  # noqa: C901
     1. Interaction author (persona field) has a character sheet
     2. Endorser != endorsee (no self-endorsement)
     3. Endorser's account != endorsee's account (no alt-endorsement)
-    4. Interaction is not a whisper
-    5. Interaction is not VERY_PRIVATE
+    4. WHISPER: endorser must be the direct recipient (InteractionReceiver row)
+    5. VERY_PRIVATE: endorser must have SceneParticipation (allowed by participants)
     6. Endorser was present (scene participation OR interaction receiver)
     7. Endorsee has claimed this resonance
     8. No duplicate (endorser × interaction already endorsed)
@@ -334,9 +334,12 @@ def get_endorseable_poses_in_scene(
 ) -> list[tuple[int, Interaction]]:
     """Return (1-based absolute position, Interaction) pairs visible to the endorser.
 
-    Position numbering is stable across all of the endorsee's interactions in the
-    scene (including invisible ones), so a pose's number never shifts when private
-    poses exist earlier in the timeline.
+    Only POSE and WHISPER interactions are returned — SAY and EMIT interactions
+    are not endorseable as poses.
+
+    Position numbering is stable across all of the endorsee's POSE and WHISPER
+    interactions in the scene (including invisible ones), so a pose's number never
+    shifts when private poses exist earlier in the timeline.
 
     Visibility rules:
     - WHISPER: only visible if the endorser has an InteractionReceiver row.
@@ -354,6 +357,7 @@ def get_endorseable_poses_in_scene(
         Interaction.objects.filter(
             scene=scene,
             persona__character_sheet=endorsee_sheet,
+            mode__in=[InteractionMode.POSE, InteractionMode.WHISPER],
         )
         .select_related("persona")
         .order_by("timestamp", "pk")

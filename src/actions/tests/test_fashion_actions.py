@@ -150,6 +150,7 @@ class JudgePresentationActionTests(TestCase):
                 endorser_sheet=self.judge_sheet,
             ).exists()
         )
+        self.assertIsNotNone(result.data.get("endorsement"))
 
     def test_missing_presentation_id_returns_failure(self) -> None:
         """No presentation_id kwarg → friendly failure."""
