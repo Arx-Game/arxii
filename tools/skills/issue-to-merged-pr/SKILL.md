@@ -156,6 +156,13 @@ ledger as a section of the spec in the issue body.** A spec without a
 code-verified ledger is not finalized. (This codifies CLAUDE.md's
 "Anti-Reinvention Pass" into the workflow.)
 
+**This pass covers any "deferred follow-ups" the spec lists, too** — a deferral
+is a proposed future surface, and listing it as "later" is not a waiver. Verify
+each deferral's premise against code; drop it if it's already built/handled, and
+write design-open items as `needs-design` questions rather than asserted work.
+Deferrals filed unverified from a spec's deferred list are the exact thing that
+later gets closed as should-not-do (#1357/#1358).
+
 Then hand off for **spec review** and exit:
 
 1. `gh issue edit <N> --remove-label status:spec-draft --add-label status:spec-review`.
@@ -230,7 +237,20 @@ On conflict (exit 4):
 Compose the PR body's substitution values (summary, follow-ups, sync
 summary). For each deferred follow-up identified during implementation,
 call `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
-opening the PR) and collect the issue numbers. Then:
+opening the PR) and collect the issue numbers.
+
+**Before filing each follow-up, run the `verify-against-code` pass on its
+premise** (skill at `tools/skills/verify-against-code/`). A deferral is a
+proposed future surface, not exempt from the anti-reinvention pass just because
+it's "later": grep its core claim and confirm the thing it says is missing is
+genuinely `[ABSENT]` (not already `[BUILT & WIRED]` or handled by another
+surface). If the premise doesn't hold, **don't file it** — the issue would only
+die at pickup as should-not-do. If the item is really an open design choice
+rather than a code-verified scope, file it as a `needs-design` **question** that
+states the verified mechanism and labels what exists, not as a `feature`/`chore`
+that reads as ready-to-build. (This is the lesson of #1357/#1358, both filed
+unverified from a spec's deferred list and later closed as should-not-do; the
+genuine question became #1363.) Then:
 
 ```bash
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
