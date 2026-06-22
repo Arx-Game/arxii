@@ -1,9 +1,11 @@
 """Telnet command for performing magical rituals.
 
 Thin telnet face of ``actions.definitions.ritual.PerformRitualAction``. Parses
-``ritual <name> [key=value ...]`` into the action's kwargs. Scope: SERVICE-kind
-rituals (Imbuing, Atonement) — the only kind a telnet player drives directly.
-The web path uses the same action via ``RitualPerformView``.
+``ritual <name> [key=value ...]`` into the action's kwargs. Supports SERVICE-kind
+rituals (Imbuing, Atonement) and CEREMONY-kind rituals (Rite of Weaving, Rite of
+Imbuing). CEREMONY rituals create a ``PendingRitualEffect`` consumed by the
+appropriate finisher command (``weave``, ``imbue``). The web path uses the same
+action via ``RitualPerformView``.
 """
 
 from __future__ import annotations
@@ -50,7 +52,10 @@ class CmdRitual(ArxCommand):
 
         ritual = Ritual.objects.filter(
             name__iexact=name,
-            execution_kind=RitualExecutionKind.SERVICE,
+            execution_kind__in=[
+                RitualExecutionKind.SERVICE,
+                RitualExecutionKind.CEREMONY,
+            ],
         ).first()
         if ritual is None:
             msg = f"You don't know how to perform '{name}'."

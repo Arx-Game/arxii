@@ -78,7 +78,9 @@ class PerformRitualAction(Action):
                 matched_pks = self._validate_components(ritual, components)
                 self._consume(matched_pks)
 
-                if ritual.execution_kind == RitualExecutionKind.SERVICE:
+                if ritual.execution_kind == RitualExecutionKind.CEREMONY:
+                    result = self._begin_ceremony(ritual, sheet)
+                elif ritual.execution_kind == RitualExecutionKind.SERVICE:
                     result = self._dispatch_service(ritual, sheet, kwargs)
                 else:
                     self._dispatch_flow(ritual, sheet, kwargs)
@@ -92,9 +94,14 @@ class PerformRitualAction(Action):
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        msg = (
+            f"You begin {ritual.name}."
+            if ritual.execution_kind == RitualExecutionKind.CEREMONY
+            else f"You perform {ritual.name}."
+        )
         return ActionResult(
             success=True,
-            message=f"You perform {ritual.name}.",
+            message=msg,
             data={"execution_kind": ritual.execution_kind, "result": result},
         )
 
@@ -141,6 +148,21 @@ class PerformRitualAction(Action):
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)
         return func(character_sheet=sheet, **kwargs)
+
+    def _begin_ceremony(self, ritual: Any, sheet: Any) -> Any:
+        """Create a PendingRitualEffect for a CEREMONY-kind ritual.
+
+        Raises RitualComponentError (with a dynamic user_message) if a pending
+        effect already exists — caught by the caller's except block.
+        """
+        from world.magic.exceptions import RitualComponentError  # noqa: PLC0415
+        from world.magic.models import PendingRitualEffect  # noqa: PLC0415
+
+        if PendingRitualEffect.objects.filter(character=sheet, ritual=ritual).exists():
+            exc = RitualComponentError()
+            exc.user_message = f"A {ritual.name} is already in progress."
+            raise exc
+        return PendingRitualEffect.objects.create(character=sheet, ritual=ritual)
 
     def _dispatch_flow(self, ritual: Any, sheet: Any, kwargs: dict[str, Any]) -> None:
         """Execute the ritual's FlowDefinition via a manual FlowExecution run."""

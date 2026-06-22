@@ -29,6 +29,11 @@ class WeaveThreadAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
+    def get_prerequisites(self) -> list:
+        from actions.prerequisites import PendingRitualEffectPrerequisite  # noqa: PLC0415
+
+        return [PendingRitualEffectPrerequisite("Rite of Weaving")]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -59,6 +64,12 @@ class WeaveThreadAction(Action):
             MantleNotClearedError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
+
+        from world.magic.models import PendingRitualEffect  # noqa: PLC0415
+
+        PendingRitualEffect.objects.filter(
+            character=sheet, ritual__name__iexact="Rite of Weaving"
+        ).delete()
 
         return ActionResult(
             success=True,

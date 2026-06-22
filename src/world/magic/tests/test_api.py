@@ -30,8 +30,9 @@ from world.magic.factories import (
     ThreadPullEffectFactory,
     ThreadWeavingTeachingOfferFactory,
     ThreadWeavingUnlockFactory,
+    WeavingCeremonyFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import PendingRitualEffect, Thread
 from world.roster.factories import RosterTenureFactory
 from world.traits.factories import TraitFactory
 
@@ -72,6 +73,22 @@ class ThreadViewSetTests(APITestCase):
             resonance=cls.resonance,
             target_trait=cls.trait,
             level=5,
+        )
+        # WeaveThreadAction requires PendingRitualEffect for Rite of Weaving.
+        # Seed the canonical ceremony ritual so setUp can create per-test effects.
+        cls.weaving_ritual = WeavingCeremonyFactory()
+
+    def setUp(self) -> None:
+        # Each test that POSTs /threads/ (creating a Thread) needs a fresh
+        # PendingRitualEffect — it's consumed on the first successful weave.
+        # Idempotent: delete any leftover from a prior test before creating.
+        PendingRitualEffect.objects.filter(
+            character=self.sheet,
+            ritual=self.weaving_ritual,
+        ).delete()
+        PendingRitualEffect.objects.create(
+            character=self.sheet,
+            ritual=self.weaving_ritual,
         )
 
     def test_list_requires_auth(self) -> None:
@@ -276,6 +293,9 @@ class ThreadViewSetTests(APITestCase):
         role = CovenantRoleFactory()
         CharacterCovenantRoleFactory(character_sheet=sheet, covenant_role=role)
 
+        # WeaveThreadAction requires a pending Rite of Weaving effect.
+        PendingRitualEffect.objects.create(character=sheet, ritual=self.weaving_ritual)
+
         self.client.force_authenticate(user=account)
         response = self.client.post(
             reverse("magic:thread-list"),
@@ -374,6 +394,9 @@ class ThreadViewSetTests(APITestCase):
         mantle = MantleFactory()
         grant_mantle_clearance(sheet, mantle, 1)
         sheet.character.mantle_clearances.invalidate()
+
+        # WeaveThreadAction requires a pending Rite of Weaving effect.
+        PendingRitualEffect.objects.create(character=sheet, ritual=self.weaving_ritual)
 
         self.client.force_authenticate(user=account)
         response = self.client.post(
@@ -713,66 +736,66 @@ class RitualPerformViewTests(APITestCase):
             [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
         )
 
-    def test_imbuing_dispatch_succeeds(self) -> None:
+    def test_imbuing_ceremony_dispatch_creates_pending_effect(self) -> None:
+        """Rite of Imbuing is CEREMONY-kind: POST creates a PendingRitualEffect."""
         self.client.force_authenticate(user=self.account)
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
+                "kwargs": {},
                 "components": [],
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(response.data["ritual_id"], self.ritual.pk)
-        self.assertIn("result", response.data)
-        self.thread.refresh_from_db()
-        self.assertGreater(self.thread.developed_points + self.thread.level, 0)
+        self.assertEqual(response.data["execution_kind"], "CEREMONY")
+        self.assertNotIn("result", response.data)
+        self.assertTrue(
+            PendingRitualEffect.objects.filter(
+                character=self.sheet,
+                ritual=self.ritual,
+            ).exists(),
+            "A PendingRitualEffect must be created for a CEREMONY-kind ritual.",
+        )
 
-    def test_imbuing_requires_thread_id(self) -> None:
+    def test_imbuing_ceremony_duplicate_returns_400(self) -> None:
+        """A second Rite of Imbuing before the first is consumed returns 400."""
+        # Create a pending effect first (as if ceremony was already done once).
+        PendingRitualEffect.objects.create(character=self.sheet, ritual=self.ritual)
         self.client.force_authenticate(user=self.account)
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {"amount": 5},
-                "components": [],
+                "kwargs": {},
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_imbuing_rejects_foreign_thread(self) -> None:
-        other_sheet = CharacterSheetFactory(character=CharacterFactory(db_key="notmine"))
-        foreign = ThreadFactory(
-            owner=other_sheet,
-            resonance=self.resonance,
-            target_trait=TraitFactory(),
-        )
-        self.client.force_authenticate(user=self.account)
-        response = self.client.post(
-            reverse("magic:ritual-perform"),
-            {
-                "character_sheet_id": self.sheet.pk,
-                "ritual_id": self.ritual.pk,
-                "kwargs": {"thread_id": foreign.pk, "amount": 5},
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    def test_action_failure_returns_400_not_500(self) -> None:
+        """An ACTION-level failure returns 400, not 500.
 
-    def test_typed_exception_returns_user_message(self) -> None:
-        # amount < 0 → InvalidImbueAmount.user_message on HTTP 400.
+        Verify the HTTP contract: when PerformRitualAction returns a failure result
+        (here: duplicate CEREMONY before the first is consumed), the view responds
+        with 400 + a detail message, never 500.
+        """
+        # Pre-create the pending effect so the second attempt fails.
+        PendingRitualEffect.objects.get_or_create(
+            character=self.sheet,
+            ritual=self.ritual,
+        )
         self.client.force_authenticate(user=self.account)
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
                 "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
-                "kwargs": {"thread_id": self.thread.pk, "amount": -1},
+                "kwargs": {},
             },
             format="json",
         )

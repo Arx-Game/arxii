@@ -112,6 +112,7 @@ from world.magic.models.resonance_environment import AffinityInteraction, Resona
 from world.magic.models.ritual_check_config import RitualCheckConfig
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
+    PendingRitualEffect,
     Ritual,
     RitualComponentRequirement,
 )
@@ -245,6 +246,8 @@ __all__ = [
     "PendingAudereOffer",
     # entry-flourish offer (#1140, re-exported from world.magic.entry_flourish)
     "PendingEntryFlourishOffer",
+    # CEREMONY-kind ritual in-progress effect (#1342)
+    "PendingRitualEffect",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
     # endorsement (Spec C §2.2)
