@@ -54,6 +54,7 @@ from actions.definitions.social import (
     intimidate,
     perform,
     persuade,
+    resolve_entry_flourish,
     restore_sense,
 )
 from actions.definitions.threads import WeaveThreadAction
@@ -110,6 +111,7 @@ _ALL_ACTIONS: list[Action] = [
     perform,
     entrance,
     restore_sense,
+    resolve_entry_flourish,
 ]
 
 # Lookup by key
