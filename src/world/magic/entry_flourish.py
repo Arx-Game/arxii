@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.magic.models import Resonance
     from world.scenes.models import Scene
 
 
@@ -85,12 +86,13 @@ class EntryFlourishResult:
     scene_id: int | None
 
 
-def resolve_entry_flourish_offer(offer_id: int, *, resonance_id: int) -> EntryFlourishResult:
-    """Two-phase resolve: staleness re-check outside the txn; locked grant inside.
+def resolve_entry_flourish_offer(
+    offer: PendingEntryFlourishOffer, *, resonance: Resonance
+) -> EntryFlourishResult:
+    """Two-phase resolve: staleness check outside the txn; locked grant inside.
 
-    Phase 1 (outside transaction): fetch offer, validate resonance is claimed by the sheet.
-    If offer missing → EntryFlourishOfferNotFoundError.
-    If resonance unclaimed → delete offer + EntryFlourishOfferStaleError.
+    Phase 1 (outside transaction): validate resonance is claimed by the sheet.
+    If unclaimed → delete offer + EntryFlourishOfferStaleError.
 
     Phase 2 (inside transaction.atomic with select_for_update): re-fetch offer,
     call create_entry_flourish, delete locked offer row, return EntryFlourishResult.
@@ -99,26 +101,17 @@ def resolve_entry_flourish_offer(offer_id: int, *, resonance_id: int) -> EntryFl
         EntryFlourishOfferNotFoundError,
         EntryFlourishOfferStaleError,
     )
-    from world.magic.models import CharacterResonance, Resonance  # noqa: PLC0415
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
     from world.magic.services.gain import create_entry_flourish  # noqa: PLC0415
 
-    offer = PendingEntryFlourishOffer.objects.filter(pk=offer_id).first()
-    if offer is None:
-        raise EntryFlourishOfferNotFoundError
     sheet = offer.character_sheet
     scene = offer.scene
-    resonance = Resonance.objects.filter(pk=resonance_id).first()
-    if (
-        resonance is None
-        or not CharacterResonance.objects.filter(
-            character_sheet=sheet, resonance=resonance
-        ).exists()
-    ):
+    if not CharacterResonance.objects.filter(character_sheet=sheet, resonance=resonance).exists():
         offer.delete()
         raise EntryFlourishOfferStaleError
 
     with transaction.atomic():
-        locked = PendingEntryFlourishOffer.objects.select_for_update().filter(pk=offer_id).first()
+        locked = PendingEntryFlourishOffer.objects.select_for_update().filter(pk=offer.pk).first()
         if locked is None:
             raise EntryFlourishOfferNotFoundError
         record = create_entry_flourish(sheet, resonance, scene=scene)

@@ -185,6 +185,7 @@ class ActionRegistryTests(TestCase):
             "yield",
             "acknowledge_risk",
             "restore_sense",
+            "resolve_entry_flourish",
             "perform_ritual",
             "weave_thread",
         }

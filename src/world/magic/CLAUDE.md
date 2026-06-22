@@ -581,7 +581,7 @@ the complementary half of the entrance moment).
 **Services:**
 - `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) — called on
   Entrance success; skips if already flourished this scene or no claimed resonances.
-- `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult`
+- `resolve_entry_flourish_offer(offer: PendingEntryFlourishOffer, *, resonance: Resonance) -> EntryFlourishResult`
   (`entry_flourish.py`) — two-phase, mirrors `resolve_audere_offer`.
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None)` (`services/gain.py`) —
   checks claimed-resonance, creates `EntryFlourishRecord`, writes
@@ -590,13 +590,23 @@ the complementary half of the entrance moment).
 
 **Action wiring (`actions/definitions/social.py`):**
 - `EntranceAction` calls `maybe_create_entry_flourish_offer` on success; gated by
-  `ActionTemplate.grants_entry_flourish`.
+  `ActionTemplate.grants_entry_flourish`. When an offer is created, the actor receives
+  a telnet prompt: `"Use |wflourish <resonance>|n to declare your entrance."`
+- `ResolveFlourishOfferAction` (key `"resolve_entry_flourish"`) — telnet + web converge
+  here; calls `resolve_entry_flourish_offer(offer, resonance=resonance)` and stores the
+  result under `ActionResult.data["entry_flourish_result"]`.
+
+**Telnet commands (`commands/social/entrance_flourish.py`):**
+- `CmdEnter` — thin telnet wrapper that dispatches `EntranceAction`.
+- `CmdFlourish` — thin telnet wrapper that resolves a pending offer via
+  `ResolveFlourishOfferAction`.
 
 **REST endpoints (`/api/magic/entry-flourish/`):**
 - `GET /api/magic/entry-flourish/pending/` + `GET .../pending/<id>/` —
   `PendingEntryFlourishOfferViewSet` (account-scoped, read-only).
 - `POST /api/magic/entry-flourish/respond/` — `EntryFlourishRespondView`; body
-  `{offer_id, resonance_id}`; picker data reuses `CharacterResonanceViewSet`.
+  `{offer_id, resonance_id}`; dispatches through `ResolveFlourishOfferAction` (same
+  seam as the telnet `flourish` command); picker data reuses `CharacterResonanceViewSet`.
 
 **Exceptions (`exceptions.py`):**
 - `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError`,

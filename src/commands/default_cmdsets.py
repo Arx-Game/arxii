@@ -63,6 +63,7 @@ from commands.social.blocking import (
     CmdUnblock,
     CmdUnmute,
 )
+from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from commands.weave import CmdWeaveThread
 
 
@@ -122,6 +123,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdUnlock())
         self.add(CmdRitual())
         self.add(CmdWeaveThread())
+        self.add(CmdEnter())
+        self.add(CmdFlourish())
         self.add(CmdIntimidate())
         self.add(CmdAccept())
         self.add(CmdDeny())
