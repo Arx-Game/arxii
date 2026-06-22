@@ -21,7 +21,7 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.combat import CmdDeclareTechnique
-from commands.consent import CmdIntimidate
+from commands.consent import CmdAccept, CmdDeny, CmdIntimidate
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
@@ -113,6 +113,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdRitual())
         self.add(CmdWeaveThread())
         self.add(CmdIntimidate())
+        self.add(CmdAccept())
+        self.add(CmdDeny())
         self.add(CmdDig())
         self.add(CmdOpen())
         self.add(CmdLink())

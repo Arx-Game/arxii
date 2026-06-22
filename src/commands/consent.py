@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_models import SceneActionRequest
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
@@ -119,3 +121,85 @@ class CmdIntimidate(ConsentRequestCommand):
 
     key = "intimidate"
     action_key = "intimidate"
+
+
+_NO_PENDING_MSG = "You have no pending action to respond to."
+
+
+class _RespondCommand(ArxCommand):
+    """Base for telnet commands that answer a pending consent request.
+
+    Subclasses set ``decision`` (a ``ConsentDecision`` value). Resolves the
+    caller's pending ``SceneActionRequest`` — by id when ``self.args`` is a
+    digit, else the most-recent PENDING request targeting the caller's active
+    persona — then forwards the decision to ``respond_to_action_request``, the
+    SAME service the consent viewset calls. All consent + resolution logic stays
+    in the service; this is a thin shell.
+
+    Usage:
+        <key> [request_id]
+    """
+
+    decision: ClassVar[str] = ""
+    locks = "cmd:all()"
+    action = None
+
+    def func(self) -> None:
+        from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
+
+        request = self._resolve_pending_request()
+        if request is None:
+            self.msg(_NO_PENDING_MSG)
+            return
+        respond_to_action_request(action_request=request, decision=self.decision)
+        verb = "accept" if self.decision == ConsentDecision.ACCEPT else "deny"
+        self.msg(f"You {verb} the action against you.")
+
+    def _resolve_pending_request(self) -> SceneActionRequest | None:
+        """Most-recent PENDING request targeting the caller (or by id arg).
+
+        Resolves the caller's active persona, then the latest PENDING
+        ``SceneActionRequest`` whose ``target_persona`` is that persona. When
+        ``self.args`` is a digit, looks up by pk (still constrained to the
+        caller as target). Returns None when nothing matches.
+        """
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return None
+        try:
+            persona = active_persona_for_sheet(sheet)
+        except ObjectDoesNotExist:
+            return None
+        qs = SceneActionRequest.objects.filter(
+            target_persona=persona, status=ActionRequestStatus.PENDING
+        )
+        args = self.args.strip() if self.args else ""
+        if args.isdigit():
+            return qs.filter(pk=int(args)).first()
+        return qs.order_by("-id").first()
+
+
+class CmdAccept(_RespondCommand):
+    """Accept a pending action targeting you.
+
+    Usage:
+        accept [request_id]
+    """
+
+    key = "accept"
+    decision = ConsentDecision.ACCEPT
+
+
+class CmdDeny(_RespondCommand):
+    """Deny a pending action targeting you.
+
+    Usage:
+        deny [request_id]
+    """
+
+    key = "deny"
+    decision = ConsentDecision.DENY

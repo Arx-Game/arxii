@@ -10,16 +10,16 @@ wiring) and assert the row lands in PENDING with the right personas.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from commands.consent import CmdIntimidate, ConsentRequestCommand
+from commands.consent import CmdAccept, CmdDeny, CmdIntimidate, ConsentRequestCommand
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import SceneActionRequestFactory, SceneFactory
 
 
 class CmdIntimidateTests(TestCase):
@@ -107,3 +107,99 @@ class CmdIntimidateTests(TestCase):
         """The base reads ``action_key`` from the subclass — no hardcoding."""
         self.assertEqual(CmdIntimidate.action_key, "intimidate")
         self.assertTrue(issubclass(CmdIntimidate, ConsentRequestCommand))
+
+
+class RespondCommandTests(TestCase):
+    """Defender runs ``accept`` / ``deny``; the pending request is resolved.
+
+    These exercise the thin shell's two jobs — resolving the caller's pending
+    ``SceneActionRequest`` and forwarding the right ``ConsentDecision`` to
+    ``respond_to_action_request`` (the SAME service the consent viewset calls).
+    The deny path lands DENIED via the real service; the accept path's full
+    resolution pipeline is the service's own concern (covered in scenes tests),
+    so here we assert the command calls the service with ACCEPT.
+    """
+
+    def setUp(self) -> None:
+        # DbHolder trap: Evennia ObjectDB fixtures must be built in setUp.
+        self.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.initiator_char = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.target_char = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.initiator_sheet = CharacterSheetFactory(character=self.initiator_char)
+        self.target_sheet = CharacterSheetFactory(character=self.target_char)
+        self.initiator_persona = self.initiator_sheet.primary_persona
+        self.target_persona = self.target_sheet.primary_persona
+        self.scene = SceneFactory(is_active=True, location=self.room)
+
+    def _make_pending(self) -> SceneActionRequest:
+        return SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator_persona,
+            target_persona=self.target_persona,
+            status=ActionRequestStatus.PENDING,
+        )
+
+    def _run(self, cmd_cls: type, caller: object, args: str = "") -> object:
+        cmd = cmd_cls()
+        cmd.caller = caller
+        cmd.args = args
+        cmd.raw_string = f"{cmd_cls.key} {args}".strip()
+        caller.msg = MagicMock()
+        cmd.func()
+        return cmd
+
+    def test_deny_marks_request_denied(self) -> None:
+        req = self._make_pending()
+
+        cmd = self._run(CmdDeny, self.target_char)
+
+        req.refresh_from_db()
+        self.assertEqual(req.status, ActionRequestStatus.DENIED)
+        cmd.caller.msg.assert_called()
+
+    def test_accept_forwards_accept_decision_for_pending_request(self) -> None:
+        req = self._make_pending()
+
+        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+            cmd = self._run(CmdAccept, self.target_char)
+
+        respond.assert_called_once()
+        kwargs = respond.call_args.kwargs
+        self.assertEqual(kwargs["action_request"], req)
+        self.assertEqual(kwargs["decision"], ConsentDecision.ACCEPT)
+        cmd.caller.msg.assert_called()
+
+    def test_accept_by_id_arg_resolves_that_request(self) -> None:
+        req = self._make_pending()
+
+        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+            self._run(CmdAccept, self.target_char, args=str(req.pk))
+
+        self.assertEqual(respond.call_args.kwargs["action_request"], req)
+
+    def test_no_pending_request_reports_cleanly(self) -> None:
+        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+            cmd = self._run(CmdAccept, self.target_char)
+
+        respond.assert_not_called()
+        cmd.caller.msg.assert_called()
+
+    def test_respond_uses_most_recent_pending_for_caller(self) -> None:
+        self._make_pending()
+        newest = self._make_pending()
+
+        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+            self._run(CmdAccept, self.target_char)
+
+        self.assertEqual(respond.call_args.kwargs["action_request"], newest)
