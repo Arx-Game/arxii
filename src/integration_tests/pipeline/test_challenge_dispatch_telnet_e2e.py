@@ -18,6 +18,7 @@ materialized view in a non-combat context, so no @tag("postgres") is needed.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -69,7 +70,7 @@ class _ChallengeProbeCommand(DispatchCommand):
     def resolve_action_ref(self) -> ActionRef:
         return self._ref
 
-    def resolve_action_args(self) -> dict:
+    def resolve_action_args(self) -> dict[str, Any]:
         return {}
 
 
