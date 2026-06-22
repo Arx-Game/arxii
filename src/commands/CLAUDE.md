@@ -49,7 +49,7 @@ actions, backends, and service functions.
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
-- **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
+- **`ritual.py`**: `CmdRitual` — telnet face of
   `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE rituals
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<id> [name=<...>]` (TRAIT anchor only — the

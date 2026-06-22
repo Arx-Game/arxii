@@ -213,7 +213,6 @@ class AllSocialCommandsRegisteredTests(TestCase):
             CmdDeceive,
             CmdEntrance,
             CmdFlirt,
-            CmdIntimidate,
             CmdPerform,
             CmdPersuade,
             CmdRestoreSense,
