@@ -78,7 +78,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
 
     key = "DefaultCharacter"
 
-    def at_cmdset_creation(self) -> None:
+    def at_cmdset_creation(self) -> None:  # noqa: PLR0915
         """
         Populates the cmdset
         """
