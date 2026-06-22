@@ -33,6 +33,7 @@ from commands.consent import (
     CmdRestoreSense,
 )
 from commands.door import CmdLock, CmdUnlock
+from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
     CmdEmit,
@@ -125,6 +126,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdWeaveThread())
         self.add(CmdEnter())
         self.add(CmdFlourish())
+        self.add(CmdEndorse())
+        self.add(CmdPoses())
         self.add(CmdIntimidate())
         self.add(CmdAccept())
         self.add(CmdDeny())
