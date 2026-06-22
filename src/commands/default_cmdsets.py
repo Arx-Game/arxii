@@ -52,6 +52,7 @@ from commands.social.blocking import (
     CmdUnblock,
     CmdUnmute,
 )
+from commands.weave import CmdWeaveThread
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -109,6 +110,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdLock())
         self.add(CmdUnlock())
         self.add(CmdRitual())
+        self.add(CmdWeaveThread())
         self.add(CmdDig())
         self.add(CmdOpen())
         self.add(CmdLink())
