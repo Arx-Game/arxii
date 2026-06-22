@@ -5,6 +5,7 @@ from django.db.models import Count
 
 from world.relationships.models import (
     CharacterRelationship,
+    GrievanceOption,
     HybridRelationshipType,
     HybridRequirement,
     RelationshipCapstone,
@@ -18,6 +19,15 @@ from world.relationships.models import (
 )
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
+
+
+@admin.register(GrievanceOption)
+class GrievanceOptionAdmin(admin.ModelAdmin):
+    list_display = ["label", "track", "points", "display_order", "is_active"]
+    list_editable = ["points", "display_order", "is_active"]
+    list_filter = ["is_active", "track"]
+    search_fields = ["label"]
+    ordering = ["display_order", "label"]
 
 
 @admin.register(RelationshipCondition)

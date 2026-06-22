@@ -6,6 +6,7 @@ from factory.django import DjangoModelFactory
 from world.relationships.constants import TrackSign
 from world.relationships.models import (
     CharacterRelationship,
+    GrievanceOption,
     HybridRelationshipType,
     HybridRequirement,
     RelationshipCapstone,
@@ -43,6 +44,20 @@ class RelationshipTrackFactory(DjangoModelFactory):
     description = factory.Faker("sentence")
     sign = TrackSign.POSITIVE
     display_order = factory.Sequence(lambda n: n)
+
+
+class GrievanceOptionFactory(DjangoModelFactory):
+    """Factory for GrievanceOption — defaults to a negative-sign track (grievances must be)."""
+
+    class Meta:
+        model = GrievanceOption
+        django_get_or_create = ("label",)
+
+    label = factory.Sequence(lambda n: f"Grievance {n}")
+    track = factory.SubFactory(RelationshipTrackFactory, sign=TrackSign.NEGATIVE)
+    points = 500
+    display_order = factory.Sequence(lambda n: n)
+    is_active = True
 
 
 class RelationshipTierFactory(DjangoModelFactory):
