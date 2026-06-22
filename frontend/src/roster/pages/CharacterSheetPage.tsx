@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { useAppSelector } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
 import {
   CharacterPortrait,
@@ -13,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
+import { SecretsTab } from '@/secrets/components/SecretsTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -26,6 +28,10 @@ export function CharacterSheetPage() {
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
+  // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
+  // resolve the active character's roster entry. Null when no character is active → no secrets.
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
@@ -44,6 +50,7 @@ export function CharacterSheetPage() {
         <TabsList>
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
           <TabsTrigger value="renown">Renown</TabsTrigger>
+          <TabsTrigger value="secrets">Secrets</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -88,6 +95,13 @@ export function CharacterSheetPage() {
               viewerPersonaId={viewerPersonaId}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="secrets" className="space-y-4">
+          {/* The character sheet shares its pk with the ObjectDB, so character.id is the
+              CharacterSheet pk the secret-tab API filters by. Radix unmounts inactive tab
+              content, so the query only fires when this tab is opened. */}
+          <SecretsTab subjectId={entry.character.id} viewerId={viewerEntryId} />
         </TabsContent>
       </Tabs>
     </div>

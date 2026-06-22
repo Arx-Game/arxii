@@ -7,11 +7,11 @@ loop.
 **Source:** `src/world/secrets/`
 **Umbrella issue / design:** #1334
 
-> **Build status:** Slices 1–2 built — the content model + authoring (slice 1) and **discovery**
-> (slice 2: the per-knower held/partial-knowledge record + the SECRET clue-target wiring). The
-> profile secret-tab display, action-anchored minting (blackmail/murder/affair/crime → Secret +
-> Evidence), the Deed↔Secret cross-link, the #1269 distinction migration, and the CG nudge are
-> **later slices** of #1334.
+> **Build status:** Slices 1–3 built — content model + authoring (slice 1), **discovery**
+> (slice 2: the held/partial-knowledge record + the SECRET clue-target), and the **secret-tab
+> display** (slice 3: the known-secrets API + the React tab, locked layers shown as "Unknown").
+> Action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the Deed↔Secret
+> cross-link, the #1269 distinction migration, and the CG nudge are **later slices** of #1334.
 
 ---
 
@@ -78,6 +78,22 @@ gained a `SECRET` `target_kind` + `target_secret` FK (#1334); `grant_clue_target
 secret's fact via `grant_secret_knowledge`, and `target_already_known` reflects held knowledge.
 So a planted/searched SECRET clue grants the secret on acquisition exactly like a CODEX or RESCUE
 clue.
+
+## Display — the secret tab
+
+`GET /api/secrets/known/?subject=<CharacterSheet pk>&viewer=<RosterEntry pk>` returns the secrets
+the **active viewing character** holds about that subject (newest first), paginated. The
+serializer renders each held secret with locked layers as **"Unknown"**: the fact (`content`)
+always shows, but `category` / `consequences` read "Unknown" when the viewer hasn't unlocked that
+layer *or* the secret leaves it unplaced. The frontend `SecretsTab` (a tab on
+`CharacterSheetPage`) renders the list; Radix unmounts inactive tab content, so the query only
+fires when the tab is opened.
+
+> **IC scope invariant:** IC knowledge scopes to the **active character**, never the account.
+> `KnownSecretViewSet` scopes to the single `viewer` RosterEntry the caller passes, validated
+> via `RosterEntry.objects.for_account` (so the param can't reach another account's knowledge);
+> no/unowned `viewer` → no secrets. The frontend resolves the active character from
+> `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
 ## Boundary with Codex
 

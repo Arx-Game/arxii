@@ -19760,6 +19760,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/secrets/known/:
+    get:
+      operationId: secrets_known_list
+      description: A viewer's known secrets — the data behind the profile secret tab
+        (#1334).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: subject
+        schema:
+          type: number
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKnownSecretList'
+          description: ''
+  /api/secrets/known/{id}/:
+    get:
+      operationId: secrets_known_retrieve
+      description: A viewer's known secrets — the data behind the profile secret tab
+        (#1334).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Secret knowledge.
+        required: true
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnownSecret'
+          description: ''
   /api/session-requests/:
     get:
       operationId: session_requests_list
@@ -31682,6 +31732,54 @@ components:
       - status
       - summary
       - template_name
+    KnownSecret:
+      type: object
+      description: One known secret, from the viewer's side, with locked layers shown
+        as "Unknown".
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        level:
+          type: string
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+        provenance:
+          type: string
+          readOnly: true
+        found_at:
+          type: string
+          format: date-time
+          readOnly: true
+        subject:
+          type: string
+          readOnly: true
+        second_party:
+          type: string
+          nullable: true
+          readOnly: true
+        category:
+          type: string
+          readOnly: true
+        consequences:
+          type: string
+          readOnly: true
+        author:
+          type: string
+          readOnly: true
+      required:
+      - author
+      - category
+      - consequences
+      - content
+      - found_at
+      - id
+      - level
+      - provenance
+      - second_party
+      - subject
     LedgerRow:
       type: object
       properties:
@@ -35174,6 +35272,29 @@ components:
       - next
       - previous
       - results
+    PaginatedKnownSecretList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnownSecret'
     PaginatedMissionCategoryList:
       type: object
       required:
