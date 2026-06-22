@@ -440,6 +440,7 @@ include = [
 exclude = [
     "**/tests/**",
     "**/tests.py",
+    "src/integration_tests/**",   # integration_tests/ doesn't match **/tests/**
     "**/migrations/**",
     "**/admin.py",        # Django admin decorators don't type well
     "**/admin/**",        # Django admin directories don't type well
