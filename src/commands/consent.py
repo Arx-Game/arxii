@@ -6,15 +6,16 @@ via ``CmdAccept``/``CmdDeny`` (Task 6). Telnet calls the SAME service functions
 the web viewset calls (``create_action_request`` / ``respond_to_action_request``)
 — convergence at the service seam, not ``action.run()``.
 
-``SceneActionRequestViewSet.create`` resolves ``scene``, ``initiator_persona``,
-and ``target_persona`` from explicit ids in the request payload (the web client
-already knows them). Telnet has no payload — so the command resolves the same
-three objects from the caller's location and a typed target name, then hands
-the IDENTICAL ``create_action_request(scene, initiator_persona, target_persona,
-action_key)`` call. The persona resolution itself reuses
-``active_persona_for_sheet`` (the same "which face is this character on right
-now" helper the request-level web resolver uses), so both faces are honoured
-identically.
+Convergence is at the **service seam**, not the resolution. The web viewset
+resolves ``scene`` / ``initiator_persona`` / ``target_persona`` from explicit
+ids in the POST payload (the web client already picked which face it is acting
+as). Telnet has no payload, so it *derives* the same three objects from the
+caller's location and a typed target name — scene via the location's active
+scene, personas via ``active_persona_for_sheet`` (the caller's currently
+presented face). The two paths therefore differ in how they obtain the
+arguments, but hand the identical
+``create_action_request(scene, initiator_persona, target_persona, action_key)``
+call to the shared service — which owns all consent logic.
 """
 
 from __future__ import annotations
@@ -69,9 +70,10 @@ class ConsentRequestCommand(ArxCommand):
         """Resolve (active Scene, initiator Persona) for the caller.
 
         The scene is the active scene at the caller's location; the persona is
-        the face the caller is currently presenting (``active_persona_for_sheet``
-        — the same resolver the web request path gates on). Raises
-        ``CommandError`` on either miss so the command surfaces a clean message.
+        the face the caller is currently presenting (``active_persona_for_sheet``).
+        The web viewset instead takes these from explicit payload ids; telnet
+        derives them. Raises ``CommandError`` on either miss so the command
+        surfaces a clean message.
         """
         from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
 
