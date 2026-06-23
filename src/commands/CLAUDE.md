@@ -49,7 +49,12 @@ actions, backends, and service functions.
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
-- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept`, `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+- **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,
+  `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
+- **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
+  extended `CmdAccept` in `consent.py`.
+- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
+  fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
   CEREMONY rituals. SERVICE rituals execute immediately; CEREMONY rituals create a

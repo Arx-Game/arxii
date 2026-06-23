@@ -171,7 +171,7 @@ class RespondCommandTests(TestCase):
     def test_accept_forwards_accept_decision_for_pending_request(self) -> None:
         req = self._make_pending()
 
-        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+        with patch("commands.consent.respond_to_action_request") as respond:
             cmd = self._run(CmdAccept, self.target_char)
 
         respond.assert_called_once()
@@ -183,13 +183,13 @@ class RespondCommandTests(TestCase):
     def test_accept_by_id_arg_resolves_that_request(self) -> None:
         req = self._make_pending()
 
-        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+        with patch("commands.consent.respond_to_action_request") as respond:
             self._run(CmdAccept, self.target_char, args=str(req.pk))
 
         self.assertEqual(respond.call_args.kwargs["action_request"], req)
 
     def test_no_pending_request_reports_cleanly(self) -> None:
-        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+        with patch("commands.consent.respond_to_action_request") as respond:
             cmd = self._run(CmdAccept, self.target_char)
 
         respond.assert_not_called()
@@ -199,7 +199,7 @@ class RespondCommandTests(TestCase):
         self._make_pending()
         newest = self._make_pending()
 
-        with patch("world.scenes.action_services.respond_to_action_request") as respond:
+        with patch("commands.consent.respond_to_action_request") as respond:
             self._run(CmdAccept, self.target_char)
 
         self.assertEqual(respond.call_args.kwargs["action_request"], newest)

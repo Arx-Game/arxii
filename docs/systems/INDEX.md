@@ -231,6 +231,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     pending entry-flourish offer inbox (#1140)
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
+- **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

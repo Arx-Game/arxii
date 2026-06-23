@@ -428,12 +428,17 @@ def _post_declaration(character: ObjectDB, text: str):
     Returns (scene, interaction) on success.
     Returns (None, None) when there is no active scene at the character's location.
     Returns (scene, None) when the character has no primary persona.
+    Returns (scene, None) when text is empty — callers must enforce non-empty text.
     """
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import create_interaction  # noqa: PLC0415
     from world.scenes.models import Persona, Scene  # noqa: PLC0415
 
     scene = Scene.objects.filter(location=character.location, is_active=True).first()
+
+    if not text.strip():
+        return scene, None
+
     if scene is None:
         return None, None
 

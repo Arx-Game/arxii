@@ -156,28 +156,26 @@ class ArxCommand(Command):
         return match.group(1).strip(), match.group(2).strip()
 
     def func(self) -> None:
-        """Execute the command by delegating to the action.
-
-        Parses arguments via :meth:`resolve_action_args`, calls
-        ``action.run()``, and sends results to the caller.
-        """
-        if self.action is None:
-            self.msg("This command is not available.")
-            return
-
+        """Execute the command; surface ``CommandError`` as a player message."""
         try:
-            kwargs = self.resolve_action_args()
-            result = self.action.run(actor=self.caller, **kwargs)
-            if result.message:
-                self.msg(result.message)
+            self._execute()
         except CommandError as err:
             self.msg(str(err))
-            self.msg(
-                command_error={
-                    "error": str(err),
-                    "command": self.raw_string or "",
-                },
-            )
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _execute(self) -> None:
+        """Run the command.
+
+        Default: resolve args and run ``self.action``. Override in ``action=None``
+        subclasses; raise :class:`~commands.exceptions.CommandError` for errors.
+        """
+        if self.action is None:
+            msg = "This command is not available."
+            raise CommandError(msg)
+        kwargs = self.resolve_action_args()
+        result = self.action.run(actor=self.caller, **kwargs)
+        if result.message:
+            self.msg(result.message)
 
     def get_help(
         self,

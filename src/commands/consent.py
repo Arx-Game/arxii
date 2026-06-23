@@ -22,10 +22,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
+
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.offer_registry import find_handler, format_pending_listing, get_all_pending
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.interaction_services import _get_active_scene
+from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
@@ -47,23 +53,11 @@ class ConsentRequestCommand(ArxCommand):
     locks = "cmd:all()"
     action = None
 
-    def func(self) -> None:
-        # ValidationError is imported as DjangoValidationError to avoid colliding
-        # with DRF's ValidationError; the service raises Django's (e.g. technique
-        # validation or a TABLE_TALK delivery without a place). Subclasses that
-        # pass a technique/delivery can trip it, so the base converts it to a
-        # clean message rather than a raw traceback — mirroring the web viewset.
-        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
-
-        from world.scenes.action_services import create_action_request  # noqa: PLC0415
-
-        try:
-            scene, initiator_persona = self._resolve_scene_and_initiator()
-            target_persona = self._resolve_target_persona()
-        except CommandError as err:
-            self.msg(str(err))
-            return
-
+    def _execute(self) -> None:
+        # DjangoValidationError converted to CommandError so the base try/except
+        # surfaces it cleanly — mirrors how the web viewset handles it.
+        scene, initiator_persona = self._resolve_scene_and_initiator()
+        target_persona = self._resolve_target_persona()
         try:
             request = create_action_request(
                 scene=scene,
@@ -72,9 +66,8 @@ class ConsentRequestCommand(ArxCommand):
                 action_key=self.action_key,
             )
         except DjangoValidationError as err:
-            self.msg("; ".join(err.messages))
-            return
-
+            msg = "; ".join(err.messages)
+            raise CommandError(msg) from err
         self.msg(
             f"You move to {self.action_key} {target_persona.name}. "
             f"Awaiting their response (request #{request.pk})."
@@ -89,8 +82,6 @@ class ConsentRequestCommand(ArxCommand):
         derives them. Raises ``CommandError`` on either miss so the command
         surfaces a clean message.
         """
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-
         scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "You are not in an active scene."
@@ -111,10 +102,6 @@ class ConsentRequestCommand(ArxCommand):
 
     def _persona_for(self, character: object, missing_msg: str) -> Persona:
         """Active persona for ``character``; ``CommandError(missing_msg)`` on miss."""
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
         sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             raise CommandError(missing_msg)
@@ -228,9 +215,7 @@ class _RespondCommand(ArxCommand):
     locks = "cmd:all()"
     action = None
 
-    def func(self) -> None:
-        from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
-
+    def _execute(self) -> None:
         request = self._resolve_pending_request()
         if request is None:
             self.msg(_NO_PENDING_MSG)
@@ -247,10 +232,6 @@ class _RespondCommand(ArxCommand):
         ``self.args`` is a digit, looks up by pk (still constrained to the
         caller as target). Returns None when nothing matches.
         """
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return None
@@ -268,14 +249,50 @@ class _RespondCommand(ArxCommand):
 
 
 class CmdAccept(_RespondCommand):
-    """Accept a pending action targeting you.
+    """Accept a pending game prompt, or consent to a pending action against you.
+
+    The game will tell you what to type when a prompt is available.
 
     Usage:
-        accept [request_id]
+        accept                   — list pending offers, or check for consent requests
+        accept <keyword> [args]  — accept via a registered offer handler
+        accept [request_id]      — consent to a pending social action (numeric id)
     """
 
     key = "accept"
     decision = ConsentDecision.ACCEPT
+
+    def _execute(self) -> None:
+        args = (self.args or "").strip()
+        first = args.partition(" ")[0]
+        if not first.isdigit() and (first or self._has_registry_pending()):
+            self.msg(self._dispatch_registry(args))
+        else:
+            super()._execute()
+
+    def _has_registry_pending(self) -> bool:
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return False
+        return bool(get_all_pending(sheet))
+
+    def _dispatch_registry(self, args: str) -> str:
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        keyword, _, rest = args.partition(" ")
+        if not keyword:
+            return format_pending_listing(get_all_pending(sheet) if sheet is not None else [])
+        handler = find_handler(keyword)
+        if handler is None:
+            msg = f"No registered offer type '{keyword}'."
+            raise CommandError(msg)
+        if sheet is None:
+            msg = "You need a character sheet for that."
+            raise CommandError(msg)
+        offer = handler.pending_for(sheet)
+        if offer is None:
+            msg = f"You have no pending {handler.label} offer."
+            raise CommandError(msg)
+        return handler.accept(offer, self.caller, rest.strip())
 
 
 class CmdDeny(_RespondCommand):
