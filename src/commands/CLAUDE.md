@@ -58,9 +58,16 @@ actions, backends, and service functions.
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
-  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
-  CEREMONY rituals. SERVICE rituals execute immediately; CEREMONY rituals create a
-  `PendingRitualEffect` that the matching finisher command (`weave`, `imbue`) consumes.
+  `PerformRitualAction` and multi-participant session lifecycle:
+  - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
+    immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
+  - `ritual sessions` — list pending sessions
+  - `ritual draft <name> invite=<char>[,<char>]` — draft a session
+  - `ritual join <id>` — accept your invitation
+  - `ritual decline <id>` — decline your invitation
+  - `ritual fire <id>` — fire the session (initiator only)
+
+  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` directly.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
@@ -89,14 +96,18 @@ actions, backends, and service functions.
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` — account information display
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
-- **`sheet.py`**: `CmdSheet` — character sheet display
+- **`sheet.py`**: `CmdSheet` — the character sheet **hub**. Bare `sheet` shows the overview;
+  `sheet/<section>` dispatches to a section (mirroring the web sheet tabs). The sheet is the
+  baseline for a character and sections (secrets, and — as built — renown, relationships, society
+  standings, covenant, magic) hang off it. Add a section: write a renderer in `sheet_sections.py`
+  and register it in `SHEET_SECTIONS` — **don't** add a standalone `+command`.
+- **`sheet_sections.py`**: the `sheet/<section>` renderers + `SHEET_SECTIONS` registry. `secret`
+  (`sheet/secret [character]`, #1334) is the first — your own secrets, or the ones you know about
+  a character; thin over `world.secrets.services`, locked layers render "Unknown".
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
   (#1278) — telnet face of the persona block/mute menu; thin over `world.scenes.block_services`.
-- **`secrets.py`**: `CmdSecrets` (`+secrets`, #1334) — telnet face of the secret tab; thin over
-  `world.secrets.services` (`secrets_owned_by` / `known_secrets_for`). Caller is the active
-  character, so IC scoping is automatic; locked layers render "Unknown".
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)

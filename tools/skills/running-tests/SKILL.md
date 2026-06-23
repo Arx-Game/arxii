@@ -9,6 +9,14 @@ description: Use when running or writing tests in this repo — choosing the SQL
 
 Tests run in a **two-tier model**: a fast SQLite in-memory inner loop and a Postgres parity tier (what CI runs). **IMPORTANT: Always use `arx test` (or its `just` wrappers) to run tests.** Never use `uv run python -m`, `python manage.py test`, sourcing venvs to find binaries, or any other method.
 
+## Testing philosophy
+
+Prefer big **E2E user-journey integration tests** over many fine-grained unit tests. A single telnet-driven journey test that drives command → action → service → DB end-to-end is worth more than a dozen unit tests of individual layers. Don't create marginal unit tests that duplicate what the E2E already covers — they add maintenance cost without adding safety, and will be retired when E2E coverage matures anyway.
+
+Write focused unit tests only when logic is genuinely fiddly and wouldn't be observable from the E2E happy path: e.g. a parsing helper with multiple lookup branches, error-path exception mapping, or a pure-function edge case. When in doubt, skip the unit test and let the integration test carry the weight.
+
+**Don't assume player omniscience.** E2E journey tests should assert that the game tells the player what to do next, not just that the underlying state changed. If the game should emit a prompt ("use `flourish <resonance>` to declare your entrance"), assert that the caller received it. A journey test that only checks DB state leaves a gap: the player could be left with no idea what action is available to them, and the test wouldn't catch it.
+
 ## Two-tier model: SQLite for the inner loop, Postgres for parity
 
 Production runs Postgres exclusively. Tests run in TWO tiers:
