@@ -232,6 +232,7 @@ class PassRoundAction(Action):
             scene_round=rnd,
             round_number=rnd.round_number,
             participant=participant,
+            is_immediate=False,
             defaults={
                 "is_pass": True,
                 "challenge_instance": None,

@@ -252,6 +252,45 @@ class PassRoundActionTests(TestCase):
         self.assertFalse(result.success)
         self.assertFalse(SceneActionDeclaration.objects.filter(scene_round=self.round).exists())
 
+    def test_pass_round_with_existing_immediate_declarations_does_not_raise(self) -> None:
+        """Regression: pass must not raise MultipleObjectsReturned when immediate rows exist.
+
+        With the one_scene_action_declaration_per_round UniqueConstraint removed (Task 2),
+        a participant can have multiple rows for (scene_round, round_number, participant)
+        distinguished by is_immediate.  The pass update_or_create must scope its lookup
+        to is_immediate=False so it never matches those immediate rows.
+        """
+        from actions.definitions.rounds import PassRoundAction
+
+        # Simulate pose-order: participant already has TWO immediate declarations.
+        SceneActionDeclaration.objects.create(
+            scene_round=self.round,
+            round_number=1,
+            participant=self.participant,
+            is_immediate=True,
+            is_pass=False,
+        )
+        SceneActionDeclaration.objects.create(
+            scene_round=self.round,
+            round_number=1,
+            participant=self.participant,
+            is_immediate=True,
+            is_pass=False,
+        )
+
+        # Before the fix this raised MultipleObjectsReturned; after it succeeds.
+        result = PassRoundAction().execute(actor=self.actor)
+
+        self.assertTrue(result.success)
+        deferred = SceneActionDeclaration.objects.filter(
+            scene_round=self.round,
+            round_number=1,
+            participant=self.participant,
+            is_immediate=False,
+        )
+        self.assertEqual(deferred.count(), 1)
+        self.assertTrue(deferred.get().is_pass)
+
 
 class ForceResolveRoundActionTests(TestCase):
     """force_resolve_round resolves a DECLARING round even when partially declared."""
