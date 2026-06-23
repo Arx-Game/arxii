@@ -16,8 +16,10 @@ Web:                      frontend → websocket → action dispatcher → dispa
 ```
 
 `dispatch_player_action()` routes by backend: REGISTRY → `action.run()`,
-CHALLENGE → `resolve_challenge()`, COMBAT → `declare_action()`/`resolve_round()`.
-Use `DispatchCommand` whenever the command must reach a CHALLENGE or COMBAT backend.
+CHALLENGE → `resolve_challenge()`, COMBAT → `declare_action()`/`resolve_round()`,
+SCENE_ADAPTIVE → immediate or declaration-deferred depending on round context.
+Use `DispatchCommand` whenever the command must reach a CHALLENGE, COMBAT, or
+SCENE_ADAPTIVE backend.
 
 ## Key Files
 
@@ -38,7 +40,7 @@ Use `DispatchCommand` whenever the command must reach a CHALLENGE or COMBAT back
 |---|---|
 | REGISTRY action (most look/say/move/item commands) | `ArxCommand` |
 | CHALLENGE backend (dungeon puzzle challenges — requires `challenge_instance_id`) | `DispatchCommand` |
-| Non-combat magic cast (`attempt`) — calls `request_technique_cast` directly | `ArxCommand` |
+| SCENE_ADAPTIVE action (technique cast, works in and out of combat) | `DispatchCommand` |
 | COMBAT backend (technique declaration into the current round) | `DispatchCommand` |
 
 Both bases stay thin: no business logic in commands — all behavior lives in
@@ -67,10 +69,14 @@ actions, backends, and service functions.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
-- **`magic.py`**: `CmdAttempt` (`attempt`) — non-combat technique cast shell (#1332); thin
-  `ArxCommand` that parses `attempt <technique> [at <target>]`, resolves the persona via
-  `persona_for_character`, and calls `request_technique_cast` (the same service the web
-  viewset calls). No business logic; does NOT use CHALLENGE backend.
+- **`combat.py`**: `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
+  technique cast (#1351); thin `DispatchCommand` that parses
+  `cast <technique> [at <target>] [effort=<level>]` and emits a SCENE_ADAPTIVE
+  `ActionRef` keyed to `"cast_technique"`. Outside combat: runs `CastTechniqueAction.execute()`
+  immediately (non-combat cast via `request_technique_cast`). In a DECLARING round:
+  calls `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
+  declaration. Target resolution branches on context: combat → `CombatOpponent` pk
+  (`focused_opponent_target_id`); non-combat → `Persona` pk (`target_persona_id`).
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without

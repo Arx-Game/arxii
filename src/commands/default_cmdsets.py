@@ -57,7 +57,6 @@ from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHom
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.imbue import CmdImbue
-from commands.magic import CmdAttempt
 from commands.offer_response import CmdDecline
 from commands.pull import CmdPull
 from commands.ritual import CmdRitual
@@ -168,10 +167,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Soul Tether lifecycle commands (#1343)
             CmdTether,
             CmdSineater,
-            # Combat commands
+            # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
-            # Non-combat magic cast (#1332)
-            CmdAttempt,
         )
         for command_cls in command_classes:
             self.add(command_cls())
