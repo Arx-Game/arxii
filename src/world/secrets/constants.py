@@ -23,6 +23,18 @@ class SecretLevel(models.IntegerChoices):
     DANGEROUS = 4, "Dangerous Secret"  # PLACEHOLDER name
 
 
+# PLACEHOLDER magnitudes — the default direct standing hit a victim takes when a secret of a
+# given level is exposed (used when a SecretVictim sets no explicit severity). Values are
+# load-bearing only in relative ordering; tune in a later balance pass (#1429). Scaled against
+# the -1000..+1000 reputation range so a Dangerous secret roughly reaches "Reviled".
+DEFAULT_VICTIM_SEVERITY_BY_LEVEL: dict[int, int] = {
+    1: 150,
+    2: 350,
+    3: 600,
+    4: 1000,
+}
+
+
 class SecretProvenance(models.TextChoices):
     """Where a secret came from — drives the anchor-scales-with-level rule and OOC attribution.
 

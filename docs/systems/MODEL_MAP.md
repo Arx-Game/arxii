@@ -3494,6 +3494,7 @@
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
   - authored_secrets <- secrets.Secret
+  - secret_victimhoods <- secrets.SecretVictim
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -3709,7 +3710,14 @@
   - author_persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - clues <- clues.Clue
+  - victims <- secrets.SecretVictim
   - known_by <- secrets.SecretKnowledge
+
+### SecretVictim
+**Foreign Keys:**
+  - secret -> secrets.Secret [FK]
+  - organization -> societies.Organization [FK] (nullable)
+  - persona -> scenes.Persona [FK] (nullable)
 
 ### SecretKnowledge
 **Foreign Keys:**
@@ -3719,6 +3727,7 @@
 ### Service Functions
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
 
@@ -3795,6 +3804,7 @@
   - ranking_displays <- societies.RankingDisplay
   - ranking_band_labels <- societies.RankingBandLabel
   - fame_reaction_lines <- societies.FameReactionLine
+  - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
@@ -3825,6 +3835,7 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - contracts_notarized <- currency.Contract
+  - secret_victimhoods <- secrets.SecretVictim
   - capture_consequence_effects <- checks.ConsequenceEffect
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
@@ -3943,6 +3954,7 @@
   - auderemajorathreshold_renown_configs <- magic.AudereMajoraThreshold
   - dramaticmomenttype_renown_configs <- magic.DramaticMomentType
   - legend_entries <- societies.LegendEntry
+  - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions

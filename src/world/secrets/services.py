@@ -7,20 +7,28 @@ murder/affair/crime → Secret + Evidence) are later slices.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 
-from world.secrets.constants import SecretLevel, SecretProvenance
+from world.secrets.constants import (
+    DEFAULT_VICTIM_SEVERITY_BY_LEVEL,
+    SecretLevel,
+    SecretProvenance,
+)
 from world.secrets.models import Secret, SecretKnowledge
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
 
     from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.secrets.models import SecretCategory
+    from world.societies.models import Society
 
 
 class SecretError(Exception):
@@ -101,7 +109,7 @@ def grant_secret_knowledge(
     extra layers. Monotonic — re-granting only ever unlocks more, never re-hides. This is the
     single entry point discovery surfaces (clue acquisition, evidence-sharing, GM grant) call.
     """
-    held, _ = SecretKnowledge.objects.get_or_create(roster_entry=roster_entry, secret=secret)
+    held, created = SecretKnowledge.objects.get_or_create(roster_entry=roster_entry, secret=secret)
     updates: list[str] = []
     if knows_category and not held.knows_category:
         held.knows_category = True
@@ -111,12 +119,128 @@ def grant_secret_knowledge(
         updates.append("knows_consequences")
     if updates:
         held.save(update_fields=updates)
+    if created:
+        # First time this character learns the fact — if they are the *victim* of it and a
+        # player runs them, prompt them so they can decide a relationship effect (#1429).
+        _notify_secret_victim_on_learn(secret, roster_entry)
     return held
+
+
+_VICTIM_LEARN_BODY = (
+    "A secret in which you are the wronged party has come to light. How you respond — and what "
+    "it does to your regard for those responsible — is yours to decide."
+)
+
+
+def _notify_secret_victim_on_learn(secret: Secret, roster_entry: RosterEntry) -> None:
+    """Notify a learner who is this secret's victim, so they may register a grudge (#1429).
+
+    The persona-victim *effect* is **decided by the victim**, never auto-applied: the
+    relationship system is consent-gated and player-driven, so we only *prompt* — the victim then
+    uses the normal relationship flow toward the perpetrator at their discretion. Fires only when
+    the learner is a registered ``SecretVictim`` of this secret **and** the character is run by an
+    account (``get_account_for_character``); NPC victims have no one to decide, so nothing fires.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+    from world.secrets.models import SecretVictim  # noqa: PLC0415
+
+    sheet = roster_entry.character_sheet
+    is_victim = SecretVictim.objects.filter(secret=secret, persona__character_sheet=sheet).exists()
+    if not is_victim or get_account_for_character(sheet.character) is None:
+        return
+    send_narrative_message(
+        recipients=[sheet],
+        body=_VICTIM_LEARN_BODY,
+        category=NarrativeCategory.SYSTEM,
+    )
 
 
 def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
     """Whether this character already holds the fact of this secret (#1334)."""
     return SecretKnowledge.objects.filter(secret=secret, roster_entry=roster_entry).exists()
+
+
+# --- Reputation bridge (#1429) ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SecretExposureResult:
+    """What a secret's exposure did to reputation (#1429).
+
+    ``society_reputation_deltas`` is the **diffuse** channel (archetype · each society's
+    principles); ``organization_victim_deltas`` is the **relational** channel (direct hits to
+    victim orgs, independent of their philosophy). ``notified_persona_victim_ids`` are PC victims
+    who, on the secret going public, were granted the knowledge and prompted to decide a
+    relationship effect of their own (never auto-applied — the relationship flow is player-driven).
+    """
+
+    newly_exposed_society_ids: tuple[int, ...] = ()
+    society_reputation_deltas: dict[int, int] = field(default_factory=dict)
+    organization_victim_deltas: dict[int, int] = field(default_factory=dict)
+    notified_persona_victim_ids: tuple[int, ...] = ()
+
+
+def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExposureResult:
+    """Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).
+
+    The reveal→reputation bridge. A secret is just an unrevealed fact; exposing it to a society
+    feeds the existing renown engine:
+
+    - **Diffuse channel** — each newly-exposed society reads the secret's ``archetypes`` through
+      its own principles (so an ambition-prizing society and a pious one net opposite signs).
+      Fired one-shot per society via ``societies_exposed`` (re-exposure never double-fires).
+    - **Relational channel** — on the *first* exposure, each victim takes a direct hit
+      **independent of their philosophy**: organization victims get an ``OrganizationReputation``
+      delta (``severity`` or, if null, the level default); persona victims are recorded only
+      (their personal-grudge effect is deferred — see ``SecretVictim``).
+
+    Reputation is attributed to the subject's primary persona (only established/primary identities
+    accrue reputation, enforced downstream). Idempotent across re-exposure.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415 — cross-app, avoid cycle at load
+    from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid import cycle at load
+        apply_archetype_society_reputation,
+        bump_organization_reputation,
+    )
+
+    persona = secret.subject_sheet.primary_persona
+    already_exposed = set(secret.societies_exposed.values_list("pk", flat=True))
+    newly = [society for society in societies if society.pk not in already_exposed]
+    first_exposure = not already_exposed and bool(newly)
+
+    society_deltas: dict[int, int] = {}
+    if newly:
+        secret.societies_exposed.add(*newly)
+        society_deltas = apply_archetype_society_reputation(persona, newly, secret.archetypes.all())
+
+    org_deltas: dict[int, int] = {}
+    notified_persona_ids: list[int] = []
+    if first_exposure:
+        default_severity = DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(secret.level, 0)
+        for victim in secret.victims.select_related("organization", "persona__character_sheet"):
+            if victim.organization_id:
+                severity = victim.severity if victim.severity is not None else default_severity
+                new_value = bump_organization_reputation(persona, victim.organization, -severity)
+                if new_value is not None:
+                    org_deltas[victim.organization_id] = new_value
+            elif victim.persona_id:
+                # Going public reaches the victim too: grant a PC victim the knowledge, which
+                # prompts them (via grant_secret_knowledge) to decide a relationship effect.
+                victim_entry = RosterEntry.objects.filter(
+                    character_sheet=victim.persona.character_sheet
+                ).first()
+                if victim_entry is not None:
+                    grant_secret_knowledge(roster_entry=victim_entry, secret=secret)
+                    notified_persona_ids.append(victim.persona_id)
+
+    return SecretExposureResult(
+        newly_exposed_society_ids=tuple(society.pk for society in newly),
+        society_reputation_deltas=society_deltas,
+        organization_victim_deltas=org_deltas,
+        notified_persona_victim_ids=tuple(notified_persona_ids),
+    )
 
 
 # --- Listing (shared by the web viewset + the telnet +secrets command) -------------------

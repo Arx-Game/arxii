@@ -134,6 +134,40 @@ A sensitive distinction is **relocated** into a Secret rather than carrying a pu
   surfaces on the **secret tab** once learned, through the ordinary `SecretKnowledge` loop. The
   `DistinctionEntry` payload exposes `is_secret` (not `visibility`).
 
+## Reputation consequences — the reveal bridge (#1429)
+
+A secret is an **unrevealed fact**; revealing it feeds the existing renown/reputation engine
+(`world/societies/`). `expose_secret(secret, *, societies)` (the reveal→reputation bridge) fires
+two channels, one-shot:
+
+- **Diffuse / philosophical.** The secret's `archetypes` (M2M → `societies.PhilosophicalArchetype`)
+  are dot-producted against each newly-exposed society's principles — so the *same* fact reads
+  positive to an ambition-prizing society and negative to a pious one. Tracked per society via
+  `Secret.societies_exposed` so re-exposure never double-fires. Reuses
+  `societies.renown.apply_archetype_society_reputation`.
+- **Relational / targeted.** A `SecretVictim` names an entity directly harmed; on first exposure
+  it takes a hit **independent of its philosophy** (an org that prizes cunning still turns on you
+  for killing its head). **Organization** victims get an `OrganizationReputation` delta
+  (`severity`, or the level default from `DEFAULT_VICTIM_SEVERITY_BY_LEVEL`) via
+  `societies.renown.bump_organization_reputation` — the first gameplay writer of org reputation.
+
+**Persona victims — the victim decides.** A persona victim's effect is **never auto-applied**
+(the relationship system is consent-gated and player-driven). Instead, when the victim *learns
+the secret* — through personal discovery / sharing / a confession, or because it went **public**
+(public knowledge reaches the victim too) — they are **prompted** to decide a relationship effect
+of their own toward the perpetrator via the normal relationship flow (`register_grievance`). The
+hook lives in `grant_secret_knowledge` (the single point a character learns a secret): on first
+learn, if the learner is a registered `SecretVictim.persona` **and** the character is run by an
+account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them. NPC
+victims have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge
+so the same hook prompts them when the secret goes public.
+
+Reputation attaches to the subject's **primary persona** (only established/primary identities
+accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
+trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
+slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
+propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
+
 ## Boundary with Codex
 
 Cut on **authorship**, not topic. **Codex** = canon lore (subjects, history, world) authored
