@@ -107,9 +107,11 @@ actions, backends, and service functions.
   baseline for a character and sections (secrets, and — as built — renown, relationships, society
   standings, covenant, magic) hang off it. Add a section: write a renderer in `sheet_sections.py`
   and register it in `SHEET_SECTIONS` — **don't** add a standalone `+command`.
-- **`sheet_sections.py`**: the `sheet/<section>` renderers + `SHEET_SECTIONS` registry. `secret`
-  (`sheet/secret [character]`, #1334) is the first — your own secrets, or the ones you know about
-  a character; thin over `world.secrets.services`, locked layers render "Unknown".
+- **`sheet_sections.py`**: the `sheet/<section>` renderers + `SHEET_SECTIONS` registry. Sections:
+  `secret` (`sheet/secret [character]`, #1334 — your own secrets, or the ones you know about a
+  character; locked layers "Unknown") and `renown` (`sheet/renown`, #676 — your prestige / fame
+  tier / society standing, via `build_renown_payload`, mirroring the web `RenownPanel`). Each is
+  thin over its app's services. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`).
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`

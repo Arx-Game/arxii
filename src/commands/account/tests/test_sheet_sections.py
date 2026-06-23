@@ -45,3 +45,17 @@ class SheetSecretSectionTests(TestCase):
     def test_secret_section_without_an_active_character(self) -> None:
         self.caller.puppet = None
         assert "no active character" in self._run("").lower()
+
+    def test_renown_section_shows_fame_and_prestige(self) -> None:
+        out = self._run("", switches=["renown"])
+        assert "Renown" in out
+        assert "Fame:" in out
+        assert "Prestige:" in out
+
+    def test_renown_section_lists_society_standing(self) -> None:
+        from world.societies.factories import SocietyReputationFactory
+
+        SocietyReputationFactory(
+            persona=self.viewer_sheet.primary_persona, society__name="The Compact", value=600
+        )
+        assert "The Compact" in self._run("", switches=["renown"])

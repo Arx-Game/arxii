@@ -100,12 +100,46 @@ def _render_known(held_rows: QuerySet[SecretKnowledge]) -> list[str]:
     return lines
 
 
+def _render_renown_section(command: Command) -> list[str]:
+    """The renown section: your standing — prestige, fame tier, society reputations (#676).
+
+    Mirrors the web Renown tab (the owner's ``RenownPanel``) for your active character. Viewing
+    another character's renown *card* (tiers only, from their perspective) is a follow-up.
+    """
+    from world.societies.renown_serializers import build_renown_payload  # noqa: PLC0415
+
+    viewer = _viewer_sheet(command)
+    return _format_renown(build_renown_payload(viewer.primary_persona))
+
+
+def _format_renown(payload: dict) -> list[str]:
+    fame = payload["fame"]
+    prestige = payload["prestige"]
+    lines = [
+        f"|wRenown — {payload['persona_name']}|n",
+        f"  Fame: {fame['tier_label']} ({fame['points']} pts)",
+        (
+            f"  Prestige: {prestige['total']}  (deeds {prestige['deeds']}, orgs {prestige['orgs']},"
+            f" dwellings {prestige['dwellings']}, items {prestige['items']},"
+            f" fashion {prestige['fashion']})"
+        ),
+    ]
+    reputation = payload["reputation"]
+    if reputation:
+        lines.append("  Standing:")
+        lines.extend(f"    {row['society_name']}: {row['tier']}" for row in reputation)
+    else:
+        lines.append("  Standing: none recorded.")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "secret": _render_secret_section,
     "secrets": _render_secret_section,
+    "renown": _render_renown_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
-SECTION_NAMES: tuple[str, ...] = ("secret",)
+SECTION_NAMES: tuple[str, ...] = ("secret", "renown")
