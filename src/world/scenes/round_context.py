@@ -136,11 +136,13 @@ class SceneRoundContext(RoundContext):
             record_pose_order_action,
         )
 
-        participant = SceneRoundParticipant.objects.get(
+        participant = SceneRoundParticipant.objects.filter(
             scene_round=self._scene_round,
             character_sheet=actor,
             status=SceneRoundParticipantStatus.ACTIVE,
-        )
+        ).first()
+        if participant is None:
+            return
         record_pose_order_action(self._scene_round, participant, target_persona)
         advance_pose_order_round_if_quorum(self._scene_round)
 

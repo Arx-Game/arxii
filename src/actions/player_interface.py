@@ -236,11 +236,23 @@ def _dispatch_scene_adaptive(
             raise ActionDispatchError(ActionDispatchError.ROUND_REPEAT_BLOCKED)
 
     result = action_obj.run(actor=character, **run_kwargs)
+    if result.success:
+        _record_scene_adaptive_acted(sheet, ctx, ref, target_persona, mark_acted)
+    return DispatchResult(backend=ActionBackend.SCENE_ADAPTIVE, deferred=False, detail=result)
+
+
+def _record_scene_adaptive_acted(
+    sheet: Any,
+    ctx: RoundContext | None,
+    ref: ActionRef,
+    target_persona: Any,
+    mark_acted: Any,
+) -> None:
+    """Record anti-spam and pose-order side-effects after a successful SCENE_ADAPTIVE action."""
     if sheet is not None:
         mark_acted(sheet.pk)
-    if ctx is not None:
+    if ctx is not None and sheet is not None:
         ctx.record_immediate_action(sheet, ref, target_persona)
-    return DispatchResult(backend=ActionBackend.SCENE_ADAPTIVE, deferred=False, detail=result)
 
 
 def _recover_combat_player_action(character: ObjectDB, ref: ActionRef) -> PlayerAction:

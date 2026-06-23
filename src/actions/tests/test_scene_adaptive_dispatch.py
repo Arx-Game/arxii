@@ -270,3 +270,90 @@ class PoseOrderImmediateIntegrationTest(django.test.TestCase):
         self.assertFalse(SceneActionDeclaration.objects.filter(scene_round=rnd).exists())
         rnd.refresh_from_db()
         self.assertEqual(rnd.round_number, 1)
+
+
+class FailedActionDoesNotCountTest(django.test.TestCase):
+    """Regression: a failed immediate SCENE_ADAPTIVE action must not record side effects.
+
+    A soft-failed action (ActionResult(success=False)) must NOT:
+    - set the anti-spam cooldown (mark_acted must not be called)
+    - write an is_immediate=True SceneActionDeclaration row (quorum must not advance)
+    """
+
+    def setUp(self):
+        import commands.pending_actions as pa
+
+        pa._LAST_ACTED.clear()
+
+    def tearDown(self):
+        import commands.pending_actions as pa
+
+        pa._LAST_ACTED.clear()
+
+    def test_failed_action_does_not_start_anti_spam_cooldown(self):
+        from actions.player_interface import _dispatch_scene_adaptive
+        from actions.types import ActionResult
+        from commands.pending_actions import check_anti_spam
+
+        character, sheet = _make_character_with_sheet()
+        ref = _make_scene_adaptive_ref("test_action")
+
+        action_mock = MagicMock()
+        action_mock.round_declaration.return_value = None
+        # Soft failure: run() returns success=False without raising
+        action_mock.run.return_value = ActionResult(success=False, message="no active scene")
+
+        with patch("actions.player_interface.get_action", return_value=action_mock):
+            _dispatch_scene_adaptive(character, ref, {}, ctx=None)
+
+        # Anti-spam cooldown must NOT be set for a failed action
+        remaining = check_anti_spam(sheet.pk, seconds=5)
+        self.assertIsNone(
+            remaining,
+            "mark_acted was called for a failed action — cooldown must only start on success",
+        )
+
+    def test_failed_action_does_not_write_pose_order_declaration(self):
+        from actions.player_interface import _dispatch_scene_adaptive
+        from actions.types import ActionResult
+        from world.scenes.models import SceneActionDeclaration
+        from world.scenes.round_context import SceneRoundContext
+
+        rnd = SceneRoundFactory(
+            status=RoundStatus.DECLARING,
+            mode=SceneRoundMode.POSE_ORDER,
+            round_number=1,
+            advance_quorum_pct=100,
+        )
+        sheet = CharacterSheetFactory()
+        SceneRoundParticipantFactory(
+            scene_round=rnd,
+            character_sheet=sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+
+        # character mock whose sheet_data resolves to the sheet we just made
+        character = MagicMock()
+        character.sheet_data = sheet
+
+        ctx = SceneRoundContext(rnd)
+        ref = _make_scene_adaptive_ref("test_action")
+
+        action_mock = MagicMock()
+        action_mock.round_declaration.return_value = None
+        action_mock.run.return_value = ActionResult(success=False, message="no active scene")
+
+        with patch("actions.player_interface.get_action", return_value=action_mock):
+            _dispatch_scene_adaptive(character, ref, {}, ctx=ctx)
+
+        # No is_immediate declaration row must exist — quorum must not advance
+        self.assertFalse(
+            SceneActionDeclaration.objects.filter(scene_round=rnd, is_immediate=True).exists(),
+            "record_immediate_action was called for a failed action — must be gated on success",
+        )
+        rnd.refresh_from_db()
+        self.assertEqual(
+            rnd.round_number,
+            1,
+            "round number advanced despite failed action",
+        )
