@@ -78,14 +78,18 @@ actions, backends, and service functions.
 ### Account Commands (`account/`)
 - **`account_info.py`**: `CmdAccount` — account information display
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
-- **`sheet.py`**: `CmdSheet` — character sheet display
+- **`sheet.py`**: `CmdSheet` — the character sheet **hub**. Bare `sheet` shows the overview;
+  `sheet/<section>` dispatches to a section (mirroring the web sheet tabs). The sheet is the
+  baseline for a character and sections (secrets, and — as built — renown, relationships, society
+  standings, covenant, magic) hang off it. Add a section: write a renderer in `sheet_sections.py`
+  and register it in `SHEET_SECTIONS` — **don't** add a standalone `+command`.
+- **`sheet_sections.py`**: the `sheet/<section>` renderers + `SHEET_SECTIONS` registry. `secret`
+  (`sheet/secret [character]`, #1334) is the first — your own secrets, or the ones you know about
+  a character; thin over `world.secrets.services`, locked layers render "Unknown".
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
   (#1278) — telnet face of the persona block/mute menu; thin over `world.scenes.block_services`.
-- **`secrets.py`**: `CmdSecrets` (`+secrets`, #1334) — telnet face of the secret tab; thin over
-  `world.secrets.services` (`secrets_owned_by` / `known_secrets_for`). Caller is the active
-  character, so IC scoping is automatic; locked layers render "Unknown".
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
