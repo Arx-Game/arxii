@@ -293,19 +293,21 @@ class CmdAccept(_RespondCommand):
         # Registry path: non-numeric first token matches a registered handler.
         if first and not first.isdigit():
             handler = find_handler(first)
-            if handler is not None:
-                if sheet is None:
-                    self.msg("You need a character sheet for that.")
-                    return
-                offer = handler.pending_for(sheet)
-                if offer is None:
-                    self.msg(f"You have no pending {handler.label} offer.")
-                    return
-                try:
-                    self.msg(handler.accept(offer, self.caller, rest.strip()))
-                except CommandError as exc:
-                    self.msg(str(exc))
+            if handler is None:
+                self.msg(f"No registered offer type '{first}'.")
                 return
+            if sheet is None:
+                self.msg("You need a character sheet for that.")
+                return
+            offer = handler.pending_for(sheet)
+            if offer is None:
+                self.msg(f"You have no pending {handler.label} offer.")
+                return
+            try:
+                self.msg(handler.accept(offer, self.caller, rest.strip()))
+            except CommandError as exc:
+                self.msg(str(exc))
+            return
 
         # Listing path: no args — show registry pending if any, then fall through.
         if not args and sheet is not None:
