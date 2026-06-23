@@ -1326,17 +1326,24 @@ class SceneActionDeclaration(SharedMemoryModel):
         blank=True,
         related_name="scene_declarations",
     )
+    target_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="targeted_scene_declarations",
+    )
+    is_immediate = models.BooleanField(
+        default=False,
+        help_text=(
+            "True for a resolved POSE_ORDER/OPEN action; False for a deferred STRICT declaration."
+        ),
+    )
     is_pass = models.BooleanField(default=False)
     declared_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["participant__initiative_order", "declared_at", "pk"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["scene_round", "round_number", "participant"],
-                name="one_scene_action_declaration_per_round",
-            ),
-        ]
 
     def __str__(self) -> str:
         kind = "pass" if self.is_pass else "challenge"

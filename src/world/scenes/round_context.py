@@ -81,6 +81,7 @@ class SceneRoundContext(RoundContext):
             scene_round=self._scene_round,
             round_number=self._scene_round.round_number,
             participant=participant,
+            is_immediate=False,
             defaults={
                 "challenge_instance": challenge_instance,
                 "challenge_approach": challenge_approach,

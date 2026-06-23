@@ -26,6 +26,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def actions_this_round(scene_round: SceneRound, participant: SceneRoundParticipant) -> int:
+    """Return the number of action declarations for a participant in the current round."""
+    return scene_round.action_declarations.filter(
+        round_number=scene_round.round_number, participant=participant
+    ).count()
+
+
+def distinct_actors_this_round(scene_round: SceneRound) -> int:
+    """Return the number of distinct participants with declarations in the current round."""
+    return (
+        scene_round.action_declarations.filter(round_number=scene_round.round_number)
+        .values("participant_id")
+        .distinct()
+        .count()
+    )
+
+
 @transaction.atomic
 def start_scene_round(scene_round: SceneRound) -> SceneRound:
     """Advance a BETWEEN_ROUNDS round into DECLARING (round_number += 1)."""
@@ -166,9 +183,9 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
         status=SceneRoundParticipantStatus.ACTIVE
     ).select_related("character_sheet")
     declared_ids = set(
-        scene_round.action_declarations.filter(round_number=scene_round.round_number).values_list(
-            "participant_id", flat=True
-        )
+        scene_round.action_declarations.filter(
+            round_number=scene_round.round_number, is_immediate=False
+        ).values_list("participant_id", flat=True)
     )
     present_active = [p for p in active if p.character_sheet.character_id in present_ids]
     if not present_active:
@@ -230,7 +247,9 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     from world.mechanics.services import get_available_actions  # noqa: PLC0415
 
     declarations = list(
-        scene_round.action_declarations.filter(round_number=scene_round.round_number, is_pass=False)
+        scene_round.action_declarations.filter(
+            round_number=scene_round.round_number, is_pass=False, is_immediate=False
+        )
         .select_related(
             "participant",
             "participant__character_sheet",
