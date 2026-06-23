@@ -59,3 +59,26 @@ class SheetSecretSectionTests(TestCase):
             persona=self.viewer_sheet.primary_persona, society__name="The Compact", value=600
         )
         assert "The Compact" in self._run("", switches=["renown"])
+
+    def test_relationships_section_lists_your_relationships(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.relationships.constants import TrackSign
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        target = CharacterSheetFactory(character__db_key="Brennan")
+        relationship = CharacterRelationshipFactory(source=self.viewer_sheet, target=target)
+        RelationshipTrackProgressFactory(
+            relationship=relationship,
+            track=RelationshipTrackFactory(sign=TrackSign.POSITIVE),
+            developed_points=50,
+        )
+        out = self._run("", switches=["relationship"])
+        assert "Brennan" in out
+        assert "warm" in out
+
+    def test_relationships_section_empty(self) -> None:
+        assert "no relationships" in self._run("", switches=["relationship"]).lower()
