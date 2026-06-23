@@ -14,6 +14,7 @@ from world.magic.audere_majora import (
     AudereMajoraCrossing,
     AudereMajoraCrossingResult,
     PendingAudereMajoraOffer,
+    _post_declaration,
     check_audere_majora_eligibility,
     end_audere_majora,
     resolve_audere_majora_offer,
@@ -448,3 +449,34 @@ class EndAuderaMajoraTests(TestCase):
     def test_safe_noop_when_absent(self) -> None:
         # Should not raise
         end_audere_majora(self.character)
+
+
+# ---------------------------------------------------------------------------
+# _post_declaration empty-text guard
+# ---------------------------------------------------------------------------
+
+
+class TestPostDeclarationEmptyGuard(TestCase):
+    """_post_declaration returns (scene, None) for empty or whitespace text."""
+
+    def setUp(self) -> None:
+        wire_audere_power_multipliers()
+        (
+            self.character,
+            self.sheet,
+            self.threshold,
+            self.prospect_path,
+            self.puissant_path,
+            self.offer,
+        ) = _build_crossing_character(boundary_level=4, suffix="_empty_guard")
+        self.scene = SceneFactory(location=self.character.location, is_active=True)
+
+    def test_empty_text_returns_no_interaction(self) -> None:
+        result_scene, interaction = _post_declaration(self.character, "")
+        self.assertEqual(result_scene, self.scene)
+        self.assertIsNone(interaction)
+
+    def test_whitespace_only_returns_no_interaction(self) -> None:
+        result_scene, interaction = _post_declaration(self.character, "   ")
+        self.assertEqual(result_scene, self.scene)
+        self.assertIsNone(interaction)
