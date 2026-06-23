@@ -57,9 +57,16 @@ actions, backends, and service functions.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
-  `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
-  CEREMONY rituals. SERVICE rituals execute immediately; CEREMONY rituals create a
-  `PendingRitualEffect` that the matching finisher command (`weave`, `imbue`) consumes.
+  `PerformRitualAction` and multi-participant session lifecycle:
+  - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
+    immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
+  - `ritual sessions` — list pending sessions
+  - `ritual draft <name> invite=<char>[,<char>]` — draft a session
+  - `ritual join <id>` — accept your invitation
+  - `ritual decline <id>` — decline your invitation
+  - `ritual fire <id>` — fire the session (initiator only)
+
+  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` directly.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
