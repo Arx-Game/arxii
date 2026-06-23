@@ -5,6 +5,20 @@
 **Domain:** Core (Tehom) — action interface, magic-in-combat, challenge resolution
 **Branch:** `unified-action-interface`
 
+## The principle (read this first, plain language)
+
+A player has a **small, shared set of commands**. Whether they click a button on the web or type
+a command in telnet, both simply **express the intent to use an action**. Whether that action
+**happens now, waits its turn, or is blocked** is decided by **context — generally the rules of the
+active scene** (see the scene-round modes in §4 / `SceneRound.mode`: OPEN, POSE_ORDER, STRICT,
+added in #1351). **Combat is one specialization of this** (it always defers), not a separate system.
+
+Both interfaces should express that intent through the **same** path, so a backend (telnet) test of
+a journey also proves the web path. Where the web currently reaches something by an older,
+separate path, that's a **frontend-follows-the-backend** fixup to do afterward — not a different
+design. Everything below is the implementation detail behind this one idea; if the jargon ever
+seems to contradict this principle, the principle wins.
+
 ## 1. Problem & Context
 
 A player's character can currently take actions through **four disconnected
