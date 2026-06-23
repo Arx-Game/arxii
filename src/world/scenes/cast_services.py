@@ -431,7 +431,112 @@ def resolve_accepted_cast(
     return result  # result.power_ledger is already set from _resolve_cast
 
 
-def request_technique_cast(  # noqa: PLR0913, C901 - cohesive cast-routing params
+def _guard_area_consent(technique: Technique) -> None:
+    """Raise InvalidCastTarget when a behavior-altering AREA cast would expand without consent."""
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+
+    if technique.target_type != ActionTargetType.AREA or not cast_requires_consent(technique):
+        return
+    if derive_target_relationship(technique) == ConditionTargetKind.ALLY:
+        # TODO(#1321 follow-up): mass-consent state machine for AREA behavior-altering
+        # techniques; per-target consent is not yet supported for multi-target casts.
+        msg = (
+            "Multi-target behavior-altering AREA casts are not yet supported; "
+            "obtain individual consent before casting."
+        )
+        raise InvalidCastTarget(msg)
+
+
+def _route_filtered_group_cast(  # noqa: PLR0913
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    technique: Technique,
+    strain_commitment: int,
+    fury_commitment: FuryTier | None,
+    fury_anchor: CharacterSheet | None,
+    cast_pull: CastPullDeclaration | None,
+    supplied_personas: list[Persona],
+) -> CastResult:
+    """Route a FILTERED_GROUP cast that has a player-supplied persona list.
+
+    Raises InvalidCastTarget for hostile or behavior-altering cases (deferred paths).
+    """
+    if is_technique_hostile(technique):
+        # TODO(#1321 follow-up): multi-target hostile FILTERED_GROUP needs
+        # per-target combat seeds; not yet supported.
+        msg = (
+            "Multi-target hostile FILTERED_GROUP casts are not yet supported standalone; "
+            "use combat targeting instead."
+        )
+        raise InvalidCastTarget(msg)
+    if cast_requires_consent(technique):
+        # TODO(#1321 follow-up): behavior-altering FILTERED_GROUP requires a
+        # per-target consent state machine; not yet supported.
+        msg = (
+            "Multi-target behavior-altering FILTERED_GROUP casts are not yet supported; "
+            "obtain individual consent before casting."
+        )
+        raise InvalidCastTarget(msg)
+    return _route_immediate_cast(
+        scene=scene,
+        initiator_persona=initiator_persona,
+        target_persona=None,  # no single primary target; resolve_targets uses supplied_personas
+        technique=technique,
+        strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
+        cast_pull=cast_pull,
+        supplied_personas=supplied_personas,
+    )
+
+
+def _route_other_pc_cast(  # noqa: PLR0913
+    *,
+    scene: Scene,
+    initiator_persona: Persona,
+    target_persona: Persona,
+    technique: Technique,
+    strain_commitment: int,
+    fury_commitment: FuryTier | None,
+    fury_anchor: CharacterSheet | None,
+    cast_pull: CastPullDeclaration | None,
+) -> CastResult:
+    """Route a cast directed at another PC (not the caster's own sheet)."""
+    if is_technique_hostile(technique):
+        if cast_pull is not None:
+            msg = "Pulls cannot be declared on hostile casts."
+            raise ValidationError(msg)
+        return _route_hostile_cast(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+        )
+    if cast_requires_consent(technique):
+        return _route_benign_cast(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
+            cast_pull=cast_pull,
+        )
+    return _route_immediate_cast(
+        scene=scene,
+        initiator_persona=initiator_persona,
+        target_persona=target_persona,
+        technique=technique,
+        strain_commitment=strain_commitment,
+        fury_commitment=fury_commitment,
+        fury_anchor=fury_anchor,
+        cast_pull=cast_pull,
+    )
+
+
+def request_technique_cast(  # noqa: PLR0913
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -493,45 +598,12 @@ def request_technique_cast(  # noqa: PLR0913, C901 - cohesive cast-routing param
         target_personas=[target_persona] if target_persona is not None else [],
     )
 
-    # AREA technique that requires consent: guard before the immediate route.
-    # Hostile AREA routes to combat; SELF AREA only hits the caster — both safe.
-    # Only behavior-altering ALLY-expanding AREA is the hole: resolve_targets would
-    # silently expand to all other scene personas with no consent step.
-    if technique.target_type == ActionTargetType.AREA and cast_requires_consent(technique):
-        relationship = derive_target_relationship(technique)
-        if relationship == ConditionTargetKind.ALLY:
-            # TODO(#1321 follow-up): mass-consent state machine for AREA behavior-altering
-            # techniques; per-target consent is not yet supported for multi-target casts.
-            msg = (
-                "Multi-target behavior-altering AREA casts are not yet supported; "
-                "obtain individual consent before casting."
-            )
-            raise InvalidCastTarget(msg)
+    _guard_area_consent(technique)
 
-    # FILTERED_GROUP with a player-supplied list: guard the deferred cases, then
-    # resolve immediately for the benign capability / stat-buff path.
     if supplied_personas is not None and technique.target_type == ActionTargetType.FILTERED_GROUP:
-        if is_technique_hostile(technique):
-            # TODO(#1321 follow-up): multi-target hostile FILTERED_GROUP needs
-            # per-target combat seeds; not yet supported.
-            msg = (
-                "Multi-target hostile FILTERED_GROUP casts are not yet supported standalone; "
-                "use combat targeting instead."
-            )
-            raise InvalidCastTarget(msg)
-        if cast_requires_consent(technique):
-            # TODO(#1321 follow-up): behavior-altering FILTERED_GROUP requires a
-            # per-target consent state machine; not yet supported.
-            msg = (
-                "Multi-target behavior-altering FILTERED_GROUP casts are not yet supported; "
-                "obtain individual consent before casting."
-            )
-            raise InvalidCastTarget(msg)
-        # Benign, consent-free FILTERED_GROUP → resolve immediately with the full list.
-        return _route_immediate_cast(
+        return _route_filtered_group_cast(
             scene=scene,
             initiator_persona=initiator_persona,
-            target_persona=None,  # no single primary target; resolve_targets uses supplied_personas
             technique=technique,
             strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
@@ -546,29 +618,7 @@ def request_technique_cast(  # noqa: PLR0913, C901 - cohesive cast-routing param
         target_persona is not None
         and target_persona.character_sheet_id != initiator_persona.character_sheet_id
     ):
-        if is_technique_hostile(technique):
-            if cast_pull is not None:
-                msg = "Pulls cannot be declared on hostile casts."
-                raise ValidationError(msg)
-            return _route_hostile_cast(
-                scene=scene,
-                initiator_persona=initiator_persona,
-                target_persona=target_persona,
-                technique=technique,
-            )
-        if cast_requires_consent(technique):
-            return _route_benign_cast(
-                scene=scene,
-                initiator_persona=initiator_persona,
-                target_persona=target_persona,
-                technique=technique,
-                strain_commitment=strain_commitment,
-                fury_commitment=fury_commitment,
-                fury_anchor=fury_anchor,
-                cast_pull=cast_pull,
-            )
-        # Benign but no consent required (capability/stat buffs) → immediate resolution.
-        return _route_immediate_cast(
+        return _route_other_pc_cast(
             scene=scene,
             initiator_persona=initiator_persona,
             target_persona=target_persona,

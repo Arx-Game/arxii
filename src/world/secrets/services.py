@@ -22,6 +22,8 @@ from world.secrets.models import Secret, SecretKnowledge
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
@@ -239,3 +241,58 @@ def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExpo
         organization_victim_deltas=org_deltas,
         notified_persona_victim_ids=tuple(notified_persona_ids),
     )
+
+
+# --- Listing (shared by the web viewset + the telnet +secrets command) -------------------
+# Sort keys, mapped to ordering tuples. Same keys for both shelves; the field paths differ
+# because "your own" lists Secret rows and "known about others" lists SecretKnowledge rows.
+_OWN_SORTS: dict[str, tuple[str, ...]] = {
+    "level": ("-level", "-created_date"),
+    "recent": ("-created_date",),
+    "category": ("category__name", "-level"),
+}
+_KNOWN_SORTS: dict[str, tuple[str, ...]] = {
+    "level": ("-secret__level", "-found_at"),
+    "recent": ("-found_at",),
+    "category": ("secret__category__name", "-secret__level"),
+    "subject": ("secret__subject_sheet__character__db_key", "-secret__level"),
+}
+SECRET_SORT_KEYS: tuple[str, ...] = tuple(_KNOWN_SORTS)
+
+
+def secrets_owned_by(sheet: CharacterSheet, *, sort: str = "level") -> QuerySet[Secret]:
+    """The secrets a character **owns** — its own shelf (#1334).
+
+    Single-owner: ``subject_sheet`` is the sole owner, and the owner knows their own secrets in
+    full (no Unknown layers). ``sort`` is one of ``_OWN_SORTS`` (defaults to most-dangerous-first).
+    """
+    order = _OWN_SORTS.get(sort, _OWN_SORTS["level"])
+    return (
+        Secret.objects.filter(subject_sheet=sheet)
+        .select_related("category", "author_persona")
+        .order_by(*order)
+    )
+
+
+def known_secrets_for(
+    roster_entry: RosterEntry,
+    *,
+    subject_sheet: CharacterSheet | None = None,
+    sort: str = "recent",
+) -> QuerySet[SecretKnowledge]:
+    """The secrets a character has **learned about others** — held records (#1334).
+
+    Optionally scoped to one ``subject_sheet`` (a single person's tab). Partial-knowledge layers
+    stay locked per the held row; the serializer/command renders locked layers as "Unknown".
+    Query-free downstream: pulls the subject name + category + author. ``sort`` ∈ ``_KNOWN_SORTS``.
+    """
+    qs = SecretKnowledge.objects.filter(roster_entry=roster_entry).select_related(
+        "secret",
+        "secret__category",
+        "secret__author_persona",
+        "secret__subject_sheet__character",
+    )
+    if subject_sheet is not None:
+        qs = qs.filter(secret__subject_sheet=subject_sheet)
+    order = _KNOWN_SORTS.get(sort, _KNOWN_SORTS["recent"])
+    return qs.order_by(*order)

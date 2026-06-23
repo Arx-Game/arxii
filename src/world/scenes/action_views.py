@@ -86,10 +86,36 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
+    @staticmethod
+    def _validate_cardinality(action_key: str, target_ids: list[int]) -> None:
+        """Raise DRFValidationError if target_ids conflict with the action's target_type."""
+        registered_action = get_action(action_key)
+        cardinality = (
+            registered_action.target_type if registered_action is not None else TargetType.SINGLE
+        )
+        if cardinality == TargetType.SINGLE and len(target_ids) > 1:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action targets a single persona."}
+            )
+        if cardinality in (TargetType.AREA, TargetType.FILTERED_GROUP) and not target_ids:
+            raise DRFValidationError(
+                {"target_persona_ids": "This action requires at least one target."}
+            )
+        if cardinality == TargetType.SELF and target_ids:
+            raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
+
+    @staticmethod
+    def _resolve_delivery_receivers(receiver_ids: list[int]) -> tuple[list[Persona], bool]:
+        """Return (resolved_personas, all_found). ``all_found`` is False if any id is missing."""
+        if not receiver_ids:
+            return [], True
+        delivery_receivers = list(Persona.objects.filter(pk__in=receiver_ids))
+        return delivery_receivers, len(delivery_receivers) == len(set(receiver_ids))
+
     @extend_schema(
         request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: C901
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -107,23 +133,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         target_ids: list[int] = serializer.validated_data["target_ids"]
         effort_level: str = serializer.validated_data["effort_level"]
 
-        # Cardinality validation: enforce the action's target_type against the
-        # normalised target_ids list.  Unknown / unregistered actions default to
-        # SINGLE (conservative — avoids silent multi-target dispatch).
-        registered_action = get_action(action_key)
-        cardinality = (
-            registered_action.target_type if registered_action is not None else TargetType.SINGLE
-        )
-        if cardinality == TargetType.SINGLE and len(target_ids) > 1:
-            raise DRFValidationError(
-                {"target_persona_ids": "This action targets a single persona."}
-            )
-        if cardinality in (TargetType.AREA, TargetType.FILTERED_GROUP) and not target_ids:
-            raise DRFValidationError(
-                {"target_persona_ids": "This action requires at least one target."}
-            )
-        if cardinality == TargetType.SELF and target_ids:
-            raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
+        self._validate_cardinality(action_key, target_ids)
 
         try:
             scene = Scene.objects.get(pk=scene_id, is_active=True)
@@ -158,14 +168,12 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         delivery = serializer.validated_data.get("delivery", "")
         receiver_ids = serializer.validated_data.get("delivery_receiver_ids", [])
-        delivery_receivers: list[Persona] = []
-        if receiver_ids:
-            delivery_receivers = list(Persona.objects.filter(pk__in=receiver_ids))
-            if len(delivery_receivers) != len(set(receiver_ids)):
-                return Response(
-                    {"detail": "One or more delivery receivers not found."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        delivery_receivers, all_found = self._resolve_delivery_receivers(receiver_ids)
+        if not all_found:
+            return Response(
+                {"detail": "One or more delivery receivers not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             action_request = create_action_request(
@@ -294,6 +302,19 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         return Response(response_data)
 
+    @staticmethod
+    def _resolve_supplied_personas(
+        target_persona_ids: list[int] | None,
+    ) -> tuple[list[Persona] | None, bool]:
+        """Resolve FILTERED_GROUP picker ids to Persona objects.
+
+        Returns ``(resolved, all_found)``. ``resolved`` is None when no ids supplied.
+        """
+        if target_persona_ids is None:
+            return None, True
+        supplied = list(Persona.objects.filter(pk__in=target_persona_ids))
+        return supplied, len(supplied) == len(set(target_persona_ids))
+
     @extend_schema(
         request=TechniqueCastCreateSerializer,
         responses={201: SceneActionRequestSerializer},
@@ -324,7 +345,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         initiator_persona_id = vd["initiator_persona"]
         technique_id = vd["technique_id"]
         target_persona_id = vd.get("target_persona")
-        target_persona_ids: list[int] | None = vd.get("target_persona_ids") or None
         strain_commitment = vd.get("strain_commitment", 0) or 0
 
         cast_pull = None
@@ -358,14 +378,13 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             target_persona = get_object_or_404(Persona, pk=target_persona_id)
 
         # Resolve the FILTERED_GROUP picker list, if provided.
-        supplied_personas: list[Persona] | None = None
-        if target_persona_ids is not None:
-            supplied_personas = list(Persona.objects.filter(pk__in=target_persona_ids))
-            if len(supplied_personas) != len(set(target_persona_ids)):
-                return Response(
-                    {"detail": "One or more target personas not found."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        raw_target_ids: list[int] | None = vd.get("target_persona_ids") or None
+        supplied_personas, all_found = self._resolve_supplied_personas(raw_target_ids)
+        if not all_found:
+            return Response(
+                {"detail": "One or more target personas not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         technique = get_object_or_404(Technique, pk=technique_id)
 
