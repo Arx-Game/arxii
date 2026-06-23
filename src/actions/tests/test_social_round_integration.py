@@ -38,6 +38,7 @@ from world.mechanics.factories import (
 from world.mechanics.models import ChallengeInstance
 from world.scenes.constants import (
     RoundStatus,
+    SceneRoundMode,
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
@@ -142,7 +143,8 @@ class SocialRoundIntegrationBase(TestCase):
         return _challenge_ref(self.challenge_instance, self.approach)
 
     def _make_round(self, **kwargs):
-        """Create an OPT_IN DECLARING round with the given participants/initiative."""
+        """Create a STRICT OPT_IN DECLARING round with the given participants/initiative."""
+        kwargs.setdefault("mode", SceneRoundMode.STRICT)
         return SceneRoundFactory(
             room=self.room,
             status=RoundStatus.DECLARING,

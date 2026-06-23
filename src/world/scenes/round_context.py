@@ -12,6 +12,7 @@ from actions.round_context import RoundContext
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
+    SceneRoundMode,
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
@@ -38,12 +39,12 @@ class SceneRoundContext(RoundContext):
 
     @property
     def is_declaration_open(self) -> bool:
-        # Social (opt-in / GM) rounds gather declarations while DECLARING. DANGER rounds
-        # keep the #1046 acute-tier behavior (resolve immediately, tick on action), so they
-        # never declaration-gate — this preserves AFK-safety for bleed-out progression.
+        # Only STRICT rounds gather declarations. POSE_ORDER and OPEN rounds resolve
+        # immediately. DANGER rounds use the #1046 acute-tier behavior.
         return (
             self._scene_round.status == RoundStatus.DECLARING
             and self._scene_round.start_reason != SceneRoundStartReason.DANGER
+            and self._scene_round.mode == SceneRoundMode.STRICT
         )
 
     @transaction.atomic
@@ -88,6 +89,38 @@ class SceneRoundContext(RoundContext):
                 "is_pass": False,
             },
         )
+
+    def is_repeat_blocked(
+        self,
+        actor: CharacterSheet,
+        action_ref: Any,  # noqa: ARG002
+        target_persona: Any,
+    ) -> bool:
+        from world.scenes.round_services import actions_this_round  # noqa: PLC0415
+
+        rnd = self._scene_round
+        if rnd.mode == SceneRoundMode.OPEN:
+            return False
+        if rnd.mode == SceneRoundMode.STRICT:
+            return not self.is_declaration_open
+        # POSE_ORDER
+        participant = SceneRoundParticipant.objects.get(
+            scene_round=rnd,
+            character_sheet=actor,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+        taken = actions_this_round(rnd, participant)
+        if taken >= rnd.max_actions_per_round:
+            return True
+        if rnd.per_target_repeat_lock and target_persona is not None:
+            already_hit = rnd.action_declarations.filter(
+                round_number=rnd.round_number,
+                participant=participant,
+                target_persona=target_persona,
+            ).exists()
+            if already_hit:
+                return True
+        return False
 
 
 def resolve_scene_round_context(character: CharacterSheet) -> SceneRoundContext | None:

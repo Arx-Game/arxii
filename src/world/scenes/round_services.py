@@ -44,6 +44,43 @@ def distinct_actors_this_round(scene_round: SceneRound) -> int:
 
 
 @transaction.atomic
+def record_pose_order_action(
+    scene_round: SceneRound,
+    participant: SceneRoundParticipant,
+    target_persona: object = None,
+) -> None:
+    """Record an immediate (POSE_ORDER) action for a participant in the current round."""
+    from world.scenes.models import SceneActionDeclaration  # noqa: PLC0415
+
+    SceneActionDeclaration.objects.create(
+        scene_round=scene_round,
+        round_number=scene_round.round_number,
+        participant=participant,
+        target_persona=target_persona,
+        is_immediate=True,
+        is_pass=False,
+    )
+
+
+@transaction.atomic
+def advance_pose_order_round_if_quorum(scene_round: SceneRound) -> SceneRound:
+    """Advance round_number if distinct actors >= quorum. Pose-order rounds stay DECLARING."""
+    import math  # noqa: PLC0415
+
+    rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
+    active = rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).count()
+    if active == 0:
+        return scene_round
+    needed = math.ceil(rnd.advance_quorum_pct / 100 * active)
+    if distinct_actors_this_round(rnd) >= needed:
+        rnd.round_number += 1
+        rnd.round_started_at = timezone.now()
+        rnd.save(update_fields=["round_number", "round_started_at"])
+        scene_round.refresh_from_db()
+    return scene_round
+
+
+@transaction.atomic
 def start_scene_round(scene_round: SceneRound) -> SceneRound:
     """Advance a BETWEEN_ROUNDS round into DECLARING (round_number += 1)."""
     rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)

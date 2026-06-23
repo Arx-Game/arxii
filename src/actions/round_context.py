@@ -73,6 +73,13 @@ class RoundContext(ABC):
         """
         ...
 
+    @abstractmethod
+    def is_repeat_blocked(
+        self, actor: CharacterSheet, action_ref: Any, target_persona: Any
+    ) -> bool:
+        """True when *actor* may not act again until the round advances."""
+        ...
+
 
 def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     """Return the active ``RoundContext`` for *character*, or ``None``.
