@@ -47,23 +47,15 @@ class ConsentRequestCommand(ArxCommand):
     locks = "cmd:all()"
     action = None
 
-    def func(self) -> None:
-        # ValidationError is imported as DjangoValidationError to avoid colliding
-        # with DRF's ValidationError; the service raises Django's (e.g. technique
-        # validation or a TABLE_TALK delivery without a place). Subclasses that
-        # pass a technique/delivery can trip it, so the base converts it to a
-        # clean message rather than a raw traceback — mirroring the web viewset.
+    def _execute(self) -> None:
+        # DjangoValidationError converted to CommandError so the base try/except
+        # surfaces it cleanly — mirrors how the web viewset handles it.
         from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
 
         from world.scenes.action_services import create_action_request  # noqa: PLC0415
 
-        try:
-            scene, initiator_persona = self._resolve_scene_and_initiator()
-            target_persona = self._resolve_target_persona()
-        except CommandError as err:
-            self.msg(str(err))
-            return
-
+        scene, initiator_persona = self._resolve_scene_and_initiator()
+        target_persona = self._resolve_target_persona()
         try:
             request = create_action_request(
                 scene=scene,
@@ -72,9 +64,8 @@ class ConsentRequestCommand(ArxCommand):
                 action_key=self.action_key,
             )
         except DjangoValidationError as err:
-            self.msg("; ".join(err.messages))
-            return
-
+            msg = "; ".join(err.messages)
+            raise CommandError(msg) from err
         self.msg(
             f"You move to {self.action_key} {target_persona.name}. "
             f"Awaiting their response (request #{request.pk})."
@@ -228,7 +219,7 @@ class _RespondCommand(ArxCommand):
     locks = "cmd:all()"
     action = None
 
-    def func(self) -> None:
+    def _execute(self) -> None:
         from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
 
         request = self._resolve_pending_request()
@@ -281,16 +272,13 @@ class CmdAccept(_RespondCommand):
     key = "accept"
     decision = ConsentDecision.ACCEPT
 
-    def func(self) -> None:
+    def _execute(self) -> None:
         args = (self.args or "").strip()
         first = args.partition(" ")[0]
         if not first.isdigit() and (first or self._has_registry_pending()):
-            try:
-                self.msg(self._dispatch_registry(args))
-            except CommandError as exc:
-                self.msg(str(exc))
+            self.msg(self._dispatch_registry(args))
         else:
-            super().func()
+            super()._execute()
 
     def _has_registry_pending(self) -> bool:
         from commands.offer_registry import get_all_pending  # noqa: PLC0415

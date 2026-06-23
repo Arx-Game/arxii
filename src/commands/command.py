@@ -156,13 +156,19 @@ class ArxCommand(Command):
         return match.group(1).strip(), match.group(2).strip()
 
     def func(self) -> None:
-        """Execute the command by delegating to the action.
+        """Execute the command.
 
-        Parses arguments via :meth:`resolve_action_args`, calls
-        ``action.run()``, and sends results to the caller.
+        For action-based commands: parses via :meth:`resolve_action_args`,
+        calls ``action.run()``. For ``action=None`` commands: delegates to
+        :meth:`_execute`. Both paths catch :class:`~commands.exceptions.CommandError`
+        and surface it as a player message — subclasses raise rather than
+        handling errors inline.
         """
         if self.action is None:
-            self.msg("This command is not available.")
+            try:
+                self._execute()
+            except CommandError as err:
+                self.msg(str(err))
             return
 
         try:
@@ -178,6 +184,10 @@ class ArxCommand(Command):
                     "command": self.raw_string or "",
                 },
             )
+
+    def _execute(self) -> None:
+        """Override in ``action=None`` subclasses; raise ``CommandError`` for errors."""
+        self.msg("This command is not available.")
 
     def get_help(
         self,
