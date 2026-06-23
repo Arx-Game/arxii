@@ -35,3 +35,11 @@ def find_handler(keyword: str) -> OfferHandler | None:
         if handler.keyword.lower() == keyword_lower:
             return handler
     return None
+
+
+def format_pending_listing(pending: list[tuple[OfferHandler, Any]]) -> str:
+    if not pending:
+        return "You have no pending offers."
+    lines = ["Pending prompts:"]
+    lines += [f"  [{h.keyword}] {h.describe(o)}" for h, o in pending]
+    return "\n".join(lines)

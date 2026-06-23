@@ -282,50 +282,47 @@ class CmdAccept(_RespondCommand):
     decision = ConsentDecision.ACCEPT
 
     def func(self) -> None:
-        from commands.exceptions import CommandError  # noqa: PLC0415
-        from commands.offer_registry import find_handler, get_all_pending  # noqa: PLC0415
-        from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
-
-        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         args = (self.args or "").strip()
-        first, _, rest = args.partition(" ")
-
-        # Registry path: non-numeric first token matches a registered handler.
-        if first and not first.isdigit():
-            handler = find_handler(first)
-            if handler is None:
-                self.msg(f"No registered offer type '{first}'.")
-                return
-            if sheet is None:
-                self.msg("You need a character sheet for that.")
-                return
-            offer = handler.pending_for(sheet)
-            if offer is None:
-                self.msg(f"You have no pending {handler.label} offer.")
-                return
+        first = args.partition(" ")[0]
+        if not first.isdigit() and (first or self._has_registry_pending()):
             try:
-                self.msg(handler.accept(offer, self.caller, rest.strip()))
+                self.msg(self._dispatch_registry(args))
             except CommandError as exc:
                 self.msg(str(exc))
-            return
+        else:
+            super().func()
 
-        # Listing path: no args — show registry pending if any, then fall through.
-        if not args and sheet is not None:
-            pending = get_all_pending(sheet)
-            if pending:
-                lines = ["Pending prompts:"]
-                lines += [f"  [{h.keyword}] {h.describe(o)}" for h, o in pending]
-                self.msg("\n".join(lines))
-                return
+    def _has_registry_pending(self) -> bool:
+        from commands.offer_registry import get_all_pending  # noqa: PLC0415
 
-        # Existing consent behavior (unchanged — numeric id or no args with no registry offers).
-        request = self._resolve_pending_request()
-        if request is None:
-            self.msg(_NO_PENDING_MSG)
-            return
-        respond_to_action_request(action_request=request, decision=self.decision)
-        verb = "accept" if self.decision == ConsentDecision.ACCEPT else "deny"
-        self.msg(f"You {verb} the action against you.")
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return False
+        return bool(get_all_pending(sheet))
+
+    def _dispatch_registry(self, args: str) -> str:
+        from commands.offer_registry import (  # noqa: PLC0415
+            find_handler,
+            format_pending_listing,
+            get_all_pending,
+        )
+
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        keyword, _, rest = args.partition(" ")
+        if not keyword:
+            return format_pending_listing(get_all_pending(sheet) if sheet is not None else [])
+        handler = find_handler(keyword)
+        if handler is None:
+            msg = f"No registered offer type '{keyword}'."
+            raise CommandError(msg)
+        if sheet is None:
+            msg = "You need a character sheet for that."
+            raise CommandError(msg)
+        offer = handler.pending_for(sheet)
+        if offer is None:
+            msg = f"You have no pending {handler.label} offer."
+            raise CommandError(msg)
+        return handler.accept(offer, self.caller, rest.strip())
 
 
 class CmdDeny(_RespondCommand):
