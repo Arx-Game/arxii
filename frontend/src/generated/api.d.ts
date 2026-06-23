@@ -11653,6 +11653,47 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/secrets/grievance/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description A secret's victim registers a grievance against its subject (#1429).
+     *
+     *     The web face of the persona-victim prompt; converges on the same
+     *     ``register_secret_grievance`` service the telnet ``+grievance`` command calls. The viewing
+     *     character (``viewer`` = a RosterEntry pk) is validated as owned by the requester, and the
+     *     service enforces that they are an entitled victim who has learned the secret.
+     */
+    post: operations['secrets_grievance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/secrets/grievance-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The grievance responses a wronged character may choose from (#1429). */
+    get: operations['secrets_grievance_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/secrets/known/': {
     parameters: {
       query?: never;
@@ -16911,6 +16952,13 @@ export interface components {
       /** @description Check if this domain is optional (doesn't require point allocation). */
       readonly is_optional: boolean;
     };
+    /** @description A preset grievance swing offered to a wronged character (#1429). */
+    GrievanceOption: {
+      readonly id: number;
+      readonly label: string;
+      readonly points: number;
+      readonly track: string;
+    };
     /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
     GroupBallotState: {
       character_id: number;
@@ -17592,6 +17640,8 @@ export interface components {
       readonly provenance: string;
       /** Format: date-time */
       readonly found_at: string;
+      /** @default false */
+      readonly can_grieve: boolean;
       readonly subject: string;
       readonly category: string;
       readonly consequences: string;
@@ -42119,6 +42169,43 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  secrets_grievance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  secrets_grievance_options_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GrievanceOption'][];
         };
       };
     };

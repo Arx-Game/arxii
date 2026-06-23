@@ -95,19 +95,19 @@ fires when the tab is opened.
 > no/unowned `viewer` → no secrets. The frontend resolves the active character from
 > `state.game.active`. An alt knowing a secret never surfaces it while you play a different face.
 
-### Telnet — `+secrets`
+### Telnet — `sheet/secret`
 
-The telnet face of the tab (`commands/social/secrets.py`, thin over the services). On telnet the
-caller **is** the active character, so scoping is automatic — no viewer param:
+Secrets are a **section of the sheet**, not a standalone command — the same shape as the web
+(the `SecretsTab` is a tab on `CharacterSheetPage`). The sheet is the character hub; `sheet/secret`
+is its first telnet section (`commands/account/sheet_sections.py`, thin over the services):
 
-- `+secrets` → your *own* secrets (`secrets_owned_by` — you own them, shown in full, no Unknown).
-- `+secrets <character>` → secrets you know about them (`known_secrets_for`, locked layers
-  rendered "Unknown").
-- `+secrets all` → every secret you know about others.
-- `+secrets/<sort>` → sort by `level` (default) / `recent` / `category` / `subject`.
+- `sheet/secret` → your *own* secrets (`secrets_owned_by` — shown in full, no Unknown).
+- `sheet/secret <character>` → secrets you know about them (`known_secrets_for`, locked layers
+  rendered "Unknown"), scoped to your active (viewing) character.
 
-The command and the web viewset share one query path (`known_secrets_for` / `secrets_owned_by`)
-so they can't drift.
+The section and the web viewset share one query path (`known_secrets_for` / `secrets_owned_by`)
+so they can't drift. Future sections (renown, relationships, society standings, covenant, magic)
+join the same `sheet/<section>` registry.
 
 ## Originating systems — the back-reference pattern
 
@@ -162,11 +162,21 @@ account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` pro
 victims have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge
 so the same hook prompts them when the secret goes public.
 
+**Registering the grievance (web + telnet).** The victim's chosen response is a
+`relationships.GrievanceOption` (an authored preset: label + negative track + points) or a custom
+value, applied as a one-sided capstone toward the perpetrator. `register_secret_grievance(*,
+roster_entry, secret, option | custom)` is the shared seam (validates victimhood + that they've
+learned it, then calls `relationships.register_grievance`). The **web** path: the known-secret tab
+flags `can_grieve` (an `Exists` annotation), and a `GrievancePrompt` (the four presets) posts to
+`/api/secrets/grievance/`; `/api/secrets/grievance-options/` lists the menu. The **telnet** path:
+`+grievance` (`commands/social/grievance.py`) — both converge on the one service.
+
 Reputation attaches to the subject's **primary persona** (only established/primary identities
-accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
-trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
-slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
-propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
+accrue reputation). A custom-value field in the web prompt, the `magnitude`/fame axis, org-level
+diffuse interpretation, the *exposure trigger* (how individual `SecretKnowledge` propagates to
+society-level exposure — the gossip slice), enforcement (wanted/blood-feud conditions,
+hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
+**later slices** of the #1429 sub-epic.
 
 ## Boundary with Codex
 

@@ -257,7 +257,7 @@ mechanical is web-only.
 | **Thread weave/imbue/pull** | `weave_thread` / `spend_resonance_for_imbuing` / `_for_pull` (`magic/services/`) | G1/G3 |
 | **Soul-tether & sineating** | 8 APIViews: accept/dissolve/request/respond/rescue/stage-advance (`magic/views.py:1206–1461`) | G3 |
 | **Audere / Audere Majora** | `resolve_audere_offer`; `cross_threshold` (`magic/audere*.py`) — the progression/"leveling" surface | G3 |
-| **Multi-participant rituals** | `draft_session`/`accept`/`decline`/`fire` (`magic/services/sessions.py`) | G3 |
+| **Multi-participant rituals** | `draft_session`/`accept`/`decline`/`fire` (`magic/services/sessions.py`) | **RESOLVED — #1345** |
 | **Covenant membership** | engage/disengage/leave/kick/rank; banner-call/stand-down (`covenants/services.py`) | G3 |
 | **Persona / guise** | `set_active_persona` (`scenes/services.py:86`) | G3 |
 | **Progression rewards** | `claim_kudos_for_xp`; `cast_vote`/`remove_vote`; random-scene; path-intent (`progression/views.py`) | G3 |

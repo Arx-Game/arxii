@@ -69,7 +69,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
-from commands.social.secrets import CmdSecrets
+from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.weave import CmdWeaveThread
 
@@ -162,11 +162,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMute,
             CmdUnmute,
             CmdBlockList,
-            # #1334 — the telnet face of the secret tab.
-            CmdSecrets,
             # Soul Tether lifecycle commands (#1343)
             CmdTether,
             CmdSineater,
+            # #1429 — the telnet face of the secret-victim grievance prompt.
+            CmdGrievance,
             # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
         )

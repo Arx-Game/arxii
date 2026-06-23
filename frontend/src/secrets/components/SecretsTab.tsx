@@ -1,6 +1,8 @@
 import { useKnownSecretsQuery } from '../queries';
 import type { KnownSecret } from '../types';
 
+import { GrievancePrompt } from './GrievancePrompt';
+
 const UNKNOWN = 'Unknown';
 
 /** One partial-knowledge layer. The backend renders unlocked/unplaced layers as "Unknown"; we
@@ -15,7 +17,7 @@ function Layer({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SecretCard({ secret }: { secret: KnownSecret }) {
+function SecretCard({ secret, viewerId }: { secret: KnownSecret; viewerId: number }) {
   return (
     <div className="space-y-1 rounded-md border p-3">
       <div className="flex items-center justify-between">
@@ -27,6 +29,11 @@ function SecretCard({ secret }: { secret: KnownSecret }) {
       <p>{secret.content}</p>
       <Layer label="Category" value={secret.category} />
       <Layer label="Consequences" value={secret.consequences} />
+      {secret.can_grieve && (
+        <div className="pt-1">
+          <GrievancePrompt secretId={secret.id} viewerId={viewerId} />
+        </div>
+      )}
     </div>
   );
 }
@@ -59,7 +66,7 @@ export function SecretsTab({
   return (
     <div className="space-y-3">
       {secrets.map((secret) => (
-        <SecretCard key={secret.id} secret={secret} />
+        <SecretCard key={secret.id} secret={secret} viewerId={viewerId} />
       ))}
     </div>
   );
