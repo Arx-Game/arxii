@@ -1,3 +1,5 @@
+/workspaces/arxii/.claude/worktrees/issue-1351-scene-adaptive-cast/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -3469,6 +3471,7 @@
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
   - summary_revisions <- scenes.SceneSummaryRevision
+  - targeted_scene_declarations <- scenes.SceneActionDeclaration
   - initiated_action_requests <- scenes.SceneActionRequest
   - received_action_requests <- scenes.SceneActionRequest
   - delivery_scoped_action_requests <- scenes.SceneActionRequest
@@ -3610,6 +3613,10 @@
   - participants <- scenes.SceneRoundParticipant
   - action_declarations <- scenes.SceneActionDeclaration
 
+### SceneRoundDefaultsConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
 ### SceneRoundParticipant
 **Foreign Keys:**
   - scene_round -> scenes.SceneRound [FK]
@@ -3623,6 +3630,7 @@
   - participant -> scenes.SceneRoundParticipant [FK]
   - challenge_instance -> mechanics.ChallengeInstance [FK] (nullable)
   - challenge_approach -> mechanics.ChallengeApproach [FK] (nullable)
+  - target_persona -> scenes.Persona [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**
@@ -3729,7 +3737,9 @@
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
+- `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
+- `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
 
 
 ## world.skills

@@ -608,9 +608,19 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
 ### Scenes
-Roleplay session recording with participant tracking, interaction logging, persona-based identity, and social action consent flow.
+Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
+action consent flow, and a three-mode non-combat round framework.
 
-- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`, `SceneCastPullDeclaration`
+- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
+  `SceneCastPullDeclaration`,
+  **Round framework (#1351):** `SceneRound` (room-anchored non-combat round; fields: `mode`
+  (`SceneRoundMode`), `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`;
+  DANGER start_reason forces `mode=OPEN`), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
+  defaults: `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
+  `anti_spam_seconds`; accessed via `get_scene_round_defaults_config()`), `SceneActionDeclaration`
+  (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
+  deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
+  `max_actions_per_round`), `SceneRoundParticipant`
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -626,6 +636,15 @@ Roleplay session recording with participant tracking, interaction logging, perso
   - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
     `SceneParticipation` for the character's account in the scene if one does not already exist.
     Public API consumed by combat to record fighters as first-class scene participants.
+  - **Round framework (`round_services.py`, #1351):**
+    - `get_scene_round_defaults_config() -> SceneRoundDefaultsConfig` (`models.py`) — get-or-create the singleton config.
+    - `actions_this_round(scene_round, participant) -> int` — declaration count for a participant.
+    - `distinct_actors_this_round(scene_round) -> int` — distinct participants with declarations this round.
+    - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
+    - `advance_pose_order_round_if_quorum(scene_round) -> SceneRound` — advance `round_number` when quorum met (round stays DECLARING).
+    - `scene_round_is_complete(scene_round) -> bool` — presence-gated: True when all present ACTIVE participants have a deferred declaration.
+    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round.
+    - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -654,7 +673,8 @@ Roleplay session recording with participant tracking, interaction logging, perso
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
-  actions (resolver registry via `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
+  actions (`SCENE_ADAPTIVE` backend dispatch + `CastTechniqueAction`; resolver registry via
+  `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories

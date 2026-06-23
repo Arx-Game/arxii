@@ -78,7 +78,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
 | [Rooms, Buildings & Estates](rooms-and-estates.md) | skeleton | What ownership of rooms/buildings/estates unlocks — servants, decoration, vaults, special-purpose rooms |
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
-| [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement |
+| [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement, three-mode round framework |
 | [Events](events.md) | **MVP complete** | Scheduled RP gatherings, calendar, invitations, room modifications |
 | [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, trust tiers, time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
@@ -99,6 +99,30 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 - [Seed Mechanism + Integration Test Coverage](seed-and-integration-tests.md) — making the project clonable and every L1 user story regression-tested. Three phases: magic completeness → integration test framework expansion → seed for clone use. Audit at `docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`. **Sequenced before broad UI work.**
 
 ### Recent Infrastructure Changes
+
+- **Scene-adaptive cast + three-mode round framework (#1351, complete):**
+  - `SceneRoundMode` TextChoices (`OPEN` / `POSE_ORDER` / `STRICT`) on `SceneRound`. Social rounds
+    default to `POSE_ORDER` (immediate, quorum-driven advancement). DANGER rounds are forced to `OPEN`.
+    STRICT rounds gather declarations and resolve batch. `SceneRoundDefaultsConfig` (singleton pk=1)
+    lets staff tune `default_mode`, `advance_quorum_pct`, `max_actions_per_round`,
+    `per_target_repeat_lock`, and `anti_spam_seconds`.
+  - `SceneActionDeclaration` is now a multi-action-per-round ledger: `is_immediate` bool, `target_persona`
+    FK, no unique-per-round constraint. `actions_this_round` / `distinct_actors_this_round` helpers in
+    `round_services.py`. `record_pose_order_action` + `advance_pose_order_round_if_quorum` for action-driven
+    quorum. `scene_round_is_complete` / `maybe_resolve_scene_round` for STRICT social rounds.
+  - `SceneRoundContext.is_declaration_open` now requires `mode==STRICT`. `is_repeat_blocked` branches
+    on mode. `record_immediate_action` writes the POSE_ORDER ledger and advances quorum.
+  - `ActionBackend.SCENE_ADAPTIVE` + `_dispatch_scene_adaptive` in `actions/player_interface.py`:
+    anti-spam floor → `round_declaration` hook → `is_repeat_blocked` → immediate execution with
+    pose-order side-effects.
+  - `Action.round_declaration` hook in `actions/base.py` (default None). `CastTechniqueAction` returns
+    a combat declaration when inside a `CombatRoundContext`, else None (immediate in social rounds).
+  - `CastTechniqueAction` (key `"cast_technique"`, `actions/definitions/cast.py`) + soulfray consent
+    gate via `confirm_soulfray_risk` / `SoulfrayPendingHandler` (`world/magic/offer_handlers.py`) +
+    in-memory anti-spam + pending-cast store (`commands/pending_actions.py`).
+  - Unified `cast` command (`CmdDeclareTechnique`, `commands/combat.py`; key `cast`): parses
+    `cast <technique> [at <target>] [effort=<level>]`, emits a SCENE_ADAPTIVE `ActionRef`. The
+    prior `CmdAttempt` in `commands/magic.py` was deleted.
 
 - **ModifierTarget rename (Phase 1 complete):** `ModifierType` has been renamed to `ModifierTarget`
   across the entire codebase for clarity. Stat-category targets now have a `target_trait` FK for
