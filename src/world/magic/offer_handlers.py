@@ -128,7 +128,7 @@ class CrossingOfferHandler:
             path_name = path_part
 
         if not declaration.strip():
-            msg = "Speak -- your declaration must ring out before the threshold answers."
+            msg = "A declaration is required: accept crossing path=<name> declaration=<your text>"
             raise CommandError(msg)
 
         character = offer.character_sheet.character
