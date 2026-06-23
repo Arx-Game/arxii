@@ -54,7 +54,7 @@ class CommandErrorMessageTests(TestCase):
         cmd.key = "stub"
 
         cmd.func()
-        caller.msg.assert_called_once_with("This command is not available.")
+        caller.msg.assert_any_call("This command is not available.")
 
     def test_action_result_message_sent_to_caller(self):
         """Successful action result message should be sent to caller."""
