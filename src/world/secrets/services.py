@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.character_sheets.models import CharacterSheet
+    from world.relationships.models import GrievanceOption, RelationshipCapstone, RelationshipTrack
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.secrets.models import SecretCategory
@@ -158,6 +159,44 @@ def _notify_secret_victim_on_learn(secret: Secret, roster_entry: RosterEntry) ->
 def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
     """Whether this character already holds the fact of this secret (#1334)."""
     return SecretKnowledge.objects.filter(secret=secret, roster_entry=roster_entry).exists()
+
+
+def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinct field
+    *,
+    roster_entry: RosterEntry,
+    secret: Secret,
+    option: GrievanceOption | None = None,
+    custom_points: int | None = None,
+    custom_track: RelationshipTrack | None = None,
+    writeup: str = "",
+) -> RelationshipCapstone:
+    """A secret's victim registers a grievance against its subject (#1429).
+
+    The shared seam both the web endpoint and the telnet ``+grievance`` command call. The viewing
+    character must be a registered ``SecretVictim`` of ``secret`` **and** already hold the fact —
+    you can't grudge a wrong you haven't learned. Source is the victim's sheet, target the secret's
+    subject (the perpetrator); the chosen swing is applied via ``relationships.register_grievance``.
+    Raises ``SecretError`` if the caller isn't an entitled victim.
+    """
+    from world.relationships.services import register_grievance  # noqa: PLC0415 — avoid cycle
+    from world.secrets.models import SecretVictim  # noqa: PLC0415
+
+    sheet = roster_entry.character_sheet
+    is_victim = SecretVictim.objects.filter(secret=secret, persona__character_sheet=sheet).exists()
+    if not is_victim:
+        msg = "You are not a wronged party to this secret."
+        raise SecretError(msg, user_message=msg)
+    if not secret_known_to(secret, roster_entry):
+        msg = "You have not learned this secret."
+        raise SecretError(msg, user_message=msg)
+    return register_grievance(
+        source=sheet,
+        target=secret.subject_sheet,
+        option=option,
+        custom_points=custom_points,
+        custom_track=custom_track,
+        writeup=writeup,
+    )
 
 
 # --- Reputation bridge (#1429) ------------------------------------------------------------

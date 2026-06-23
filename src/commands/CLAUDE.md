@@ -50,6 +50,7 @@ actions, backends, and service functions.
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept`, `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+- **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
   CEREMONY rituals. SERVICE rituals execute immediately; CEREMONY rituals create a
