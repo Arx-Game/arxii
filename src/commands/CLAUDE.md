@@ -37,7 +37,8 @@ Use `DispatchCommand` whenever the command must reach a CHALLENGE or COMBAT back
 | Use | Base class |
 |---|---|
 | REGISTRY action (most look/say/move/item commands) | `ArxCommand` |
-| CHALLENGE backend (magic attempt, non-combat skill check) | `DispatchCommand` |
+| CHALLENGE backend (dungeon puzzle challenges — requires `challenge_instance_id`) | `DispatchCommand` |
+| Non-combat magic cast (`attempt`) — calls `request_technique_cast` directly | `ArxCommand` |
 | COMBAT backend (technique declaration into the current round) | `DispatchCommand` |
 
 Both bases stay thin: no business logic in commands — all behavior lives in
@@ -49,7 +50,12 @@ actions, backends, and service functions.
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
-- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept`, `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
+- **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,
+  `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
+- **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
+  extended `CmdAccept` in `consent.py`.
+- **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
+  fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction`; parses `ritual <name> [key=value ...]` for SERVICE and
@@ -62,6 +68,10 @@ actions, backends, and service functions.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
+- **`magic.py`**: `CmdAttempt` (`attempt`) — non-combat technique cast shell (#1332); thin
+  `ArxCommand` that parses `attempt <technique> [at <target>]`, resolves the persona via
+  `persona_for_character`, and calls `request_technique_cast` (the same service the web
+  viewset calls). No business logic; does NOT use CHALLENGE backend.
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
