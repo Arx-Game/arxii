@@ -268,14 +268,62 @@ class _RespondCommand(ArxCommand):
 
 
 class CmdAccept(_RespondCommand):
-    """Accept a pending action targeting you.
+    """Accept a pending game prompt, or consent to a pending action against you.
+
+    The game will tell you what to type when a prompt is available.
 
     Usage:
-        accept [request_id]
+        accept                   — list pending offers, or check for consent requests
+        accept <keyword> [args]  — accept via a registered offer handler
+        accept [request_id]      — consent to a pending social action (numeric id)
     """
 
     key = "accept"
     decision = ConsentDecision.ACCEPT
+
+    def func(self) -> None:
+        from commands.exceptions import CommandError  # noqa: PLC0415
+        from commands.offer_registry import find_handler, get_all_pending  # noqa: PLC0415
+        from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
+
+        sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        args = (self.args or "").strip()
+        first, _, rest = args.partition(" ")
+
+        # Registry path: non-numeric first token matches a registered handler.
+        if first and not first.isdigit():
+            handler = find_handler(first)
+            if handler is not None:
+                if sheet is None:
+                    self.msg("You need a character sheet for that.")
+                    return
+                offer = handler.pending_for(sheet)
+                if offer is None:
+                    self.msg(f"You have no pending {handler.label} offer.")
+                    return
+                try:
+                    self.msg(handler.accept(offer, self.caller, rest.strip()))
+                except CommandError as exc:
+                    self.msg(str(exc))
+                return
+
+        # Listing path: no args — show registry pending if any, then fall through.
+        if not args and sheet is not None:
+            pending = get_all_pending(sheet)
+            if pending:
+                lines = ["Pending prompts:"]
+                lines += [f"  [{h.keyword}] {h.describe(o)}" for h, o in pending]
+                self.msg("\n".join(lines))
+                return
+
+        # Existing consent behavior (unchanged — numeric id or no args with no registry offers).
+        request = self._resolve_pending_request()
+        if request is None:
+            self.msg(_NO_PENDING_MSG)
+            return
+        respond_to_action_request(action_request=request, decision=self.decision)
+        verb = "accept" if self.decision == ConsentDecision.ACCEPT else "deny"
+        self.msg(f"You {verb} the action against you.")
 
 
 class CmdDeny(_RespondCommand):

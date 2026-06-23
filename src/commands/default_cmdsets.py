@@ -57,6 +57,7 @@ from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHom
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.imbue import CmdImbue
+from commands.offer_response import CmdDecline
 from commands.pull import CmdPull
 from commands.ritual import CmdRitual
 from commands.social.blocking import (
@@ -142,6 +143,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdJudgePresentation,
             CmdIntimidate,
             CmdAccept,
+            CmdDecline,
             CmdDeny,
             CmdPersuade,
             CmdDeceive,
