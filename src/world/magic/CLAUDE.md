@@ -660,6 +660,15 @@ the complementary half of the entrance moment).
 
 **GainSource:** `ENTRY_FLOURISH` in `world/magic/constants.py` (`GainSource` TextChoices).
 
+### Offer handler registry (`commands/offer_registry.py`)
+
+System-initiated prompts (intensity surges, path crossings) are dispatched through
+a registry of `OfferHandler` objects keyed by keyword string. Handlers live in
+`world/magic/offer_handlers.py` and register in `MagicConfig.ready()`. The telnet
+`accept`/`decline` commands route non-numeric first-token args through the registry.
+To add a new handler: implement the `OfferHandler` protocol and call
+`register_offer_handler()` in `ready()`.
+
 ### Audere & Audere Majora (#873, #543)
 
 `audere.py` — Audere, the in-the-moment intensity surge: `AudereThreshold` (global
