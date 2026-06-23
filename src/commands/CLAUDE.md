@@ -109,9 +109,11 @@ actions, backends, and service functions.
   and register it in `SHEET_SECTIONS` — **don't** add a standalone `+command`.
 - **`sheet_sections.py`**: the `sheet/<section>` renderers + `SHEET_SECTIONS` registry. Sections:
   `secret` (`sheet/secret [character]`, #1334 — your own secrets, or the ones you know about a
-  character; locked layers "Unknown") and `renown` (`sheet/renown`, #676 — your prestige / fame
-  tier / society standing, via `build_renown_payload`, mirroring the web `RenownPanel`). Each is
-  thin over its app's services. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`).
+  character; locked layers "Unknown"); `renown` (`sheet/renown`, #676 — your prestige / fame tier /
+  society standing, via `build_renown_payload`, mirroring the web `RenownPanel`); `relationship`
+  (`sheet/relationship`, — your regard toward others, a qualitative warm/cold/neutral read of
+  `CharacterRelationship.affection`, mirroring the web `RelationshipsSection`). Each is thin over
+  its app's data. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`).
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`

@@ -49,6 +49,7 @@ export function CharacterSheetPage() {
       <Tabs defaultValue="sheet" className="space-y-4">
         <TabsList>
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
+          <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="renown">Renown</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
         </TabsList>
@@ -73,10 +74,6 @@ export function CharacterSheetPage() {
             vocation={entry.character.vocation}
             socialRank={entry.character.social_rank}
           />
-          <RelationshipsSection
-            relationships={entry.character.relationships}
-            characterSheetId={entry.character.id}
-          />
           <GalleriesSection galleries={entry.character.galleries} />
           {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
           {isMyCharacter && (
@@ -84,6 +81,13 @@ export function CharacterSheetPage() {
               <MessagesSection />
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="relationships" className="space-y-4">
+          <RelationshipsSection
+            relationships={entry.character.relationships}
+            characterSheetId={entry.character.id}
+          />
         </TabsContent>
 
         <TabsContent value="renown" className="space-y-4">
