@@ -17,6 +17,7 @@ from world.scenes.constants import (
     PoseKind,
     RoundStatus,
     ScenePrivacyMode,
+    SceneRoundMode,
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
     SummaryAction,
@@ -1199,6 +1200,12 @@ class SceneRound(SharedMemoryModel):
         choices=SceneRoundStartReason.choices,
         default=SceneRoundStartReason.OPT_IN,
     )
+    mode = models.CharField(
+        max_length=20, choices=SceneRoundMode.choices, default=SceneRoundMode.POSE_ORDER
+    )
+    advance_quorum_pct = models.PositiveSmallIntegerField(default=60)
+    max_actions_per_round = models.PositiveSmallIntegerField(default=1)
+    per_target_repeat_lock = models.BooleanField(default=False)
     round_started_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -1218,8 +1225,42 @@ class SceneRound(SharedMemoryModel):
             ),
         ]
 
+    def save(self, *args: object, **kwargs: object) -> None:
+        if self._state.adding:
+            if self.start_reason == SceneRoundStartReason.DANGER:
+                self.mode = SceneRoundMode.OPEN
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"SceneRound(room={self.room_id}, round={self.round_number}, {self.status})"
+
+
+class SceneRoundDefaultsConfig(SharedMemoryModel):
+    """Singleton (pk=1) staff-tunable defaults for new scene rounds."""
+
+    default_mode = models.CharField(
+        max_length=20, choices=SceneRoundMode.choices, default=SceneRoundMode.POSE_ORDER
+    )
+    advance_quorum_pct = models.PositiveSmallIntegerField(default=60)
+    max_actions_per_round = models.PositiveSmallIntegerField(default=1)
+    per_target_repeat_lock = models.BooleanField(default=False)
+    anti_spam_seconds = models.PositiveSmallIntegerField(default=5)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scene_round_defaults_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"SceneRoundDefaultsConfig(pk={self.pk})"
+
+
+def get_scene_round_defaults_config() -> SceneRoundDefaultsConfig:
+    obj, _ = SceneRoundDefaultsConfig.objects.get_or_create(pk=1)
+    return obj
 
 
 class SceneRoundParticipant(SharedMemoryModel):
