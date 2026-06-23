@@ -13,6 +13,8 @@ from world.consent.models import (
     SocialConsentWhitelist,
 )
 
+_ROSTER_TENURE_FACTORY = "world.roster.factories.RosterTenureFactory"
+
 
 class ConsentGroupFactory(DjangoModelFactory):
     """Factory for creating ConsentGroup instances."""
@@ -20,7 +22,7 @@ class ConsentGroupFactory(DjangoModelFactory):
     class Meta:
         model = ConsentGroup
 
-    owner = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    owner = factory.SubFactory(_ROSTER_TENURE_FACTORY)
     name = factory.Sequence(lambda n: f"Group {n}")
 
 
@@ -31,7 +33,7 @@ class ConsentGroupMemberFactory(DjangoModelFactory):
         model = ConsentGroupMember
 
     group = factory.SubFactory(ConsentGroupFactory)
-    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
 
 
 class SocialConsentCategoryFactory(DjangoModelFactory):
@@ -48,7 +50,7 @@ class SocialConsentPreferenceFactory(DjangoModelFactory):
     class Meta:
         model = SocialConsentPreference
 
-    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
     allow_social_actions = True
 
 
@@ -65,8 +67,8 @@ class SocialConsentWhitelistFactory(DjangoModelFactory):
     class Meta:
         model = SocialConsentWhitelist
 
-    owner_tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
-    allowed_tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    owner_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
+    allowed_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
     category = factory.SubFactory(SocialConsentCategoryFactory)
 
 

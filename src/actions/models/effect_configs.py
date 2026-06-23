@@ -12,6 +12,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TransformType
 
+CHECK_TYPE_FK = "checks.CheckType"
+CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
+
 
 class BaseEffectConfig(models.Model):
     """Abstract base for all effect config models.
@@ -82,13 +85,13 @@ class ConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
     """
 
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_FK,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="Attacker's check type (weighted trait combination).",
     )
     resistance_check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_FK,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -101,7 +104,7 @@ class ConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
         help_text="Fixed difficulty fallback for NPCs/missions.",
     )
     condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_FK,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="Condition to apply on successful check.",
@@ -109,7 +112,7 @@ class ConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
     severity = models.PositiveIntegerField(default=1)
     duration_rounds = models.PositiveIntegerField(null=True, blank=True)
     immunity_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_FK,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -145,13 +148,13 @@ class RemoveConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
     """
 
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_FK,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="Attacker's check type (weighted trait combination).",
     )
     resistance_check_type = models.ForeignKey(
-        "checks.CheckType",
+        CHECK_TYPE_FK,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -164,7 +167,7 @@ class RemoveConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
         help_text="Fixed difficulty fallback for NPCs/missions.",
     )
     condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        CONDITION_TEMPLATE_FK,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="Condition to remove on successful check.",

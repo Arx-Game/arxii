@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 _PERSONA_MODEL = "scenes.Persona"
+_INTERACTION_MODEL = "scenes.Interaction"
 
 
 class DefenderConsentFields(models.Model):
@@ -204,7 +205,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         db_index=True,
     )
     result_interaction = models.OneToOneField(
-        "scenes.Interaction",
+        _INTERACTION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -213,7 +214,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="The interaction recording the result of this action",
     )
     action_interaction = models.OneToOneField(
-        "scenes.Interaction",
+        _INTERACTION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -281,7 +282,7 @@ class SceneActionTarget(DefenderConsentFields, SharedMemoryModel):
         db_index=True,
     )
     result_interaction = models.OneToOneField(
-        "scenes.Interaction",
+        _INTERACTION_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

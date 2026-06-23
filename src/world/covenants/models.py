@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
+COVENANT_MODEL = "covenants.Covenant"
 COVENANT_ROLE_MODEL = "covenants.CovenantRole"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
@@ -265,6 +266,43 @@ class CovenantRole(SharedMemoryModel):
             ),
         ]
 
+    def _clean_subrole(self) -> None:
+        if self.unlock_thread_level == 0:
+            raise ValidationError(
+                {"unlock_thread_level": "Sub-roles must have unlock_thread_level > 0."}
+            )
+        parent = self.parent_role
+        if parent.covenant_type != self.covenant_type:
+            raise ValidationError(
+                {"covenant_type": "Sub-role covenant_type must match parent_role.covenant_type."}
+            )
+        if parent.archetype != self.archetype:
+            raise ValidationError(
+                {"archetype": "Sub-role archetype must match parent_role.archetype."}
+            )
+        if parent.parent_role_id is not None:
+            raise ValidationError(
+                {"parent_role": "Sub-sub-roles are not allowed (single-depth only)."}
+            )
+
+    def _clean_primary_role(self) -> None:
+        if self.discovery_achievement_id is not None or self.codex_entry_id is not None:
+            raise ValidationError(
+                {
+                    "discovery_achievement": (
+                        "Only sub-roles may set discovery_achievement / codex_entry."
+                    )
+                }
+            )
+        if self.unlock_thread_level != 0:
+            raise ValidationError(
+                {
+                    "unlock_thread_level": (
+                        "Primary roles (no parent_role/resonance) must have unlock_thread_level=0."
+                    )
+                }
+            )
+
     def clean(self) -> None:
         super().clean()
         has_parent = self.parent_role_id is not None
@@ -279,47 +317,9 @@ class CovenantRole(SharedMemoryModel):
             raise ValidationError({"parent_role": msg, "resonance": msg})
 
         if has_parent and has_resonance:
-            # Sub-role rules
-            if self.unlock_thread_level == 0:
-                raise ValidationError(
-                    {"unlock_thread_level": "Sub-roles must have unlock_thread_level > 0."}
-                )
-            parent = self.parent_role
-            if parent.covenant_type != self.covenant_type:
-                raise ValidationError(
-                    {
-                        "covenant_type": (
-                            "Sub-role covenant_type must match parent_role.covenant_type."
-                        )
-                    }
-                )
-            if parent.archetype != self.archetype:
-                raise ValidationError(
-                    {"archetype": "Sub-role archetype must match parent_role.archetype."}
-                )
-            if parent.parent_role_id is not None:
-                raise ValidationError(
-                    {"parent_role": "Sub-sub-roles are not allowed (single-depth only)."}
-                )
-        # Primary role rules
+            self._clean_subrole()
         else:
-            if self.discovery_achievement_id is not None or self.codex_entry_id is not None:
-                raise ValidationError(
-                    {
-                        "discovery_achievement": (
-                            "Only sub-roles may set discovery_achievement / codex_entry."
-                        )
-                    }
-                )
-            if self.unlock_thread_level != 0:
-                raise ValidationError(
-                    {
-                        "unlock_thread_level": (
-                            "Primary roles (no parent_role/resonance) must have"
-                            " unlock_thread_level=0."
-                        )
-                    }
-                )
+            self._clean_primary_role()
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_covenant_type_display()})"
@@ -362,7 +362,7 @@ class CovenantRank(SharedMemoryModel):
     """
 
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.CASCADE,
         related_name="ranks",
     )
@@ -423,7 +423,7 @@ class CharacterCovenantRole(SharedMemoryModel):
         related_name="character_assignments",
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.PROTECT,
         related_name="memberships",
     )
@@ -698,7 +698,7 @@ class CovenantRiteInstance(SharedMemoryModel):
         related_name="instances",
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.PROTECT,
         related_name="rite_instances",
     )
@@ -833,7 +833,7 @@ class MentorBond(SharedMemoryModel):
     """
 
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        COVENANT_MODEL,
         on_delete=models.CASCADE,
         related_name="mentor_bonds",
     )

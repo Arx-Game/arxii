@@ -121,6 +121,8 @@ def get_resonance_gain_config() -> ResonanceGainConfig:
 
 
 ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
+_ERR_ALT_ENDORSE = "Cannot endorse an alt character"
+_ERR_RESONANCE_UNCLAIMED = "Endorsee has not claimed this resonance"
 
 
 @transaction.atomic
@@ -260,7 +262,7 @@ def create_pose_endorsement(  # noqa: C901
         and endorsee_account is not None
         and endorser_account == endorsee_account
     ):
-        msg = "Cannot endorse an alt character"
+        msg = _ERR_ALT_ENDORSE
         raise EndorsementValidationError(msg)
 
     if interaction.mode == InteractionMode.WHISPER:
@@ -282,7 +284,7 @@ def create_pose_endorsement(  # noqa: C901
     if not CharacterResonance.objects.filter(
         character_sheet=endorsee_sheet, resonance=resonance
     ).exists():
-        msg = "Endorsee has not claimed this resonance"
+        msg = _ERR_RESONANCE_UNCLAIMED
         raise EndorsementValidationError(msg)
 
     existing = PoseEndorsement.objects.filter(
@@ -475,7 +477,7 @@ def create_scene_entry_endorsement(
         and endorsee_account is not None
         and endorser_account == endorsee_account
     ):
-        msg = "Cannot endorse an alt character"
+        msg = _ERR_ALT_ENDORSE
         raise EndorsementValidationError(msg)
 
     if endorser_account is None:
@@ -488,7 +490,7 @@ def create_scene_entry_endorsement(
     if not CharacterResonance.objects.filter(
         character_sheet=endorsee_sheet, resonance=resonance
     ).exists():
-        msg = "Endorsee has not claimed this resonance"
+        msg = _ERR_RESONANCE_UNCLAIMED
         raise EndorsementValidationError(msg)
 
     # Find the endorsee's entry pose in this scene.
@@ -634,7 +636,7 @@ def create_style_presentation_endorsement(
         and endorsee_account is not None
         and endorser_account == endorsee_account
     ):
-        msg = "Cannot endorse an alt character"
+        msg = _ERR_ALT_ENDORSE
         raise EndorsementValidationError(msg)
 
     if not _endorser_can_see_scene(endorser_account, scene):
@@ -644,7 +646,7 @@ def create_style_presentation_endorsement(
     if not CharacterResonance.objects.filter(
         character_sheet=endorsee_sheet, resonance=resonance
     ).exists():
-        msg = "Endorsee has not claimed this resonance"
+        msg = _ERR_RESONANCE_UNCLAIMED
         raise EndorsementValidationError(msg)
 
     if not _endorsee_wears_bound_style(endorsee_sheet, resonance):

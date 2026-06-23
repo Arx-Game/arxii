@@ -31,7 +31,7 @@ from world.secrets.serializers import (
     KnownSecretSerializer,
     SecretGrievanceSerializer,
 )
-from world.secrets.services import SecretError, register_secret_grievance
+from world.secrets.services import SecretError, known_secrets_for, register_secret_grievance
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -55,27 +55,18 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         viewer = self._viewer_entry()
         if viewer is None:
             return SecretKnowledge.objects.none()
-        # #1429 — annotate whether the viewer is a wronged party (one Exists subquery, no N+1),
-        # so the tab can show a "Respond" affordance only where a grievance is available.
+        # Shared with the telnet +secrets command (`known_secrets_for`); the `subject` FilterSet
+        # narrows to one tab. #1429 — annotate whether the viewer is a wronged party (one Exists
+        # subquery, no N+1) so the tab can show a "Respond" affordance only where one's available.
         from world.secrets.models import SecretVictim  # noqa: PLC0415
 
-        return (
-            SecretKnowledge.objects.filter(roster_entry=viewer)
-            .select_related(
-                "secret",
-                "secret__category",
-                "secret__author_persona",
-                "secret__subject_sheet__character",
-            )
-            .annotate(
-                can_grieve=Exists(
-                    SecretVictim.objects.filter(
-                        secret=OuterRef("secret"),
-                        persona__character_sheet=viewer.character_sheet,
-                    )
+        return known_secrets_for(viewer).annotate(
+            can_grieve=Exists(
+                SecretVictim.objects.filter(
+                    secret=OuterRef("secret"),
+                    persona__character_sheet=viewer.character_sheet,
                 )
             )
-            .order_by("-found_at")
         )
 
     def _viewer_entry(self) -> RosterEntry | None:

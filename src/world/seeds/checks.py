@@ -49,6 +49,9 @@ _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
     (3, 50, "Expert"),
 )
 
+# CheckOutcome tier name constants — referenced in both _OUTCOMES and the band tuples.
+_OUTCOME_PARTIAL_SUCCESS = "Partial Success"
+
 # --- Outcome catalog (name -> success_level) ---
 # Initial sane defaults aligned with the integration-test setup. "Critical
 # Failure" is included so the magic cluster's backfire consequence pools (which
@@ -57,7 +60,7 @@ _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
 _OUTCOMES: tuple[tuple[str, int], ...] = (
     ("Critical Failure", -2),
     ("Failure", -1),
-    ("Partial Success", 0),
+    (_OUTCOME_PARTIAL_SUCCESS, 0),
     ("Success", 1),
     ("Critical Success", 2),
 )
@@ -73,12 +76,12 @@ _EASY_BANDS: tuple[tuple[str, int, int], ...] = (
 )
 _EVEN_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 40),
-    ("Partial Success", 41, 60),
+    (_OUTCOME_PARTIAL_SUCCESS, 41, 60),
     ("Success", 61, 100),
 )
 _HARD_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 70),
-    ("Partial Success", 71, 85),
+    (_OUTCOME_PARTIAL_SUCCESS, 71, 85),
     ("Success", 86, 100),
 )
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (

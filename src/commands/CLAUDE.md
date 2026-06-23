@@ -81,6 +81,13 @@ actions, backends, and service functions.
 - **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
 - **`sheet.py`**: `CmdSheet` — character sheet display
 
+### Social Commands (`social/`)
+- **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
+  (#1278) — telnet face of the persona block/mute menu; thin over `world.scenes.block_services`.
+- **`secrets.py`**: `CmdSecrets` (`+secrets`, #1334) — telnet face of the secret tab; thin over
+  `world.secrets.services` (`secrets_owned_by` / `known_secrets_for`). Caller is the active
+  character, so IC scoping is automatic; locked layers render "Unknown".
+
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
 - **`utils.py`**: `serialize_cmdset()` — serializes cmdset for frontend

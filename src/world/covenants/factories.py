@@ -30,6 +30,8 @@ from world.covenants.models import (
 )
 from world.items.constants import GearArchetype
 
+CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 if TYPE_CHECKING:
     from world.conditions.models import CapabilityType
     from world.magic.models import Resonance
@@ -147,7 +149,7 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterCovenantRole
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     rank = factory.LazyAttribute(lambda o: CovenantRankFactory(covenant=o.covenant))
@@ -237,8 +239,8 @@ class MentorBondFactory(factory_django.DjangoModelFactory):
         model = MentorBond
 
     covenant = factory.SubFactory(CovenantFactory)
-    mentor_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    sidekick_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    mentor_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
+    sidekick_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     adjusted_party = MentorBondAdjusted.SIDEKICK
     dissolved_at = None
 

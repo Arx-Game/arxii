@@ -24,6 +24,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.captivity.constants import CaptivityStatus
 
+_MISSION_TEMPLATE_FK = "missions.MissionTemplate"
+
 
 class Captivity(SharedMemoryModel):
     """One character's imprisonment and how it ends."""
@@ -77,7 +79,7 @@ class Captivity(SharedMemoryModel):
         help_text="The one-shot demand contract surfaced on the captor-debtor's books.",
     )
     rescue_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        _MISSION_TEMPLATE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -125,7 +127,7 @@ class CaptivityConfig(SharedMemoryModel):
     """
 
     captive_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        _MISSION_TEMPLATE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -136,7 +138,7 @@ class CaptivityConfig(SharedMemoryModel):
         ),
     )
     rescue_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        _MISSION_TEMPLATE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
