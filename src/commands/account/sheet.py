@@ -9,22 +9,26 @@ from typing import Any, ClassVar
 
 from evennia import Command
 
+from commands.account.sheet_sections import SECTION_NAMES, SHEET_SECTIONS
+from commands.exceptions import CommandError
+
 
 class CmdSheet(Command):  # ty: ignore[invalid-base]
     """
     Display character sheet information (OOC).
 
+    The sheet is the hub for a character; **sections** hang off it (mirroring the web tabs).
+
     Usage:
-        @sheet [character]
-        sheet [character]
+        @sheet [character]            — the overview
+        sheet/<section> [character]   — a section (e.g. sheet/secret)
 
-    Displays the character sheet with demographic information, physical
-    characteristics, and descriptive text. If no character is specified,
-    shows your currently controlled character's sheet.
+    Bare ``sheet`` shows the demographic overview. ``sheet/secret`` shows your secrets (or, with
+    a character, the secrets you know about them). More sections (renown, relationships, society
+    standings, covenant, magic) join the same ``sheet/<section>`` pattern as they're built.
 
-    This is an out-of-character command for viewing character information.
-    Staff can view any character's sheet. Players can only view sheets
-    of characters they control or that are publicly visible.
+    Staff can view any character's overview. Players can only view overviews of characters they
+    control; sections enforce their own visibility (e.g. you only see secrets you've learned).
     """
 
     key = "@sheet"
@@ -33,7 +37,22 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     help_category = "Account"
 
     def func(self) -> None:
-        """Display character sheet information."""
+        """Dispatch to a section (``sheet/<section>``) or show the overview."""
+        try:
+            switches = self.switches
+        except AttributeError:
+            switches = []
+        section = next((switch for switch in switches if switch in SHEET_SECTIONS), None)
+        if section is not None:
+            try:
+                output = SHEET_SECTIONS[section](self)
+            except CommandError as exc:
+                self.caller.msg(str(exc))
+                return
+            if output:
+                self.caller.msg("\n".join(output))
+            return
+
         target = self._get_target_character()
         if not target:
             return
@@ -43,7 +62,12 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         sheet_data = target.item_data
         output = self._build_sheet_display(target, sheet_data)
+        output.extend(self._sections_footer())
         self.caller.msg("\n".join(output))
+
+    def _sections_footer(self) -> list[str]:
+        """A one-line pointer to the available sections (``sheet/<section>``)."""
+        return ["", f"|wSections|n (sheet/<section>): {', '.join(SECTION_NAMES)}"]
 
     def _get_target_character(self) -> Any:
         """Get the target character for the sheet command."""
