@@ -156,38 +156,26 @@ class ArxCommand(Command):
         return match.group(1).strip(), match.group(2).strip()
 
     def func(self) -> None:
-        """Execute the command.
-
-        For action-based commands: parses via :meth:`resolve_action_args`,
-        calls ``action.run()``. For ``action=None`` commands: delegates to
-        :meth:`_execute`. Both paths catch :class:`~commands.exceptions.CommandError`
-        and surface it as a player message — subclasses raise rather than
-        handling errors inline.
-        """
-        if self.action is None:
-            try:
-                self._execute()
-            except CommandError as err:
-                self.msg(str(err))
-            return
-
+        """Execute the command; surface ``CommandError`` as a player message."""
         try:
-            kwargs = self.resolve_action_args()
-            result = self.action.run(actor=self.caller, **kwargs)
-            if result.message:
-                self.msg(result.message)
+            self._execute()
         except CommandError as err:
             self.msg(str(err))
-            self.msg(
-                command_error={
-                    "error": str(err),
-                    "command": self.raw_string or "",
-                },
-            )
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _execute(self) -> None:
-        """Override in ``action=None`` subclasses; raise ``CommandError`` for errors."""
-        self.msg("This command is not available.")
+        """Run the command.
+
+        Default: resolve args and run ``self.action``. Override in ``action=None``
+        subclasses; raise :class:`~commands.exceptions.CommandError` for errors.
+        """
+        if self.action is None:
+            msg = "This command is not available."
+            raise CommandError(msg)
+        kwargs = self.resolve_action_args()
+        result = self.action.run(actor=self.caller, **kwargs)
+        if result.message:
+            self.msg(result.message)
 
     def get_help(
         self,

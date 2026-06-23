@@ -177,8 +177,8 @@ class TestAudereTelnetE2E(TestCase):
             PendingAudereMajoraOffer.objects.filter(character_sheet=self.sheet).exists()
         )
         self.character.msg.assert_called()
-        call_args = self.character.msg.call_args[0][0]
-        self.assertIn("declaration", call_args.lower())
+        error_texts = [c.args[0] for c in self.character.msg.call_args_list if c.args]
+        self.assertTrue(any("declaration" in t.lower() for t in error_texts))
 
     # ------------------------------------------------------------------
     # Listing paths (no-arg)
