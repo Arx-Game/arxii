@@ -37,8 +37,10 @@ class MagicConfig(AppConfig):
         from commands.offer_registry import register_offer_handler  # noqa: PLC0415
         from world.magic.offer_handlers import (  # noqa: PLC0415
             CrossingOfferHandler,
+            SoulfrayPendingHandler,
             SurgeOfferHandler,
         )
 
         register_offer_handler(SurgeOfferHandler())
         register_offer_handler(CrossingOfferHandler())
+        register_offer_handler(SoulfrayPendingHandler())

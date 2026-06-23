@@ -4,6 +4,58 @@ from commands.exceptions import CommandError
 from world.magic.audere import PendingAudereOffer
 from world.magic.audere_majora import PendingAudereMajoraOffer
 
+
+class SoulfrayPendingHandler:
+    """Offer handler for the soulfray consent gate on standalone technique casts.
+
+    When a caster has an active Soulfray stage, the first cast attempt halts and
+    registers a ``PendingCast``. This handler routes ``accept soulfray`` /
+    ``decline soulfray`` to re-dispatch or discard that pending cast.
+    """
+
+    keyword = "soulfray"
+    label = "Soulfray Risk"
+
+    def pending_for(self, sheet):
+        from commands.pending_actions import peek_pending  # noqa: PLC0415
+
+        return peek_pending(sheet.pk)
+
+    def describe(self, offer) -> str:  # noqa: ARG002
+        return "A pending cast would accrue soulfray. Confirm to proceed."
+
+    def accept(self, offer, caller, args: str) -> str:  # noqa: ARG002
+        from actions.constants import ActionBackend  # noqa: PLC0415
+        from actions.player_interface import dispatch_player_action  # noqa: PLC0415
+        from actions.types import ActionRef  # noqa: PLC0415
+        from commands.pending_actions import pop_pending  # noqa: PLC0415
+
+        pending = pop_pending(caller.sheet_data.pk)
+        if pending is None:
+            return "No pending soulfray cast."
+        ref = ActionRef(
+            backend=ActionBackend.SCENE_ADAPTIVE,
+            registry_key="cast_technique",
+            technique_id=pending.technique_id,
+        )
+        dispatch_player_action(
+            caller,
+            ref,
+            {
+                **pending.kwargs,
+                "target_persona_id": pending.target_persona_id,
+                "confirm_soulfray_risk": True,
+            },
+        )
+        return "You steel yourself and complete the casting."
+
+    def decline(self, offer, caller) -> str:  # noqa: ARG002
+        from commands.pending_actions import pop_pending  # noqa: PLC0415
+
+        pop_pending(caller.sheet_data.pk)
+        return "You hold back, the casting unspent."
+
+
 _DECLARATION_KEY = "declaration="  # noqa: STRING_LITERAL
 _PATH_KEY = "path="  # noqa: STRING_LITERAL
 

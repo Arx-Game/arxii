@@ -86,7 +86,8 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
-) -> tuple[EnhancedSceneActionResult, PowerLedger | None, FuryResolution | None]:
+    confirm_soulfray_risk: bool = True,
+) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, FuryResolution | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
     Mirrors ``action_services._resolve_enhanced_action`` so anima deduction,
@@ -104,8 +105,10 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         fury_commitment: Optional FuryTier the player declared.
         fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
 
-    Returns the ``EnhancedSceneActionResult``, the cast-level ``PowerLedger``
-    (BASE + ENVIRONMENT stages), and the ``FuryResolution`` (None if no fury).
+    Returns the ``EnhancedSceneActionResult`` (``None`` when ``use_technique``
+    returns ``confirmed=False`` — soulfray gate not confirmed), the cast-level
+    ``PowerLedger`` (BASE + ENVIRONMENT stages), and the ``FuryResolution`` (None
+    if no fury).
     """
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.anima import get_character_cast_check  # noqa: PLC0415
@@ -145,13 +148,17 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         character=character,
         technique=technique,
         resolve_fn=_resolve_fn,
-        confirm_soulfray_risk=True,
+        confirm_soulfray_risk=confirm_soulfray_risk,
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
     )
+
+    # Soulfray gate: use_technique returned without resolving — propagate None result.
+    if not technique_result.confirmed:
+        return None, None, fury_res
 
     resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
     power_ledger = captured.get("ledger")
@@ -218,7 +225,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     cast_pull: CastPullDeclaration | None = None,
     fizzle_note: str | None = None,
     supplied_personas: list[Persona] | None = None,
-) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
+    confirm_soulfray_risk: bool = True,
+) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
     Shared by the immediate path (request just created) and the consent-accept path
@@ -245,7 +253,12 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
+        confirm_soulfray_risk=confirm_soulfray_risk,
     )
+
+    # Soulfray gate: use_technique returned unconfirmed — propagate without resolving.
+    if result is None:
+        return None, None, None
 
     # Apply technique-authored conditions to resolved targets.
     success_level = (
@@ -404,7 +417,7 @@ def resolve_accepted_cast(
 
     def _resolve(
         pull: CastPullDeclaration | None, note: str | None
-    ) -> tuple[EnhancedSceneActionResult, PowerLedger | None, Interaction]:
+    ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
         with transaction.atomic():
             return _resolve_and_pose_cast(
                 request=action_request,
@@ -417,6 +430,7 @@ def resolve_accepted_cast(
                 fury_anchor=action_request.fury_anchor,
                 cast_pull=pull,
                 fizzle_note=note,
+                confirm_soulfray_risk=True,  # consent-accept always confirms soulfray
             )
 
     try:
@@ -457,6 +471,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None,
     cast_pull: CastPullDeclaration | None,
     supplied_personas: list[Persona],
+    confirm_soulfray_risk: bool = True,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -488,6 +503,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         supplied_personas=supplied_personas,
+        confirm_soulfray_risk=confirm_soulfray_risk,
     )
 
 
@@ -501,6 +517,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     fury_commitment: FuryTier | None,
     fury_anchor: CharacterSheet | None,
     cast_pull: CastPullDeclaration | None,
+    confirm_soulfray_risk: bool = True,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -523,6 +540,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
+            confirm_soulfray_risk=confirm_soulfray_risk,
         )
     return _route_immediate_cast(
         scene=scene,
@@ -533,6 +551,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
+        confirm_soulfray_risk=confirm_soulfray_risk,
     )
 
 
@@ -547,6 +566,7 @@ def request_technique_cast(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
+    confirm_soulfray_risk: bool = True,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -567,6 +587,10 @@ def request_technique_cast(  # noqa: PLR0913
             forwarded to ``resolve_targets`` for intersection with the eligible set.
             Only the immediate (benign, consent-free) path is supported; hostile or
             behavior-altering FILTERED_GROUP raises ``InvalidCastTarget``.
+        confirm_soulfray_risk: When ``False`` and the caster has an active Soulfray
+            stage, the cast is halted before resolving and a ``CastResult`` with
+            ``soulfray_warning`` populated (and no request row) is returned. Defaults
+            ``True`` so all existing callers are unaffected.
 
     Returns:
         A CastResult whose populated payload depends on the routing branch taken.
@@ -610,6 +634,7 @@ def request_technique_cast(  # noqa: PLR0913
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
+            confirm_soulfray_risk=confirm_soulfray_risk,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -627,6 +652,7 @@ def request_technique_cast(  # noqa: PLR0913
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
+            confirm_soulfray_risk=confirm_soulfray_risk,
         )
 
     return _route_immediate_cast(
@@ -638,6 +664,7 @@ def request_technique_cast(  # noqa: PLR0913
         fury_commitment=fury_commitment,
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
+        confirm_soulfray_risk=confirm_soulfray_risk,
     )
 
 
@@ -727,6 +754,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
@@ -765,8 +793,24 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
+    confirm_soulfray_risk: bool = True,
 ) -> CastResult:
-    """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose."""
+    """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
+
+    When ``confirm_soulfray_risk=False`` and the caster has an active Soulfray stage,
+    ``use_technique`` will return without resolving. In that case no request row is
+    persisted and a ``CastResult`` with only ``soulfray_warning`` populated is returned.
+    """
+    from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+
+    # Pre-flight soulfray check: avoid creating a SceneActionRequest when the cast
+    # will be halted by the soulfray gate (use_technique returns confirmed=False).
+    if not confirm_soulfray_risk:
+        character = initiator_persona.character_sheet.character
+        warning = get_soulfray_warning(character)
+        if warning is not None:
+            return CastResult(soulfray_warning=warning)
+
     with transaction.atomic():
         request = _create_cast_request(
             scene=scene,
@@ -789,6 +833,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
+            confirm_soulfray_risk=confirm_soulfray_risk,
         )
 
     return CastResult(
