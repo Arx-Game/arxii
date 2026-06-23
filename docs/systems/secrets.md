@@ -162,11 +162,21 @@ account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` pro
 victims have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge
 so the same hook prompts them when the secret goes public.
 
+**Registering the grievance (web + telnet).** The victim's chosen response is a
+`relationships.GrievanceOption` (an authored preset: label + negative track + points) or a custom
+value, applied as a one-sided capstone toward the perpetrator. `register_secret_grievance(*,
+roster_entry, secret, option | custom)` is the shared seam (validates victimhood + that they've
+learned it, then calls `relationships.register_grievance`). The **web** path: the known-secret tab
+flags `can_grieve` (an `Exists` annotation), and a `GrievancePrompt` (the four presets) posts to
+`/api/secrets/grievance/`; `/api/secrets/grievance-options/` lists the menu. The **telnet** path:
+`+grievance` (`commands/social/grievance.py`) — both converge on the one service.
+
 Reputation attaches to the subject's **primary persona** (only established/primary identities
-accrue reputation). The `magnitude`/fame axis, org-level diffuse interpretation, the *exposure
-trigger* (how individual `SecretKnowledge` propagates to society-level exposure — the gossip
-slice), enforcement (wanted/blood-feud conditions, hostile-territory consequences), and
-propaganda (granular re-framing of the diffuse reading) are **later slices** of the #1429 sub-epic.
+accrue reputation). A custom-value field in the web prompt, the `magnitude`/fame axis, org-level
+diffuse interpretation, the *exposure trigger* (how individual `SecretKnowledge` propagates to
+society-level exposure — the gossip slice), enforcement (wanted/blood-feud conditions,
+hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
+**later slices** of the #1429 sub-epic.
 
 ## Boundary with Codex
 

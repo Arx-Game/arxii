@@ -3729,6 +3729,7 @@
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
+- `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
 
 

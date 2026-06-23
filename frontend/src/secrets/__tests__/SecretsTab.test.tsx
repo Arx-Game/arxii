@@ -11,6 +11,15 @@ import type { KnownSecret } from '../types';
 
 vi.mock('@/secrets/queries', () => ({
   useKnownSecretsQuery: vi.fn(),
+  useGrievanceOptionsQuery: vi.fn(() => ({
+    data: [{ id: 1, label: 'Furious Revelation', points: 1000, track: 'Enemies' }],
+  })),
+  useSubmitGrievanceMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+  })),
 }));
 
 import { useKnownSecretsQuery } from '@/secrets/queries';
@@ -36,6 +45,7 @@ function secret(overrides: Partial<KnownSecret>): KnownSecret {
     category: 'Scandal',
     consequences: 'Execution if proven.',
     author: 'GM/Staff',
+    can_grieve: false,
     ...overrides,
   };
 }
@@ -72,5 +82,17 @@ describe('SecretsTab', () => {
     mockResults([]);
     render(<SecretsTab subjectId={5} viewerId={null} />);
     expect(screen.getByText(/select a character/i)).toBeInTheDocument();
+  });
+
+  it('offers a grievance response on a secret the viewer is wronged by (#1429)', () => {
+    mockResults([secret({ can_grieve: true })]);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
+    expect(screen.getByText(/respond to this wrong/i)).toBeInTheDocument();
+  });
+
+  it('hides the grievance response when the viewer is not a wronged party', () => {
+    mockResults([secret({ can_grieve: false })]);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
+    expect(screen.queryByText(/respond to this wrong/i)).toBeNull();
   });
 });

@@ -70,6 +70,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.weave import CmdWeaveThread
 
@@ -165,6 +166,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Soul Tether lifecycle commands (#1343)
             CmdTether,
             CmdSineater,
+            # #1429 — the telnet face of the secret-victim grievance prompt.
+            CmdGrievance,
             # Combat commands
             CmdDeclareTechnique,
             # Non-combat magic cast (#1332)

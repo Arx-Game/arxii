@@ -19760,6 +19760,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/secrets/grievance/:
+    post:
+      operationId: secrets_grievance_create
+      description: |-
+        A secret's victim registers a grievance against its subject (#1429).
+
+        The web face of the persona-victim prompt; converges on the same
+        ``register_secret_grievance`` service the telnet ``+grievance`` command calls. The viewing
+        character (``viewer`` = a RosterEntry pk) is validated as owned by the requester, and the
+        service enforces that they are an entitled victim who has learned the secret.
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/secrets/grievance-options/:
+    get:
+      operationId: secrets_grievance_options_list
+      description: The grievance responses a wronged character may choose from (#1429).
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GrievanceOption'
+          description: ''
   /api/secrets/known/:
     get:
       operationId: secrets_known_list
@@ -30318,6 +30352,27 @@ components:
       - id
       - is_optional
       - name
+    GrievanceOption:
+      type: object
+      description: A preset grievance swing offered to a wronged character (#1429).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        points:
+          type: integer
+          readOnly: true
+        track:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - label
+      - points
+      - track
     GroupBallotState:
       type: object
       description: Read-only mirror of :class:`world.missions.types.GroupBallotState`
@@ -31759,6 +31814,10 @@ components:
           type: string
           format: date-time
           readOnly: true
+        can_grieve:
+          type: boolean
+          readOnly: true
+          default: false
         subject:
           type: string
           readOnly: true
@@ -31773,6 +31832,7 @@ components:
           readOnly: true
       required:
       - author
+      - can_grieve
       - category
       - consequences
       - content

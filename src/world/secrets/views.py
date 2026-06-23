@@ -11,19 +11,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
+from django.db.models import Exists, OuterRef
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status
+from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from world.relationships.models import GrievanceOption, RelationshipTrack
 from world.roster.models import RosterEntry
 from world.secrets.filters import KnownSecretFilter
-from world.secrets.models import SecretKnowledge
-from world.secrets.serializers import KnownSecretSerializer
-from world.secrets.services import known_secrets_for
+from world.secrets.models import Secret, SecretKnowledge
+from world.secrets.serializers import (
+    GrievanceOptionSerializer,
+    KnownSecretSerializer,
+    SecretGrievanceSerializer,
+)
+from world.secrets.services import SecretError, known_secrets_for, register_secret_grievance
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from rest_framework.request import Request
 
 
 class SecretsPagination(PageNumberPagination):
@@ -43,8 +55,19 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         viewer = self._viewer_entry()
         if viewer is None:
             return SecretKnowledge.objects.none()
-        # Shared with the telnet +secrets command; the `subject` FilterSet narrows to one tab.
-        return known_secrets_for(viewer)
+        # Shared with the telnet +secrets command (`known_secrets_for`); the `subject` FilterSet
+        # narrows to one tab. #1429 — annotate whether the viewer is a wronged party (one Exists
+        # subquery, no N+1) so the tab can show a "Respond" affordance only where one's available.
+        from world.secrets.models import SecretVictim  # noqa: PLC0415
+
+        return known_secrets_for(viewer).annotate(
+            can_grieve=Exists(
+                SecretVictim.objects.filter(
+                    secret=OuterRef("secret"),
+                    persona__character_sheet=viewer.character_sheet,
+                )
+            )
+        )
 
     def _viewer_entry(self) -> RosterEntry | None:
         """The active (viewing) character, validated as owned by the requester (#1334).
@@ -58,3 +81,61 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         if not raw or not raw.isdigit():
             return None
         return RosterEntry.objects.for_account(self.request.user).filter(pk=int(raw)).first()
+
+
+class GrievanceOptionListView(ListAPIView):
+    """The grievance responses a wronged character may choose from (#1429)."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = GrievanceOptionSerializer
+    pagination_class = None
+
+    def get_queryset(self) -> QuerySet[GrievanceOption]:
+        return GrievanceOption.objects.filter(is_active=True).select_related("track")
+
+
+class SecretGrievanceView(APIView):
+    """A secret's victim registers a grievance against its subject (#1429).
+
+    The web face of the persona-victim prompt; converges on the same
+    ``register_secret_grievance`` service the telnet ``+grievance`` command calls. The viewing
+    character (``viewer`` = a RosterEntry pk) is validated as owned by the requester, and the
+    service enforces that they are an entitled victim who has learned the secret.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        data = SecretGrievanceSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        payload = data.validated_data
+
+        viewer = RosterEntry.objects.for_account(request.user).filter(pk=payload["viewer"]).first()
+        if viewer is None:
+            return Response(
+                {"detail": "No such active character."}, status=status.HTTP_403_FORBIDDEN
+            )
+        secret = Secret.objects.filter(pk=payload["secret"]).first()
+        if secret is None:
+            return Response({"detail": "No such secret."}, status=status.HTTP_404_NOT_FOUND)
+
+        option = None
+        custom_track = None
+        if payload.get("option") is not None:
+            option = GrievanceOption.objects.filter(pk=payload["option"], is_active=True).first()
+        else:
+            custom_track = RelationshipTrack.objects.filter(pk=payload["custom_track"]).first()
+
+        try:
+            register_secret_grievance(
+                roster_entry=viewer,
+                secret=secret,
+                option=option,
+                custom_points=payload.get("custom_points"),
+                custom_track=custom_track,
+            )
+        except SecretError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+        except ValidationError as exc:
+            return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
