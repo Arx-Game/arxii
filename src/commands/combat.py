@@ -1,8 +1,17 @@
-"""Combat-related telnet commands — thin adapters over the COMBAT dispatch backend.
+"""Technique cast command — scene-adaptive telnet shell for CastTechniqueAction.
 
-Commands here parse text input from telnet clients and delegate entirely to
-``dispatch_player_action``. No business logic lives here; validation and round
-gating are the dispatcher's job.
+Routes through the SCENE_ADAPTIVE backend so it works both inside and outside
+combat:
+- Outside combat: ``dispatch_player_action`` runs ``CastTechniqueAction.execute()``
+  immediately (non-combat cast via ``request_technique_cast``).
+- Inside a DECLARING combat round: ``dispatch_player_action`` calls
+  ``CastTechniqueAction.round_declaration()`` which builds a ``CombatRoundAction``
+  declaration row; the round resolves when all participants have declared.
+
+Target resolution is context-sensitive:
+- Combat context (``_combat_participant_or_none()`` returns non-None):
+  ``at <name>`` is resolved as a ``CombatOpponent`` → ``focused_opponent_target_id``.
+- Non-combat context: ``at <name>`` is resolved as a ``Persona`` → ``target_persona_id``.
 """
 
 from __future__ import annotations
@@ -21,18 +30,19 @@ _EFFORT_PREFIX = "effort="
 
 
 class CmdDeclareTechnique(DispatchCommand):
-    """Declare a technique for the current combat round.
+    """Cast a technique — works both in and out of combat.
 
     Usage:
         cast <technique> [at <target>] [effort=<level>]
         declare <technique> [at <target>] [effort=<level>]
 
-    Declare which technique you will cast this round. Optionally focus
-    a specific opponent target with ``at <name>`` and set your effort
+    Outside combat: casts the technique immediately in the active scene.
+    In a DECLARING combat round: declares the technique for this round;
+    the round resolves once all participants have declared.
+
+    Optionally focus a specific target with ``at <name>`` and set your effort
     level with ``effort=<level>`` (very_low/low/medium/high/extreme;
     defaults to medium).
-
-    You must be in an active combat round (DECLARING phase) to use this.
     """
 
     key = "cast"
@@ -96,16 +106,17 @@ class CmdDeclareTechnique(DispatchCommand):
 
     # -- Resolution helpers ----------------------------------------------------
 
-    def _active_participant(self) -> CombatParticipant:
-        """Return the caller's active CombatParticipant in a DECLARING encounter.
+    def _combat_participant_or_none(self) -> CombatParticipant | None:
+        """Return the caller's active CombatParticipant in a DECLARING encounter, or None.
 
-        Raises:
-            CommandError: If no active DECLARING combat is found.
+        Unlike ``_active_participant`` (which raises), this returns ``None`` when the
+        caller is not in an active DECLARING combat round so the non-combat path can
+        proceed without branching the dispatch regime.
         """
         from world.combat.constants import EncounterStatus, ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatParticipant  # noqa: PLC0415
 
-        participant = (
+        return (
             CombatParticipant.objects.filter(
                 character_sheet=self.caller.sheet_data,
                 status=ParticipantStatus.ACTIVE,
@@ -115,6 +126,14 @@ class CmdDeclareTechnique(DispatchCommand):
             .order_by("-encounter__created_at")
             .first()
         )
+
+    def _active_participant(self) -> CombatParticipant:
+        """Return the caller's active CombatParticipant in a DECLARING encounter.
+
+        Raises:
+            CommandError: If no active DECLARING combat is found.
+        """
+        participant = self._combat_participant_or_none()
         if participant is None:
             msg = "You are not in an active combat round."
             raise CommandError(msg)
@@ -183,38 +202,72 @@ class CmdDeclareTechnique(DispatchCommand):
             raise CommandError(msg)
         return matches[0].pk
 
+    def _resolve_target_persona_id(self) -> int | None:
+        """Return the pk of the Persona named by ``self._target_name``, or None.
+
+        Used on the non-combat path when ``at <name>`` names a scene participant.
+
+        Raises:
+            CommandError: If a target name was given but no matching Persona exists.
+        """
+        if not self._target_name:
+            return None
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        name = self._target_name
+        persona = Persona.objects.filter(name__iexact=name).first()
+        if persona is None:
+            msg = f"No persona named '{name}' found."
+            raise CommandError(msg)
+        return persona.pk
+
     # -- DispatchCommand interface ---------------------------------------------
 
     def resolve_action_ref(self) -> ActionRef:
-        """Build a COMBAT ``ActionRef`` for the declared technique.
+        """Build a SCENE_ADAPTIVE ``ActionRef`` for the named technique.
 
         Parses args on the first call and caches the results so
         ``resolve_action_args`` can reuse them without re-parsing.
 
-        Raises:
-            CommandError: If the caller is not in an active DECLARING combat round.
+        Routes through the SCENE_ADAPTIVE backend so the dispatcher decides
+        whether to run immediately (non-combat) or defer as a round declaration
+        (inside a DECLARING combat round) — no gating on active combat here.
         """
         from actions.constants import ActionBackend  # noqa: PLC0415
         from actions.types import ActionRef  # noqa: PLC0415
 
         self._parse_args()
-        # Gate ALL casts (targeted and untargeted) on an active DECLARING round.
-        # Cache the participant so _resolve_opponent_target_id can reuse it.
-        self._participant = self._active_participant()
         technique_id = self._resolve_technique_id()
-        return ActionRef(backend=ActionBackend.COMBAT, technique_id=technique_id)
+        return ActionRef(
+            backend=ActionBackend.SCENE_ADAPTIVE,
+            registry_key="cast_technique",
+            technique_id=technique_id,
+        )
 
     def resolve_action_args(self) -> dict[str, Any]:
-        """Return dispatch kwargs for the COMBAT backend.
+        """Return dispatch kwargs; routes target resolution by context.
 
-        Keys:
-            effort_level: EffortLevel value string (default ``"medium"``).
-            focused_opponent_target_id: CombatOpponent pk, omitted when no
-                ``at <target>`` was given.
+        Always includes ``effort_level``.  If ``at <target>`` was given:
+        - Combat context → ``focused_opponent_target_id`` (CombatOpponent pk).
+        - Non-combat context → ``target_persona_id`` (Persona pk).
         """
         self._parse_args()
-        opp_id = self._resolve_opponent_target_id()
         kwargs: dict[str, Any] = {"effort_level": self._effort}
-        if opp_id is not None:
-            kwargs["focused_opponent_target_id"] = opp_id
+
+        if not self._target_name:
+            return kwargs
+
+        # Check whether we're in a DECLARING combat round to decide how to
+        # resolve the target name. Cache the participant for _resolve_opponent_target_id.
+        participant = self._combat_participant_or_none()
+        if participant is not None:
+            self._participant = participant
+            opp_id = self._resolve_opponent_target_id()
+            if opp_id is not None:
+                kwargs["focused_opponent_target_id"] = opp_id
+        else:
+            persona_id = self._resolve_target_persona_id()
+            if persona_id is not None:
+                kwargs["target_persona_id"] = persona_id
+
         return kwargs

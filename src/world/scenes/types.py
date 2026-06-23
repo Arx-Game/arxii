@@ -11,6 +11,7 @@ from world.magic.types import TechniqueUseResult
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter
     from world.magic.models import FuryTier
+    from world.magic.types import SoulfrayWarning
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Interaction
@@ -66,13 +67,19 @@ class CastResult:
     - immediate self/room/no-target cast → ``result`` + ``outcome_interaction`` + ``power_ledger``,
     - benign cast at another PC → only ``request`` (PENDING; resolves on accept),
     - hostile cast at another PC → ``encounter`` (combat seeded/fed).
+    - soulfray gate not confirmed → ``soulfray_warning`` set, ``result`` is None.
 
     ``power_ledger`` is present only on the immediate path (BASE + ENVIRONMENT stages).
     It is None on benign-PENDING and hostile paths (no resolution has occurred yet).
+
+    ``soulfray_warning`` is set when ``use_technique`` returned ``confirmed=False``
+    (the cast was halted for soulfray consent). The caller should prompt the actor
+    to confirm or decline before re-dispatching with ``confirm_soulfray_risk=True``.
     """
 
-    request: SceneActionRequest
+    request: SceneActionRequest | None = None
     result: EnhancedSceneActionResult | None = None
     encounter: CombatEncounter | None = None
     outcome_interaction: Interaction | None = None
     power_ledger: PowerLedger | None = None
+    soulfray_warning: SoulfrayWarning | None = None

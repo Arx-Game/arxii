@@ -31,6 +31,7 @@ from world.mechanics.factories import (
 from world.mechanics.models import ChallengeInstance
 from world.scenes.constants import (
     RoundStatus,
+    SceneRoundMode,
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
@@ -122,12 +123,13 @@ class TestSocialRoundAutoResolvesOnLastDeclaration(TestCase):
         _grant_capability(self.sheet_a, capability)
         _grant_capability(self.sheet_b, capability)
 
-        # OPT_IN (social) round in DECLARING; both participants ACTIVE and present.
+        # STRICT (social) round in DECLARING; both participants ACTIVE and present.
         self.scene_round = SceneRoundFactory(
             room=self.room,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.OPT_IN,
+            mode=SceneRoundMode.STRICT,
         )
         self.participant_a = SceneRoundParticipantFactory(
             scene_round=self.scene_round,

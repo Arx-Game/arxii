@@ -71,11 +71,18 @@ class StartRoundAction(Action):
 
         rnd = _active_round_for_room(room)
         if rnd is None:
+            from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
+
+            cfg = get_scene_round_defaults_config()
             rnd = SceneRound.objects.create(
                 room=room,
                 status=RoundStatus.DECLARING,
                 round_number=1,
                 start_reason=SceneRoundStartReason.OPT_IN,
+                mode=cfg.default_mode,
+                advance_quorum_pct=cfg.advance_quorum_pct,
+                max_actions_per_round=cfg.max_actions_per_round,
+                per_target_repeat_lock=cfg.per_target_repeat_lock,
             )
         elif rnd.status == RoundStatus.BETWEEN_ROUNDS:
             rnd = start_scene_round(rnd)
@@ -232,6 +239,7 @@ class PassRoundAction(Action):
             scene_round=rnd,
             round_number=rnd.round_number,
             participant=participant,
+            is_immediate=False,
             defaults={
                 "is_pass": True,
                 "challenge_instance": None,

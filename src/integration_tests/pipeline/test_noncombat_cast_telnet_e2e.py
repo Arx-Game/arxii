@@ -1,7 +1,9 @@
-"""Telnet-driven non-combat cast E2E (#1332): CmdAttempt → use_technique.
+"""Telnet-driven non-combat cast E2E (#1332 / #1351): cast command → use_technique.
 
 Proves the full pipeline:
-  CmdAttempt.func()
+  CmdDeclareTechnique.func()  (key="cast", SCENE_ADAPTIVE backend)
+    → dispatch_player_action(SCENE_ADAPTIVE)
+    → CastTechniqueAction.execute()
     → request_technique_cast(scene, persona, technique)
     → _resolve_cast()
     → use_technique()
@@ -27,7 +29,7 @@ from evennia import create_object
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.factories import ActionTemplateFactory
-from commands.magic import CmdAttempt
+from commands.combat import CmdDeclareTechnique
 from flows.constants import EventName
 from world.magic.factories import BinaryEffectTypeFactory, CharacterAnimaFactory, TechniqueFactory
 from world.scenes.constants import InteractionMode
@@ -38,18 +40,18 @@ from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
 
 
-def _make_attempt_cmd(caller, args: str) -> CmdAttempt:
-    """Build a CmdAttempt wired to *caller* with *args*."""
-    cmd = CmdAttempt()
+def _make_cast_cmd(caller, args: str) -> CmdDeclareTechnique:
+    """Build a CmdDeclareTechnique wired to *caller* with *args*."""
+    cmd = CmdDeclareTechnique()
     cmd.caller = caller
     cmd.args = args
-    cmd.raw_string = f"attempt {args}"
-    cmd.cmdname = "attempt"
+    cmd.raw_string = f"cast {args}"
+    cmd.cmdname = "cast"
     return cmd
 
 
 class NoncombatCastTelnetE2ETests(TestCase):
-    """CmdAttempt.func() drives the full non-combat cast pipeline.
+    """CmdDeclareTechnique.func() (SCENE_ADAPTIVE) drives the full non-combat cast pipeline.
 
     Uses setUp (not setUpTestData) for ObjectDB objects to avoid the
     DbHolder deepcopy trap in CI shard runs.
@@ -101,16 +103,26 @@ class NoncombatCastTelnetE2ETests(TestCase):
         self._check_patcher.start()
         self._accrue_patcher = patch("world.scenes.action_services.accrue")
         self._accrue_patcher.start()
+        # SCENE_ADAPTIVE dispatch checks anti-spam via commands.pending_actions.check_anti_spam;
+        # the module-level _LAST_ACTED dict persists between tests in the same process,
+        # causing the second and third tests to be blocked by the cooldown from the first.
+        # Patch it away so each test starts with no cooldown.
+        self._antispam_patcher = patch(
+            "commands.pending_actions.check_anti_spam",
+            return_value=None,
+        )
+        self._antispam_patcher.start()
 
     def tearDown(self) -> None:
         self._check_patcher.stop()
         self._accrue_patcher.stop()
+        self._antispam_patcher.stop()
 
-    def test_attempt_command_deducts_anima(self) -> None:
-        """CmdAttempt drives use_technique which deducts anima."""
+    def test_cast_command_deducts_anima(self) -> None:
+        """cast (SCENE_ADAPTIVE) drives use_technique which deducts anima."""
         anima_before = self.anima.current
 
-        cmd = _make_attempt_cmd(self.character, self.technique.name)
+        cmd = _make_cast_cmd(self.character, self.technique.name)
         cmd.func()
 
         self.anima.refresh_from_db()
@@ -120,9 +132,9 @@ class NoncombatCastTelnetE2ETests(TestCase):
             "anima.current must decrease: use_technique deducts the technique's anima cost",
         )
 
-    def test_attempt_command_writes_outcome_interaction(self) -> None:
-        """CmdAttempt causes a Narrator OUTCOME Interaction to be written to the scene."""
-        cmd = _make_attempt_cmd(self.character, self.technique.name)
+    def test_cast_command_writes_outcome_interaction(self) -> None:
+        """cast (SCENE_ADAPTIVE) causes an OUTCOME Interaction to be written to the scene."""
+        cmd = _make_cast_cmd(self.character, self.technique.name)
         cmd.func()
 
         self.assertTrue(
@@ -133,8 +145,8 @@ class NoncombatCastTelnetE2ETests(TestCase):
             "An OUTCOME Interaction must exist in the scene after a resolved cast",
         )
 
-    def test_attempt_command_emits_technique_cast_event(self) -> None:
-        """CmdAttempt causes TECHNIQUE_CAST to be emitted via emit_event.
+    def test_cast_command_emits_technique_cast_event(self) -> None:
+        """cast (SCENE_ADAPTIVE) causes TECHNIQUE_CAST to be emitted via emit_event.
 
         Patches world.magic.services.techniques.emit_event because techniques.py
         binds emit_event at import time; patching flows.emit.emit_event alone
@@ -148,7 +160,7 @@ class NoncombatCastTelnetE2ETests(TestCase):
             "emit_event",
             wraps=_real_emit_event,
         ) as mock_emit:
-            cmd = _make_attempt_cmd(self.character, self.technique.name)
+            cmd = _make_cast_cmd(self.character, self.technique.name)
             cmd.func()
 
         technique_cast_calls = [

@@ -30,7 +30,68 @@ They do not use the command system, dispatchers, or handlers.
 - **`definitions/`**: Concrete action implementations grouped by category
   (e.g. `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
-  `CmdRitual` and the web `RitualPerformView`, #1331)
+  `CmdRitual` and the web `RitualPerformView`, #1331;
+  `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
+  seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below)
+
+## SCENE_ADAPTIVE Backend (#1351)
+
+`ActionBackend.SCENE_ADAPTIVE` is a fourth dispatch backend (alongside CHALLENGE, COMBAT, REGISTRY)
+for actions that work in **and** out of a combat round — such as technique casts. The canonical
+implementation is `CastTechniqueAction` (`actions/definitions/cast.py`, key `"cast_technique"`).
+
+### Dispatch flow (`_dispatch_scene_adaptive` in `player_interface.py`)
+
+1. **Anti-spam check** — `commands.pending_actions.check_anti_spam(sheet_pk, anti_spam_seconds)`.
+   If a cooldown remains, raises `ActionDispatchError(ANTI_SPAM_COOLDOWN)`. The cooldown length
+   comes from `get_scene_round_defaults_config().anti_spam_seconds`.
+2. **Registry lookup** — key resolved from `ref.registry_key`.
+3. **Round context branch** (when `ctx` is not None):
+   a. Call `action_obj.round_declaration(ctx, **run_kwargs)`. If the context's `is_declaration_open`
+      is True and a `(PlayerAction, decl_kwargs)` tuple is returned, record the declaration and return
+      `deferred=True` immediately (STRICT combat round path).
+   b. Otherwise call `ctx.is_repeat_blocked(sheet, ref, target_persona)`. If True, raise
+      `ActionDispatchError(ROUND_REPEAT_BLOCKED)`.
+4. **Immediate execution** — `action_obj.run(actor, **run_kwargs)`.
+5. **Side-effects** (only when `result.success`):
+   - `mark_acted(sheet_pk)` — records the timestamp for the anti-spam floor.
+   - `ctx.record_immediate_action(sheet, ref, target_persona)` — writes the POSE_ORDER ledger row and
+     advances the quorum when `mode==POSE_ORDER`.
+
+### `Action.round_declaration` hook (`base.py`)
+
+Default returns `None` (always immediate). Override to declare into a round:
+
+```python
+def round_declaration(self, ctx: Any, **kwargs: Any) -> tuple[PlayerAction, dict[str, Any]] | None:
+    ...
+```
+
+`CastTechniqueAction` returns a `(PlayerAction, decl_kwargs)` tuple when `ctx` is a
+`CombatRoundContext` (so `cast` inside combat declares into the combat round), and `None` otherwise
+(immediate execution in social scene rounds).
+
+### Anti-spam floor + pending-cast store (`commands/pending_actions.py`)
+
+In-memory (no DB) transient stores:
+
+- `check_anti_spam(sheet_pk, seconds) -> float | None` — remaining cooldown or None.
+- `mark_acted(sheet_pk)` — records the timestamp.
+- `PendingCast` dataclass — stores `(technique_id, target_persona_id, kwargs)` for soulfray-gated
+  re-dispatch.
+- `register_pending(sheet_pk, pending)` / `pop_pending(sheet_pk)` / `peek_pending(sheet_pk)` —
+  manipulate the pending cast store for the `SoulfrayPendingHandler` offer flow.
+
+### `CastTechniqueAction` (`actions/definitions/cast.py`)
+
+Key: `"cast_technique"`. Resolves a standalone technique cast via `request_technique_cast`
+(`world.scenes.cast_services`). Soulfray consent gate:
+
+- When `get_soulfray_warning` is non-None and `confirm_soulfray_risk=False`, the action registers a
+  `PendingCast` and returns `success=False` — the dispatcher does NOT record anti-spam or advance the
+  pose-order quorum. The actor is prompted to `accept soulfray` or `decline soulfray` (handled by
+  `SoulfrayPendingHandler` in `world/magic/offer_handlers.py`).
+- When `confirm_soulfray_risk=True` (set by the offer-accept path), the cast proceeds immediately.
 
 ## Prerequisites
 

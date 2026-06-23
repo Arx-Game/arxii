@@ -26,6 +26,60 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def actions_this_round(scene_round: SceneRound, participant: SceneRoundParticipant) -> int:
+    """Return the number of action declarations for a participant in the current round."""
+    return scene_round.action_declarations.filter(
+        round_number=scene_round.round_number, participant=participant
+    ).count()
+
+
+def distinct_actors_this_round(scene_round: SceneRound) -> int:
+    """Return the number of distinct participants with declarations in the current round."""
+    return (
+        scene_round.action_declarations.filter(round_number=scene_round.round_number)
+        .values("participant_id")
+        .distinct()
+        .count()
+    )
+
+
+@transaction.atomic
+def record_pose_order_action(
+    scene_round: SceneRound,
+    participant: SceneRoundParticipant,
+    target_persona: object = None,
+) -> None:
+    """Record an immediate (POSE_ORDER) action for a participant in the current round."""
+    from world.scenes.models import SceneActionDeclaration  # noqa: PLC0415
+
+    SceneActionDeclaration.objects.create(
+        scene_round=scene_round,
+        round_number=scene_round.round_number,
+        participant=participant,
+        target_persona=target_persona,
+        is_immediate=True,
+        is_pass=False,
+    )
+
+
+@transaction.atomic
+def advance_pose_order_round_if_quorum(scene_round: SceneRound) -> SceneRound:
+    """Advance round_number if distinct actors >= quorum. Pose-order rounds stay DECLARING."""
+    import math  # noqa: PLC0415
+
+    rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
+    active = rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).count()
+    if active == 0:
+        return scene_round
+    needed = math.ceil(rnd.advance_quorum_pct / 100 * active)
+    if distinct_actors_this_round(rnd) >= needed:
+        rnd.round_number += 1
+        rnd.round_started_at = timezone.now()
+        rnd.save(update_fields=["round_number", "round_started_at"])
+        scene_round.refresh_from_db()
+    return scene_round
+
+
 @transaction.atomic
 def start_scene_round(scene_round: SceneRound) -> SceneRound:
     """Advance a BETWEEN_ROUNDS round into DECLARING (round_number += 1)."""
@@ -166,9 +220,9 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
         status=SceneRoundParticipantStatus.ACTIVE
     ).select_related("character_sheet")
     declared_ids = set(
-        scene_round.action_declarations.filter(round_number=scene_round.round_number).values_list(
-            "participant_id", flat=True
-        )
+        scene_round.action_declarations.filter(
+            round_number=scene_round.round_number, is_immediate=False
+        ).values_list("participant_id", flat=True)
     )
     present_active = [p for p in active if p.character_sheet.character_id in present_ids]
     if not present_active:
@@ -230,7 +284,9 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     from world.mechanics.services import get_available_actions  # noqa: PLC0415
 
     declarations = list(
-        scene_round.action_declarations.filter(round_number=scene_round.round_number, is_pass=False)
+        scene_round.action_declarations.filter(
+            round_number=scene_round.round_number, is_pass=False, is_immediate=False
+        )
         .select_related(
             "participant",
             "participant__character_sheet",

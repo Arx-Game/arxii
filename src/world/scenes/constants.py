@@ -125,3 +125,11 @@ class SceneRoundStartReason(models.TextChoices):
     OPT_IN = "opt_in", "Player opt-in"
     GM = "gm", "GM-started"
     DANGER = "danger", "Danger (auto-started)"
+
+
+class SceneRoundMode(models.TextChoices):
+    """How a scene round gates player actions (orthogonal to start_reason)."""
+
+    OPEN = "open", "Open (immediate, unbounded)"
+    POSE_ORDER = "pose_order", "Pose order (immediate, quota-gated)"
+    STRICT = "strict", "Strict (declare, batch-resolved)"

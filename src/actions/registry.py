@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from actions.base import Action
+from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.communication import (
     MutterAction,
     PemitAction,
@@ -116,6 +117,7 @@ _ALL_ACTIONS: list[Action] = [
     WithdrawChallengeAction(),
     YieldAction(),
     AcknowledgeRiskAction(),
+    CastTechniqueAction(),
     intimidate,
     persuade,
     deceive,

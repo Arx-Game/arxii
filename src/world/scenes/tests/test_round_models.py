@@ -55,21 +55,37 @@ class RoundFactorySmokeTests(TestCase):
 
 
 class SceneActionDeclarationTests(TestCase):
-    def test_scene_action_declaration_unique_per_participant_per_round(self):
-        from django.db import IntegrityError
+    def test_scene_action_declaration_allows_multiple_rows_per_participant_per_round(self):
+        """Multiple declarations per (scene_round, round_number, participant) are now allowed.
 
+        Task 2 removed the one_scene_action_declaration_per_round UniqueConstraint to support
+        multi-action rounds (pose-order / max_actions_per_round > 1).  A participant may have
+        several is_immediate=True rows (pose-order actions already resolved) alongside a single
+        deferred is_immediate=False row (STRICT-style declaration or pass).
+        """
         from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
         from world.scenes.models import SceneActionDeclaration
 
         rnd = SceneRoundFactory()
         participant = SceneRoundParticipantFactory(scene_round=rnd)
         SceneActionDeclaration.objects.create(
-            scene_round=rnd, round_number=rnd.round_number, participant=participant, is_pass=True
+            scene_round=rnd,
+            round_number=rnd.round_number,
+            participant=participant,
+            is_immediate=True,
+            is_pass=False,
         )
-        with self.assertRaises(IntegrityError):
-            SceneActionDeclaration.objects.create(
-                scene_round=rnd,
-                round_number=rnd.round_number,
-                participant=participant,
-                is_pass=True,
-            )
+        # A second immediate row (another pose-order action) must be allowed.
+        SceneActionDeclaration.objects.create(
+            scene_round=rnd,
+            round_number=rnd.round_number,
+            participant=participant,
+            is_immediate=True,
+            is_pass=False,
+        )
+        self.assertEqual(
+            SceneActionDeclaration.objects.filter(
+                scene_round=rnd, round_number=rnd.round_number, participant=participant
+            ).count(),
+            2,
+        )

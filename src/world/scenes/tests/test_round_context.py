@@ -5,7 +5,7 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeInstanceFactory
-from world.scenes.constants import RoundStatus, SceneRoundStartReason
+from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
 from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
 from world.scenes.models import SceneActionDeclaration
 from world.scenes.round_context import SceneRoundContext, resolve_scene_round_context
@@ -13,13 +13,15 @@ from world.scenes.round_context import SceneRoundContext, resolve_scene_round_co
 
 class SceneRoundContextTests(TestCase):
     def test_active_participant_resolves_context(self):
-        rnd = SceneRoundFactory(status=RoundStatus.DECLARING, round_number=2)
+        rnd = SceneRoundFactory(
+            status=RoundStatus.DECLARING, round_number=2, mode=SceneRoundMode.STRICT
+        )
         sheet = CharacterSheetFactory()
         SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
         ctx = resolve_scene_round_context(sheet)
         assert ctx is not None
         assert ctx.round_id == (rnd.pk, 2)
-        # OPT_IN + DECLARING is a social round that now gathers declarations.
+        # STRICT + DECLARING is a social round that gathers declarations.
         assert ctx.is_declaration_open is True
 
     def test_no_round_returns_none(self):
@@ -36,12 +38,18 @@ class SceneRoundContextTests(TestCase):
 class DeclarationGatingTests(TestCase):
     def test_opt_in_declaring_round_is_declaration_open(self):
         rnd = SceneRoundFactory(
-            start_reason=SceneRoundStartReason.OPT_IN, status=RoundStatus.DECLARING
+            start_reason=SceneRoundStartReason.OPT_IN,
+            status=RoundStatus.DECLARING,
+            mode=SceneRoundMode.STRICT,
         )
         assert SceneRoundContext(rnd).is_declaration_open is True
 
     def test_gm_declaring_round_is_declaration_open(self):
-        rnd = SceneRoundFactory(start_reason=SceneRoundStartReason.GM, status=RoundStatus.DECLARING)
+        rnd = SceneRoundFactory(
+            start_reason=SceneRoundStartReason.GM,
+            status=RoundStatus.DECLARING,
+            mode=SceneRoundMode.STRICT,
+        )
         assert SceneRoundContext(rnd).is_declaration_open is True
 
     def test_danger_round_is_not_declaration_open(self):
@@ -63,6 +71,7 @@ class RecordDeclarationTests(TestCase):
             start_reason=SceneRoundStartReason.OPT_IN,
             status=RoundStatus.DECLARING,
             round_number=3,
+            mode=SceneRoundMode.STRICT,
         )
         sheet = CharacterSheetFactory()
         SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)

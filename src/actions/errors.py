@@ -13,12 +13,16 @@ class ActionDispatchError(Exception):
     UNKNOWN_ACTION_REF = "unknown_action_ref"
     ROUND_DECLARATION_CLOSED = "round_declaration_closed"
     TARGET_OUT_OF_REACH = "target_out_of_reach"
+    ANTI_SPAM_COOLDOWN = "anti_spam_cooldown"
+    ROUND_REPEAT_BLOCKED = "round_repeat_blocked"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
         UNKNOWN_ACTION_REF: "That action is no longer available.",
         ROUND_DECLARATION_CLOSED: "The declaration window for this round is closed.",
         TARGET_OUT_OF_REACH: "Target is out of reach for this technique.",
+        ANTI_SPAM_COOLDOWN: "You must wait before acting again.",
+        ROUND_REPEAT_BLOCKED: "You have already acted this round.",
     }
     _FALLBACK = "That action could not be completed."
 

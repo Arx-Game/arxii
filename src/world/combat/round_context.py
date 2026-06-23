@@ -89,6 +89,15 @@ class CombatRoundContext(RoundContext):
         """True when the encounter is in the DECLARING phase."""
         return self._encounter.status == EncounterStatus.DECLARING
 
+    def is_repeat_blocked(
+        self,
+        actor: CharacterSheet,  # noqa: ARG002
+        action_ref: Any,  # noqa: ARG002
+        target_persona: Any,  # noqa: ARG002
+    ) -> bool:
+        # STRICT: declaration window governs; immediate repeats are never allowed mid-round.
+        return not self.is_declaration_open
+
     def record_declaration(
         self,
         character: CharacterSheet,  # noqa: ARG002

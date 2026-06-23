@@ -114,6 +114,29 @@ model with a split where the initiator controls effort and each defender control
 - **APIs:** SceneViewSet, PersonaViewSet, SceneSummaryRevisionViewSet, PlaceViewSet, SceneActionRequestViewSet, SceneActionTargetViewSet
 - **Frontend:** Scene list/detail pages, interaction feed, action panel
 
+### Three-Mode Round Framework + Scene-Adaptive Cast — DONE (#1351)
+
+Non-combat scene rounds (`SceneRound`) now support three action-gating modes:
+
+- **OPEN** — every action resolves immediately, no quota (used for DANGER rounds).
+- **POSE_ORDER** — default for social rounds; actions resolve immediately and `round_number` advances
+  once `ceil(advance_quorum_pct × active_count)` distinct participants have acted this round.
+- **STRICT** — actions are declared into a ledger while `is_declaration_open`; the round resolves as a
+  batch when presence-gated completion is met or a GM force-resolves.
+
+`SceneRoundDefaultsConfig` (singleton pk=1) lets staff tune `default_mode`, `advance_quorum_pct`,
+`max_actions_per_round`, `per_target_repeat_lock`, and `anti_spam_seconds` without a code deploy.
+`SceneActionDeclaration` is a multi-action-per-round ledger (`is_immediate` + `target_persona` FK).
+
+`ActionBackend.SCENE_ADAPTIVE` (`actions/player_interface.py`) is the fourth dispatch backend for
+actions that work inside and outside combat: anti-spam floor → `round_declaration` hook (declares
+into a combat round when in one, else resolves immediately) → `is_repeat_blocked` check →
+immediate execution with pose-order ledger side-effects.
+
+`CastTechniqueAction` (key `"cast_technique"`, `actions/definitions/cast.py`) implements the unified
+technique cast. The unified `cast` command (`CmdDeclareTechnique`, `commands/combat.py`) replaces
+the deleted `CmdAttempt`; parses `cast <technique> [at <target>] [effort=<level>]`.
+
 ### Positioning in Scenes — DONE (#1017)
 - **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.
 - **Frontend:** `RoomPositionsPanel` component (`frontend/src/scenes/components/`) renders positions, persona placement, move action, and a staff "Set the stage" control. `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).

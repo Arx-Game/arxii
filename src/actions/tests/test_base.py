@@ -193,6 +193,7 @@ class ActionRegistryTests(TestCase):
             "endorse_pose",
             "endorse_scene_entry",
             "endorse_style_presentation",
+            "cast_technique",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

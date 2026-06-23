@@ -12,6 +12,7 @@ from world.scenes.constants import (
     PersonaType,
     RoundStatus,
     ScenePrivacyMode,
+    SceneRoundMode,
     SummaryAction,
 )
 from world.scenes.models import (
@@ -232,6 +233,7 @@ class SceneRoundFactory(factory_django.DjangoModelFactory):
     room = factory.SubFactory(ObjectDBFactory)
     status = RoundStatus.BETWEEN_ROUNDS
     round_number = 0
+    mode = SceneRoundMode.POSE_ORDER
 
 
 class SceneRoundParticipantFactory(factory_django.DjangoModelFactory):
