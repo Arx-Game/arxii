@@ -779,6 +779,7 @@
   - story_progress <- stories.StoryProgress
   - employments <- currency.CharacterEmployment
   - secrets <- secrets.Secret
+  - secret_grievances <- secrets.SecretGrievance
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
   - relationships_as_source <- relationships.CharacterRelationship
@@ -3711,6 +3712,7 @@
 **Pointed to by:**
   - clues <- clues.Clue
   - victims <- secrets.SecretVictim
+  - grievances <- secrets.SecretGrievance
   - known_by <- secrets.SecretKnowledge
 
 ### SecretVictim
@@ -3718,6 +3720,12 @@
   - secret -> secrets.Secret [FK]
   - organization -> societies.Organization [FK] (nullable)
   - persona -> scenes.Persona [FK] (nullable)
+
+### SecretGrievance
+**Foreign Keys:**
+  - secret -> secrets.Secret [FK]
+  - victim_sheet -> character_sheets.CharacterSheet [FK]
+  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
 
 ### SecretKnowledge
 **Foreign Keys:**
@@ -3729,8 +3737,10 @@
 - `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
+- `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
+- `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
 
 
 ## world.skills

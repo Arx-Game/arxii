@@ -158,18 +158,23 @@ the secret* — through personal discovery / sharing / a confession, or because 
 of their own toward the perpetrator via the normal relationship flow (`register_grievance`). The
 hook lives in `grant_secret_knowledge` (the single point a character learns a secret): on first
 learn, if the learner is a registered `SecretVictim.persona` **and** the character is run by an
-account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them. NPC
-victims have no one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge
-so the same hook prompts them when the secret goes public.
+account (`roster.selectors.get_account_for_character`), a `NarrativeMessage` prompts them — it
+carries **the now-known secret's own text** followed by the response prompt. NPC victims have no
+one to decide, so nothing fires. `expose_secret` grants PC victims the knowledge so the same hook
+prompts them when the secret goes public. *(The web should route this prompt straight to the
+grievance widget with a link to the secret rather than showing the telnet `+grievance` line — an
+FE follow-up.)*
 
 **Registering the grievance (web + telnet).** The victim's chosen response is a
 `relationships.GrievanceOption` (an authored preset: label + negative track + points) or a custom
 value, applied as a one-sided capstone toward the perpetrator. `register_secret_grievance(*,
 roster_entry, secret, option | custom)` is the shared seam (validates victimhood + that they've
-learned it, then calls `relationships.register_grievance`). The **web** path: the known-secret tab
-flags `can_grieve` (an `Exists` annotation), and a `GrievancePrompt` (the four presets) posts to
-`/api/secrets/grievance/`; `/api/secrets/grievance-options/` lists the menu. The **telnet** path:
-`+grievance` (`commands/social/grievance.py`) — both converge on the one service.
+learned it, then calls `relationships.register_grievance`). **One-shot:** a `SecretGrievance` row
+(unique per `secret` + `victim_sheet`) records the answer, so a second attempt is rejected and the
+secret drops off the menu / `can_grieve` flag — no stacking grudges. The **web** path: the
+known-secret tab flags `can_grieve` (victim **and** not-yet-grieved), and a `GrievancePrompt` (the
+four presets) posts to `/api/secrets/grievance/`; `/api/secrets/grievance-options/` lists the menu.
+The **telnet** path: `+grievance` (`commands/social/grievance.py`) — both converge on the one service.
 
 Reputation attaches to the subject's **primary persona** (only established/primary identities
 accrue reputation). A custom-value field in the web prompt, the `magnitude`/fame axis, org-level

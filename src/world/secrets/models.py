@@ -199,6 +199,48 @@ class SecretVictim(SharedMemoryModel):
         return f"victim {target} of secret {self.secret_id}"
 
 
+class SecretGrievance(SharedMemoryModel):
+    """Records that a secret's victim has answered it with a grievance — one per victim (#1429).
+
+    Grieving is a **one-time choice**: this row marks the secret *answered* for that victim, so it
+    drops off the grievance menu / `can_grieve` flag and a second attempt is rejected (no stacking
+    grudge swings). Links the `RelationshipCapstone` the answer applied, so a past response can be
+    shown.
+    """
+
+    secret = models.ForeignKey(
+        Secret,
+        on_delete=models.CASCADE,
+        related_name="grievances",
+        help_text="The secret that was answered.",
+    )
+    victim_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="secret_grievances",
+        help_text="The wronged character who answered it.",
+    )
+    capstone = models.ForeignKey(
+        "relationships.RelationshipCapstone",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The relationship capstone this grievance applied.",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["secret", "victim_sheet"], name="one_grievance_per_secret_victim"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"grievance by {self.victim_sheet_id} for secret {self.secret_id}"
+
+
 class SecretKnowledge(SharedMemoryModel):
     """A character's held knowledge of a secret, with partial-knowledge layers (#1334).
 
