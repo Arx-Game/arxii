@@ -61,6 +61,7 @@ class ActionBackend(models.TextChoices):
     CHALLENGE = "challenge", "Challenge"
     COMBAT = "combat", "Combat"
     REGISTRY = "registry", "Registry"
+    SCENE_ADAPTIVE = "scene_adaptive", "Scene-adaptive"
 
 
 class ActionCategory(models.TextChoices):

@@ -174,6 +174,9 @@ class ActionRef:
         if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
             msg = "REGISTRY ActionRef requires registry_key"
             raise ValueError(msg)
+        if self.backend == ActionBackend.SCENE_ADAPTIVE and not self.registry_key:
+            msg = "SCENE_ADAPTIVE ActionRef requires registry_key"
+            raise ValueError(msg)
 
 
 @dataclass

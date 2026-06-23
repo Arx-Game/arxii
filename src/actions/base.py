@@ -95,6 +95,10 @@ class Action:
         """
         return []
 
+    def round_declaration(self, ctx: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]] | None:
+        """Return (PlayerAction, dispatch_kwargs) to defer to a round, or None for immediate."""
+        return None
+
     def execute(
         self,
         actor: ObjectDB,

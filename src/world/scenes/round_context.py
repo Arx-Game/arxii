@@ -122,6 +122,28 @@ class SceneRoundContext(RoundContext):
                 return True
         return False
 
+    def record_immediate_action(
+        self,
+        actor: CharacterSheet,
+        action_ref: Any,  # noqa: ARG002
+        target_persona: Any,
+    ) -> None:
+        """Write a pose-order ledger row and advance quorum when mode is POSE_ORDER."""
+        if self._scene_round.mode != SceneRoundMode.POSE_ORDER:
+            return
+        from world.scenes.round_services import (  # noqa: PLC0415
+            advance_pose_order_round_if_quorum,
+            record_pose_order_action,
+        )
+
+        participant = SceneRoundParticipant.objects.get(
+            scene_round=self._scene_round,
+            character_sheet=actor,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+        record_pose_order_action(self._scene_round, participant, target_persona)
+        advance_pose_order_round_if_quorum(self._scene_round)
+
 
 def resolve_scene_round_context(character: CharacterSheet) -> SceneRoundContext | None:
     """Return a SceneRoundContext for the character's active scene round, or None."""

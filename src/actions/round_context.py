@@ -80,6 +80,16 @@ class RoundContext(ABC):
         """True when *actor* may not act again until the round advances."""
         ...
 
+    def record_immediate_action(  # noqa: B027
+        self, actor: CharacterSheet, action_ref: Any, target_persona: Any
+    ) -> None:
+        """Record that *actor* acted immediately this round (pose-order ledger/quorum).
+
+        Default no-op. Overridden by ``SceneRoundContext`` for POSE_ORDER rounds to
+        write a ``SceneActionDeclaration(is_immediate=True)`` row and advance the
+        round when quorum is met. Combat and other contexts leave this as a no-op.
+        """
+
 
 def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     """Return the active ``RoundContext`` for *character*, or ``None``.

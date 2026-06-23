@@ -113,6 +113,10 @@ def dispatch_player_action(
     if ref.backend == ActionBackend.REGISTRY:
         return _dispatch_registry(character, ref, kwargs, ctx)
 
+    # SCENE_ADAPTIVE: anti-spam gated, then immediate or declaration-deferred.
+    if ref.backend == ActionBackend.SCENE_ADAPTIVE:
+        return _dispatch_scene_adaptive(character, ref, kwargs, ctx)
+
     # Step 2: recover authoritative resolution inputs (validates ref against current availability).
     if ref.backend == ActionBackend.CHALLENGE:
         avail = _find_available_action_for_ref(character, ref)
@@ -172,6 +176,71 @@ def _dispatch_registry(
     result = action_obj.run(actor=character, **merged_kwargs)
     _drive_scene_round_for_turn_cost(action_obj, ctx)
     return DispatchResult(backend=ActionBackend.REGISTRY, deferred=False, detail=result)
+
+
+def _scene_adaptive_target(kwargs: dict[str, Any]) -> Any:
+    """Resolve ``target_persona_id`` from *kwargs* into a ``Persona`` instance, or ``None``."""
+    target_persona_id = kwargs.get("target_persona_id")
+    if target_persona_id is None:
+        return None
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        return Persona.objects.get(pk=target_persona_id)
+    except Persona.DoesNotExist:
+        return None
+
+
+def _dispatch_scene_adaptive(
+    character: ObjectDB,
+    ref: ActionRef,
+    kwargs: dict[str, Any],
+    ctx: RoundContext | None,
+) -> DispatchResult:
+    """Resolve and run a SCENE_ADAPTIVE action: anti-spam gated, then immediate or deferred.
+
+    Flow:
+    1. Anti-spam check — reject if the sheet acted too recently.
+    2. Look up the action in the registry.
+    3. If a round context is active:
+       a. Ask the action for a round declaration; if one is returned and the window is open,
+          record it and return deferred=True.
+       b. Otherwise check is_repeat_blocked; raise ROUND_REPEAT_BLOCKED if blocked.
+    4. Run immediately, mark acted, feed the pose-order ledger.
+    """
+    from commands.pending_actions import check_anti_spam, mark_acted  # noqa: PLC0415
+    from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
+
+    sheet = _get_character_sheet(character)
+    if sheet is not None:
+        cooldown = check_anti_spam(sheet.pk, get_scene_round_defaults_config().anti_spam_seconds)
+        if cooldown is not None:
+            raise ActionDispatchError(ActionDispatchError.ANTI_SPAM_COOLDOWN)
+
+    action_obj = get_action(ref.registry_key or "")
+    if action_obj is None:
+        raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    target_persona = _scene_adaptive_target(kwargs)
+    run_kwargs = dict(kwargs)
+    if ref.technique_id is not None:
+        run_kwargs.setdefault("technique_id", ref.technique_id)
+
+    if ctx is not None:
+        decl = action_obj.round_declaration(ctx, **run_kwargs)
+        if ctx.is_declaration_open and decl is not None:
+            player_action, decl_kwargs = decl
+            ctx.record_declaration(sheet, player_action, decl_kwargs)  # type: ignore[arg-type]
+            return DispatchResult(backend=ActionBackend.SCENE_ADAPTIVE, deferred=True, detail=None)
+        if ctx.is_repeat_blocked(sheet, ref, target_persona):
+            raise ActionDispatchError(ActionDispatchError.ROUND_REPEAT_BLOCKED)
+
+    result = action_obj.run(actor=character, **run_kwargs)
+    if sheet is not None:
+        mark_acted(sheet.pk)
+    if ctx is not None:
+        ctx.record_immediate_action(sheet, ref, target_persona)
+    return DispatchResult(backend=ActionBackend.SCENE_ADAPTIVE, deferred=False, detail=result)
 
 
 def _recover_combat_player_action(character: ObjectDB, ref: ActionRef) -> PlayerAction:
