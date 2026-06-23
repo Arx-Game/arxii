@@ -1,7 +1,11 @@
 """CastTechniqueAction — SCENE_ADAPTIVE action for standalone technique casts.
 
-Both telnet (``commands.magic.CmdAttempt``) and the web dispatch path converge
-here for standalone technique casts. The action:
+Reached by the **telnet** ``cast``/``declare`` command (``commands.combat.CmdDeclareTechnique``)
+via ``dispatch_player_action(SCENE_ADAPTIVE)``. The **web** standalone-cast endpoint
+(``world.scenes.action_views.SceneActionRequestViewSet.cast``) does NOT route through this
+action — it calls ``request_technique_cast`` directly. So telnet and web converge at the
+``request_technique_cast`` **service**, not at ``action.run()``; this action's anti-spam,
+pose-order, and soulfray-pending machinery is telnet-only today. The action:
 
 1. Resolves the active scene, initiator persona, technique, and optional target.
 2. Calls ``request_technique_cast``.

@@ -153,8 +153,11 @@ the keystone correction above.
 **Descriptor — `PlayerAction` dataclass** (carries model instances, not bare
 PKs; types in `src/actions/types.py`):
 
-- `backend`: `CHALLENGE | COMBAT | REGISTRY` (TextChoices in
-  `src/actions/constants.py`)
+- `backend`: `CHALLENGE | COMBAT | REGISTRY | SCENE_ADAPTIVE` (TextChoices in
+  `src/actions/constants.py`). `SCENE_ADAPTIVE` was added in #1351 for actions
+  that work both in and out of a combat round (technique casts); see the
+  "SCENE_ADAPTIVE Backend" section of `src/actions/CLAUDE.md` for its dispatch
+  flow (anti-spam floor, `round_declaration` deferral, soulfray-pending gate).
 - `check_type`: the resolved `CheckType` instance (always present; the unifying
   anchor, sourced per-backend per the keystone correction)
 - `action_template`: the `ActionTemplate` instance or `None` (present for
@@ -190,6 +193,10 @@ on the next read with no special path.
   capability_source)`.
 - `COMBAT` → `declare_action(participant, …)`.
 - `REGISTRY` → `get_action(key).run(actor, **kwargs)`.
+- `SCENE_ADAPTIVE` (#1351) → anti-spam check, then `get_action(key)`; inside a
+  combat round `action.round_declaration(ctx, …)` may defer it as a COMBAT
+  declaration, otherwise `action.run(actor, **kwargs)` runs immediately (with a
+  POSE_ORDER quorum / repeat-block check from the active scene round).
 - Immediate vs. declaration-gated is decided by the tempo seam (§4), not the
   backend.
 
