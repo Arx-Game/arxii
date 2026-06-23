@@ -22,10 +22,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
+
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.offer_registry import find_handler, format_pending_listing, get_all_pending
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.interaction_services import _get_active_scene
+from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
@@ -50,10 +56,6 @@ class ConsentRequestCommand(ArxCommand):
     def _execute(self) -> None:
         # DjangoValidationError converted to CommandError so the base try/except
         # surfaces it cleanly — mirrors how the web viewset handles it.
-        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
-
-        from world.scenes.action_services import create_action_request  # noqa: PLC0415
-
         scene, initiator_persona = self._resolve_scene_and_initiator()
         target_persona = self._resolve_target_persona()
         try:
@@ -80,8 +82,6 @@ class ConsentRequestCommand(ArxCommand):
         derives them. Raises ``CommandError`` on either miss so the command
         surfaces a clean message.
         """
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-
         scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "You are not in an active scene."
@@ -102,10 +102,6 @@ class ConsentRequestCommand(ArxCommand):
 
     def _persona_for(self, character: object, missing_msg: str) -> Persona:
         """Active persona for ``character``; ``CommandError(missing_msg)`` on miss."""
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
         sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             raise CommandError(missing_msg)
@@ -220,8 +216,6 @@ class _RespondCommand(ArxCommand):
     action = None
 
     def _execute(self) -> None:
-        from world.scenes.action_services import respond_to_action_request  # noqa: PLC0415
-
         request = self._resolve_pending_request()
         if request is None:
             self.msg(_NO_PENDING_MSG)
@@ -238,10 +232,6 @@ class _RespondCommand(ArxCommand):
         ``self.args`` is a digit, looks up by pk (still constrained to the
         caller as target). Returns None when nothing matches.
         """
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return None
@@ -281,20 +271,12 @@ class CmdAccept(_RespondCommand):
             super()._execute()
 
     def _has_registry_pending(self) -> bool:
-        from commands.offer_registry import get_all_pending  # noqa: PLC0415
-
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return False
         return bool(get_all_pending(sheet))
 
     def _dispatch_registry(self, args: str) -> str:
-        from commands.offer_registry import (  # noqa: PLC0415
-            find_handler,
-            format_pending_listing,
-            get_all_pending,
-        )
-
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         keyword, _, rest = args.partition(" ")
         if not keyword:

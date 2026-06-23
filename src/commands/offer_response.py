@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.offer_registry import find_handler, format_pending_listing, get_all_pending
 
 
 class CmdDecline(ArxCommand):
@@ -17,12 +18,6 @@ class CmdDecline(ArxCommand):
     action = None
 
     def _execute(self) -> None:
-        from commands.offer_registry import (  # noqa: PLC0415
-            find_handler,
-            format_pending_listing,
-            get_all_pending,
-        )
-
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         args = (self.args or "").strip()
         if not args:
