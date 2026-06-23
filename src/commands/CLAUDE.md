@@ -37,7 +37,8 @@ Use `DispatchCommand` whenever the command must reach a CHALLENGE or COMBAT back
 | Use | Base class |
 |---|---|
 | REGISTRY action (most look/say/move/item commands) | `ArxCommand` |
-| CHALLENGE backend (magic attempt, non-combat skill check) | `DispatchCommand` |
+| CHALLENGE backend (dungeon puzzle challenges — requires `challenge_instance_id`) | `DispatchCommand` |
+| Non-combat magic cast (`attempt`) — calls `request_technique_cast` directly | `ArxCommand` |
 | COMBAT backend (technique declaration into the current round) | `DispatchCommand` |
 
 Both bases stay thin: no business logic in commands — all behavior lives in
@@ -66,6 +67,10 @@ actions, backends, and service functions.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
+- **`magic.py`**: `CmdAttempt` (`attempt`) — non-combat technique cast shell (#1332); thin
+  `ArxCommand` that parses `attempt <technique> [at <target>]`, resolves the persona via
+  `persona_for_character`, and calls `request_technique_cast` (the same service the web
+  viewset calls). No business logic; does NOT use CHALLENGE backend.
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
