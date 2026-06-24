@@ -7,14 +7,22 @@ Covers the three wiring guarantees added in Task 6:
 
 And the two wiring guarantees added in Task 2 (#1455):
 - a declared pull with INTENSITY_BUMP effect raises the cast's derived power,
-- a declared pull with FLAT_BONUS effect raises the cast check's extra_modifiers.
+- a declared pull with FLAT_BONUS effect raises the cast check's extra_modifiers,
+- a TECHNIQUE_PRE_CAST cancellation does NOT charge the pull (resonance balance
+  unchanged), restoring the invariant that aborted casts never spend resources.
 """
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
+from flows.constants import EventName
+from flows.consts import FlowActionChoices
+from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ReactiveConditionFactory
 from world.magic.constants import TargetKind
 from world.magic.exceptions import ResonanceInsufficient
 from world.magic.factories import (
@@ -30,6 +38,25 @@ from world.magic.services import use_technique
 from world.magic.services.cast_threads import build_cast_applicable_threads
 from world.magic.types.pull import CastPullDeclaration
 from world.mechanics.factories import CharacterEngagementFactory
+
+
+def _create_room(key: str = "TestRoom") -> ObjectDB:
+    return ObjectDB.objects.create(
+        db_key=key,
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+
+
+def _make_cancel_flow():
+    """Return a FlowDefinition with a single CANCEL_EVENT step."""
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        parent_id=None,
+        action=FlowActionChoices.CANCEL_EVENT,
+        parameters={},
+    )
+    return flow
 
 
 def _capture_power() -> "tuple[dict[str, object], object]":
@@ -292,4 +319,56 @@ class UseTechniqueFlatPullTests(_CastPullChargeTestBase):
             captured["extra_modifiers"],
             2,
             "Expected extra_modifiers == 2 from FLAT_BONUS pull effect",
+        )
+
+
+class UseTechniqueCancelledPreCastPullTests(_CastPullChargeTestBase):
+    """A TECHNIQUE_PRE_CAST cancellation must NOT charge the pull (#1455 regression lock).
+
+    The pull charge was previously placed before the pre-cast cancellation gate, which
+    meant a reactive subscriber cancelling the cast would still spend the caster's
+    resonance. This test locks the restored invariant: resonance balance must be
+    identical before and after a cancelled cast.
+
+    Uses _CastPullChargeTestBase which already provides a tier-1 FLAT_BONUS pull effect
+    (non-inert) and a TECHNIQUE-anchored thread. A room is required for the
+    TECHNIQUE_PRE_CAST event to fire and for the cancel trigger to activate.
+    """
+
+    SELF_FILTER = {"path": "caster", "op": "==", "value": "self"}
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = _create_room()
+        self.character.location = self.room
+
+    def test_cancelled_precast_does_not_charge_pull(self) -> None:
+        """Resonance balance is unchanged when TECHNIQUE_PRE_CAST is cancelled."""
+        cr = CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=self.SELF_FILTER,
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=MagicMock(return_value="result"),
+            cast_pull=CastPullDeclaration(resonance=self.resonance, tier=1, threads=(self.thread,)),
+        )
+
+        self.assertFalse(result.confirmed, "cast should be cancelled, not confirmed")
+        cr.refresh_from_db()
+        self.assertEqual(
+            cr.balance,
+            10,
+            "resonance balance must be unchanged when cast is cancelled",
         )
