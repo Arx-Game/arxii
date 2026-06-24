@@ -189,6 +189,14 @@ class SpendResonanceForPullCombatTests(TestCase):
             resonance=self.resonance,
             as_track_thread=True,
         )
+        # Add a tier-1 FLAT_BONUS effect for RELATIONSHIP_TRACK so the pull has
+        # at least one applicable effect (the guard requires this).
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=self.resonance,
+            tier=1,
+            flat_bonus_amount=2,
+        )
         ctx = _setup_combat_context(sheet=self.sheet)
 
         pre = CombatPull.objects.count()
@@ -779,3 +787,63 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
         # level=20 → multiplier = max(1, 20//10) = 2; scaled = 5 × 2 = 10.
         self.assertEqual(flat_rows[0].level_multiplier, 2)
         self.assertEqual(flat_rows[0].scaled_value, 10)
+
+
+class SpendResonanceForPullInertEffectsTests(TestCase):
+    """Guard: refuse a pull whose every resolved effect is inactive (no charge-for-nothing)."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        # TECHNIQUE-kind thread so involved_techniques anchors it in-action.
+        self.vital_only_thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            as_technique_thread=True,
+            level=1,
+        )
+        # Wire ONLY a VITAL_BONUS tier-1 effect for this thread's target_kind+resonance.
+        # In non-combat context resolve_pull_effects marks VITAL_BONUS inactive —
+        # so this pull would have zero applicable effects.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=self.resonance,
+            tier=1,
+            min_thread_level=0,
+            as_vital_bonus=True,
+            vital_bonus_amount=5,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+            flat_bonus_amount=None,
+        )
+        self.technique = self.vital_only_thread.target_technique
+
+    def test_non_combat_pull_with_only_inert_effects_refuses_and_does_not_charge(self) -> None:
+        before = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        ).balance
+        with self.assertRaises(InvalidImbueAmount):
+            spend_resonance_for_pull(
+                self.sheet,
+                self.resonance,
+                tier=1,
+                threads=[self.vital_only_thread],
+                action_context=PullActionContext(
+                    combat_encounter=None,
+                    involved_techniques=(self.technique.pk,),
+                ),
+            )
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        cr.refresh_from_db()
+        assert cr.balance == before  # no charge-for-nothing

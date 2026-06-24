@@ -668,6 +668,11 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
     in_combat = action_context.combat_encounter is not None
     resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
 
+    applicable = [e for e in resolved if not e.inactive]
+    if not applicable:
+        msg = "This pull would have no effect on that action."
+        raise InvalidImbueAmount(msg)
+
     # Persist combat pull FIRST so the unique-key check fires before any
     # debit hits the DB. This keeps the in-memory cr / anima instances
     # consistent with the DB on failure — if persist raises IntegrityError,

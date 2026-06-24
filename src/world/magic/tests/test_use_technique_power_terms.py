@@ -118,6 +118,14 @@ class _CastPullChargeTestBase(TestCase):
         cls.resonance = ResonanceFactory()
         # tier-1 pull: 1 resonance, 1 anima per thread.
         ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
+        # tier-1 FLAT_BONUS so the pull has at least one applicable effect (guard
+        # added by #1455 refuses pulls where every resolved effect is inactive).
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=cls.resonance,
+            tier=1,
+            flat_bonus_amount=2,
+        )
 
     def setUp(self) -> None:
         self.character, self.sheet = _make_caster()
