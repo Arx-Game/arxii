@@ -1,5 +1,7 @@
-"""Technique cast command — scene-adaptive telnet shell for CastTechniqueAction.
+"""Combat telnet commands — scene-adaptive cast and clash-commit shells.
 
+``CmdDeclareTechnique`` (key ``cast``, alias ``declare``)
+---------------------------------------------------------
 Routes through the SCENE_ADAPTIVE backend so it works both inside and outside
 combat:
 - Outside combat: ``dispatch_player_action`` runs ``CastTechniqueAction.execute()``
@@ -19,6 +21,15 @@ Target resolution is context-sensitive:
 The optional ``secondary`` keyword declares the technique in its derived passive
 slot (PHYSICAL → ``passive-physical``, SOCIAL → ``passive-social``, MENTAL →
 ``passive-mental``) instead of the focused slot.
+
+``CmdClashCommit`` (key ``clash``)
+------------------------------------
+Commits a technique + optional strain to an active Clash during a DECLARING round.
+Routes through the COMBAT backend, wiring the resolved ``Clash.pk`` as
+``clash_id`` on the ``ActionRef``.  The dispatcher routes to
+``_dispatch_clash_contribution`` which calls ``declare_clash_contribution``.
+
+Syntax: ``clash <opponent> with <technique> [strain=<n>]``
 """
 
 from __future__ import annotations
@@ -37,6 +48,8 @@ if TYPE_CHECKING:
 _EFFORT_PREFIX = "effort="
 # Standalone keyword that declares the technique as a passive secondary action.
 _SECONDARY_KEYWORD = "secondary"
+# Keyword prefix used to parse strain=<n> from clash command args.
+_STRAIN_PREFIX = "strain="
 
 # Mapping from ActionCategory to the corresponding passive CombatActionSlot.
 _SECONDARY_SLOT: dict[str, str] = {
@@ -46,7 +59,61 @@ _SECONDARY_SLOT: dict[str, str] = {
 }
 
 
-class CmdDeclareTechnique(DispatchCommand):
+class _CombatCommandMixin:
+    """Shared helpers for combat telnet commands.
+
+    Provides ``_combat_participant_or_none`` and ``_find_technique_id`` so that
+    ``CmdDeclareTechnique`` and ``CmdClashCommit`` can reuse the same lookup logic
+    without duplicating it.
+    """
+
+    def _combat_participant_or_none(self) -> CombatParticipant | None:
+        """Return the caller's active CombatParticipant in a DECLARING encounter, or None.
+
+        Unlike ``_active_participant`` (which raises), this returns ``None`` when the
+        caller is not in an active DECLARING combat round so the non-combat path can
+        proceed without branching the dispatch regime.
+        """
+        from world.combat.constants import EncounterStatus, ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+        return (
+            CombatParticipant.objects.filter(
+                character_sheet=self.caller.sheet_data,
+                status=ParticipantStatus.ACTIVE,
+                encounter__status=EncounterStatus.DECLARING,
+            )
+            .select_related("encounter")
+            .order_by("-encounter__created_at")
+            .first()
+        )
+
+    def _find_technique_id(self, technique_name: str) -> int:
+        """Return the pk of the technique matching *technique_name*.
+
+        Matches case-insensitively against ``Technique.name`` for techniques
+        the caller knows (via ``CharacterTechnique``).
+
+        Raises:
+            CommandError: If no matching known technique is found.
+        """
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        ct = (
+            CharacterTechnique.objects.filter(
+                character=self.caller.sheet_data,
+                technique__name__iexact=technique_name,
+            )
+            .select_related("technique")
+            .first()
+        )
+        if ct is None:
+            msg = f"You don't know a technique called '{technique_name}'."
+            raise CommandError(msg)
+        return ct.technique_id
+
+
+class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     """Cast a technique — works both in and out of combat.
 
     Usage:
@@ -136,27 +203,6 @@ class CmdDeclareTechnique(DispatchCommand):
 
     # -- Resolution helpers ----------------------------------------------------
 
-    def _combat_participant_or_none(self) -> CombatParticipant | None:
-        """Return the caller's active CombatParticipant in a DECLARING encounter, or None.
-
-        Unlike ``_active_participant`` (which raises), this returns ``None`` when the
-        caller is not in an active DECLARING combat round so the non-combat path can
-        proceed without branching the dispatch regime.
-        """
-        from world.combat.constants import EncounterStatus, ParticipantStatus  # noqa: PLC0415
-        from world.combat.models import CombatParticipant  # noqa: PLC0415
-
-        return (
-            CombatParticipant.objects.filter(
-                character_sheet=self.caller.sheet_data,
-                status=ParticipantStatus.ACTIVE,
-                encounter__status=EncounterStatus.DECLARING,
-            )
-            .select_related("encounter")
-            .order_by("-encounter__created_at")
-            .first()
-        )
-
     def _active_participant(self) -> CombatParticipant:
         """Return the caller's active CombatParticipant in a DECLARING encounter.
 
@@ -172,27 +218,13 @@ class CmdDeclareTechnique(DispatchCommand):
     def _resolve_technique_id(self) -> int:
         """Return the pk of the technique named by ``self._technique_name``.
 
-        Matches case-insensitively against ``Technique.name`` for techniques
-        the caller knows (via ``CharacterTechnique``).
+        Delegates to the shared mixin helper.  Keeps the zero-argument call
+        signature used by the rest of this class.
 
         Raises:
             CommandError: If no matching known technique is found.
         """
-        from world.magic.models import CharacterTechnique  # noqa: PLC0415
-
-        name = self._technique_name or ""
-        ct = (
-            CharacterTechnique.objects.filter(
-                character=self.caller.sheet_data,
-                technique__name__iexact=name,
-            )
-            .select_related("technique")
-            .first()
-        )
-        if ct is None:
-            msg = f"You don't know a technique called '{name}'."
-            raise CommandError(msg)
-        return ct.technique_id
+        return self._find_technique_id(self._technique_name or "")
 
     def _resolve_technique(self) -> Technique:  # type: ignore[name-defined]  # noqa: F821
         """Return the ``Technique`` object named by ``self._technique_name``.
@@ -396,3 +428,133 @@ class CmdDeclareTechnique(DispatchCommand):
                 kwargs["target_persona_id"] = persona_id
 
         return kwargs
+
+
+class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
+    """Commit a technique to an active Clash during a DECLARING combat round.
+
+    Usage:
+        clash <opponent> with <technique> [strain=<n>]
+
+    Identifies the active Clash against the named NPC opponent and declares a
+    ClashContributionDeclaration via the COMBAT backend dispatcher.  The round
+    resolves when all participants have declared; the clash post-pass then drives
+    ``run_clash_round`` and writes ``ClashContribution`` audit rows.
+
+    ``strain=<n>`` commits extra anima beyond the technique's base cost (default 0).
+    """
+
+    key = "clash"
+    locks = "cmd:all()"
+
+    # -- Parsed state -----------------------------------------------------------
+
+    _opponent_name: str | None = None
+    _technique_name: str | None = None
+    _strain: int = 0
+    _parsed: bool = False
+
+    # ---------------------------------------------------------------------------
+
+    def _parse_args(self) -> None:
+        """Parse ``self.args`` once; cache opponent, technique, and strain."""
+        if self._parsed:
+            return
+
+        import re  # noqa: PLC0415
+
+        raw = (self.args or "").strip()
+        if not raw:
+            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            raise CommandError(msg)
+
+        # Strip off strain=<n> suffix (case-insensitive).
+        strain = 0
+        if _STRAIN_PREFIX in raw.lower():
+            parts = re.split(re.escape(_STRAIN_PREFIX), raw, flags=re.IGNORECASE)
+            raw = parts[0].strip()
+            strain_str = parts[1].strip()
+            if not strain_str.isdigit():
+                msg = f"Invalid strain value '{strain_str}' — must be a non-negative integer."
+                raise CommandError(msg)
+            strain = int(strain_str)
+
+        # Split on " with " (case-insensitive) to separate opponent from technique.
+        with_index = raw.lower().find(" with ")
+        if with_index == -1:
+            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            raise CommandError(msg)
+
+        self._opponent_name = raw[:with_index].strip()
+        self._technique_name = raw[with_index + len(" with ") :].strip()
+
+        if not self._opponent_name or not self._technique_name:
+            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            raise CommandError(msg)
+
+        self._strain = strain
+        self._parsed = True
+
+    def _resolve_clash(self, participant: CombatParticipant) -> Any:
+        """Return the active Clash for this participant's encounter against the named opponent.
+
+        Raises:
+            CommandError: If no active Clash matches or the name is ambiguous.
+        """
+        from world.combat.constants import ClashStatus  # noqa: PLC0415
+        from world.combat.models import Clash  # noqa: PLC0415
+
+        name = self._opponent_name or ""
+        matches = list(
+            Clash.objects.filter(
+                encounter=participant.encounter,
+                status=ClashStatus.ACTIVE,
+                npc_opponent__name__iexact=name,
+            ).select_related("npc_opponent")
+        )
+        if not matches:
+            msg = f"No active Clash against '{name}' in this encounter."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            msg = f"More than one active Clash against '{name}' — be more specific."
+            raise CommandError(msg)
+        return matches[0]
+
+    # -- DispatchCommand interface ---------------------------------------------
+
+    def resolve_action_ref(self) -> ActionRef:
+        """Build a COMBAT ``ActionRef`` carrying the resolved Clash pk.
+
+        Locates the caller's active DECLARING participant, then finds the
+        active Clash against the named opponent.  Raises ``CommandError`` when
+        the caller is not in a DECLARING round or no matching Clash is found.
+        """
+        from actions.constants import ActionBackend  # noqa: PLC0415
+        from actions.types import ActionRef  # noqa: PLC0415
+
+        self._parse_args()
+
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            msg = "You are not in an active combat round."
+            raise CommandError(msg)
+
+        clash = self._resolve_clash(participant)
+
+        # ClashActionSlot.FOCUSED.value == "FOCUSED" (TextChoices first element).
+        # Pass the string literal directly to avoid a ty false-positive on
+        # TextChoices value extraction (same pattern used in player_interface.py).
+        return ActionRef(
+            backend=ActionBackend.COMBAT,
+            clash_id=clash.pk,
+            clash_action_slot="FOCUSED",
+        )
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        """Return ``technique_id`` and ``strain_commitment`` for the dispatcher."""
+        self._parse_args()
+        technique_id = self._find_technique_id(self._technique_name or "")
+        return {
+            "technique_id": technique_id,
+            "strain_commitment": self._strain,
+        }

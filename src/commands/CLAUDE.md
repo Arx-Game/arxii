@@ -77,14 +77,24 @@ actions, backends, and service functions.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
-- **`combat.py`**: `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
-  technique cast (#1351); thin `DispatchCommand` that parses
-  `cast <technique> [at <target>] [effort=<level>]` and emits a SCENE_ADAPTIVE
-  `ActionRef` keyed to `"cast_technique"`. Outside combat: runs `CastTechniqueAction.execute()`
-  immediately (non-combat cast via `request_technique_cast`). In a DECLARING round:
-  calls `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
-  declaration. Target resolution branches on context: combat → `CombatOpponent` pk
-  (`focused_opponent_target_id`); non-combat → `Persona` pk (`target_persona_id`).
+- **`combat.py`**: Two commands sharing a `_CombatCommandMixin` (provides
+  `_combat_participant_or_none` and `_find_technique_id`):
+  - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
+    technique cast (#1351); thin `DispatchCommand` that parses
+    `cast <technique> [at <target>] [effort=<level>]` and emits a SCENE_ADAPTIVE
+    `ActionRef` keyed to `"cast_technique"`. Outside combat: runs `CastTechniqueAction.execute()`
+    immediately (non-combat cast via `request_technique_cast`). In a DECLARING round:
+    calls `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
+    declaration. Target resolution branches on context: combat → `CombatOpponent` pk
+    (`focused_opponent_target_id`); non-combat → `Persona` pk (`target_persona_id`).
+  - `CmdClashCommit` (`clash`) — commit a technique + optional strain to an active
+    Clash during a DECLARING round (#1451); parses
+    `clash <opponent> with <technique> [strain=<n>]`, resolves the `Clash` by
+    NPC opponent name (`Clash.objects.filter(npc_opponent__name__iexact=...)`),
+    and emits a COMBAT `ActionRef` with `clash_id=clash.pk` +
+    `clash_action_slot=FOCUSED`. The dispatcher routes to `_dispatch_clash_contribution`
+    which calls `declare_clash_contribution` (writes a `ClashContributionDeclaration`
+    consumed by `_resolve_clashes` in the round post-pass).
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
