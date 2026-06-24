@@ -153,8 +153,8 @@ is GM/system-triggered.
 | Step | Telnet | Web dispatch | Same code? | Existing test | Class |
 |---|---|---|---|---|---|
 | GM starts encounter | ❌ none | `CombatEncounterViewSet.create` + `begin_declaration_phase` (`combat/services.py:1451`) | GM/system surface | `test_duels_integration.py` | G3 (correct) |
-| Player declares technique/passives | ❌ none | `dispatch_player_action`→COMBAT→`record_declaration`→`declare_action` (`combat/services.py:1494`) → `CombatRoundAction` row | seam converges; no telnet | `test_combat_ui_integration.py` | **G1** |
-| Commit to clash | ❌ none | `dispatch_player_action`→`_dispatch_clash_contribution` (`player_interface.py:546`) | seam converges; no telnet | `test_combat_ui_integration.py` | **G1** |
+| Player declares technique/passives (effort, target, secondary) | ✅ `cast`/`declare` (`CmdDeclareTechnique`, `commands/combat.py` — `DispatchCommand`) | `dispatch_player_action`→SCENE_ADAPTIVE→`CastTechniqueAction.round_declaration`→`declare_action` (`combat/services.py:1494`) → `CombatRoundAction` row | **YES** — telnet calls `dispatch_player_action` (same seam); target routes via `derive_target_relationship` (ENEMY→`focused_opponent_target_id`, ALLY→`focused_ally_target_id`); `secondary` keyword maps `action_category`→passive slot | `test_combat_ui_integration.py`, `test_combat_cast_telnet_e2e.py`, `test_combat_commands.py` | **G0 (RESOLVED — #1330/#1451)** |
+| Commit to clash (strain) | ✅ `clash` (`CmdClashCommit`, `commands/combat.py` — `DispatchCommand`) | `dispatch_player_action`→COMBAT→`_dispatch_clash_contribution` (`player_interface.py:546`)→`declare_clash_contribution` → `ClashContributionDeclaration` row | **YES** — telnet calls `dispatch_player_action` (same seam); `strain=<n>` commits extra anima | `test_combat_ui_integration.py` | **G0 (RESOLVED — #1451)** |
 | GM resolves round | ❌ none | `…/resolve_round/` → `resolve_round` (`combat/services.py:3997`) → `use_technique` | service-only, GM-triggered | `test_duels_integration.py` | G3 (correct) |
 | NPC selection / damage / conditions | N/A | threat-pool selection + damage services (internal to `resolve_round`) | service-only | `test_agency_integration.py` | G3 (correct) |
 
@@ -162,10 +162,12 @@ is GM/system-triggered.
 (auto-assigned if absent), `ThreatPool`/`ThreatPoolEntry`, and `Technique.action_template.check_type`
 populated. Factories exist for most.
 
-**Verdict:** player declarations are the only missing player surface (G1); resolution is
-correctly GM/system-only (G3). Combat is deferred (declare-then-resolve), so a telnet
-`declare` command calling `dispatch_player_action()` records a declaration exactly like the
-web. Minimal fix: a `CmdDeclareAction` plus a GM-only `start encounter` for test setup.
+**Verdict:** player declarations (technique + effort + target + secondary slot) and clash-commit
+(technique + strain) are now telnet-driveable (G0) via `cast`/`declare` (`CmdDeclareTechnique`)
+and `clash` (`CmdClashCommit`) — both call `dispatch_player_action()` on the same seam the web
+uses (#1330/#1451). Resolution is correctly GM/system-only (G3). Remaining player surfaces —
+combo (#1452), thread-pull (#1455), and flee/cover/interpose/yield/join/leave/ready (#1453) —
+are still G1 gaps.
 
 ---
 
@@ -177,8 +179,10 @@ web. Minimal fix: a `CmdDeclareAction` plus a GM-only `start encounter` for test
 2. **Consent-flow and direct-viewset systems need telnet shells that call the same
    service/flow** (`create_action_request`/`respond_to_action_request` for social;
    `weave_thread`/`spend_resonance_for_*` for threads) — not `action.run()`.
-3. **No magic/combat story is telnet-driveable today**, so none can yet serve as a telnet E2E
-   regression. The service-layer pipeline tests remain the only proof for those loops.
+3. **Magic (non-combat and combat cast + clash-commit) is now telnet-driveable** (#1330/#1332/#1451):
+   `cast`/`declare` and `clash` complete the player-facing declaration surface so a telnet E2E
+   can drive a combat round end-to-end. The remaining service-layer pipeline tests cover
+   resolution, which is GM/system-only (G3) and correctly has no telnet surface.
 4. ~~**The `action.run` docstring is stale** and should be corrected to describe the real
    `dispatch_player_action` seam and the three dispatch families.~~
    **[ALREADY CORRECT — audit claim stale, verified #1337]** The `Action` docstring

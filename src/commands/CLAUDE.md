@@ -78,15 +78,27 @@ actions, backends, and service functions.
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
 - **`combat.py`**: Two commands sharing a `_CombatCommandMixin` (provides
-  `_combat_participant_or_none` and `_find_technique_id`):
+  `_combat_participant_or_none` and `_find_technique_id`). Both subclass `DispatchCommand`
+  — business logic lives entirely in the dispatcher and service layer, never in the command.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
-    technique cast (#1351); thin `DispatchCommand` that parses
-    `cast <technique> [at <target>] [effort=<level>]` and emits a SCENE_ADAPTIVE
+    technique cast (#1351/#1330); thin `DispatchCommand` that parses
+    `cast <technique> [at <name>] [effort=<level>] [secondary]` and emits a SCENE_ADAPTIVE
     `ActionRef` keyed to `"cast_technique"`. Outside combat: runs `CastTechniqueAction.execute()`
     immediately (non-combat cast via `request_technique_cast`). In a DECLARING round:
     calls `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
-    declaration. Target resolution branches on context: combat → `CombatOpponent` pk
-    (`focused_opponent_target_id`); non-combat → `Persona` pk (`target_persona_id`).
+    declaration row.
+
+    **Target resolution** (`at <name>`) branches on context and on the technique's authored
+    `derive_target_relationship`:
+    - Combat context + `ENEMY` relationship → `CombatOpponent` pk → `focused_opponent_target_id`
+    - Combat context + `ALLY`/`SELF` relationship → `CombatParticipant` pk → `focused_ally_target_id`
+    - Non-combat context → `Persona` pk → `target_persona_id`
+
+    **`secondary` keyword** — adds a standalone `secondary` token to the command args:
+    `cast <technique> … secondary`. The technique's `action_category` derives the passive
+    slot (PHYSICAL → `passive-physical`, SOCIAL → `passive-social`, MENTAL → `passive-mental`),
+    which is passed as `action_slot` in both the `ActionRef` and the dispatch kwargs so
+    `round_declaration` writes to the correct passive slot rather than the focused slot.
   - `CmdClashCommit` (`clash`) — commit a technique + optional strain to an active
     Clash during a DECLARING round (#1451); parses
     `clash <opponent> with <technique> [strain=<n>]`, resolves the `Clash` by
@@ -94,7 +106,8 @@ actions, backends, and service functions.
     and emits a COMBAT `ActionRef` with `clash_id=clash.pk` +
     `clash_action_slot=FOCUSED`. The dispatcher routes to `_dispatch_clash_contribution`
     which calls `declare_clash_contribution` (writes a `ClashContributionDeclaration`
-    consumed by `_resolve_clashes` in the round post-pass).
+    consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
+    extra anima beyond the technique's base cost (default 0).
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
