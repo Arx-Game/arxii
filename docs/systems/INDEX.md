@@ -530,8 +530,8 @@ Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.
 ### Tidings / Public-reaction feed (#1450)
 The pull/browse vector of the public-reaction "contextual center" (#1446) — recent public events
 scoped to what a viewer's persona would have heard. **Modelless and greenfield-light:** there is no
-feed table; the service aggregates two awareness M2Ms other apps already own. *The echo (push)
-vector, in-world criers/hubs, and a first-class `reach` taxonomy are later slices of #1450.*
+feed table; the service aggregates two awareness M2Ms other apps already own. *In-world criers/hubs
+are a later slice of #1450.*
 
 - **No models.** `world.tidings` is a service + API app (no migrations).
 - **Key function (`world/tidings/services.py`):** `public_feed_for(persona, *, limit)` → list of
@@ -544,6 +544,13 @@ vector, in-world criers/hubs, and a first-class `reach` taxonomy are later slice
   *tidings*, not `gossip`/`news`: `gossip` is reserved for level-1-secret access, `news` for OOC
   game news; criers will be NPCs.)
 - **Source:** `src/world/tidings/`
+- **Echo (push) vector — staff/GM gemits with reach (#1450), in `world.narrative`:**
+  `broadcast_gemit` broadcasts a **hand-authored, verbatim** message (colour codes and all) to a
+  `reach` — `GemitReach` ∈ GAME_WIDE / SOCIETY / ORGANIZATION; the scoped forms carry one-or-more
+  `Gemit.reach_societies` / `reach_organizations`. Audience = sessions whose **active persona** is a
+  member of a target society/org (a TEMPORARY mask holds none, so the disguised fall out — by
+  design). History is reach-scoped so a society gemit never leaks to outsiders (staff see all).
+  Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) + web `POST /api/narrative/gemits/`.
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
 content sharing and social action targeting (#1141).

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from world.narrative.constants import NarrativeCategory
+from world.narrative.constants import GemitReach, NarrativeCategory
 from world.narrative.models import (
     AmbientStirLine,
     Gemit,
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.societies.models import Organization, Society
     from world.stories.models import BeatCompletion, EpisodeResolution, Era, Story
 
 
@@ -131,30 +132,94 @@ def send_story_ooc_message(
     )
 
 
-def broadcast_gemit(
+def _eligible_persona_ids(
+    reach: str,
+    societies: Iterable[Society],
+    organizations: Iterable[Organization],
+) -> set[int]:
+    """Persona ids whose membership puts them in a scoped gemit's audience (#1450).
+
+    SOCIETY: members of any organization belonging to a target society. ORGANIZATION: members of a
+    target organization. (Society *reputation* alone — an outsider the society merely knows of —
+    does not count; internal news goes to members.) Empty for GAME_WIDE.
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    if reach == GemitReach.SOCIETY:
+        return set(
+            OrganizationMembership.objects.filter(organization__society__in=societies).values_list(
+                "persona_id", flat=True
+            )
+        )
+    if reach == GemitReach.ORGANIZATION:
+        return set(
+            OrganizationMembership.objects.filter(organization__in=organizations).values_list(
+                "persona_id", flat=True
+            )
+        )
+    return set()
+
+
+def _session_in_audience(session: object, eligible_persona_ids: set[int]) -> bool:
+    """Whether a connected session's active-persona character is in a scoped gemit's audience.
+
+    Keyed on the *active* persona (the face the character is currently wearing) — a TEMPORARY mask
+    holds no memberships, so a disguised character falls out of society/org reach, by design.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    puppet = getattr(session, "puppet", None)  # noqa: GETATTR_LITERAL
+    if puppet is None:
+        return False
+    try:
+        sheet = puppet.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+    return active_persona_for_sheet(sheet).id in eligible_persona_ids
+
+
+def broadcast_gemit(  # noqa: PLR0913
     *,
     body: str,
     sender_account: AccountDB,
+    reach: str = GemitReach.GAME_WIDE,
+    societies: Iterable[Society] | None = None,
+    organizations: Iterable[Organization] | None = None,
     related_era: Era | None = None,
     related_story: Story | None = None,
 ) -> Gemit:
-    """Create a Gemit and push to all currently-connected sessions in green.
+    """Create a Gemit and push it to its ``reach`` audience in green (#1450).
 
-    The Gemit row persists for retroactive viewing. The real-time push uses
-    evennia.SESSION_HANDLER to reach all connected sessions; push failures
-    are swallowed so that broadcast errors do not roll back the record.
+    GAME_WIDE pushes to every connected session (the classic gemit). SOCIETY / ORGANIZATION push
+    only to sessions whose active-persona character is a member of a target society / organization;
+    the targets are also recorded on the row so retroactive viewing stays scoped. The Gemit row
+    persists either way; push failures are swallowed so a broadcast error never rolls back the
+    record.
     """
+    societies = list(societies or [])
+    organizations = list(organizations or [])
     gemit = Gemit.objects.create(
         body=body,
+        reach=reach,
         sender_account=sender_account,
         related_era=related_era,
         related_story=related_story,
     )
+    if societies:
+        gemit.reach_societies.set(societies)
+    if organizations:
+        gemit.reach_organizations.set(organizations)
+
     formatted = f"|G[GEMIT]|n {body}"
+    eligible = _eligible_persona_ids(reach, societies, organizations)
     try:
         from evennia import SESSION_HANDLER  # noqa: PLC0415
 
         for session in SESSION_HANDLER.get_sessions():
+            if reach != GemitReach.GAME_WIDE and not _session_in_audience(session, eligible):
+                continue
             session.msg(text=(formatted, {}), type="gemit")
     except Exception as exc:  # noqa: BLE001 — best-effort broadcast; capture, don't propagate
         from world.player_submissions.services import report_error  # noqa: PLC0415

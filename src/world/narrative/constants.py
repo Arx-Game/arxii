@@ -9,3 +9,15 @@ class NarrativeCategory(models.TextChoices):
     SYSTEM = "system", "System"
     COVENANT = "covenant", "Covenant"
     RENOWN = "renown", "Renown"
+
+
+class GemitReach(models.TextChoices):
+    """How wide a gemit broadcasts (#1450) — its audience scope.
+
+    GAME_WIDE reaches every online session (the classic gemit). SOCIETY / ORGANIZATION reach only
+    the members of the linked societies / organizations (multiple targets allowed per gemit).
+    """
+
+    GAME_WIDE = "game_wide", "Game-wide"
+    SOCIETY = "society", "Society"
+    ORGANIZATION = "organization", "Organization"

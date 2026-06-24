@@ -22,6 +22,15 @@ NarrativeCategory.HAPPENSTANCE   # Random incidents, unexpected arrivals
 NarrativeCategory.SYSTEM         # System notifications
 ```
 
+```python
+from world.narrative.constants import GemitReach
+
+# TextChoices — how wide a gemit broadcasts (#1450):
+GemitReach.GAME_WIDE      # every online session (the classic gemit)
+GemitReach.SOCIETY        # members of the linked societies only
+GemitReach.ORGANIZATION   # members of the linked organizations only
+```
+
 ---
 
 ## Models
@@ -51,6 +60,20 @@ Per-recipient delivery state. Unique per `(message, recipient_character_sheet)`.
 | `recipient_character_sheet` | FK to `character_sheets.CharacterSheet` | Cascade delete |
 | `delivered_at` | DateTimeField, nullable | Set when the message was pushed to the recipient's puppeted session; null until delivered |
 | `acknowledged_at` | DateTimeField, nullable | Set when the player acknowledges the message via the API |
+
+### Gemit (#1450)
+
+A staff/GM real-time broadcast, persisted for retroactive (reach-scoped) viewing. Does **not** fan out into `NarrativeMessageDelivery` rows — gemit is broadcast, not per-recipient. The body is **hand-authored verbatim** (colour codes and all); nothing is generated.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `body` | TextField | Verbatim broadcast text |
+| `reach` | CharField (`GemitReach`) | Audience scope; default `GAME_WIDE` |
+| `reach_societies` | M2M to `societies.Society` | Targets when `reach=SOCIETY` (multiple allowed) |
+| `reach_organizations` | M2M to `societies.Organization` | Targets when `reach=ORGANIZATION` (multiple allowed) |
+| `sender_account` | FK to `accounts.AccountDB`, nullable | Null = system-generated |
+| `related_era` / `related_story` | FK, nullable | Optional context links |
+| `sent_at` | DateTimeField | `auto_now_add` |
 
 ---
 
@@ -83,6 +106,23 @@ def deliver_queued_messages(character_sheet: CharacterSheet) -> int
 ```
 
 Pushes all unread queued deliveries for a character and marks them `delivered_at=now`. Called from `Character.at_post_puppet` via `stories.services.login.catch_up_character_stories`. Returns the count of deliveries attempted.
+
+### `broadcast_gemit` (#1450)
+
+```python
+def broadcast_gemit(
+    *,
+    body: str,
+    sender_account: AccountDB,
+    reach: str = GemitReach.GAME_WIDE,
+    societies: Iterable[Society] | None = None,
+    organizations: Iterable[Organization] | None = None,
+    related_era: Era | None = None,
+    related_story: Story | None = None,
+) -> Gemit
+```
+
+Creates a `Gemit`, records its reach + targets, and pushes the green `|G[GEMIT]|n` broadcast. `GAME_WIDE` reaches every connected session; `SOCIETY` / `ORGANIZATION` reach only sessions whose **active persona** is a member of a target society/org (resolved once via `OrganizationMembership`, then matched per session — a TEMPORARY mask holds no membership, so the disguised fall out of scope by design). Push failures are swallowed so a broadcast error never rolls back the record. Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) and web `POST /api/narrative/gemits/`; the gemit history list (`GemitViewSet`) is reach-scoped so a scoped gemit never leaks to non-members (staff see all).
 
 ---
 

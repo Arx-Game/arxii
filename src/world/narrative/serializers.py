@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from world.narrative.constants import GemitReach
 from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
 
 
@@ -71,6 +72,9 @@ class GemitSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "body",
+            "reach",
+            "reach_societies",
+            "reach_organizations",
             "sender_account",
             "related_era",
             "related_story",
@@ -80,7 +84,11 @@ class GemitSerializer(serializers.ModelSerializer):
 
 
 class GemitCreateSerializer(serializers.ModelSerializer):
-    """Input serializer for staff POST /api/narrative/gemits/."""
+    """Input serializer for staff POST /api/narrative/gemits/ (#1450).
+
+    ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
+    ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+    """
 
     body = serializers.CharField(
         min_length=1,
@@ -90,7 +98,31 @@ class GemitCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Gemit
-        fields = ["body", "related_era", "related_story"]
+        fields = [
+            "body",
+            "reach",
+            "reach_societies",
+            "reach_organizations",
+            "related_era",
+            "related_story",
+        ]
+
+    def validate(self, attrs: dict) -> dict:
+        reach = attrs.get("reach", GemitReach.GAME_WIDE)
+        societies = attrs.get("reach_societies") or []
+        organizations = attrs.get("reach_organizations") or []
+        if reach == GemitReach.SOCIETY and not societies:
+            raise serializers.ValidationError(
+                {"reach_societies": "Name at least one society for a society-reach gemit."}
+            )
+        if reach == GemitReach.ORGANIZATION and not organizations:
+            raise serializers.ValidationError(
+                {"reach_organizations": "Name at least one organization for an org-reach gemit."}
+            )
+        if reach == GemitReach.GAME_WIDE and (societies or organizations):
+            msg = "A game-wide gemit takes no society or organization targets."
+            raise serializers.ValidationError(msg)
+        return attrs
 
 
 # ---------------------------------------------------------------------------

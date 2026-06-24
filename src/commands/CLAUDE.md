@@ -97,6 +97,12 @@ actions, backends, and service functions.
   `_get_active_scene` (#1340).
 - **`fashion.py`**: `CmdJudgePresentation` (`judge`) — telnet face of
   `JudgePresentationAction`; parses `judge <presentation_id>` (#1340).
+- **`gemit.py`**: `CmdGemit` (`gemit`, staff-only `perm(Admin)`, #1450) — the *push* face of the
+  public-reaction center. Thin over `world.narrative.services.broadcast_gemit` (the same service the
+  web gemit endpoint calls). Broadcasts a **hand-authored, verbatim** message (colour codes and all)
+  to a *reach*: `gemit <msg>` (game-wide), `gemit/society <a>,<b> = <msg>`, or `gemit/org <a>,<b> =
+  <msg>` (members of those societies/orgs, by active persona). No body is ever generated. Player/
+  covenant-targeted story emits are a separate, non-public tool — not this command.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
