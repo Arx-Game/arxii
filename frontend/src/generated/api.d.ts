@@ -16828,8 +16828,20 @@ export interface components {
     /** @description Full Gemit representation for list and create responses. */
     Gemit: {
       readonly id: number;
-      /** @description Broadcast text shown to all connected players. */
+      /** @description Broadcast text shown to the audience (staff-authored verbatim, colour and all). */
       body: string;
+      /**
+       * @description Audience scope: game-wide, or the members of the linked societies / orgs.
+       *
+       *     * `game_wide` - Game-wide
+       *     * `society` - Society
+       *     * `organization` - Organization
+       */
+      reach?: components['schemas']['ReachF5cEnum'];
+      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach_societies?: number[];
+      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      reach_organizations?: number[];
       /** @description Null = system-generated. */
       readonly sender_account: number | null;
       /** @description Optional: link to the era this gemit relates to. */
@@ -16839,19 +16851,53 @@ export interface components {
       /** Format: date-time */
       readonly sent_at: string;
     };
-    /** @description Input serializer for staff POST /api/narrative/gemits/. */
+    /**
+     * @description Input serializer for staff POST /api/narrative/gemits/ (#1450).
+     *
+     *     ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
+     *     ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+     */
     GemitCreate: {
       /** @description Broadcast text. Must be at least one non-whitespace character. */
       body: string;
+      /**
+       * @description Audience scope: game-wide, or the members of the linked societies / orgs.
+       *
+       *     * `game_wide` - Game-wide
+       *     * `society` - Society
+       *     * `organization` - Organization
+       */
+      reach?: components['schemas']['ReachF5cEnum'];
+      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach_societies?: number[];
+      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      reach_organizations?: number[];
       /** @description Optional: link to the era this gemit relates to. */
       related_era?: number | null;
       /** @description Optional: link to a specific story this gemit relates to. */
       related_story?: number | null;
     };
-    /** @description Input serializer for staff POST /api/narrative/gemits/. */
+    /**
+     * @description Input serializer for staff POST /api/narrative/gemits/ (#1450).
+     *
+     *     ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
+     *     ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+     */
     GemitCreateRequest: {
       /** @description Broadcast text. Must be at least one non-whitespace character. */
       body: string;
+      /**
+       * @description Audience scope: game-wide, or the members of the linked societies / orgs.
+       *
+       *     * `game_wide` - Game-wide
+       *     * `society` - Society
+       *     * `organization` - Organization
+       */
+      reach?: components['schemas']['ReachF5cEnum'];
+      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach_societies?: number[];
+      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      reach_organizations?: number[];
       /** @description Optional: link to the era this gemit relates to. */
       related_era?: number | null;
       /** @description Optional: link to a specific story this gemit relates to. */
@@ -21517,7 +21563,7 @@ export interface components {
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
        */
-      reach?: components['schemas']['ReachEnum'];
+      reach?: components['schemas']['TechniqueReachEnum'];
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -22476,12 +22522,12 @@ export interface components {
      */
     RatingEnum: -2 | -1 | 0 | 1 | 2;
     /**
-     * @description * `same` - Same position
-     *     * `adjacent` - Adjacent position
-     *     * `any` - Anywhere in room
+     * @description * `game_wide` - Game-wide
+     *     * `society` - Society
+     *     * `organization` - Organization
      * @enum {string}
      */
-    ReachEnum: 'same' | 'adjacent' | 'any';
+    ReachF5cEnum: 'game_wide' | 'society' | 'organization';
     /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed
@@ -24397,7 +24443,7 @@ export interface components {
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
        */
-      reach?: components['schemas']['ReachEnum'];
+      reach?: components['schemas']['TechniqueReachEnum'];
       readonly tier: number;
       readonly target_spec: components['schemas']['TargetSpec'];
     };
@@ -24414,6 +24460,13 @@ export interface components {
       fury_anchor_id?: number | null;
       pull?: components['schemas']['CastPullRequestRequest'] | null;
     };
+    /**
+     * @description * `same` - Same position
+     *     * `adjacent` - Adjacent position
+     *     * `any` - Anywhere in room
+     * @enum {string}
+     */
+    TechniqueReachEnum: 'same' | 'adjacent' | 'any';
     /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
       /** @description Name of the technique (not unique - different characters can have same name). */
@@ -24444,7 +24497,7 @@ export interface components {
        *     * `adjacent` - Adjacent position
        *     * `any` - Anywhere in room
        */
-      reach?: components['schemas']['ReachEnum'];
+      reach?: components['schemas']['TechniqueReachEnum'];
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {
