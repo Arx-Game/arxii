@@ -474,7 +474,7 @@ class TechniqueCheckResultExtractorTest(TestCase):
             use_technique(
                 character=self.char,
                 technique=self.technique,
-                resolve_fn=lambda *, power, ledger: resolution,  # noqa: ARG005
+                resolve_fn=lambda *, power, ledger, extra_modifiers=0: resolution,  # noqa: ARG005
             )
 
         # The extractor must have found .check_result and passed it through.
@@ -530,7 +530,7 @@ class ReactivePowerLedgerStageTest(TestCase):
                 captured_cast.append(payload)
             return original(name, payload, **kw)
 
-        def resolve_fn(*, power, ledger):
+        def resolve_fn(*, power, ledger, extra_modifiers=0):
             captured_resolve["power"] = power
             captured_resolve["ledger"] = ledger
             return MagicMock(check_result=None)
@@ -622,7 +622,7 @@ class ReactivePowerLedgerStageTest(TestCase):
             target=treat_char,
         )
 
-        def resolve_fn(*, power, ledger):
+        def resolve_fn(*, power, ledger, extra_modifiers=0):
             return MagicMock(check_result=None)
 
         treat_result = use_technique(

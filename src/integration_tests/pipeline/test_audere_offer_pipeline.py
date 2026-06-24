@@ -120,7 +120,7 @@ class TestAudereOfferPipeline(APITestCase):
         result = use_technique(
             character=self.character,
             technique=self.technique,
-            resolve_fn=lambda *, power, ledger: None,  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger, extra_modifiers=0: None,  # noqa: ARG005
         )
         self.assertTrue(result.confirmed)
         self.assertTrue(PendingAudereOffer.objects.filter(character_sheet=self.sheet).exists())

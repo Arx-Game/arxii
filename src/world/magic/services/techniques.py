@@ -699,7 +699,7 @@ def _emit_cast_events(  # noqa: PLR0913 - frozen event payload fields
         )
 
 
-def use_technique(  # noqa: PLR0913
+def use_technique(  # noqa: PLR0913, C901
     *,
     character: ObjectDB,
     technique: Technique,
@@ -782,8 +782,40 @@ def use_technique(  # noqa: PLR0913
     # reused at Step 10 (backfire + defilement) — evaluate-once (#639/#722).
     room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
 
+    # Step 3c (#768, #1455): charge a declared cast pull. Placed after the soulfray
+    # checkpoint and pre-cast cancellation gate (so an aborted cast never charges)
+    # and BEFORE _derive_power so INTENSITY_BUMP effects feed into power derivation.
+    # An inert pull (all effects inactive) raises InvalidImbueAmount here — the caller
+    # surfaces it as a cast failure. Combat pulls are committed separately.
+    pull_flat_bonus = 0
+    pull_intensity_bonus = 0
+    if cast_pull is not None:
+        from world.magic.constants import EffectKind  # noqa: PLC0415
+        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+        pull_sheet = _get_character_sheet(character)
+        if pull_sheet is not None:
+            pull_result = spend_resonance_for_pull(
+                pull_sheet,
+                cast_pull.resonance,
+                cast_pull.tier,
+                list(cast_pull.threads),
+                PullActionContext(
+                    combat_encounter=None,
+                    involved_techniques=(technique.pk,),
+                ),
+            )
+            for eff in pull_result.resolved_effects:
+                if eff.inactive or not eff.scaled_value:
+                    continue
+                if eff.kind == EffectKind.FLAT_BONUS:
+                    pull_flat_bonus += eff.scaled_value
+                elif eff.kind == EffectKind.INTENSITY_BUMP:
+                    pull_intensity_bonus += eff.scaled_value
+
     seed_ledger = _derive_power(
-        channeled_intensity=stats.intensity + max(power_intensity_bonus, 0),
+        channeled_intensity=stats.intensity + max(power_intensity_bonus, 0) + pull_intensity_bonus,
         technique=technique,
         character=character,
         applicable_threads=applicable_threads,
@@ -815,33 +847,14 @@ def use_technique(  # noqa: PLR0913
     effective_ledger = _reconcile_precast_ledger(pre_payload)
     effective_power = effective_ledger.total
 
-    # Step 3c (#768): charge a declared cast pull. Placed after the soulfray
-    # checkpoint and pre-cast cancellation gate (so an aborted cast never
-    # charges) and before anima deduction (so an unaffordable pull raises
-    # before the technique's own anima is spent). Combat pulls are committed
-    # separately and never reach this path.
-    if cast_pull is not None:
-        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
-        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
-
-        pull_sheet = _get_character_sheet(character)
-        if pull_sheet is not None:
-            spend_resonance_for_pull(
-                pull_sheet,
-                cast_pull.resonance,
-                cast_pull.tier,
-                list(cast_pull.threads),
-                PullActionContext(
-                    combat_encounter=None,
-                    involved_techniques=(technique.pk,),
-                ),
-            )
-
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
 
-    # Steps 5 + 6: Resolution
-    resolution_result = resolve_fn(power=effective_power, ledger=effective_ledger)
+    # Steps 5 + 6: Resolution — pull_flat_bonus (from FLAT_BONUS pull effects) is
+    # threaded to the resolve_fn so the cast's check gains the bonus as extra_modifiers.
+    resolution_result = resolve_fn(
+        power=effective_power, ledger=effective_ledger, extra_modifiers=pull_flat_bonus
+    )
 
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = _resolve_check_result(check_result, resolution_result)

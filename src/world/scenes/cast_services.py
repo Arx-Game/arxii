@@ -134,7 +134,12 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     captured: dict[str, PowerLedger] = {}
 
-    def _resolve_fn(*, power: int, ledger: PowerLedger) -> PendingActionResolution:  # noqa: ARG001 — power is the pipeline's
+    def _resolve_fn(
+        *,
+        power: int,  # noqa: ARG001 — power unused; ledger is what the cast pipeline captures
+        ledger: PowerLedger,
+        extra_modifiers: int = 0,
+    ) -> PendingActionResolution:
         captured["ledger"] = ledger
         return start_action_resolution(
             character=character,
@@ -142,6 +147,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
             target_difficulty=difficulty,
             context=context,
             check_type=cast_check,
+            extra_modifiers=extra_modifiers,
         )
 
     technique_result = use_technique(
