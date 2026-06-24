@@ -117,10 +117,6 @@ actions, backends, and service functions.
   collisions (mirrors `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`.
-- **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
-  mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
-  [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without
-  debiting; live mode calls `spend_resonance_for_pull`.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.

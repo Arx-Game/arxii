@@ -1,13 +1,14 @@
 /**
- * ThreadPullDialog — multi-thread pull commit surface.
+ * ThreadPullDialog — thread pull selector (select-only surface).
+ *
+ * Calls `onSelect` with the chosen resonance/tier/threads so the caller
+ * (e.g. combat cast dispatch or clash commit) can include the pull inline
+ * in its own request. Pull no longer commits standalone — it rides
+ * cast/clash everywhere.
  *
  * Ephemeral mode (no `combat` prop): only ALWAYS_IN_ACTION_KINDS are eligible.
  * Combat mode (`combat` prop set): TRAIT/TECHNIQUE threads additionally
  * eligible when their anchor appears in the involved-ID lists.
- *
- * Select mode (`onSelect` prop set): instead of committing directly, calls
- * `onSelect` with the chosen resonance/tier/threads so the caller (e.g.
- * combat cast dispatch) can include the pull inline in its own request.
  *
  * Live preview: every change debounces a previewPull call (250ms).
  */

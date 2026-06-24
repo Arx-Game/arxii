@@ -8327,23 +8327,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/magic/thread-pull-commit/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Dispatch the pull and return the commit result. */
-    post: operations['magic_thread_pull_commit_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/magic/thread-pull-preview/': {
     parameters: {
       query?: never;
@@ -14101,12 +14084,7 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
-    /**
-     * @description Nested pull declaration on the cast endpoint (#854).
-     *
-     *     Field shapes mirror ThreadPullCommitRequestSerializer
-     *     (world/magic/serializers.py).
-     */
+    /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
       tier: number;
@@ -22426,23 +22404,6 @@ export interface components {
      */
     PublicFeedItemKindEnum: 'deed' | 'scandal';
     /**
-     * @description Wire shape for the optional ``action_context`` block in a pull commit.
-     *
-     *     Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
-     *     the additional fields the commit path consumes: ``combat_participant_id`` and
-     *     the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
-     *     pulls omit them entirely.
-     */
-    PullActionContextCommitRequest: {
-      action_kind?: string;
-      anchors_in_play?: number[];
-      combat_encounter_id?: number | null;
-      combat_participant_id?: number | null;
-      involved_trait_ids?: number[];
-      involved_technique_ids?: number[];
-      involved_object_ids?: number[];
-    };
-    /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
      *     Only ``combat_encounter_id`` is consumed by the preview path — the rest
@@ -22715,28 +22676,6 @@ export interface components {
       readonly source_thread_id: number;
       source_thread_level: number;
       source_tier: number;
-      narrative_snippet: string;
-      inactive: boolean;
-      inactive_reason: string | null;
-    };
-    /**
-     * @description Wire shape for a single ResolvedPullEffect in the commit response.
-     *
-     *     Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
-     *     ``granted_capability_id`` (which the commit path includes) and uses
-     *     source-accessor notation for ``source_thread_id``.
-     */
-    ResolvedPullEffectCommit: {
-      kind: string;
-      authored_value: number | null;
-      level_multiplier: number;
-      scaled_value: number | null;
-      vital_target: string | null;
-      source_thread_id: number;
-      source_thread_level: number;
-      source_tier: number;
-      /** @description Return the granted_capability PK, or None if absent. */
-      readonly granted_capability_id: number | null;
       narrative_snippet: string;
       inactive: boolean;
       inactive_reason: string | null;
@@ -24641,30 +24580,6 @@ export interface components {
       weavable_traits: components['schemas']['_WeavableTrait'][];
       weavable_techniques: components['schemas']['_WeavableTechnique'][];
       weavable_relationship_track_ids: number[];
-    };
-    /**
-     * @description Request serializer for POST /api/magic/thread-pull-commit/.
-     *
-     *     ``character_sheet_id`` is required and must identify a CharacterSheet owned
-     *     by the requesting account (staff may pass any sheet).
-     *
-     *     ``action_context`` carries optional combat context.  If
-     *     ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
-     *     set (and vice versa).  Omitting the whole dict or leaving both fields
-     *     absent signals an ephemeral (RP) pull with no CombatPull row written.
-     */
-    ThreadPullCommitRequestRequest: {
-      character_sheet_id: number;
-      resonance_id: number;
-      tier: number;
-      thread_ids: number[];
-      action_context?: components['schemas']['PullActionContextCommitRequest'];
-    };
-    /** @description Response serializer for POST /api/magic/thread-pull-commit/. */
-    ThreadPullCommitResponse: {
-      resonance_spent: number;
-      anima_spent: number;
-      resolved_effects: components['schemas']['ResolvedPullEffectCommit'][];
     };
     /**
      * @description Request serializer for POST /api/magic/thread-pull-preview/.
@@ -36374,29 +36289,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ThreadHubSummary'];
-        };
-      };
-    };
-  };
-  magic_thread_pull_commit_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ThreadPullCommitRequestRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadPullCommitResponse'];
         };
       };
     };

@@ -168,20 +168,6 @@ export type PreviewedEffect = components['schemas']['ResolvedPullEffect'];
 export type PullPreviewResponse = components['schemas']['ThreadPullPreviewResponse'];
 
 // ---------------------------------------------------------------------------
-// Pull Commit
-//
-// POST /api/magic/thread-pull-commit/ — schema now correct via @extend_schema.
-// Re-export generated shapes.
-// ---------------------------------------------------------------------------
-
-/** One resolved effect in the commit response. */
-export type ResolvedPullEffect = components['schemas']['ResolvedPullEffectCommit'];
-
-export type PullCommitRequest = components['schemas']['ThreadPullCommitRequestRequest'];
-
-export type PullCommitResponse = components['schemas']['ThreadPullCommitResponse'];
-
-// ---------------------------------------------------------------------------
 // Teaching Offer accept
 //
 // POST /api/magic/teaching-offers/{id}/accept/ — schema now correct via

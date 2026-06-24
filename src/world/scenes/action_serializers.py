@@ -137,11 +137,7 @@ def _cap_strain_by_anima(attrs: dict) -> dict:
 
 
 class CastPullRequestSerializer(serializers.Serializer):
-    """Nested pull declaration on the cast endpoint (#854).
-
-    Field shapes mirror ThreadPullCommitRequestSerializer
-    (world/magic/serializers.py).
-    """
+    """Nested pull declaration on the cast endpoint (#854)."""
 
     resonance_id = serializers.IntegerField()
     tier = serializers.IntegerField(min_value=1, max_value=3)

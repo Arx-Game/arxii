@@ -5,13 +5,16 @@ Steps:
   2. CmdWeaveThread → weave Ember of Endurance       → Thread row created, effect consumed
   3. CmdRitual → Rite of Imbuing ceremony  → PendingRitualEffect (imbuing)
   4. CmdImbue → imbue thread 5 points               → developed_points advanced, effect consumed
-  5. CmdPull → pull tier-1 through thread            → CharacterResonance.balance debited
+  5. spend_resonance_for_pull → tier-1 pull         → CharacterResonance.balance debited
 
 This covers the happy-path end-to-end through the ceremony/finisher model introduced in
 #1342. Supersedes test_thread_pull_pipeline.py (retired) for the pull step and
 SpendResonanceForImbuingTests (retired from test_resonance_services.py) for the imbue step.
 Steps 1 and 3 use CmdRitual (the real telnet path) to prove CEREMONY-kind rituals are
 reachable from the telnet layer.
+
+Step 5 was previously CmdPull (now removed — pull rides cast/clash); it is now exercised
+directly via spend_resonance_for_pull to preserve coverage of the spend/debit path.
 """
 
 from __future__ import annotations
@@ -21,7 +24,6 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from commands.imbue import CmdImbue
-from commands.pull import CmdPull
 from commands.ritual import CmdRitual
 from commands.weave import CmdWeaveThread
 from integration_tests.game_content.magic import seed_thread_pull_catalog
@@ -36,6 +38,8 @@ from world.magic.factories import (
     WeavingCeremonyFactory,
 )
 from world.magic.models import CharacterResonance, PendingRitualEffect, Thread
+from world.magic.services.resonance import spend_resonance_for_pull
+from world.magic.types import PullActionContext
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 
 
@@ -177,23 +181,28 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         )
 
         # ------------------------------------------------------------------
-        # Step 5: CmdPull → CharacterResonance.balance debited
+        # Step 5: spend_resonance_for_pull → CharacterResonance.balance debited
+        # (CmdPull was removed — pull now rides cast/clash; this step exercises
+        # the spend/debit path directly via the service layer.)
         # ------------------------------------------------------------------
         balance_before = CharacterResonance.objects.get(
             character_sheet=self.sheet,
             resonance=self.resonance,
         ).balance
 
-        cmd_pull = CmdPull()
-        cmd_pull.caller = character
-        cmd_pull.args = (
-            f"resonance={self.resonance.name} "
-            f"tier=1 "
-            f"thread=Ember of Endurance "
-            f"trait={self.trait.name}"
+        pulled_thread = Thread.objects.get(owner=self.sheet, resonance=self.resonance)
+        pull_ctx = PullActionContext(
+            involved_traits=(self.trait.pk,),
+            involved_techniques=(),
+            involved_objects=(),
         )
-        cmd_pull.raw_string = f"pull {cmd_pull.args}"
-        cmd_pull.func()
+        spend_resonance_for_pull(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            tier=1,
+            threads=[pulled_thread],
+            action_context=pull_ctx,
+        )
 
         cr = CharacterResonance.objects.get(
             character_sheet=self.sheet,

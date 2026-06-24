@@ -60,7 +60,6 @@ from commands.fashion import CmdJudgePresentation
 from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.offer_response import CmdDecline
-from commands.pull import CmdPull
 from commands.ritual import CmdRitual
 from commands.social.blocking import (
     CmdBlock,
@@ -138,7 +137,6 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRitual,
             CmdWeaveThread,
             CmdImbue,
-            CmdPull,
             CmdEnter,
             CmdFlourish,
             CmdEndorse,

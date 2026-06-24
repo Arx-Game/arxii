@@ -45,8 +45,6 @@ import type {
   PathOptions,
   PatchThreadRequest,
   PendingStageAdvanceOffer,
-  PullCommitRequest,
-  PullCommitResponse,
   PullPreviewRequest,
   PullPreviewResponse,
   RescueOutcome,
@@ -101,7 +99,6 @@ const CHAR_RESONANCES_URL = '/api/magic/character-resonances';
 const RELATIONSHIPS_URL = '/api/relationships/relationships';
 const THREAD_HUB_SUMMARY_URL = '/api/magic/thread-hub-summary/';
 const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
-const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
 const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
 const TECHNIQUES_URL = '/api/magic/techniques';
 const PENDING_ALTERATIONS_URL = '/api/magic/pending-alterations';
@@ -614,27 +611,6 @@ export async function previewPull(body: PullPreviewRequest): Promise<PullPreview
     await parseErrorDetail(res, 'Failed to preview pull effects');
   }
   return res.json() as Promise<PullPreviewResponse>;
-}
-
-// ---------------------------------------------------------------------------
-// Pull Commit
-// ---------------------------------------------------------------------------
-
-/**
- * POST /api/magic/thread-pull-commit/
- *
- * Commits the pull: spends resonance and applies effects.
- */
-export async function commitPull(body: PullCommitRequest): Promise<PullCommitResponse> {
-  const res = await apiFetch(THREAD_PULL_COMMIT_URL, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to commit pull');
-  }
-  return res.json() as Promise<PullCommitResponse>;
 }
 
 // ---------------------------------------------------------------------------

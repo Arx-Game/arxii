@@ -49,7 +49,6 @@ from world.magic.views import (
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadHubSummaryView,
-    ThreadPullCommitView,
     ThreadPullPreviewView,
     ThreadViewSet,
     ThreadWeavingTeachingOfferViewSet,
@@ -146,11 +145,6 @@ urlpatterns = [
         "thread-hub-summary/",
         ThreadHubSummaryView.as_view(),
         name="thread-hub-summary",
-    ),
-    path(
-        "thread-pull-commit/",
-        ThreadPullCommitView.as_view(),
-        name="thread-pull-commit",
     ),
     path(
         "thread-pull-preview/",
