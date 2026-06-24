@@ -141,8 +141,13 @@ actions, backends, and service functions.
   character; locked layers "Unknown"); `renown` (`sheet/renown`, #676 — your prestige / fame tier /
   society standing, via `build_renown_payload`, mirroring the web `RenownPanel`); `relationship`
   (`sheet/relationship`, — your regard toward others, a qualitative warm/cold/neutral read of
-  `CharacterRelationship.affection`, mirroring the web `RelationshipsSection`). Each is thin over
-  its app's data. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`).
+  `CharacterRelationship.affection`, mirroring the web `RelationshipsSection`); `standing`
+  (`sheet/standing` — your **organizational** positions: org memberships with rank titles + org
+  reputations, scoped to active persona; distinct from `renown`, which holds fame / prestige /
+  *society* reputation); `covenant` (`sheet/covenant` — your covenant membership(s), role, rank,
+  and which you're *engaged* in, from `CharacterCovenantRole`; read-only). Each is thin over its
+  app's data. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`). *Web tabs for
+  standing/covenant are a follow-up — the "which contextual center owns this" call is open (#1446).*
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
