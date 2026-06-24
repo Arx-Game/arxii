@@ -47,6 +47,7 @@ from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_round
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
+    BuffPassiveTechniqueFactory,
     CharacterAnimaFactory,
     EffectTypeFactory,
     GiftFactory,
@@ -268,4 +269,72 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertIsNone(
             row.focused_action_id,
             "focused_action should be null when declaring into a passive slot",
+        )
+
+    def test_cast_declares_secondary_action(self) -> None:
+        """cast <technique> secondary → CombatRoundAction.physical_passive = technique.
+
+        The setUp technique has action_category=PHYSICAL, so 'secondary' maps to
+        CombatActionSlot.PASSIVE_PHYSICAL → physical_passive slot.
+        """
+        cmd = _make_cmd(self.character, f"{self.technique.name} secondary")
+        cmd.func()
+        action = CombatRoundAction.objects.get(
+            participant=self.participant,
+            round_number=1,
+        )
+        self.assertEqual(
+            action.physical_passive_id,
+            self.technique.pk,
+            "physical_passive should be the PHYSICAL technique declared with 'secondary'",
+        )
+        self.assertIsNone(
+            action.focused_action_id,
+            "focused_action must be null when declared as secondary",
+        )
+
+    def test_cast_beneficial_technique_targets_ally(self) -> None:
+        """Casting a buff at an ally routes to focused_ally_target_id.
+
+        BuffPassiveTechniqueFactory with buff_condition__target_kind="ally" produces
+        a technique whose derive_target_relationship() returns ALLY, so the 'at <name>'
+        target is resolved as a CombatParticipant (ally) instead of a CombatOpponent.
+        """
+        # Create a second PC participant (the ally).
+        ally_sheet = CharacterSheetFactory()
+        ally_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=ally_sheet,
+        )
+
+        # Author a buff technique that derives ALLY targeting.
+        # effect_type must have base_power=None so is_technique_hostile() returns
+        # False (non-null base_power marks an offensive effect → ENEMY relationship).
+        buff = BuffPassiveTechniqueFactory(
+            gift=GiftFactory(),
+            action_template=self.action_template,
+            effect_type=EffectTypeFactory(name="Buff E2E", base_power=None),
+            buff_condition__target_kind="ally",
+        )
+        CharacterTechnique.objects.create(character=self.sheet, technique=buff)
+
+        # Drive the telnet command: cast <buff> at <ally character key>.
+        cmd = _make_cmd(
+            self.character,
+            f"{buff.name} at {ally_sheet.character.key}",
+        )
+        cmd.func()
+
+        action = CombatRoundAction.objects.get(
+            participant=self.participant,
+            round_number=1,
+        )
+        self.assertEqual(
+            action.focused_ally_target_id,
+            ally_participant.pk,
+            "focused_ally_target should be the ally CombatParticipant",
+        )
+        self.assertIsNone(
+            action.focused_opponent_target_id,
+            "focused_opponent_target must be null when technique targets an ally",
         )

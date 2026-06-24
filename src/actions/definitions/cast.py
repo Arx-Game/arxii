@@ -145,4 +145,7 @@ class CastTechniqueAction(Action):
         focused_opponent_id = kwargs.get("focused_opponent_target_id")
         if focused_opponent_id is not None:
             decl_kwargs["focused_opponent_target_id"] = focused_opponent_id
+        focused_ally_id = kwargs.get("focused_ally_target_id")
+        if focused_ally_id is not None:
+            decl_kwargs["focused_ally_target_id"] = focused_ally_id
         return pa, decl_kwargs

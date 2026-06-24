@@ -10,14 +10,22 @@ combat:
 
 Target resolution is context-sensitive:
 - Combat context (``_combat_participant_or_none()`` returns non-None):
-  ``at <name>`` is resolved as a ``CombatOpponent`` → ``focused_opponent_target_id``.
+  ``at <name>`` is resolved by the technique's own targeting relationship
+  (``derive_target_relationship``): ENEMY → ``CombatOpponent`` →
+  ``focused_opponent_target_id``; ALLY/SELF → ``CombatParticipant`` →
+  ``focused_ally_target_id``.
 - Non-combat context: ``at <name>`` is resolved as a ``Persona`` → ``target_persona_id``.
+
+The optional ``secondary`` keyword declares the technique in its derived passive
+slot (PHYSICAL → ``passive-physical``, SOCIAL → ``passive-social``, MENTAL →
+``passive-mental``) instead of the focused slot.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from actions.constants import ActionCategory, CombatActionSlot
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
 
@@ -27,14 +35,23 @@ if TYPE_CHECKING:
 
 # Keyword prefix used to parse effort=<level> from command args.
 _EFFORT_PREFIX = "effort="
+# Standalone keyword that declares the technique as a passive secondary action.
+_SECONDARY_KEYWORD = "secondary"
+
+# Mapping from ActionCategory to the corresponding passive CombatActionSlot.
+_SECONDARY_SLOT: dict[str, str] = {
+    ActionCategory.PHYSICAL: CombatActionSlot.PASSIVE_PHYSICAL,
+    ActionCategory.SOCIAL: CombatActionSlot.PASSIVE_SOCIAL,
+    ActionCategory.MENTAL: CombatActionSlot.PASSIVE_MENTAL,
+}
 
 
 class CmdDeclareTechnique(DispatchCommand):
     """Cast a technique — works both in and out of combat.
 
     Usage:
-        cast <technique> [at <target>] [effort=<level>]
-        declare <technique> [at <target>] [effort=<level>]
+        cast <technique> [at <target>] [effort=<level>] [secondary]
+        declare <technique> [at <target>] [effort=<level>] [secondary]
 
     Outside combat: casts the technique immediately in the active scene.
     In a DECLARING combat round: declares the technique for this round;
@@ -43,6 +60,9 @@ class CmdDeclareTechnique(DispatchCommand):
     Optionally focus a specific target with ``at <name>`` and set your effort
     level with ``effort=<level>`` (very_low/low/medium/high/extreme;
     defaults to medium).
+
+    Use ``secondary`` to declare the technique as a passive action in its
+    arena slot (the technique's action_category decides the slot).
     """
 
     key = "cast"
@@ -54,13 +74,14 @@ class CmdDeclareTechnique(DispatchCommand):
     _technique_name: str | None = None
     _target_name: str | None = None
     _effort: str = "medium"
+    _secondary: bool = False
     _parsed: bool = False
     _participant: CombatParticipant | None = None
 
     # --------------------------------------------------------------------------
 
     def _parse_args(self) -> None:
-        """Parse ``self.args`` once; cache technique name, optional target, effort."""
+        """Parse ``self.args`` once; cache technique name, optional target, effort, secondary."""
         if self._parsed:
             return
 
@@ -70,7 +91,7 @@ class CmdDeclareTechnique(DispatchCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            msg = "Usage: cast <technique> [at <target>] [effort=<level>]"
+            msg = "Usage: cast <technique> [at <target>] [effort=<level>] [secondary]"
             raise CommandError(msg)
 
         # Strip off effort=<level> if present (rightmost keyword=value pair).
@@ -87,6 +108,14 @@ class CmdDeclareTechnique(DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
+        # Strip off standalone "secondary" keyword (case-insensitive, whole-word
+        # suffix). Must come after effort= stripping so the remaining raw is clean.
+        secondary = False
+        stripped = raw.rstrip()
+        if re.search(r"(?i)\bsecondary$", stripped):
+            raw = re.sub(r"(?i)\s+secondary$", "", stripped).strip()
+            secondary = True
+
         # Split on the first " at " (case-insensitive) to separate technique from
         # the optional target. A literal search avoids a backtracking-prone regex.
         at_index = raw.lower().find(" at ")
@@ -98,10 +127,11 @@ class CmdDeclareTechnique(DispatchCommand):
             self._target_name = None
 
         if not self._technique_name:
-            msg = "Usage: cast <technique> [at <target>] [effort=<level>]"
+            msg = "Usage: cast <technique> [at <target>] [effort=<level>] [secondary]"
             raise CommandError(msg)
 
         self._effort = effort_str
+        self._secondary = secondary
         self._parsed = True
 
     # -- Resolution helpers ----------------------------------------------------
@@ -163,6 +193,64 @@ class CmdDeclareTechnique(DispatchCommand):
             msg = f"You don't know a technique called '{name}'."
             raise CommandError(msg)
         return ct.technique_id
+
+    def _resolve_technique(self) -> Technique:  # type: ignore[name-defined]  # noqa: F821
+        """Return the ``Technique`` object named by ``self._technique_name``.
+
+        Uses the same CharacterTechnique lookup as ``_resolve_technique_id`` but
+        returns the full object so callers can read ``action_category`` etc.
+
+        Raises:
+            CommandError: If no matching known technique is found.
+        """
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        name = self._technique_name or ""
+        ct = (
+            CharacterTechnique.objects.filter(
+                character=self.caller.sheet_data,
+                technique__name__iexact=name,
+            )
+            .select_related("technique")
+            .first()
+        )
+        if ct is None:
+            msg = f"You don't know a technique called '{name}'."
+            raise CommandError(msg)
+        return ct.technique
+
+    def _resolve_ally_target_id(self, participant: CombatParticipant) -> int | None:
+        """Return the pk of the ``CombatParticipant`` named by ``self._target_name``.
+
+        Scoped to the encounter so cross-encounter names cannot be targeted.
+
+        Returns ``None`` when no target name was provided.
+
+        Raises:
+            CommandError: If a target name was given but no matching active
+                participant was found.
+        """
+        if not self._target_name:
+            return None
+
+        from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+        name = self._target_name
+        matches = list(
+            CombatParticipant.objects.filter(
+                encounter=participant.encounter,
+                status=ParticipantStatus.ACTIVE,
+                character_sheet__character__db_key__iexact=name,
+            )
+        )
+        if not matches:
+            msg = f"No active ally named '{name}' in this encounter."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            msg = f"More than one ally named '{name}' — be more specific."
+            raise CommandError(msg)
+        return matches[0].pk
 
     def _resolve_opponent_target_id(self) -> int | None:
         """Return the pk of the CombatOpponent named by ``self._target_name``.
@@ -232,39 +320,76 @@ class CmdDeclareTechnique(DispatchCommand):
         Routes through the SCENE_ADAPTIVE backend so the dispatcher decides
         whether to run immediately (non-combat) or defer as a round declaration
         (inside a DECLARING combat round) — no gating on active combat here.
+
+        When ``secondary`` was parsed, the action_slot is derived from the
+        technique's ``action_category`` and included in the ref so
+        ``round_declaration`` routes to the correct passive slot.
         """
         from actions.constants import ActionBackend  # noqa: PLC0415
         from actions.types import ActionRef  # noqa: PLC0415
 
         self._parse_args()
         technique_id = self._resolve_technique_id()
+
+        action_slot = None
+        if self._secondary:
+            technique = self._resolve_technique()
+            action_slot = _SECONDARY_SLOT.get(technique.action_category)
+
         return ActionRef(
             backend=ActionBackend.SCENE_ADAPTIVE,
             registry_key="cast_technique",
             technique_id=technique_id,
+            action_slot=action_slot,
         )
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Return dispatch kwargs; routes target resolution by context.
 
-        Always includes ``effort_level``.  If ``at <target>`` was given:
-        - Combat context → ``focused_opponent_target_id`` (CombatOpponent pk).
-        - Non-combat context → ``target_persona_id`` (Persona pk).
+        Always includes ``effort_level``.  If ``at <target>`` was given in a
+        combat context the technique's authored target relationship decides
+        the kwarg:
+        - ``ENEMY`` → ``focused_opponent_target_id`` (CombatOpponent pk).
+        - ``ALLY``/``SELF`` → ``focused_ally_target_id`` (CombatParticipant pk).
+
+        In a non-combat context ``at <target>`` resolves as
+        ``target_persona_id`` (Persona pk).
+
+        When ``secondary`` was parsed, ``action_slot`` is forwarded so
+        ``CastTechniqueAction.round_declaration`` routes to the passive slot.
         """
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+        from world.magic.services.targeting import derive_target_relationship  # noqa: PLC0415
+
         self._parse_args()
         kwargs: dict[str, Any] = {"effort_level": self._effort}
+
+        if self._secondary:
+            technique = self._resolve_technique()
+            slot = _SECONDARY_SLOT.get(technique.action_category)
+            if slot is not None:
+                kwargs["action_slot"] = slot
 
         if not self._target_name:
             return kwargs
 
         # Check whether we're in a DECLARING combat round to decide how to
-        # resolve the target name. Cache the participant for _resolve_opponent_target_id.
+        # resolve the target name. Cache the participant for later helpers.
         participant = self._combat_participant_or_none()
         if participant is not None:
             self._participant = participant
-            opp_id = self._resolve_opponent_target_id()
-            if opp_id is not None:
-                kwargs["focused_opponent_target_id"] = opp_id
+            # Use the technique's authored relationship to route target resolution.
+            technique = self._resolve_technique()
+            relationship = derive_target_relationship(technique)
+            if relationship == ConditionTargetKind.ENEMY:
+                opp_id = self._resolve_opponent_target_id()
+                if opp_id is not None:
+                    kwargs["focused_opponent_target_id"] = opp_id
+            else:
+                # ALLY or SELF: resolve as a CombatParticipant in this encounter.
+                ally_id = self._resolve_ally_target_id(participant)
+                if ally_id is not None:
+                    kwargs["focused_ally_target_id"] = ally_id
         else:
             persona_id = self._resolve_target_persona_id()
             if persona_id is not None:
