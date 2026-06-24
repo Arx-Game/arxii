@@ -207,13 +207,9 @@ class CastTechniqueAction(Action):
     ) -> None:
         """Commit a thread pull as a ``CombatPull`` row at declaration time.
 
-        Resolves the caster's ``CharacterSheet``, ``CombatParticipant``, and
-        ``CombatEncounter`` from ``ctx`` (a ``CombatRoundContext``), then calls
-        ``spend_resonance_for_pull`` with a combat ``PullActionContext`` so:
-
-        1. A ``CombatPull`` row is persisted (unique per ``(participant, round_number)``).
-        2. Resonance and anima are debited atomically.
-        3. ``CombatPullResolvedEffect`` snapshots are written for the read-path.
+        Delegates to ``world.combat.pull_helpers.commit_combat_pull`` so the
+        commit logic is shared with the clash-contribution path and is not
+        duplicated here.
 
         Raises:
             ActionDispatchError(PULL_ALREADY_COMMITTED): When the unique constraint fires
@@ -222,32 +218,13 @@ class CastTechniqueAction(Action):
                 ``MagicError`` (invalid pull declaration — e.g. thread not in action,
                 insufficient balance).
         """
-        from django.db import IntegrityError  # noqa: PLC0415
-
-        from actions.errors import ActionDispatchError  # noqa: PLC0415
-        from world.magic.exceptions import MagicError  # noqa: PLC0415
-        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
-        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+        from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
 
         participant = ctx.participant
         encounter = participant.encounter
-        sheet = participant.character_sheet
-
-        action_context = PullActionContext(
-            combat_encounter=encounter,
+        commit_combat_pull(
+            cast_pull=cast_pull,
             participant=participant,
-            involved_techniques=(technique_id,),
+            encounter=encounter,
+            technique_id=technique_id,
         )
-
-        try:
-            spend_resonance_for_pull(
-                character_sheet=sheet,
-                resonance=cast_pull.resonance,
-                tier=cast_pull.tier,
-                threads=list(cast_pull.threads),
-                action_context=action_context,
-            )
-        except IntegrityError as exc:
-            raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
-        except MagicError as exc:
-            raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc

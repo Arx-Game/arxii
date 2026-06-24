@@ -30,6 +30,15 @@ Routes through the COMBAT backend, wiring the resolved ``Clash.pk`` as
 ``_dispatch_clash_contribution`` which calls ``declare_clash_contribution``.
 
 Syntax: ``clash <opponent> with <technique> [strain=<n>]``
+         ``[pull=<thread>[,…] resonance=<name> [tier=N]]``
+
+The optional pull keywords are parsed by the same mixin helpers used by
+``CmdDeclareTechnique`` — no duplicate implementation.  When present, a
+``CastPullDeclaration`` is resolved and passed as ``cast_pull`` in the dispatch
+kwargs; ``_dispatch_clash_contribution`` commits the pull immediately via
+``world.combat.pull_helpers.commit_combat_pull`` so the clash read-path
+(``_sum_active_flat_bonuses`` / ``compute_intensity_for_clash``) reflects the
+pull during round resolution.
 """
 
 from __future__ import annotations
@@ -63,10 +72,14 @@ _SECONDARY_SLOT: dict[str, str] = {
 class _CombatCommandMixin:
     """Shared helpers for combat telnet commands.
 
-    Provides ``_combat_participant_or_none`` and ``_find_technique_id`` so that
-    ``CmdDeclareTechnique`` and ``CmdClashCommit`` can reuse the same lookup logic
+    Provides ``_combat_participant_or_none``, ``_find_technique_id``, pull-keyword
+    parsing (``_extract_pull_keywords``, ``_resolve_cast_pull``, and related statics),
+    so that ``CmdDeclareTechnique`` and ``CmdClashCommit`` can reuse the same logic
     without duplicating it.
     """
+
+    # Pull-kwarg prefixes recognised by _extract_pull_keywords.
+    _PULL_KWARG_KEYS: frozenset[str] = frozenset({"pull", "resonance", "tier"})
 
     def _combat_participant_or_none(self) -> CombatParticipant | None:
         """Return the caller's active CombatParticipant in a DECLARING encounter, or None.
@@ -113,47 +126,7 @@ class _CombatCommandMixin:
             raise CommandError(msg)
         return ct.technique_id
 
-
-class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
-    """Cast a technique — works both in and out of combat.
-
-    Usage:
-        cast <technique> [at <target>] [effort=<level>] [secondary]
-        declare <technique> [at <target>] [effort=<level>] [secondary]
-
-    Outside combat: casts the technique immediately in the active scene.
-    In a DECLARING combat round: declares the technique for this round;
-    the round resolves once all participants have declared.
-
-    Optionally focus a specific target with ``at <name>`` and set your effort
-    level with ``effort=<level>`` (very_low/low/medium/high/extreme;
-    defaults to medium).
-
-    Use ``secondary`` to declare the technique as a passive action in its
-    arena slot (the technique's action_category decides the slot).
-    """
-
-    key = "cast"
-    aliases = ["declare"]
-    locks = "cmd:all()"
-
-    # -- Parsed state cached on first call to resolve_action_ref ---------------
-
-    _technique_name: str | None = None
-    _target_name: str | None = None
-    _effort: str = "medium"
-    _secondary: bool = False
-    _parsed: bool = False
-    _participant: CombatParticipant | None = None
-    # Pull-related parsed state (None means no pull declared).
-    _pull_thread_str: str | None = None
-    _pull_resonance_str: str | None = None
-    _pull_tier: int = 1
-
-    # --------------------------------------------------------------------------
-
-    # Pull-kwarg prefixes recognised by _extract_pull_keywords.
-    _PULL_KWARG_KEYS: frozenset[str] = frozenset({"pull", "resonance", "tier"})
+    # -- Pull-keyword parsing --------------------------------------------------
 
     @staticmethod
     def _is_pull_stop_token(tok: str, pull_keys: frozenset[str]) -> bool:
@@ -184,7 +157,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         consumed: set[int] = set()
         j = start
         while j < len(tokens):
-            if CmdDeclareTechnique._is_pull_stop_token(tokens[j], pull_keys):
+            if _CombatCommandMixin._is_pull_stop_token(tokens[j], pull_keys):
                 break
             consumed.add(j)
             initial = initial + " " + tokens[j]
@@ -256,6 +229,110 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
 
         return remainder, pull_val, resonance_val, pull_tier
+
+    def _resolve_cast_pull(
+        self,
+        pull_thread_str: str | None,
+        pull_resonance_str: str | None,
+        pull_tier: int,
+    ) -> CastPullDeclaration | None:
+        """Return a ``CastPullDeclaration`` if *pull_thread_str* is set, else ``None``.
+
+        Resolves threads by name/id owned by the caller's character sheet
+        (same resonance, active only) and the resonance by name.
+
+        Args:
+            pull_thread_str: Comma-separated thread names/ids, or ``None``.
+            pull_resonance_str: Resonance name string, or ``None``.
+            pull_tier: Integer tier (1–3).
+
+        Raises:
+            CommandError: If resonance is unknown, any thread is not found /
+                does not match the resonance / is retired, or pull= is present
+                without resonance=.
+        """
+        if pull_thread_str is None:
+            return None
+
+        from world.magic.models import Resonance, Thread  # noqa: PLC0415
+        from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+        resonance_val = (pull_resonance_str or "").strip()
+        if not resonance_val:
+            msg = "pull= requires resonance=<name> to be specified as well."
+            raise CommandError(msg)
+
+        resonance_qs = Resonance.objects.filter(name__iexact=resonance_val)
+        resonance = resonance_qs.first()
+        if resonance is None:
+            msg = f"No resonance named '{resonance_val}' found."
+            raise CommandError(msg)
+
+        sheet = self.caller.sheet_data
+        thread_vals = [t.strip() for t in pull_thread_str.split(",") if t.strip()]
+        if not thread_vals:
+            msg = "pull= requires at least one thread name or id."
+            raise CommandError(msg)
+
+        threads: list[Thread] = []
+        for val in thread_vals:
+            qs = Thread.objects.filter(owner=sheet, resonance=resonance, retired_at__isnull=True)
+            if val.isdigit():
+                thread = qs.filter(pk=int(val)).first()
+            else:
+                thread = qs.filter(name__iexact=val).first()
+            if thread is None:
+                msg = (
+                    f"No active thread '{val}' found for resonance '{resonance_val}'. "
+                    "Check that the thread exists, is active, and matches the resonance."
+                )
+                raise CommandError(msg)
+            threads.append(thread)
+
+        return CastPullDeclaration(
+            resonance=resonance,
+            tier=pull_tier,
+            threads=tuple(threads),
+        )
+
+
+class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
+    """Cast a technique — works both in and out of combat.
+
+    Usage:
+        cast <technique> [at <target>] [effort=<level>] [secondary]
+        declare <technique> [at <target>] [effort=<level>] [secondary]
+
+    Outside combat: casts the technique immediately in the active scene.
+    In a DECLARING combat round: declares the technique for this round;
+    the round resolves once all participants have declared.
+
+    Optionally focus a specific target with ``at <name>`` and set your effort
+    level with ``effort=<level>`` (very_low/low/medium/high/extreme;
+    defaults to medium).
+
+    Use ``secondary`` to declare the technique as a passive action in its
+    arena slot (the technique's action_category decides the slot).
+    """
+
+    key = "cast"
+    aliases = ["declare"]
+    locks = "cmd:all()"
+
+    # -- Parsed state cached on first call to resolve_action_ref ---------------
+
+    _technique_name: str | None = None
+    _target_name: str | None = None
+    _effort: str = "medium"
+    _secondary: bool = False
+    _parsed: bool = False
+    _participant: CombatParticipant | None = None
+    # Pull-related parsed state (None means no pull declared).
+    _pull_thread_str: str | None = None
+    _pull_resonance_str: str | None = None
+    _pull_tier: int = 1
+
+    # --------------------------------------------------------------------------
 
     def _parse_args(self) -> None:
         """Parse ``self.args`` once; cache technique name, optional target, effort, secondary.
@@ -472,60 +549,15 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         return persona.pk
 
-    def _resolve_cast_pull(self) -> CastPullDeclaration | None:
+    def _cast_pull(self) -> CastPullDeclaration | None:
         """Return a ``CastPullDeclaration`` if pull= was declared, else ``None``.
 
-        Resolves threads by name/id owned by the caller's character sheet
-        (same resonance, active only) and the resonance by name.
-
-        Raises:
-            CommandError: If resonance is unknown, any thread is not found /
-                does not match the resonance / is retired, or pull= is present
-                without resonance=.
+        Delegates to the mixin's ``_resolve_cast_pull`` using cached parsed state.
         """
-        if self._pull_thread_str is None:
-            return None
-
-        from world.magic.models import Resonance, Thread  # noqa: PLC0415
-        from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
-
-        resonance_val = (self._pull_resonance_str or "").strip()
-        # resonance= guard already enforced in _parse_args; double-check here.
-        if not resonance_val:
-            msg = "pull= requires resonance=<name> to be specified as well."
-            raise CommandError(msg)
-
-        resonance_qs = Resonance.objects.filter(name__iexact=resonance_val)
-        resonance = resonance_qs.first()
-        if resonance is None:
-            msg = f"No resonance named '{resonance_val}' found."
-            raise CommandError(msg)
-
-        sheet = self.caller.sheet_data
-        thread_vals = [t.strip() for t in self._pull_thread_str.split(",") if t.strip()]
-        if not thread_vals:
-            msg = "pull= requires at least one thread name or id."
-            raise CommandError(msg)
-
-        threads: list[Thread] = []
-        for val in thread_vals:
-            qs = Thread.objects.filter(owner=sheet, resonance=resonance, retired_at__isnull=True)
-            if val.isdigit():
-                thread = qs.filter(pk=int(val)).first()
-            else:
-                thread = qs.filter(name__iexact=val).first()
-            if thread is None:
-                msg = (
-                    f"No active thread '{val}' found for resonance '{resonance_val}'. "
-                    "Check that the thread exists, is active, and matches the resonance."
-                )
-                raise CommandError(msg)
-            threads.append(thread)
-
-        return CastPullDeclaration(
-            resonance=resonance,
-            tier=self._pull_tier,
-            threads=tuple(threads),
+        return self._resolve_cast_pull(
+            self._pull_thread_str,
+            self._pull_resonance_str,
+            self._pull_tier,
         )
 
     # -- DispatchCommand interface ---------------------------------------------
@@ -590,7 +622,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 kwargs["action_slot"] = slot
 
         # Resolve an optional thread pull declaration and inject into kwargs.
-        cast_pull = self._resolve_cast_pull()
+        cast_pull = self._cast_pull()
         if cast_pull is not None:
             kwargs["cast_pull"] = cast_pull
 
@@ -627,6 +659,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
 
     Usage:
         clash <opponent> with <technique> [strain=<n>]
+            [pull=<thread>[,…] resonance=<name> [tier=N]]
 
     Identifies the active Clash against the named NPC opponent and declares a
     ClashContributionDeclaration via the COMBAT backend dispatcher.  The round
@@ -634,6 +667,12 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
     ``run_clash_round`` and writes ``ClashContribution`` audit rows.
 
     ``strain=<n>`` commits extra anima beyond the technique's base cost (default 0).
+
+    The optional pull keywords work identically to the cast command: when present,
+    ``_dispatch_clash_contribution`` commits a ``CombatPull`` at declaration time so
+    the clash read-path (``_sum_active_flat_bonuses`` / ``compute_intensity_for_clash``)
+    reflects the pull during round resolution.  The one-pull-per-round cap still
+    applies — a player who pulled on a cast this round cannot also pull on a clash.
     """
 
     key = "clash"
@@ -645,11 +684,15 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
     _technique_name: str | None = None
     _strain: int = 0
     _parsed: bool = False
+    # Pull-related parsed state (None means no pull declared).
+    _pull_thread_str: str | None = None
+    _pull_resonance_str: str | None = None
+    _pull_tier: int = 1
 
     # ---------------------------------------------------------------------------
 
     def _parse_args(self) -> None:
-        """Parse ``self.args`` once; cache opponent, technique, and strain."""
+        """Parse ``self.args`` once; cache opponent, technique, strain, and optional pull."""
         if self._parsed:
             return
 
@@ -657,8 +700,15 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            msg = (
+                "Usage: clash <opponent> with <technique> [strain=<n>]"
+                " [pull=<thread> resonance=<name> [tier=N]]"
+            )
             raise CommandError(msg)
+
+        # Strip pull=<threads>, resonance=<name>, tier=<1-3> FIRST — order-independent.
+        # _extract_pull_keywords also validates tier range and pull+resonance pairing.
+        raw, pull_thread_str, resonance_str, pull_tier = self._extract_pull_keywords(raw)
 
         # Strip off strain=<n> suffix (case-insensitive).
         strain = 0
@@ -674,17 +724,26 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
         # Split on " with " (case-insensitive) to separate opponent from technique.
         with_index = raw.lower().find(" with ")
         if with_index == -1:
-            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            msg = (
+                "Usage: clash <opponent> with <technique> [strain=<n>]"
+                " [pull=<thread> resonance=<name> [tier=N]]"
+            )
             raise CommandError(msg)
 
         self._opponent_name = raw[:with_index].strip()
         self._technique_name = raw[with_index + len(" with ") :].strip()
 
         if not self._opponent_name or not self._technique_name:
-            msg = "Usage: clash <opponent> with <technique> [strain=<n>]"
+            msg = (
+                "Usage: clash <opponent> with <technique> [strain=<n>]"
+                " [pull=<thread> resonance=<name> [tier=N]]"
+            )
             raise CommandError(msg)
 
         self._strain = strain
+        self._pull_thread_str = pull_thread_str
+        self._pull_resonance_str = resonance_str
+        self._pull_tier = pull_tier
         self._parsed = True
 
     def _resolve_clash(self, participant: CombatParticipant) -> Any:
@@ -743,10 +802,23 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
         )
 
     def resolve_action_args(self) -> dict[str, Any]:
-        """Return ``technique_id`` and ``strain_commitment`` for the dispatcher."""
+        """Return ``technique_id``, ``strain_commitment``, and optional ``cast_pull``.
+
+        When pull keywords were parsed, resolves a ``CastPullDeclaration`` and
+        includes it as ``cast_pull`` — ``_dispatch_clash_contribution`` commits the
+        pull via ``world.combat.pull_helpers.commit_combat_pull`` at declaration time.
+        """
         self._parse_args()
         technique_id = self._find_technique_id(self._technique_name or "")
-        return {
+        kwargs: dict[str, Any] = {
             "technique_id": technique_id,
             "strain_commitment": self._strain,
         }
+        cast_pull = self._resolve_cast_pull(
+            self._pull_thread_str,
+            self._pull_resonance_str,
+            self._pull_tier,
+        )
+        if cast_pull is not None:
+            kwargs["cast_pull"] = cast_pull
+        return kwargs
