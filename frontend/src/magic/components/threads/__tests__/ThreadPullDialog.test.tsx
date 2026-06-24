@@ -46,10 +46,6 @@ const mockResonances = [
 vi.mock('../../../queries', () => ({
   useThreads: () => ({ data: mockThreads }),
   useCharacterResonances: () => ({ data: mockResonances }),
-  useCommitPull: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-  }),
 }));
 
 vi.mock('../../../api', () => ({
@@ -71,6 +67,7 @@ describe('ThreadPullDialog', () => {
     characterSheetId: 12,
     open: true,
     onClose: vi.fn(),
+    onSelect: vi.fn(),
   };
 
   beforeEach(() => {
@@ -91,14 +88,38 @@ describe('ThreadPullDialog', () => {
     expect(screen.queryByTestId('resonance-btn-8')).not.toBeInTheDocument();
   });
 
-  it('in ephemeral mode: TRAIT thread not shown even if resonance is selected', async () => {
+  it('TRAIT thread not shown for always-in-action filter (no combat prop)', async () => {
     render(<ThreadPullDialog {...defaultProps} />);
     fireEvent.click(screen.getByTestId('resonance-btn-7'));
-    // Thread #1 (FACET) shown; Thread #2 (TRAIT) not eligible in ephemeral mode
+    // Thread #1 (FACET) shown; Thread #2 (TRAIT) not in ALWAYS_IN_ACTION_KINDS
     await waitFor(() => {
       expect(screen.getByTestId('thread-checkbox-1')).toBeInTheDocument();
     });
     expect(screen.queryByTestId('thread-checkbox-2')).not.toBeInTheDocument();
+  });
+
+  it('calls onSelect with resonance/tier/thread_ids when Select Pull is clicked', async () => {
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    render(<ThreadPullDialog {...defaultProps} onSelect={onSelect} onClose={onClose} />);
+
+    fireEvent.click(screen.getByTestId('resonance-btn-7'));
+    await waitFor(() => screen.getByTestId('thread-checkbox-1'));
+    fireEvent.click(screen.getByTestId('thread-checkbox-1'));
+
+    // Wait for preview to resolve and button to be enabled
+    await waitFor(() => {
+      expect(screen.getByTestId('commit-pull-btn')).not.toBeDisabled();
+    });
+
+    fireEvent.click(screen.getByTestId('commit-pull-btn'));
+
+    expect(onSelect).toHaveBeenCalledWith({
+      resonance_id: 7,
+      tier: 1,
+      thread_ids: [1],
+    });
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('retired threads are never shown', () => {

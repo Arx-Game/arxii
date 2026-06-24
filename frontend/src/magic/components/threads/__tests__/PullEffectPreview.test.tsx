@@ -147,54 +147,16 @@ describe('PullEffectPreview', () => {
     );
   });
 
-  it('enables Pull Now button for always-in-action anchor kind (RELATIONSHIP_TRACK)', () => {
+  it('shows pull-preview-note directing player to combat cast/clash', () => {
+    // The standalone "Pull Now" button was removed — pulls are now declared
+    // inline via the combat cast/clash dispatch. The preview panel shows a note
+    // directing the player to the combat UI instead.
     render(<PullEffectPreview thread={makeThread({ target_kind: 'RELATIONSHIP_TRACK' })} />, {
       wrapper: createWrapper(),
     });
-    expect(screen.getByTestId('pull-now-button')).toBeEnabled();
-  });
-
-  it('enables Pull Now button for FACET anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'FACET' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeEnabled();
-  });
-
-  it('enables Pull Now button for RELATIONSHIP_CAPSTONE anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'RELATIONSHIP_CAPSTONE' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeEnabled();
-  });
-
-  it('enables Pull Now button for COVENANT_ROLE anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'COVENANT_ROLE' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeEnabled();
-  });
-
-  it('disables Pull Now button for TRAIT anchor kind and shows combat context note', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'TRAIT' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeDisabled();
-    expect(screen.getByTestId('pull-combat-context-note')).toBeInTheDocument();
-  });
-
-  it('disables Pull Now button for TECHNIQUE anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'TECHNIQUE' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeDisabled();
-  });
-
-  it('disables Pull Now button for SANCTUM anchor kind', () => {
-    render(<PullEffectPreview thread={makeThread({ target_kind: 'SANCTUM' })} />, {
-      wrapper: createWrapper(),
-    });
-    expect(screen.getByTestId('pull-now-button')).toBeDisabled();
+    expect(screen.getByTestId('pull-preview-note')).toBeInTheDocument();
+    expect(screen.queryByTestId('pull-now-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pull-combat-context-note')).not.toBeInTheDocument();
   });
 
   it('renders effects list from preview', async () => {

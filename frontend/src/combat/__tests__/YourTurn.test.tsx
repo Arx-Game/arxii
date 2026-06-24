@@ -35,6 +35,32 @@ vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
 }));
 
+// Stub ThreadPullDialog — exposes a "simulate select" button so tests can
+// trigger the onSelect callback without opening a real Radix dialog.
+vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
+  ThreadPullDialog: ({
+    open,
+    onSelect,
+  }: {
+    open: boolean;
+    onClose: () => void;
+    onSelect?: (sel: { resonance_id: number; tier: 1 | 2 | 3; thread_ids: number[] }) => void;
+  }) => {
+    if (!open) return null;
+    return (
+      <div data-testid="thread-pull-dialog-stub">
+        <button
+          type="button"
+          data-testid="simulate-pull-select"
+          onClick={() => onSelect?.({ resonance_id: 5, tier: 2, thread_ids: [10, 11] })}
+        >
+          Simulate Select Pull
+        </button>
+      </div>
+    );
+  },
+}));
+
 // Stub ActionDeclarationCard — wrapped in vi.fn() so per-test overrides via
 // mockImplementation() work. The default implementation exposes:
 //   - data-testid="card-change-btn-<slot>": fires onContextChange without techniqueId
@@ -1170,5 +1196,143 @@ describe('YourTurn — Task 8 move-to-position actions', () => {
     });
 
     expect(screen.queryByTestId('movement-section')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7 (issue-1455) — Combat inline pull — kwargs wired into dispatch
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
+  it('includes pull kwargs in focused dispatch when a pull is selected', async () => {
+    setupMocks();
+
+    // Override the focused card stub so selecting a technique emits techniqueId=7.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    // Select a technique so there is a focused job to dispatch.
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+
+    // Open the pull dialog and simulate selecting a pull.
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+    expect(screen.getByTestId('thread-pull-dialog-stub')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+
+    // Dialog stub closes after selection (open=false) — verify the summary shows.
+    await waitFor(() => {
+      expect(screen.getByTestId('selected-pull-summary')).toBeInTheDocument();
+    });
+
+    // Submit declarations.
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    // Focused dispatch call (first) must include pull kwargs.
+    const focusedCall = mockMutateAsync.mock.calls[0] as [
+      { ref: { technique_id: number }; kwargs: Record<string, unknown> },
+    ];
+    expect(focusedCall[0].kwargs).toMatchObject({
+      pull_resonance_id: 5,
+      pull_tier: 2,
+      pull_thread_ids: [10, 11],
+    });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('includes pull kwargs in clash dispatch when a pull is selected', async () => {
+    setupMocks();
+    const clashAction = makePlayerAction(99, 'The Grand Clash');
+
+    // Override focused card to emit techniqueId=7.
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [clashAction] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    // Select a technique and a clash.
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    await userEvent.click(screen.getByTestId('clash-commit-btn-99'));
+
+    // Select a pull.
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+
+    // Submit.
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    // Find the clash dispatch call (has clash_id on ref).
+    const calls = mockMutateAsync.mock.calls as Array<
+      [{ ref: Record<string, unknown>; kwargs: Record<string, unknown> }]
+    >;
+    const clashCall = calls.find((c) => c[0].ref.clash_id === 99);
+    expect(clashCall).toBeDefined();
+    expect(clashCall![0].kwargs).toMatchObject({
+      pull_resonance_id: 5,
+      pull_tier: 2,
+      pull_thread_ids: [10, 11],
+    });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('shows selected pull summary after selection and clears on Clear click', async () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    // Open dialog and select a pull.
+    await userEvent.click(screen.getByTestId('open-pull-dialog-btn'));
+    await userEvent.click(screen.getByTestId('simulate-pull-select'));
+
+    // Summary visible.
+    await waitFor(() => {
+      expect(screen.getByTestId('selected-pull-summary')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('selected-pull-summary')).toHaveTextContent('Tier 2 pull');
+
+    // Clear button removes the selection.
+    await userEvent.click(screen.getByTestId('clear-pull-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('selected-pull-summary')).not.toBeInTheDocument();
+    });
   });
 });

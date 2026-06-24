@@ -18,7 +18,7 @@ import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
-import { ThreadPullDialog } from '@/magic/components/threads/ThreadPullDialog';
+import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
 import {
   Select,
   SelectContent,
@@ -136,11 +136,15 @@ type DispatchJob = () => Promise<unknown>;
  * Build the focused-slot dispatch job (if a technique is selected). Threads the
  * chosen single target onto the focused declaration (#1001a); the backend
  * resolves these PKs to instances scoped to the encounter.
+ *
+ * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
+ * merged into kwargs so the backend commits a CombatPull alongside the action.
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
   effortLevel: string,
-  dispatchAction: DispatchFn
+  dispatchAction: DispatchFn,
+  selectedPull: PullSelection | null
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -152,6 +156,14 @@ function buildFocusedJob(
       targetKwargs.focused_ally_target_id = focusedContext.targetId;
     }
   }
+
+  const pullKwargs: Record<string, number | number[]> = {};
+  if (selectedPull !== null) {
+    pullKwargs.pull_resonance_id = selectedPull.resonance_id;
+    pullKwargs.pull_tier = selectedPull.tier;
+    pullKwargs.pull_thread_ids = selectedPull.thread_ids;
+  }
+
   return () =>
     dispatchAction({
       ref: {
@@ -159,7 +171,7 @@ function buildFocusedJob(
         technique_id: focusedContext.techniqueId ?? null,
         action_slot: 'focused',
       },
-      kwargs: { effort_level: effortLevel, ...targetKwargs },
+      kwargs: { effort_level: effortLevel, ...targetKwargs, ...pullKwargs },
     });
 }
 
@@ -198,17 +210,29 @@ function buildPassiveJobs(
  * Build the clash-contribution dispatch job. technique_id goes in kwargs (NOT on
  * the ref) per plan Task 7.3: ActionRef.__post_init__ rejects both clash_id and
  * technique_id being set; see src/actions/types.py:137-155.
+ *
+ * When a pull is selected, pull_resonance_id / pull_tier / pull_thread_ids are
+ * merged into kwargs so the backend commits a CombatPull alongside the clash.
  */
 function buildClashJob(
   selectedClashRef: PlayerAction['ref'] | null,
   focusedContext: ActionContext,
   strainByClash: Record<number, number>,
-  dispatchAction: DispatchFn
+  dispatchAction: DispatchFn,
+  selectedPull: PullSelection | null
 ): DispatchJob | null {
   if (selectedClashRef === null || selectedClashRef.clash_id == null) return null;
 
   const clashId = selectedClashRef.clash_id;
   const strain = strainByClash[clashId] ?? 0;
+
+  const pullKwargs: Record<string, number | number[]> = {};
+  if (selectedPull !== null) {
+    pullKwargs.pull_resonance_id = selectedPull.resonance_id;
+    pullKwargs.pull_tier = selectedPull.tier;
+    pullKwargs.pull_thread_ids = selectedPull.thread_ids;
+  }
+
   return () =>
     dispatchAction({
       ref: {
@@ -220,6 +244,7 @@ function buildClashJob(
         // technique_id belongs here for clash contributions, not on the ref.
         technique_id: focusedContext.techniqueId,
         strain_commitment: strain,
+        ...pullKwargs,
       },
     });
 }
@@ -370,15 +395,19 @@ export function YourTurn({
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pullDialogOpen, setPullDialogOpen] = useState(false);
+  // Inline pull selection — populated when the player selects a pull via the
+  // ThreadPullDialog. Sent in kwargs of the focused/clash dispatch on submit.
+  const [selectedPull, setSelectedPull] = useState<PullSelection | null>(null);
 
   // Cover picker state — selected ally participant PK (string for Select compatibility).
   const [coverAllyId, setCoverAllyId] = useState<string>('');
   const [maneuverError, setManeuverError] = useState<string | null>(null);
 
-  // Reset submitted and pull dialog when round advances.
+  // Reset submitted, pull selection, and pull dialog when round advances.
   useEffect(() => {
     setSubmitted(false);
     setPullDialogOpen(false);
+    setSelectedPull(null);
     setCoverAllyId('');
     setManeuverError(null);
   }, [roundNumber]);
@@ -526,14 +555,22 @@ export function YourTurn({
 
     // Submission order per plan: focused first, then passives, then clashes
     // (focused first guarantees the server sees focused before passives).
-    const focusedJob = buildFocusedJob(focusedContext, effortLevel, dispatchAction);
+    // selectedPull (if any) rides on focused and clash kwargs — the backend
+    // commits a CombatPull when those kwargs are present.
+    const focusedJob = buildFocusedJob(focusedContext, effortLevel, dispatchAction, selectedPull);
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
       passiveContexts,
       effortLevel,
       dispatchAction
     );
-    const clashJob = buildClashJob(selectedClashRef, focusedContext, strainByClash, dispatchAction);
+    const clashJob = buildClashJob(
+      selectedClashRef,
+      focusedContext,
+      strainByClash,
+      dispatchAction,
+      selectedPull
+    );
 
     const dispatchJobs: DispatchJob[] = [
       ...(focusedJob ? [focusedJob] : []),
@@ -695,27 +732,52 @@ export function YourTurn({
         </div>
       )}
 
-      {/* Thread Pull row — opens ThreadPullDialog in ephemeral mode */}
+      {/* Thread Pull row — inline pull selection for combat cast/clash dispatch */}
       <div
-        className="flex items-center justify-between rounded border border-primary/20 bg-primary/5 px-3 py-2"
+        className="space-y-1 rounded border border-primary/20 bg-primary/5 px-3 py-2"
         data-testid="thread-pull-row"
       >
-        <span className="text-xs font-semibold text-primary/80">✦ Thread Pulls</span>
-        <button
-          type="button"
-          onClick={() => setPullDialogOpen(true)}
-          disabled={isLocked}
-          data-testid="open-pull-dialog-btn"
-          className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Pull Threads
-        </button>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-primary/80">✦ Thread Pull</span>
+          <div className="flex gap-2">
+            {selectedPull !== null && (
+              <button
+                type="button"
+                onClick={() => setSelectedPull(null)}
+                disabled={isLocked}
+                data-testid="clear-pull-btn"
+                className="rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setPullDialogOpen(true)}
+              disabled={isLocked}
+              data-testid="open-pull-dialog-btn"
+              className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selectedPull !== null ? 'Change Pull' : 'Pull Threads'}
+            </button>
+          </div>
+        </div>
+        {selectedPull !== null && (
+          <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
+            Tier {selectedPull.tier} pull — {selectedPull.thread_ids.length} thread
+            {selectedPull.thread_ids.length !== 1 ? 's' : ''} selected
+          </p>
+        )}
       </div>
 
       <ThreadPullDialog
         characterSheetId={characterSheetId}
         open={pullDialogOpen}
         onClose={() => setPullDialogOpen(false)}
+        onSelect={(selection) => {
+          setSelectedPull(selection);
+          setPullDialogOpen(false);
+        }}
       />
 
       {/* Flee / Cover declaration cluster — always rendered when encounter is non-null; controls disabled outside the declaring phase */}
