@@ -82,11 +82,22 @@ actions, backends, and service functions.
   — business logic lives entirely in the dispatcher and service layer, never in the command.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
-    `cast <technique> [at <name>] [effort=<level>] [secondary]` and emits a SCENE_ADAPTIVE
-    `ActionRef` keyed to `"cast_technique"`. Outside combat: runs `CastTechniqueAction.execute()`
-    immediately (non-combat cast via `request_technique_cast`). In a DECLARING round:
-    calls `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
+    `cast <technique> [at <name>] [effort=<level>] [secondary]
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`
+    and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
+    runs `CastTechniqueAction.execute()` immediately (non-combat cast via
+    `request_technique_cast`). In a DECLARING round: calls
+    `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
     declaration row.
+
+    **Thread-pull params** (`pull=` / `resonance=` / `tier=`) are parsed by the shared
+    `_CombatCommandMixin` pull parser. The pull rides the `cast` or `clash` declaration —
+    there is no standalone `pull` verb. In combat, one pull is allowed per round (a second
+    attempt surfaces `PULL_ALREADY_COMMITTED`). `pull=` lists comma-separated thread names
+    or ids; `resonance=` names the resonance to spend from; `tier=` is 1, 2, or 3
+    (default 1). Effects that don't apply to the current context are silently applied as
+    far as they fit; the declaration is refused without charge only if none apply
+    (inert-effect rule).
 
     **Target resolution** (`at <name>`) branches on context and on the technique's authored
     `derive_target_relationship`:
@@ -99,15 +110,18 @@ actions, backends, and service functions.
     slot (PHYSICAL → `passive-physical`, SOCIAL → `passive-social`, MENTAL → `passive-mental`),
     which is passed as `action_slot` in both the `ActionRef` and the dispatch kwargs so
     `round_declaration` writes to the correct passive slot rather than the focused slot.
-  - `CmdClashCommit` (`clash`) — commit a technique + optional strain to an active
-    Clash during a DECLARING round (#1451); parses
-    `clash <opponent> with <technique> [strain=<n>]`, resolves the `Clash` by
-    NPC opponent name (`Clash.objects.filter(npc_opponent__name__iexact=...)`),
+  - `CmdClashCommit` (`clash`) — commit a technique + optional strain + optional pull
+    to an active Clash during a DECLARING round (#1451/#1455); parses
+    `clash <opponent> with <technique> [strain=<n>]
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`,
+    resolves the `Clash` by NPC opponent name
+    (`Clash.objects.filter(npc_opponent__name__iexact=...)`),
     and emits a COMBAT `ActionRef` with `clash_id=clash.pk` +
     `clash_action_slot=FOCUSED`. The dispatcher routes to `_dispatch_clash_contribution`
     which calls `declare_clash_contribution` (writes a `ClashContributionDeclaration`
     consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
-    extra anima beyond the technique's base cost (default 0).
+    extra anima beyond the technique's base cost (default 0). Pull params are parsed by
+    the shared `_CombatCommandMixin` pull parser (same semantics as `cast`).
 - **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452) — the shared-verb
   namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
   `interpose [ally]` / `join` / `leave` / `ready` / `combo <name>` / `revert` / `yield`)

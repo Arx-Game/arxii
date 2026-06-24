@@ -17,8 +17,13 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Resonance currency**: `CharacterResonance.balance` is spendable currency
   earned via `grant_resonance` (Spec C surfaces will write here) and spent
   via `spend_resonance_for_imbuing` (advances Thread level) or
-  `spend_resonance_for_pull` (activates tier-1/2/3 pull effects during an
-  action or combat round). `lifetime_earned` is monotonic audit.
+  `spend_resonance_for_pull` (low-level spend called by the pull helpers).
+  `lifetime_earned` is monotonic audit. **Thread pulls are declaration modifiers**
+  on `cast`/`clash` — the shared commit path lives in `world/combat/pull_helpers.py`:
+  `commit_combat_pull` (combat contexts), `build_cast_pull_declaration`,
+  `resolve_pull_from_kwargs`. Non-combat cast uses `request_technique_cast(cast_pull=…)`.
+  Preview: `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) — read-only,
+  unchanged.
 - **ThreadWeaving**: Acquisition layer. `ThreadWeavingUnlock` is the authored
   catalog (per anchor scope); `CharacterThreadWeavingUnlock` is the per-character
   purchase record; `ThreadWeavingTeachingOffer` is the teacher-facing offer
@@ -310,7 +315,8 @@ The baseline is injected at these call sites:
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
   Unique per (participant, round_number). M2M to Thread for the threads
-  pulled; `resonance_spent` / `anima_spent` for audit.
+  pulled; `resonance_spent` / `anima_spent` for audit. Committed via
+  `world/combat/pull_helpers.commit_combat_pull` (not called directly).
 - `CombatPullResolvedEffect` - Frozen snapshot of one resolved effect from
   a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
   `vital_target`, `source_thread`, `source_thread_level`, `source_tier`,

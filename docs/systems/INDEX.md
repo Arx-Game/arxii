@@ -98,8 +98,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Key Services:**
   - Economy: `grant_resonance(character_sheet, resonance, amount, source, source_ref=None)`,
     `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
-    `spend_resonance_for_pull(...)`, `preview_resonance_pull(...) -> PullPreviewResult`,
-    `resolve_pull_effects(...)`, `cross_thread_xp_lock(character_sheet, thread, level)`
+    `spend_resonance_for_pull(...)` (low-level spend; called by the pull helpers),
+    `preview_resonance_pull(...) -> PullPreviewResult` (read-only preview, unchanged),
+    `resolve_pull_effects(...)`, `cross_thread_xp_lock(character_sheet, thread, level)`.
+    Pull commit is routed through `world/combat/pull_helpers.py`:
+    `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
+    `resolve_pull_from_kwargs`. Non-combat cast calls
+    `request_technique_cast(cast_pull=…)` instead.
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
@@ -215,7 +220,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `GET /api/magic/character-resonances/` — per-character balance +
     lifetime_earned rows
   - `POST /api/magic/thread-pull-preview/` — read-only preview of a pull's
-    resonance/anima cost and resolved effects
+    resonance/anima cost and resolved effects (the only standalone pull endpoint;
+    commit is via cast/clash dispatch, not a separate endpoint)
   - `POST /api/magic/rituals/perform/` — dispatches the `perform_ritual` action (`PerformRitualAction.run()`, shared with telnet `CmdRitual`, #1331)
     (resolves primitive `thread_id` → Thread instance for Imbuing)
   - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
@@ -1321,7 +1327,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `PullThreadAction` (resonance pull with preview mode; calls `spend_resonance_for_pull`)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
@@ -1369,8 +1375,14 @@ Thin telnet compatibility layer that delegates to Actions.
 - **Magic ceremony/finisher commands (#1342):** `CmdRitual` (supports SERVICE and CEREMONY
   rituals; CEREMONY creates `PendingRitualEffect`), `CmdWeaveThread` (finisher for Rite of
   Weaving; consumes pending effect, calls `weave_thread`), `CmdImbue` (finisher for Rite of
-  Imbuing; consumes pending effect, calls `spend_resonance_for_imbuing`), `CmdPull`
-  (resonance pull with `[preview]` mode; calls `spend_resonance_for_pull`).
+  Imbuing; consumes pending effect, calls `spend_resonance_for_imbuing`).
+- **Combat declaration pull (#1455):** A thread pull is a **modifier on `cast`/`clash`**,
+  not a standalone command. `cast … pull=<thread>[,…] resonance=<name> [tier=<1-3>]` and
+  `clash … pull=…` parsed by the shared `_CombatCommandMixin` pull parser. Both converge on
+  `commit_combat_pull` / `request_technique_cast(cast_pull=…)` via
+  `world/combat/pull_helpers.py`. Shared helpers: `build_cast_pull_declaration`,
+  `resolve_pull_from_kwargs`, `commit_combat_pull`. Preview remains at
+  `POST /api/magic/thread-pull-preview/` (read-only, unchanged).
 - **Source:** `src/commands/`
 - **Details:** [commands.md](commands.md)
 ### Behaviors
