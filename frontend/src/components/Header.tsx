@@ -19,6 +19,7 @@ const links = [
   { to: '/scenes', label: 'Scenes' },
   { to: '/events', label: 'Events' },
   { to: '/codex', label: 'Codex' },
+  { to: '/tidings', label: 'Tidings' },
   { to: '/news', label: 'News' },
   { to: '/community', label: 'Community' },
   { to: '/threads', label: 'Threads' },

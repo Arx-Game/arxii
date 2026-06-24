@@ -527,6 +527,23 @@ Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
 - **Details:** [secrets.md](secrets.md)
+### Tidings / Public-reaction feed (#1450)
+The pull/browse vector of the public-reaction "contextual center" (#1446) — recent public events
+scoped to what a viewer's persona would have heard. **Modelless and greenfield-light:** there is no
+feed table; the service aggregates two awareness M2Ms other apps already own. *The echo (push)
+vector, in-world criers/hubs, and a first-class `reach` taxonomy are later slices of #1450.*
+
+- **No models.** `world.tidings` is a service + API app (no migrations).
+- **Key function (`world/tidings/services.py`):** `public_feed_for(persona, *, limit)` → list of
+  `PublicFeedItem` dataclasses (`kind` / `headline` / `subject` / `occurred_at`), newest first.
+  Merges **deeds** (`societies.LegendEntry` filtered by `societies_aware`) + **scandals**
+  (`secrets.Secret` filtered by `societies_exposed`), scoped to the viewer's societies (union of
+  `SocietyReputation` societies + `OrganizationMembership` orgs' societies).
+- **Faces:** web `/api/tidings/feed/?viewer=<RosterEntry pk>` (`PublicFeedView`) → React `/tidings`
+  page (`TidingsFeed`); telnet `tidings` (`CmdTidings`). Both converge on the one service. (Named
+  *tidings*, not `gossip`/`news`: `gossip` is reserved for level-1-secret access, `news` for OOC
+  game news; criers will be NPCs.)
+- **Source:** `src/world/tidings/`
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
 content sharing and social action targeting (#1141).

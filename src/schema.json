@@ -22088,6 +22088,32 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/tidings/feed/:
+    get:
+      operationId: tidings_feed_list
+      description: The active character's public tidings feed — deeds + scandals its
+        societies are aware of.
+      parameters:
+      - in: query
+        name: viewer
+        schema:
+          type: integer
+        description: RosterEntry pk of the active viewing character (the caller's
+          own).
+        required: true
+      tags:
+      - tidings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicFeedItem'
+          description: ''
   /api/traits/stat-definitions/:
     get:
       operationId: traits_stat_definitions_list
@@ -40188,6 +40214,33 @@ components:
       - object
       - possessive
       - subject
+    PublicFeedItem:
+      type: object
+      description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``
+        dataclass.
+      properties:
+        kind:
+          $ref: '#/components/schemas/PublicFeedItemKindEnum'
+        headline:
+          type: string
+        subject:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - headline
+      - kind
+      - occurred_at
+      - subject
+    PublicFeedItemKindEnum:
+      enum:
+      - deed
+      - scandal
+      type: string
+      description: |-
+        * `deed` - Deed
+        * `scandal` - Scandal
     PullActionContextCommitRequest:
       type: object
       description: |-
