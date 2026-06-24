@@ -158,8 +158,16 @@ def _validate_cast_pull(attrs: dict) -> dict:
     Attaches resolved instances to attrs["pull"]["resonance"|"threads"] so the
     view can build a CastPullDeclaration without re-querying. Affordability and
     anchor-involvement stay with spend_resonance_for_pull at charge time.
+
+    Core ID→instance resolution is delegated to
+    ``world.combat.pull_helpers.build_cast_pull_declaration`` (the single resolver)
+    so there is no duplicate logic here.  The ``ValidationError`` mapping lives here
+    at the serializer boundary (per the anti-reinvention rule: MagicError inside the
+    helper; ValidationError only at the DRF surface).
     """
-    from world.magic.models import Resonance, Technique, Thread  # noqa: PLC0415
+    from world.combat.pull_helpers import build_cast_pull_declaration  # noqa: PLC0415
+    from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
+    from world.magic.models import Technique  # noqa: PLC0415
     from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -178,27 +186,17 @@ def _validate_cast_pull(attrs: dict) -> dict:
         raise serializers.ValidationError({"initiator_persona": "Unknown persona."}) from None
 
     try:
-        resonance = Resonance.objects.get(pk=pull["resonance_id"])
-    except Resonance.DoesNotExist:
-        raise serializers.ValidationError({"pull": "Unknown resonance."}) from None
-
-    threads = list(
-        Thread.objects.filter(
-            pk__in=pull["thread_ids"],
-            owner_id=persona.character_sheet_id,
-            resonance_id=resonance.pk,
-            retired_at__isnull=True,
+        declaration = build_cast_pull_declaration(
+            persona.character_sheet,
+            resonance_id=pull["resonance_id"],
+            tier=pull["tier"],
+            thread_ids=pull["thread_ids"],
         )
-    )
-    if len(threads) != len(pull["thread_ids"]):
-        msg = (
-            "Each pulled thread must exist, be active, be yours, match the "
-            "resonance, and appear only once."
-        )
-        raise serializers.ValidationError({"pull": msg})
+    except InvalidImbueAmount as exc:
+        raise serializers.ValidationError({"pull": str(exc)}) from exc
 
-    pull["resonance"] = resonance
-    pull["threads"] = threads
+    pull["resonance"] = declaration.resonance
+    pull["threads"] = list(declaration.threads)
     return attrs
 
 

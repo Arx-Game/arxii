@@ -682,10 +682,17 @@ def _dispatch_clash_contribution(
     # Commit an optional thread pull at declaration time.  The pull bonus is
     # sourced from the CombatPull read-path during resolution; do not forward
     # cast_pull into declare_clash_contribution (avoids double-charge).
-    cast_pull = kwargs.get("cast_pull")
-    if cast_pull is not None:
-        from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
+    # resolve_pull_from_kwargs normalises both the telnet path (pre-built
+    # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
+    # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+    from world.combat.pull_helpers import (  # noqa: PLC0415
+        commit_combat_pull,
+        resolve_pull_from_kwargs,
+    )
 
+    sheet = ctx.participant.character_sheet
+    cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
+    if cast_pull is not None:
         commit_combat_pull(
             cast_pull=cast_pull,
             participant=ctx.participant,
