@@ -598,7 +598,13 @@ class CombatTechniqueResolver:
             )
         return builder.multiply(PowerStage.PENETRATION, "ward", pct).build(), False
 
-    def __call__(self, *, power: int, ledger: PowerLedger) -> CombatTechniqueResolution:  # noqa: ARG002
+    def __call__(
+        self,
+        *,
+        power: int,  # noqa: ARG002
+        ledger: PowerLedger,
+        extra_modifiers: int = 0,  # noqa: ARG002
+    ) -> CombatTechniqueResolution:
         """Resolve the combat technique inner step.
 
         ``power`` is injected by ``use_technique`` after the PRE_CAST envelope
