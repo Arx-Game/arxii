@@ -1,4 +1,4 @@
-"""Constants for the public-reaction news feed (#1450)."""
+"""Constants for the public-reaction tidings feed (#1450)."""
 
 from django.db import models
 

@@ -118,10 +118,11 @@ actions, backends, and service functions.
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
   (#1278) — telnet face of the persona block/mute menu; thin over `world.scenes.block_services`.
-- **`gossip.py`**: `CmdGossip` (`gossip`, alias `news`, #1450) — the pull/browse face of the
-  public-reaction news feed; thin over `world.news.services.public_feed_for` (the same service the
-  web `/api/news/feed/` endpoint calls). Lists recent deeds + scandals the active character's
-  societies are aware of, newest first.
+- **`tidings.py`**: `CmdTidings` (`tidings`, #1450) — the pull/browse face of the public-reaction
+  tidings feed; thin over `world.tidings.services.public_feed_for` (the same service the web
+  `/api/tidings/feed/` endpoint calls). Lists recent deeds + scandals the active character's
+  societies are aware of, newest first. (`gossip`/`news` are intentionally *not* used — `gossip`
+  is reserved for level-1-secret access at hubs, `news` for OOC game news; criers are NPCs.)
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)

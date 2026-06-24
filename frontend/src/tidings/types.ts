@@ -1,4 +1,4 @@
-/** Public-reaction news feed API types (#1450), from the generated OpenAPI schema. */
+/** Public-reaction tidings feed API types (#1450), from the generated OpenAPI schema. */
 import type { components } from '@/generated/api';
 
 /** One row of the public feed: a deed your societies celebrate or a scandal they whisper about. */

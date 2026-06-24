@@ -7,7 +7,7 @@ from web.views import FrontendAppView
 urlpatterns = [
     path("api/", include("web.api.urls")),
     path("api/roster/", include("world.roster.urls")),
-    path("api/news/", include("world.news.urls")),
+    path("api/tidings/", include("world.tidings.urls")),
     path("api/character-creation/", include("world.character_creation.urls")),
     path("api/traits/", include("world.traits.urls")),
     path("api/magic/", include("world.magic.urls")),

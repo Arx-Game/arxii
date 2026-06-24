@@ -1,4 +1,4 @@
-"""Public-reaction news feed (#1450) — the pull/browse vector of the public-reaction center.
+"""Public-reaction tidings feed (#1450) — the pull/browse vector of the public-reaction center.
 
 Aggregates two domains that already track public awareness into one recency-ordered feed scoped
 to what a viewer's persona would plausibly have heard:
@@ -20,9 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from world.news.constants import FeedItemKind
 from world.secrets.models import Secret
 from world.societies.models import LegendEntry, OrganizationMembership, SocietyReputation
+from world.tidings.constants import FeedItemKind
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
@@ -41,7 +41,7 @@ class PublicFeedItem:
 
 
 def _viewer_society_ids(persona: Persona) -> set[int]:
-    """Societies a persona hears public news through: its reputations + its orgs' societies.
+    """Societies a persona hears public tidings through: its reputations + its orgs' societies.
 
     Union of the societies the persona has standing with (``SocietyReputation``) and the societies
     of the organizations it belongs to (``OrganizationMembership`` → ``Organization.society``).
@@ -79,7 +79,7 @@ def _scandal_item(secret: Secret) -> PublicFeedItem:
 def public_feed_for(persona: Persona, *, limit: int = _DEFAULT_LIMIT) -> list[PublicFeedItem]:
     """Recent public events (deeds + scandals) the persona's societies are aware of, newest first.
 
-    Scoped to the societies the persona hears news through (``_viewer_society_ids``). Returns an
+    Scoped to the societies the persona hears tidings through (``_viewer_society_ids``). Returns an
     empty list when the persona has no society awareness. Each source is capped at ``limit`` before
     the merge, so the merged feed never exceeds ``limit`` rows.
     """

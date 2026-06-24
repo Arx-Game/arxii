@@ -1,4 +1,4 @@
-"""Public-reaction news feed API (#1450).
+"""Public-reaction tidings feed API (#1450).
 
 Read-only: returns the recent public events (deeds + scandals) the **active viewing character**
 would have heard, newest first. IC awareness scopes to the active character, never the account —
@@ -12,14 +12,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from world.news.serializers import PublicFeedItemSerializer
-from world.news.services import public_feed_for
 from world.roster.models import RosterEntry
 from world.scenes.services import active_persona_for_sheet
+from world.tidings.serializers import PublicFeedItemSerializer
+from world.tidings.services import public_feed_for
 
 
 class PublicFeedView(APIView):
-    """The active character's public news feed — deeds + scandals its societies are aware of."""
+    """The active character's public tidings feed — deeds + scandals its societies are aware of."""
 
     permission_classes = [IsAuthenticated]
 

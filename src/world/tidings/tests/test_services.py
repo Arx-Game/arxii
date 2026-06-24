@@ -1,10 +1,8 @@
-"""Tests for the public-reaction news feed service (#1450)."""
+"""Tests for the public-reaction tidings feed service (#1450)."""
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.news.constants import FeedItemKind
-from world.news.services import public_feed_for
 from world.secrets.factories import SecretFactory
 from world.societies.factories import (
     LegendEntryFactory,
@@ -13,6 +11,8 @@ from world.societies.factories import (
     SocietyFactory,
     SocietyReputationFactory,
 )
+from world.tidings.constants import FeedItemKind
+from world.tidings.services import public_feed_for
 
 
 class PublicFeedTests(TestCase):

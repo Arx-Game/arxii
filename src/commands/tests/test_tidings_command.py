@@ -1,10 +1,10 @@
-"""Telnet gossip command tests (#1450) — thin over public_feed_for."""
+"""Telnet tidings command tests (#1450) — thin over public_feed_for."""
 
 from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.social.gossip import CmdGossip
+from commands.social.tidings import CmdTidings
 from world.roster.factories import RosterEntryFactory
 from world.secrets.factories import SecretFactory
 from world.societies.factories import (
@@ -14,7 +14,7 @@ from world.societies.factories import (
 )
 
 
-class GossipCommandTests(TestCase):
+class TidingsCommandTests(TestCase):
     def setUp(self) -> None:
         self.entry = RosterEntryFactory()
         self.persona = self.entry.character_sheet.primary_persona
@@ -24,7 +24,7 @@ class GossipCommandTests(TestCase):
         SocietyReputationFactory(persona=self.persona, society=self.society, value=300)
 
     def _run(self, args: str = "") -> str:
-        cmd = CmdGossip()
+        cmd = CmdTidings()
         cmd.caller = self.caller
         cmd.args = args
         cmd.switches = []
@@ -43,4 +43,4 @@ class GossipCommandTests(TestCase):
         assert "consorts with the abyss" in out
 
     def test_empty_when_nothing_circulating(self) -> None:
-        assert "no news circulating" in self._run().lower()
+        assert "no tidings circulating" in self._run().lower()

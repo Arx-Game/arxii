@@ -15694,32 +15694,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/news/feed/:
-    get:
-      operationId: news_feed_list
-      description: The active character's public news feed — deeds + scandals its
-        societies are aware of.
-      parameters:
-      - in: query
-        name: viewer
-        schema:
-          type: integer
-        description: RosterEntry pk of the active viewing character (the caller's
-          own).
-        required: true
-      tags:
-      - news
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PublicFeedItem'
-          description: ''
   /api/npc-services/cooldowns/:
     get:
       operationId: npc_services_cooldowns_list
@@ -22114,6 +22088,32 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/tidings/feed/:
+    get:
+      operationId: tidings_feed_list
+      description: The active character's public tidings feed — deeds + scandals its
+        societies are aware of.
+      parameters:
+      - in: query
+        name: viewer
+        schema:
+          type: integer
+        description: RosterEntry pk of the active viewing character (the caller's
+          own).
+        required: true
+      tags:
+      - tidings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicFeedItem'
+          description: ''
   /api/traits/stat-definitions/:
     get:
       operationId: traits_stat_definitions_list

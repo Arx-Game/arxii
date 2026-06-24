@@ -1,6 +1,6 @@
-/** The public-reaction news feed (#1450) — recent deeds + scandals the active character's
+/** The public-reaction tidings feed (#1450) — recent deeds + scandals the active character's
  * societies are aware of, newest first. The browse/pull face of the public-reaction center; the
- * immersive push echoes and in-world hubs are later slices. */
+ * immersive push echoes and in-world criers/hubs are later slices. */
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,12 +25,14 @@ function FeedRow({ item }: { item: PublicFeedItem }) {
   );
 }
 
-export function NewsFeed({ viewerId }: { viewerId: number | null }) {
+export function TidingsFeed({ viewerId }: { viewerId: number | null }) {
   const { data, isLoading, isError } = usePublicFeedQuery(viewerId);
 
   if (viewerId == null) {
     return (
-      <p className="text-muted-foreground">Choose an active character to catch up on the news.</p>
+      <p className="text-muted-foreground">
+        Choose an active character to catch up on the tidings.
+      </p>
     );
   }
   if (isLoading) {
@@ -43,12 +45,12 @@ export function NewsFeed({ viewerId }: { viewerId: number | null }) {
     );
   }
   if (isError) {
-    return <p className="text-destructive">The news feed could not be loaded.</p>;
+    return <p className="text-destructive">The tidings feed could not be loaded.</p>;
   }
   if (!data || data.length === 0) {
     return (
       <p className="text-muted-foreground">
-        There's no news circulating in your circles right now.
+        There are no tidings circulating in your circles right now.
       </p>
     );
   }

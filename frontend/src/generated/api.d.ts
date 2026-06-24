@@ -9646,23 +9646,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/news/feed/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description The active character's public news feed — deeds + scandals its societies are aware of. */
-    get: operations['news_feed_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/npc-services/cooldowns/': {
     parameters: {
       query?: never;
@@ -13049,6 +13032,23 @@ export interface paths {
     head?: never;
     /** @description Delegate to update. */
     patch: operations['table_bulletin_replies_partial_update'];
+    trace?: never;
+  };
+  '/api/tidings/feed/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The active character's public tidings feed — deeds + scandals its societies are aware of. */
+    get: operations['tidings_feed_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/traits/stat-definitions/': {
@@ -38604,28 +38604,6 @@ export interface operations {
       };
     };
   };
-  news_feed_list: {
-    parameters: {
-      query: {
-        /** @description RosterEntry pk of the active viewing character (the caller's own). */
-        viewer: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PublicFeedItem'][];
-        };
-      };
-    };
-  };
   npc_services_cooldowns_list: {
     parameters: {
       query?: {
@@ -44111,6 +44089,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['UpdateBulletinReplyInput'];
+        };
+      };
+    };
+  };
+  tidings_feed_list: {
+    parameters: {
+      query: {
+        /** @description RosterEntry pk of the active viewing character (the caller's own). */
+        viewer: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublicFeedItem'][];
         };
       };
     };
