@@ -53,3 +53,10 @@ class GrievanceCommandTests(TestCase):
         other = SecretFactory()  # not a secret this caller is a victim of
         out = self._run(f"{other.pk} = Furious Revelation")
         assert "not a secret you may answer" in out
+
+    def test_an_answered_secret_drops_off_the_menu(self) -> None:
+        self._run(f"{self.secret.pk} = Furious Revelation")  # answer it once
+        self.caller.msg.reset_mock()
+        out = self._run("")  # the menu no longer offers it (it was the only one)
+        assert "You poisoned my sister." not in out
+        assert "no secrets you may answer" in out

@@ -133,13 +133,60 @@ def _format_renown(payload: dict) -> list[str]:
     return lines
 
 
+def _render_relationships_section(command: Command) -> list[str]:
+    """The relationships section: your regard toward others (relationships app).
+
+    Mirrors the web Relationships tab for your active character — each relationship with a
+    qualitative read of its affection (warm / cold / neutral) + status. Numeric points stay OOC.
+    """
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.relationships.models import (  # noqa: PLC0415
+        CharacterRelationship,
+        RelationshipTrackProgress,
+    )
+
+    viewer = _viewer_sheet(command)
+    relationships = (
+        CharacterRelationship.objects.filter(source=viewer)
+        .select_related("target__character")
+        .prefetch_related(
+            Prefetch(
+                "track_progress",
+                queryset=RelationshipTrackProgress.objects.select_related("track"),
+                to_attr="cached_track_progress",
+            )
+        )
+        .order_by("-updated_at")
+    )
+    return _format_relationships(list(relationships))
+
+
+def _format_relationships(relationships: list) -> list[str]:
+    if not relationships:
+        return ["You have no relationships recorded."]
+    lines = ["|wYour relationships:|n"]
+    for relationship in relationships:
+        target = relationship.target.character.db_key
+        affection = relationship.affection
+        tone = "|gwarm|n" if affection > 0 else ("|rcold|n" if affection < 0 else "neutral")
+        status = " (pending)" if relationship.is_pending else ""
+        tether = (
+            f" |m[tether: {relationship.soul_tether_role}]|n" if relationship.is_soul_tether else ""
+        )
+        lines.append(f"  {target}: {tone}{status}{tether}")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "secret": _render_secret_section,
     "secrets": _render_secret_section,
     "renown": _render_renown_section,
+    "relationship": _render_relationships_section,
+    "relationships": _render_relationships_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
-SECTION_NAMES: tuple[str, ...] = ("secret", "renown")
+SECTION_NAMES: tuple[str, ...] = ("secret", "renown", "relationship")

@@ -5,6 +5,20 @@
 **Domain:** Core (Tehom) — action interface, magic-in-combat, challenge resolution
 **Branch:** `unified-action-interface`
 
+## The principle (read this first, plain language)
+
+A player has a **small, shared set of commands**. Whether they click a button on the web or type
+a command in telnet, both simply **express the intent to use an action**. Whether that action
+**happens now, waits its turn, or is blocked** is decided by **context — generally the rules of the
+active scene** (see the scene-round modes in §4 / `SceneRound.mode`: OPEN, POSE_ORDER, STRICT,
+added in #1351). **Combat is one specialization of this** (it always defers), not a separate system.
+
+Both interfaces should express that intent through the **same** path, so a backend (telnet) test of
+a journey also proves the web path. Where the web currently reaches something by an older,
+separate path, that's a **frontend-follows-the-backend** fixup to do afterward — not a different
+design. Everything below is the implementation detail behind this one idea; if the jargon ever
+seems to contradict this principle, the principle wins.
+
 ## 1. Problem & Context
 
 A player's character can currently take actions through **four disconnected
@@ -153,8 +167,11 @@ the keystone correction above.
 **Descriptor — `PlayerAction` dataclass** (carries model instances, not bare
 PKs; types in `src/actions/types.py`):
 
-- `backend`: `CHALLENGE | COMBAT | REGISTRY` (TextChoices in
-  `src/actions/constants.py`)
+- `backend`: `CHALLENGE | COMBAT | REGISTRY | SCENE_ADAPTIVE` (TextChoices in
+  `src/actions/constants.py`). `SCENE_ADAPTIVE` was added in #1351 for actions
+  that work both in and out of a combat round (technique casts); see the
+  "SCENE_ADAPTIVE Backend" section of `src/actions/CLAUDE.md` for its dispatch
+  flow (anti-spam floor, `round_declaration` deferral, soulfray-pending gate).
 - `check_type`: the resolved `CheckType` instance (always present; the unifying
   anchor, sourced per-backend per the keystone correction)
 - `action_template`: the `ActionTemplate` instance or `None` (present for
@@ -190,6 +207,10 @@ on the next read with no special path.
   capability_source)`.
 - `COMBAT` → `declare_action(participant, …)`.
 - `REGISTRY` → `get_action(key).run(actor, **kwargs)`.
+- `SCENE_ADAPTIVE` (#1351) → anti-spam check, then `get_action(key)`; inside a
+  combat round `action.round_declaration(ctx, …)` may defer it as a COMBAT
+  declaration, otherwise `action.run(actor, **kwargs)` runs immediately (with a
+  POSE_ORDER quorum / repeat-block check from the active scene round).
 - Immediate vs. declaration-gated is decided by the tempo seam (§4), not the
   backend.
 

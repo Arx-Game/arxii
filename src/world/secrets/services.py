@@ -127,9 +127,12 @@ def grant_secret_knowledge(
     return held
 
 
-_VICTIM_LEARN_BODY = (
-    "A secret in which you are the wronged party has come to light. How you respond — and what "
-    "it does to your regard for those responsible — is yours to decide."
+# Authored by Dan (2026-06-23) — the framing line shown after the now-known secret's text. (Not
+# PLACEHOLDER: dictated wording.) The telnet "+grievance" pointer is telnet-specific; the web
+# routes to the grievance widget instead — see the bridge note (FE follow-up).
+_VICTIM_LEARN_PROMPT = (
+    "A now public secret implies you have been wronged. "
+    "If you would like to respond, use +grievance"
 )
 
 
@@ -151,11 +154,9 @@ def _notify_secret_victim_on_learn(secret: Secret, roster_entry: RosterEntry) ->
     is_victim = SecretVictim.objects.filter(secret=secret, persona__character_sheet=sheet).exists()
     if not is_victim or get_account_for_character(sheet.character) is None:
         return
-    send_narrative_message(
-        recipients=[sheet],
-        body=_VICTIM_LEARN_BODY,
-        category=NarrativeCategory.SYSTEM,
-    )
+    # Send the now-known secret's own text, then the prompt to respond.
+    body = f"{secret.content}\n\n{_VICTIM_LEARN_PROMPT}" if secret.content else _VICTIM_LEARN_PROMPT
+    send_narrative_message(recipients=[sheet], body=body, category=NarrativeCategory.SYSTEM)
 
 
 def secret_known_to(secret: Secret, roster_entry: RosterEntry) -> bool:
@@ -181,7 +182,7 @@ def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a 
     Raises ``SecretError`` if the caller isn't an entitled victim.
     """
     from world.relationships.services import register_grievance  # noqa: PLC0415 — avoid cycle
-    from world.secrets.models import SecretVictim  # noqa: PLC0415
+    from world.secrets.models import SecretGrievance, SecretVictim  # noqa: PLC0415
 
     sheet = roster_entry.character_sheet
     is_victim = SecretVictim.objects.filter(secret=secret, persona__character_sheet=sheet).exists()
@@ -191,7 +192,11 @@ def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a 
     if not secret_known_to(secret, roster_entry):
         msg = "You have not learned this secret."
         raise SecretError(msg, user_message=msg)
-    return register_grievance(
+    # One grievance per secret per victim — answering is a one-time choice; no stacking grudges.
+    if SecretGrievance.objects.filter(secret=secret, victim_sheet=sheet).exists():
+        msg = "You have already answered this secret."
+        raise SecretError(msg, user_message=msg)
+    capstone = register_grievance(
         source=sheet,
         target=secret.subject_sheet,
         option=option,
@@ -199,6 +204,8 @@ def register_secret_grievance(  # noqa: PLR0913 — keyword-only; each arg is a 
         custom_track=custom_track,
         writeup=writeup,
     )
+    SecretGrievance.objects.create(secret=secret, victim_sheet=sheet, capstone=capstone)
+    return capstone
 
 
 # --- Reputation bridge (#1429) ------------------------------------------------------------
