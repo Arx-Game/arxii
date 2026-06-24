@@ -189,7 +189,7 @@ def _validate_cast_pull(attrs: dict) -> dict:
             thread_ids=pull["thread_ids"],
         )
     except InvalidImbueAmount as exc:
-        raise serializers.ValidationError({"pull": str(exc)}) from exc
+        raise serializers.ValidationError({"pull": exc.user_message}) from exc
 
     pull["resonance"] = declaration.resonance
     pull["threads"] = list(declaration.threads)
