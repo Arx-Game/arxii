@@ -178,6 +178,82 @@ def _format_relationships(relationships: list) -> list[str]:
     return lines
 
 
+def _render_standing_section(command: Command) -> list[str]:
+    """The standing section: your formal positions in organizations (societies app).
+
+    Your **organizational** standing — org memberships (with rank titles) and org reputations —
+    scoped to your active persona. Distinct from ``sheet/renown`` (fame / prestige / *society*
+    reputation); this is the formal-position view. Society standing lives on the renown section.
+    """
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.societies.models import (  # noqa: PLC0415
+        OrganizationMembership,
+        OrganizationReputation,
+    )
+
+    viewer = _viewer_sheet(command)
+    persona = active_persona_for_sheet(viewer)
+    memberships = list(
+        OrganizationMembership.objects.filter(persona=persona)
+        .select_related("organization", "organization__org_type")
+        .order_by("rank", "organization__name")
+    )
+    reputations = list(
+        OrganizationReputation.objects.filter(persona=persona)
+        .select_related("organization")
+        .order_by("organization__name")
+    )
+    return _format_standing(memberships, reputations)
+
+
+def _format_standing(memberships: list, reputations: list) -> list[str]:
+    if not memberships and not reputations:
+        return ["You hold no organizational standing."]
+    lines = ["|wYour standing:|n"]
+    if memberships:
+        lines.append("  Memberships:")
+        for membership in memberships:
+            title = membership.organization.get_rank_title(membership.rank)
+            lines.append(f"    {membership.organization.name}: {title} (rank {membership.rank})")
+    if reputations:
+        lines.append("  Reputation:")
+        lines.extend(
+            f"    {reputation.organization.name}: {reputation.get_tier().value.title()}"
+            for reputation in reputations
+        )
+    return lines
+
+
+def _render_covenant_section(command: Command) -> list[str]:
+    """The covenant section: your covenant membership(s) and role (covenants app).
+
+    Each active covenant assignment with its role, rank, and which one you're currently *engaged*
+    in. Read-only — joining/role changes are covenant actions, not a sheet view.
+    """
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    viewer = _viewer_sheet(command)
+    assignments = list(
+        CharacterCovenantRole.objects.filter(character_sheet=viewer, left_at__isnull=True)
+        .select_related("covenant", "covenant_role", "rank")
+        .order_by("covenant__name")
+    )
+    return _format_covenant(assignments)
+
+
+def _format_covenant(assignments: list) -> list[str]:
+    if not assignments:
+        return ["You belong to no covenant."]
+    lines = ["|wYour covenant:|n"]
+    for assignment in assignments:
+        rank = f", {assignment.rank.name}" if assignment.rank_id else ""
+        engaged = " |g[engaged]|n" if assignment.engaged else ""
+        name = assignment.covenant.name
+        role = assignment.covenant_role.name
+        lines.append(f"  {name}: {role}{rank}{engaged}")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -186,7 +262,10 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "renown": _render_renown_section,
     "relationship": _render_relationships_section,
     "relationships": _render_relationships_section,
+    "standing": _render_standing_section,
+    "standings": _render_standing_section,
+    "covenant": _render_covenant_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
-SECTION_NAMES: tuple[str, ...] = ("secret", "renown", "relationship")
+SECTION_NAMES: tuple[str, ...] = ("secret", "renown", "relationship", "standing", "covenant")

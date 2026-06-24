@@ -82,3 +82,44 @@ class SheetSecretSectionTests(TestCase):
 
     def test_relationships_section_empty(self) -> None:
         assert "no relationships" in self._run("", switches=["relationship"]).lower()
+
+    def test_standing_section_lists_org_memberships_and_reputation(self) -> None:
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+            OrganizationReputationFactory,
+        )
+
+        persona = self.viewer_sheet.primary_persona
+        OrganizationMembershipFactory(
+            organization=OrganizationFactory(name="The Wardens"), persona=persona, rank=2
+        )
+        OrganizationReputationFactory(
+            organization=OrganizationFactory(name="The Guild"), persona=persona, value=600
+        )
+        out = self._run("", switches=["standing"])
+        assert "The Wardens" in out
+        assert "The Guild" in out
+        assert "Honored" in out
+
+    def test_standing_section_empty(self) -> None:
+        assert "no organizational standing" in self._run("", switches=["standing"]).lower()
+
+    def test_covenant_section_lists_your_covenant(self) -> None:
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        CharacterCovenantRoleFactory(
+            character_sheet=self.viewer_sheet,
+            covenant=CovenantFactory(name="The Ashen Circle"),
+            covenant_role=CovenantRoleFactory(name="Vanguard"),
+        )
+        out = self._run("", switches=["covenant"])
+        assert "The Ashen Circle" in out
+        assert "Vanguard" in out
+
+    def test_covenant_section_empty(self) -> None:
+        assert "no covenant" in self._run("", switches=["covenant"]).lower()
