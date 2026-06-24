@@ -284,6 +284,14 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
   carries a required scene, so scene visibility subsumes participant membership. Effect/power-ledger
   details are separately gated by `combat.permissions.can_view_encounter_effects` (staff, scene
   GM, or encounter participant — stricter than scene visibility by design).
+- **Shared combat verbs (SHIPPED — #1453/#1452):** flee, cover, interpose, ready, join, leave,
+  combo upgrade/revert, and yield are real `Action`s in `actions/definitions/combat_maneuvers.py`
+  (keys `combat_flee`/`combat_cover`/`combat_interpose`/`combat_ready`/`combat_join`/`combat_leave`/
+  `combat_combo`/`combat_revert`; yield reuses `YieldAction`). The web player-action endpoints now
+  dispatch through these via `dispatch_player_action` (the bypass is gone; REST contract unchanged),
+  and telnet reaches them through the `combat <subverb>` namespace (`CmdCombat`). The only new
+  service is `toggle_action_ready` (extracted from the inline `ready` toggle). Verbs are namespaced
+  rather than bare top-level keys to avoid exit/channel/alias collisions.
 - **Round pacing:** Timed mode (default, configurable minutes with auto-resolve), Ready mode (all players mark ready), Manual mode (GM triggers). Timer task runs every 30 seconds via game clock scheduler
 - **Participation:** PCs in the room can self-join active encounters. Flee resolves as a graded check at round resolution with authored tier difficulty, ally cover bonuses, and pool-routed failure consequences (#878)
 - **Tests:** 599 tests across combat, vitals, conditions, mechanics, checks, and covenants
