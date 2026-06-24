@@ -140,11 +140,11 @@ class _CombatCommandMixin:
         Stops on any ``pull_keys``-prefixed token (``pull=``, ``resonance=``,
         ``tier=``) and on ``effort=`` / ``secondary`` (handled elsewhere).
         """
-        import re  # noqa: PLC0415
-
         lower = tok.lower()
-        return any(lower.startswith(k + "=") for k in pull_keys) or bool(
-            re.match(r"(?i)^(?:effort=|secondary$)", tok)
+        return (
+            any(lower.startswith(k + "=") for k in pull_keys)
+            or lower.startswith(_EFFORT_PREFIX)
+            or lower == _SECONDARY_KEYWORD
         )
 
     @staticmethod
