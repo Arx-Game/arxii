@@ -194,6 +194,14 @@ class ActionRegistryTests(TestCase):
             "endorse_scene_entry",
             "endorse_style_presentation",
             "cast_technique",
+            "combat_flee",
+            "combat_cover",
+            "combat_interpose",
+            "combat_ready",
+            "combat_combo",
+            "combat_revert",
+            "combat_join",
+            "combat_leave",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
