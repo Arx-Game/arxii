@@ -15,7 +15,9 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from commands.combat import CmdDeclareTechnique
 from commands.exceptions import CommandError
+from world.magic.factories import CharacterResonanceFactory, ThreadFactory
 from world.magic.models.techniques import ConditionTargetKind
+from world.magic.types.pull import CastPullDeclaration
 
 _DERIVE = "world.magic.services.targeting.derive_target_relationship"
 
@@ -131,6 +133,160 @@ class CmdDeclareTechniqueTests(TestCase):
             cmd.resolve_action_ref()
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
+
+
+class CmdDeclareTechniquePullParseTests(TestCase):
+    """Tests for pull=/resonance=/tier= parsing and resolution in CmdDeclareTechnique (#1455).
+
+    Uses setUpTestData for ORM objects (Thread, Resonance) since these are
+    plain Django models with no Evennia ObjectDB dependency.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.cr = CharacterResonanceFactory(balance=50)
+        cls.sheet = cls.cr.character_sheet
+        cls.resonance = cls.cr.resonance
+        cls.thread = ThreadFactory(owner=cls.sheet, resonance=cls.resonance, name="Ember Strand")
+
+    def _make_cmd(self, args: str) -> CmdDeclareTechnique:
+        cmd = CmdDeclareTechnique()
+        cmd.caller = MagicMock()
+        cmd.caller.sheet_data = self.sheet
+        cmd.args = args
+        cmd.raw_string = f"cast {args}"
+        cmd.cmdname = "cast"
+        return cmd
+
+    # -------------------------------------------------------------------------
+    # Parsing tests (no ORM resolution — just verify cached state after _parse_args)
+    # -------------------------------------------------------------------------
+
+    def test_pull_keyword_parsed_into_state(self) -> None:
+        """_parse_args caches pull thread string and resonance string."""
+        cmd = self._make_cmd(f"Firebolt pull={self.thread.name} resonance={self.resonance.name}")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd.resolve_action_ref()
+        self.assertEqual(cmd._pull_thread_str, self.thread.name)
+        self.assertEqual(cmd._pull_resonance_str, self.resonance.name)
+        self.assertEqual(cmd._pull_tier, 1)
+
+    def test_tier_keyword_parsed_correctly(self) -> None:
+        """tier=2 is stored on the command after _parse_args."""
+        cmd = self._make_cmd(
+            f"Firebolt pull={self.thread.name} resonance={self.resonance.name} tier=2"
+        )
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd.resolve_action_ref()
+        self.assertEqual(cmd._pull_tier, 2)
+
+    def test_invalid_tier_raises(self) -> None:
+        """tier=5 must raise CommandError."""
+        cmd = self._make_cmd(
+            f"Firebolt pull={self.thread.name} resonance={self.resonance.name} tier=5"
+        )
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_ref()
+
+    def test_pull_without_resonance_raises(self) -> None:
+        """pull= without resonance= must raise CommandError."""
+        cmd = self._make_cmd(f"Firebolt pull={self.thread.name}")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_ref()
+
+    def test_no_pull_leaves_state_none(self) -> None:
+        """Without pull= the command caches _pull_thread_str as None."""
+        cmd = self._make_cmd("Firebolt")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd.resolve_action_ref()
+        self.assertIsNone(cmd._pull_thread_str)
+
+    # -------------------------------------------------------------------------
+    # Resolution tests — verify resolve_action_args produces cast_pull kwarg
+    # -------------------------------------------------------------------------
+
+    def test_resolve_action_args_includes_cast_pull(self) -> None:
+        """resolve_action_args includes cast_pull=CastPullDeclaration when pull= is given."""
+        cmd = self._make_cmd(
+            f"Firebolt pull={self.thread.name} resonance={self.resonance.name} tier=1"
+        )
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertIn("cast_pull", kwargs)
+        pull = kwargs["cast_pull"]
+        self.assertIsInstance(pull, CastPullDeclaration)
+        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.tier, 1)
+        self.assertIn(self.thread, pull.threads)
+
+    def test_resolve_action_args_no_pull_key_when_absent(self) -> None:
+        """resolve_action_args omits cast_pull when no pull= was given."""
+        cmd = self._make_cmd("Firebolt")
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertNotIn("cast_pull", kwargs)
+
+    def test_unknown_resonance_raises(self) -> None:
+        """pull= with an unknown resonance name raises CommandError."""
+        cmd = self._make_cmd(f"Firebolt pull={self.thread.name} resonance=NoSuchResonanceXXX")
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
+    def test_unknown_thread_raises(self) -> None:
+        """pull= with a thread name that doesn't exist for the caster raises CommandError."""
+        cmd = self._make_cmd(f"Firebolt pull=NoSuchThreadXXX resonance={self.resonance.name}")
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            with self.assertRaises(CommandError):
+                cmd.resolve_action_args()
+
+    def test_pull_keywords_order_independent(self) -> None:
+        """resonance= tier= pull= in any order resolves correctly."""
+        cmd = self._make_cmd(
+            f"Firebolt resonance={self.resonance.name} tier=2 pull={self.thread.name}"
+        )
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertIn("cast_pull", kwargs)
+        self.assertEqual(kwargs["cast_pull"].tier, 2)
+
+    def test_pull_coexists_with_effort_and_target(self) -> None:
+        """pull= coexists with effort= and at <target> without interfering."""
+        cmd = self._make_cmd(
+            f"Firebolt at Aria pull={self.thread.name} resonance={self.resonance.name} effort=high"
+        )
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+            patch.object(cmd, "_resolve_target_persona_id", return_value=99),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs["effort_level"], "high")
+        self.assertEqual(kwargs.get("target_persona_id"), 99)
+        self.assertIn("cast_pull", kwargs)
 
 
 class CmdsetRegistrationTests(TestCase):

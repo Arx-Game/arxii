@@ -315,3 +315,142 @@ class CastTechniqueActionTests(TestCase):
             anima_before,
             "anima.current must decrease after a confirmed cast",
         )
+
+
+class CastTechniqueActionPullTests(TestCase):
+    """CastTechniqueAction.execute forwards cast_pull into request_technique_cast (#1455)."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        from actions.factories import ActionTemplateFactory
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            CharacterAnimaFactory,
+            TechniqueFactory,
+        )
+        from world.scenes.factories import PersonaFactory, SceneFactory
+        from world.scenes.tests.cast_test_helpers import grant_technique
+        from world.traits.factories import CheckSystemSetupFactory
+        from world.vitals.models import CharacterVitals
+
+        CheckSystemSetupFactory.create()
+
+        self.room = create_object(
+            "typeclasses.rooms.Room", key="CastPullActionTestRoom", nohome=True
+        )
+        self.scene = SceneFactory(location=self.room)
+
+        self.persona = PersonaFactory()
+        self.character = self.persona.character_sheet.character
+        self.character.db_location = self.room
+        self.character.save()
+
+        self.technique = TechniqueFactory(
+            anima_cost=20,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        grant_technique(self.persona, self.technique)
+
+        CharacterVitals.objects.create(
+            character_sheet=self.persona.character_sheet,
+            health=50,
+            max_health=50,
+            base_max_health=50,
+        )
+        self.anima = CharacterAnimaFactory(
+            character=self.character,
+            current=20,
+            maximum=30,
+        )
+
+        self._check_patcher = patch(
+            "actions.services.perform_check",
+            return_value=MagicMock(
+                success_level=2,
+                outcome=MagicMock(name="Success"),
+                outcome_name="Success",
+            ),
+        )
+        self._check_patcher.start()
+        self._accrue_patcher = patch("world.scenes.action_services.accrue")
+        self._accrue_patcher.start()
+
+    def tearDown(self) -> None:
+        self._check_patcher.stop()
+        self._accrue_patcher.stop()
+
+    def _make_mock_pull(self):
+        """Return a minimal CastPullDeclaration mock."""
+        from world.magic.types.pull import CastPullDeclaration
+
+        return MagicMock(spec=CastPullDeclaration)
+
+    def test_cast_pull_forwarded_to_request_technique_cast(self) -> None:
+        """CastTechniqueAction.execute passes cast_pull into request_technique_cast."""
+        mock_pull = self._make_mock_pull()
+
+        with patch(
+            "world.scenes.cast_services.request_technique_cast",
+        ) as mock_request:
+            mock_cast = MagicMock()
+            mock_cast.soulfray_warning = None
+            mock_request.return_value = mock_cast
+
+            action = CastTechniqueAction()
+            result = action.run(
+                actor=self.character,
+                technique_id=self.technique.pk,
+                confirm_soulfray_risk=True,
+                cast_pull=mock_pull,
+            )
+
+        self.assertTrue(result.success, f"Expected success=True, got: {result.message}")
+        mock_request.assert_called_once()
+        call_kwargs = mock_request.call_args.kwargs
+        self.assertIs(call_kwargs.get("cast_pull"), mock_pull)
+
+    def test_no_cast_pull_forwards_none_to_request_technique_cast(self) -> None:
+        """When cast_pull is omitted, request_technique_cast receives cast_pull=None."""
+        with patch(
+            "world.scenes.cast_services.request_technique_cast",
+        ) as mock_request:
+            mock_cast = MagicMock()
+            mock_cast.soulfray_warning = None
+            mock_request.return_value = mock_cast
+
+            action = CastTechniqueAction()
+            action.run(
+                actor=self.character,
+                technique_id=self.technique.pk,
+                confirm_soulfray_risk=True,
+            )
+
+        call_kwargs = mock_request.call_args.kwargs
+        self.assertIsNone(call_kwargs.get("cast_pull"))
+
+    def test_magic_error_from_pull_returns_clean_failure(self) -> None:
+        """A MagicError raised by request_technique_cast becomes a clean failure result."""
+        from world.magic.exceptions import MagicError
+
+        mock_pull = self._make_mock_pull()
+
+        with patch(
+            "world.scenes.cast_services.request_technique_cast",
+            side_effect=MagicError("Pull anchor not in action."),
+        ):
+            action = CastTechniqueAction()
+            result = action.run(
+                actor=self.character,
+                technique_id=self.technique.pk,
+                confirm_soulfray_risk=True,
+                cast_pull=mock_pull,
+            )
+
+        self.assertFalse(result.success)
+        self.assertIn("Pull anchor not in action.", result.message or "")

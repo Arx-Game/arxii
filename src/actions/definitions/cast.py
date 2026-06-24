@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.magic.types.pull import CastPullDeclaration
 
 
 @dataclass
@@ -49,7 +50,7 @@ class CastTechniqueAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
-    def execute(
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -57,9 +58,18 @@ class CastTechniqueAction(Action):
         technique_id: int,
         target_persona_id: int | None = None,
         confirm_soulfray_risk: bool = False,
+        cast_pull: CastPullDeclaration | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
+
+        Args:
+            cast_pull: An optional ``CastPullDeclaration`` resolved by the
+                telnet command (or passed directly).  When provided it is
+                forwarded into ``request_technique_cast`` so the pull is
+                charged and applied as part of the cast.  Rejected on hostile
+                techniques (``request_technique_cast`` raises; we surface a
+                clean failure).
 
         Returns:
             ``success=False`` when the soulfray gate fires (pending consent).
@@ -88,13 +98,25 @@ class CastTechniqueAction(Action):
             except Persona.DoesNotExist:
                 return ActionResult(success=False, message="Target persona not found.")
 
-        cast = request_technique_cast(
-            scene=scene,
-            initiator_persona=initiator,
-            target_persona=target,
-            technique=technique,
-            confirm_soulfray_risk=confirm_soulfray_risk,
-        )
+        try:
+            cast = request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator,
+                target_persona=target,
+                technique=technique,
+                confirm_soulfray_risk=confirm_soulfray_risk,
+                cast_pull=cast_pull,
+            )
+        except Exception as exc:
+            # Surface magic-layer exceptions (e.g. MagicError subclasses for
+            # invalid/inert pull declarations) as clean failure results rather
+            # than propagating as crashes.  Re-raise anything that is not a
+            # MagicError so programming errors are still visible.
+            from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+            if not isinstance(exc, MagicError):
+                raise
+            return ActionResult(success=False, message=str(exc))
 
         if cast.soulfray_warning is not None and not confirm_soulfray_risk:
             from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415

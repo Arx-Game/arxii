@@ -43,6 +43,7 @@ from commands.exceptions import CommandError
 if TYPE_CHECKING:
     from actions.types import ActionRef
     from world.combat.models import CombatParticipant
+    from world.magic.types.pull import CastPullDeclaration
 
 # Keyword prefix used to parse effort=<level> from command args.
 _EFFORT_PREFIX = "effort="
@@ -144,11 +145,126 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _secondary: bool = False
     _parsed: bool = False
     _participant: CombatParticipant | None = None
+    # Pull-related parsed state (None means no pull declared).
+    _pull_thread_str: str | None = None
+    _pull_resonance_str: str | None = None
+    _pull_tier: int = 1
 
     # --------------------------------------------------------------------------
 
+    # Pull-kwarg prefixes recognised by _extract_pull_keywords.
+    _PULL_KWARG_KEYS: frozenset[str] = frozenset({"pull", "resonance", "tier"})
+
+    @staticmethod
+    def _is_pull_stop_token(tok: str, pull_keys: frozenset[str]) -> bool:
+        """Return True when *tok* marks the start of a non-pull keyword boundary.
+
+        Stops on any ``pull_keys``-prefixed token (``pull=``, ``resonance=``,
+        ``tier=``) and on ``effort=`` / ``secondary`` (handled elsewhere).
+        """
+        import re  # noqa: PLC0415
+
+        lower = tok.lower()
+        return any(lower.startswith(k + "=") for k in pull_keys) or bool(
+            re.match(r"(?i)^(effort=|secondary$)", tok)
+        )
+
+    @staticmethod
+    def _greedy_consume(
+        tokens: list[str],
+        start: int,
+        initial: str,
+        pull_keys: frozenset[str],
+    ) -> tuple[str, int, set[int]]:
+        """Greedily extend *initial* with tokens from *start* until a stop boundary.
+
+        Returns ``(value, next_index, consumed_indices)`` where *consumed_indices*
+        are the token positions that were merged into *value*.
+        """
+        consumed: set[int] = set()
+        j = start
+        while j < len(tokens):
+            if CmdDeclareTechnique._is_pull_stop_token(tokens[j], pull_keys):
+                break
+            consumed.add(j)
+            initial = initial + " " + tokens[j]
+            j += 1
+        return initial.strip(), j, consumed
+
+    @staticmethod
+    def _validate_pull_tier(tier_val: str | None) -> int:
+        """Return the integer tier (default 1) and raise CommandError when invalid."""
+        if tier_val is None:
+            return 1
+        if not tier_val.isdigit() or int(tier_val) not in (1, 2, 3):
+            msg = f"Invalid tier '{tier_val}' — choose 1, 2, or 3."
+            raise CommandError(msg)
+        return int(tier_val)
+
+    @classmethod
+    def _extract_pull_keywords(
+        cls,
+        raw: str,
+    ) -> tuple[str, str | None, str | None, int]:
+        """Extract pull=, resonance=, and tier= tokens from *raw*.
+
+        Each keyword's value is consumed greedily until the next known keyword
+        prefix or end-of-string, so multi-word thread names (e.g. "Ember Strand")
+        and comma-separated lists ("Strand A,Strand B") are captured intact.
+
+        Raises:
+            CommandError: If ``tier=`` is present but not 1–3, or if ``pull=``
+                is given without ``resonance=``.
+
+        Returns:
+            ``(remainder, pull_val, resonance_val, pull_tier)`` where
+            *remainder* is *raw* with all three keywords stripped out and
+            *pull_tier* defaults to 1 when ``tier=`` is absent.
+        """
+        pull_keys = cls._PULL_KWARG_KEYS
+        tokens = raw.split()
+        pull_val: str | None = None
+        resonance_val: str | None = None
+        tier_val: str | None = None
+        skip_indices: set[int] = set()
+
+        i = 0
+        while i < len(tokens):
+            lower_tok = tokens[i].lower()
+            matched_key = next((k for k in pull_keys if lower_tok.startswith(k + "=")), None)
+            if matched_key is None:
+                i += 1
+                continue
+
+            skip_indices.add(i)
+            initial = tokens[i][len(matched_key) + 1 :]  # strip "key="
+            value, i, consumed = cls._greedy_consume(tokens, i + 1, initial, pull_keys)
+            skip_indices.update(consumed)
+
+            if matched_key == "pull":  # noqa: STRING_LITERAL
+                pull_val = value or None
+            elif matched_key == "resonance":  # noqa: STRING_LITERAL
+                resonance_val = value or None
+            else:
+                tier_val = value or None
+
+        remainder = " ".join(t for idx, t in enumerate(tokens) if idx not in skip_indices)
+
+        pull_tier = cls._validate_pull_tier(tier_val)
+        if pull_val is not None and resonance_val is None:
+            msg = "pull= requires resonance=<name> to be specified as well."
+            raise CommandError(msg)
+
+        return remainder, pull_val, resonance_val, pull_tier
+
     def _parse_args(self) -> None:
-        """Parse ``self.args`` once; cache technique name, optional target, effort, secondary."""
+        """Parse ``self.args`` once; cache technique name, optional target, effort, secondary.
+
+        Also extracts optional pull=<thread>[,…], resonance=<name>, and tier=<1-3>
+        keywords for a thread-pull declaration.  All keyword=value pairs are
+        order-independent and are stripped before the positional ``<technique>``
+        and ``at <target>`` parsing.
+        """
         if self._parsed:
             return
 
@@ -174,6 +290,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 msg = f"Invalid effort level '{effort_val}'. Choose from: {choices}"
                 raise CommandError(msg)
             effort_str = effort_val
+
+        # Strip pull=<threads>, resonance=<name>, tier=<1-3> if present.
+        # _extract_pull_keywords also validates tier range and pull+resonance pairing.
+        raw, pull_thread_str, resonance_str, pull_tier = self._extract_pull_keywords(raw)
 
         # Strip a standalone trailing "secondary" keyword (case-insensitive, whole
         # word). Plain string ops avoid a backtracking-prone regex (ReDoS). Must come
@@ -203,6 +323,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         self._effort = effort_str
         self._secondary = secondary
+        self._pull_thread_str = pull_thread_str
+        self._pull_resonance_str = resonance_str
+        self._pull_tier = pull_tier
         self._parsed = True
 
     # -- Resolution helpers ----------------------------------------------------
@@ -345,6 +468,62 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         return persona.pk
 
+    def _resolve_cast_pull(self) -> CastPullDeclaration | None:
+        """Return a ``CastPullDeclaration`` if pull= was declared, else ``None``.
+
+        Resolves threads by name/id owned by the caller's character sheet
+        (same resonance, active only) and the resonance by name.
+
+        Raises:
+            CommandError: If resonance is unknown, any thread is not found /
+                does not match the resonance / is retired, or pull= is present
+                without resonance=.
+        """
+        if self._pull_thread_str is None:
+            return None
+
+        from world.magic.models import Resonance, Thread  # noqa: PLC0415
+        from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
+
+        resonance_val = (self._pull_resonance_str or "").strip()
+        # resonance= guard already enforced in _parse_args; double-check here.
+        if not resonance_val:
+            msg = "pull= requires resonance=<name> to be specified as well."
+            raise CommandError(msg)
+
+        resonance_qs = Resonance.objects.filter(name__iexact=resonance_val)
+        resonance = resonance_qs.first()
+        if resonance is None:
+            msg = f"No resonance named '{resonance_val}' found."
+            raise CommandError(msg)
+
+        sheet = self.caller.sheet_data
+        thread_vals = [t.strip() for t in self._pull_thread_str.split(",") if t.strip()]
+        if not thread_vals:
+            msg = "pull= requires at least one thread name or id."
+            raise CommandError(msg)
+
+        threads: list[Thread] = []
+        for val in thread_vals:
+            qs = Thread.objects.filter(owner=sheet, resonance=resonance, retired_at__isnull=True)
+            if val.isdigit():
+                thread = qs.filter(pk=int(val)).first()
+            else:
+                thread = qs.filter(name__iexact=val).first()
+            if thread is None:
+                msg = (
+                    f"No active thread '{val}' found for resonance '{resonance_val}'. "
+                    "Check that the thread exists, is active, and matches the resonance."
+                )
+                raise CommandError(msg)
+            threads.append(thread)
+
+        return CastPullDeclaration(
+            resonance=resonance,
+            tier=self._pull_tier,
+            threads=tuple(threads),
+        )
+
     # -- DispatchCommand interface ---------------------------------------------
 
     def resolve_action_ref(self) -> ActionRef:
@@ -405,6 +584,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             slot = _SECONDARY_SLOT.get(technique.action_category)
             if slot is not None:
                 kwargs["action_slot"] = slot
+
+        # Resolve an optional thread pull declaration and inject into kwargs.
+        cast_pull = self._resolve_cast_pull()
+        if cast_pull is not None:
+            kwargs["cast_pull"] = cast_pull
 
         if not self._target_name:
             return kwargs
