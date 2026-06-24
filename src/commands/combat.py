@@ -277,7 +277,15 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             msg = "Usage: cast <technique> [at <target>] [effort=<level>] [secondary]"
             raise CommandError(msg)
 
-        # Strip off effort=<level> if present (rightmost keyword=value pair).
+        # Strip pull=<threads>, resonance=<name>, tier=<1-3> if present FIRST so
+        # that effort= and pull keywords are fully order-independent.  (If effort=
+        # were split first, any pull keyword that follows effort= in the input string
+        # would be silently discarded.)
+        # _extract_pull_keywords also validates tier range and pull+resonance pairing.
+        raw, pull_thread_str, resonance_str, pull_tier = self._extract_pull_keywords(raw)
+
+        # Strip off effort=<level> if present.  After pull keywords are removed,
+        # only effort= and positional tokens remain, so a simple split is safe.
         effort_str: str = EffortLevel.MEDIUM
         if _EFFORT_PREFIX in raw.lower():
             # Split case-insensitively so "Effort=HIGH" is handled correctly.
@@ -290,10 +298,6 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 msg = f"Invalid effort level '{effort_val}'. Choose from: {choices}"
                 raise CommandError(msg)
             effort_str = effort_val
-
-        # Strip pull=<threads>, resonance=<name>, tier=<1-3> if present.
-        # _extract_pull_keywords also validates tier range and pull+resonance pairing.
-        raw, pull_thread_str, resonance_str, pull_tier = self._extract_pull_keywords(raw)
 
         # Strip a standalone trailing "secondary" keyword (case-insensitive, whole
         # word). Plain string ops avoid a backtracking-prone regex (ReDoS). Must come

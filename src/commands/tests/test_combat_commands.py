@@ -288,6 +288,46 @@ class CmdDeclareTechniquePullParseTests(TestCase):
         self.assertEqual(kwargs.get("target_persona_id"), 99)
         self.assertIn("cast_pull", kwargs)
 
+    def test_pull_effort_order_independent_effort_between_pull_and_resonance(self) -> None:
+        """effort= between pull= and resonance= must not drop resonance= (#1455).
+
+        Previously _parse_args split on effort= first, discarding everything after it
+        (including resonance=).  This test was RED before the fix (CommandError:
+        pull= requires resonance=) and GREEN after.
+        """
+        # effort= sits between pull= and resonance=
+        cmd = self._make_cmd(
+            f"Firebolt pull={self.thread.name} effort=high resonance={self.resonance.name}"
+        )
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs["effort_level"], "high")
+        self.assertIn("cast_pull", kwargs)
+        pull: CastPullDeclaration = kwargs["cast_pull"]
+        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.threads[0], self.thread)
+
+    def test_pull_effort_order_independent_effort_before_pull(self) -> None:
+        """effort= before pull= and resonance= must resolve correctly (#1455)."""
+        cmd = self._make_cmd(
+            f"Firebolt effort=high pull={self.thread.name} resonance={self.resonance.name}"
+        )
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_combat_participant_or_none", return_value=None),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs["effort_level"], "high")
+        self.assertIn("cast_pull", kwargs)
+        pull: CastPullDeclaration = kwargs["cast_pull"]
+        self.assertEqual(pull.resonance, self.resonance)
+        self.assertEqual(pull.threads[0], self.thread)
+
 
 class CmdsetRegistrationTests(TestCase):
     def test_cast_command_registered(self) -> None:
