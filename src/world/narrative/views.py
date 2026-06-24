@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.narrative.constants import GemitReach
 from world.narrative.filters import GemitFilter, NarrativeMessageDeliveryFilter, UserStoryMuteFilter
 from world.narrative.models import Gemit, NarrativeMessageDelivery, UserStoryMute
 from world.narrative.permissions import (
@@ -23,6 +24,7 @@ from world.narrative.serializers import (
     UserStoryMuteSerializer,
 )
 from world.narrative.services import broadcast_gemit
+from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 if TYPE_CHECKING:
@@ -92,6 +94,32 @@ class GemitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gene
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
 
+    def get_queryset(self) -> "QuerySet[Gemit]":
+        """Scope the history so a scoped gemit only shows to its audience (#1450).
+
+        Staff see everything. Everyone else sees game-wide gemits plus the society/org gemits whose
+        targets a character of theirs belongs to — never another society's internal broadcasts.
+        """
+        qs = super().get_queryset()
+        user = cast("AccountDB", self.request.user)
+        if user.is_staff:
+            return qs
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.narrative.constants import GemitReach  # noqa: PLC0415
+        from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+        memberships = OrganizationMembership.objects.filter(
+            persona__character_sheet__roster_entry__in=RosterEntry.objects.for_account(user)
+        )
+        society_ids = memberships.values_list("organization__society_id", flat=True)
+        org_ids = memberships.values_list("organization_id", flat=True)
+        return qs.filter(
+            Q(reach=GemitReach.GAME_WIDE)
+            | Q(reach=GemitReach.SOCIETY, reach_societies__in=society_ids)
+            | Q(reach=GemitReach.ORGANIZATION, reach_organizations__in=org_ids)
+        ).distinct()
+
     def get_serializer_class(self) -> "type[BaseSerializer]":
         if self.action == "create":
             return GemitCreateSerializer
@@ -106,11 +134,15 @@ class GemitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gene
         """Validate input, broadcast, and return GemitSerializer response."""
         serializer = GemitCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
         gemit = broadcast_gemit(
-            body=serializer.validated_data["body"],
+            body=data["body"],
             sender_account=cast("AccountDB", request.user),
-            related_era=serializer.validated_data.get("related_era"),
-            related_story=serializer.validated_data.get("related_story"),
+            reach=data.get("reach", GemitReach.GAME_WIDE),
+            societies=data.get("reach_societies"),
+            organizations=data.get("reach_organizations"),
+            related_era=data.get("related_era"),
+            related_story=data.get("related_story"),
         )
         return Response(GemitSerializer(gemit).data, status=status.HTTP_201_CREATED)
 

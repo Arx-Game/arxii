@@ -56,6 +56,7 @@ from commands.evennia_overrides.items import (
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
+from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.offer_response import CmdDecline
 from commands.pull import CmdPull
@@ -170,6 +171,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrievance,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
+            # #1450 — the staff push face: hand-authored gemits scoped by reach.
+            CmdGemit,
             # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
             # Clash contribution (#1451)

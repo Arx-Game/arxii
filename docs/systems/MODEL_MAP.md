@@ -2857,7 +2857,7 @@
   - story -> stories.Story [FK]
 
 ### Service Functions
-- `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push to all currently-connected sessions in green.`
+- `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
 - `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' — Send a source-ambiguous ambient line to a room's bystanders (#885).`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
@@ -3470,6 +3470,7 @@
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
   - summary_revisions <- scenes.SceneSummaryRevision
+  - targeted_scene_declarations <- scenes.SceneActionDeclaration
   - initiated_action_requests <- scenes.SceneActionRequest
   - received_action_requests <- scenes.SceneActionRequest
   - delivery_scoped_action_requests <- scenes.SceneActionRequest
@@ -3611,6 +3612,10 @@
   - participants <- scenes.SceneRoundParticipant
   - action_declarations <- scenes.SceneActionDeclaration
 
+### SceneRoundDefaultsConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
+
 ### SceneRoundParticipant
 **Foreign Keys:**
   - scene_round -> scenes.SceneRound [FK]
@@ -3624,6 +3629,7 @@
   - participant -> scenes.SceneRoundParticipant [FK]
   - challenge_instance -> mechanics.ChallengeInstance [FK] (nullable)
   - challenge_approach -> mechanics.ChallengeApproach [FK] (nullable)
+  - target_persona -> scenes.Persona [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**
@@ -3822,6 +3828,7 @@
   - trendsetters <- items.Trendsetter
   - hosted_events <- events.Event
   - event_invitations <- events.EventInvitation
+  - gemits <- narrative.Gemit
 
 ### OrganizationType
 **Pointed to by:**
@@ -3852,6 +3859,7 @@
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
   - event_invitations <- events.EventInvitation
+  - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
 
 ### OrganizationMembership

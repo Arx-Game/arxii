@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.narrative.constants import NarrativeCategory
+from world.narrative.constants import GemitReach, NarrativeCategory
 
 _STR_PREVIEW_LEN = 40
 _GEMIT_PREVIEW_LEN = 60
@@ -174,15 +174,35 @@ class NarrativeMessageDelivery(SharedMemoryModel):
 
 
 class Gemit(SharedMemoryModel):
-    """A staff-sent real-time broadcast to all online players.
+    """A staff-sent real-time broadcast (#1450).
 
-    Persistent record so any account can browse retroactively. Does NOT
-    fan out into NarrativeMessageDelivery rows — gemit is server-wide,
-    not per-recipient.
+    Persistent record so the audience can browse retroactively. Does NOT
+    fan out into NarrativeMessageDelivery rows — gemit is broadcast, not
+    per-recipient. ``reach`` scopes the audience: GAME_WIDE reaches every
+    online session; SOCIETY / ORGANIZATION reach only the members of the
+    linked ``reach_societies`` / ``reach_organizations`` (multiple allowed).
     """
 
     body = models.TextField(
-        help_text="Broadcast text shown to all connected players.",
+        help_text="Broadcast text shown to the audience (staff-authored verbatim, colour and all).",
+    )
+    reach = models.CharField(
+        max_length=20,
+        choices=GemitReach.choices,
+        default=GemitReach.GAME_WIDE,
+        help_text="Audience scope: game-wide, or the members of the linked societies / orgs.",
+    )
+    reach_societies = models.ManyToManyField(
+        "societies.Society",
+        blank=True,
+        related_name="gemits",
+        help_text="When reach=SOCIETY, the societies whose members receive this gemit.",
+    )
+    reach_organizations = models.ManyToManyField(
+        "societies.Organization",
+        blank=True,
+        related_name="gemits",
+        help_text="When reach=ORGANIZATION, the organizations whose members receive this gemit.",
     )
     sender_account = models.ForeignKey(
         "accounts.AccountDB",

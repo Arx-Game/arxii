@@ -30070,7 +30070,29 @@ components:
           readOnly: true
         body:
           type: string
-          description: Broadcast text shown to all connected players.
+          description: Broadcast text shown to the audience (staff-authored verbatim,
+            colour and all).
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachF5cEnum'
+          description: |-
+            Audience scope: game-wide, or the members of the linked societies / orgs.
+
+            * `game_wide` - Game-wide
+            * `society` - Society
+            * `organization` - Organization
+        reach_societies:
+          type: array
+          items:
+            type: integer
+          description: When reach=SOCIETY, the societies whose members receive this
+            gemit.
+        reach_organizations:
+          type: array
+          items:
+            type: integer
+          description: When reach=ORGANIZATION, the organizations whose members receive
+            this gemit.
         sender_account:
           type: integer
           readOnly: true
@@ -30095,12 +30117,37 @@ components:
       - sent_at
     GemitCreate:
       type: object
-      description: Input serializer for staff POST /api/narrative/gemits/.
+      description: |-
+        Input serializer for staff POST /api/narrative/gemits/ (#1450).
+
+        ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
+        ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
       properties:
         body:
           type: string
           description: Broadcast text. Must be at least one non-whitespace character.
           minLength: 1
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachF5cEnum'
+          description: |-
+            Audience scope: game-wide, or the members of the linked societies / orgs.
+
+            * `game_wide` - Game-wide
+            * `society` - Society
+            * `organization` - Organization
+        reach_societies:
+          type: array
+          items:
+            type: integer
+          description: When reach=SOCIETY, the societies whose members receive this
+            gemit.
+        reach_organizations:
+          type: array
+          items:
+            type: integer
+          description: When reach=ORGANIZATION, the organizations whose members receive
+            this gemit.
         related_era:
           type: integer
           nullable: true
@@ -30113,12 +30160,37 @@ components:
       - body
     GemitCreateRequest:
       type: object
-      description: Input serializer for staff POST /api/narrative/gemits/.
+      description: |-
+        Input serializer for staff POST /api/narrative/gemits/ (#1450).
+
+        ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
+        ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
       properties:
         body:
           type: string
           minLength: 1
           description: Broadcast text. Must be at least one non-whitespace character.
+        reach:
+          allOf:
+          - $ref: '#/components/schemas/ReachF5cEnum'
+          description: |-
+            Audience scope: game-wide, or the members of the linked societies / orgs.
+
+            * `game_wide` - Game-wide
+            * `society` - Society
+            * `organization` - Organization
+        reach_societies:
+          type: array
+          items:
+            type: integer
+          description: When reach=SOCIETY, the societies whose members receive this
+            gemit.
+        reach_organizations:
+          type: array
+          items:
+            type: integer
+          description: When reach=ORGANIZATION, the organizations whose members receive
+            this gemit.
         related_era:
           type: integer
           nullable: true
@@ -38524,7 +38596,7 @@ components:
           description: The cantrip template this technique was created from, if any.
         reach:
           allOf:
-          - $ref: '#/components/schemas/ReachEnum'
+          - $ref: '#/components/schemas/TechniqueReachEnum'
           description: |-
             Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
 
@@ -40441,16 +40513,16 @@ components:
         * `0` - Neutral/No Opinion
         * `1` - Good
         * `2` - Excellent
-    ReachEnum:
+    ReachF5cEnum:
       enum:
-      - same
-      - adjacent
-      - any
+      - game_wide
+      - society
+      - organization
       type: string
       description: |-
-        * `same` - Same position
-        * `adjacent` - Adjacent position
-        * `any` - Anywhere in room
+        * `game_wide` - Game-wide
+        * `society` - Society
+        * `organization` - Organization
     ReferencedMilestoneTypeEnum:
       enum:
       - story_resolved
@@ -44482,7 +44554,7 @@ components:
             * `filtered_group` - Filtered Group
         reach:
           allOf:
-          - $ref: '#/components/schemas/ReachEnum'
+          - $ref: '#/components/schemas/TechniqueReachEnum'
           description: |-
             Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
 
@@ -44542,6 +44614,16 @@ components:
       - initiator_persona
       - scene
       - technique_id
+    TechniqueReachEnum:
+      enum:
+      - same
+      - adjacent
+      - any
+      type: string
+      description: |-
+        * `same` - Same position
+        * `adjacent` - Adjacent position
+        * `any` - Anywhere in room
     TechniqueRequest:
       type: object
       description: Serializer for Technique records with intensity and control stats.
@@ -44595,7 +44677,7 @@ components:
           description: The cantrip template this technique was created from, if any.
         reach:
           allOf:
-          - $ref: '#/components/schemas/ReachEnum'
+          - $ref: '#/components/schemas/TechniqueReachEnum'
           description: |-
             Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
 
