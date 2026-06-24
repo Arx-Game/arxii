@@ -15,6 +15,9 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from commands.combat import CmdDeclareTechnique
 from commands.exceptions import CommandError
+from world.magic.models.techniques import ConditionTargetKind
+
+_DERIVE = "world.magic.services.targeting.derive_target_relationship"
 
 
 def _make_cmd(args):
@@ -42,19 +45,39 @@ class CmdDeclareTechniqueTests(TestCase):
         with self.assertRaises(CommandError):
             cmd.resolve_action_ref()
 
-    def test_combat_path_adds_focused_opponent_target_id(self) -> None:
-        """In a DECLARING combat round the target resolves to a CombatOpponent."""
+    def test_combat_path_hostile_technique_adds_focused_opponent_target_id(self) -> None:
+        """In combat, a hostile (ENEMY) technique resolves the target to a CombatOpponent."""
         cmd = _make_cmd("Firebolt at Mook effort=high")
         participant = MagicMock()
         with (
             patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_resolve_technique", return_value=MagicMock()),
             patch.object(cmd, "_combat_participant_or_none", return_value=participant),
             patch.object(cmd, "_resolve_opponent_target_id", return_value=7),
+            patch(_DERIVE, return_value=ConditionTargetKind.ENEMY),
         ):
             cmd.resolve_action_ref()
             kwargs = cmd.resolve_action_args()
         self.assertEqual(kwargs["effort_level"], "high")
         self.assertEqual(kwargs["focused_opponent_target_id"], 7)
+        self.assertNotIn("focused_ally_target_id", kwargs)
+        self.assertNotIn("target_persona_id", kwargs)
+
+    def test_combat_path_beneficial_technique_adds_focused_ally_target_id(self) -> None:
+        """In combat, a beneficial (ALLY) technique resolves the target to a CombatParticipant."""
+        cmd = _make_cmd("Mend at Aria")
+        participant = MagicMock()
+        with (
+            patch.object(cmd, "_resolve_technique_id", return_value=1),
+            patch.object(cmd, "_resolve_technique", return_value=MagicMock()),
+            patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch.object(cmd, "_resolve_ally_target_id", return_value=5),
+            patch(_DERIVE, return_value=ConditionTargetKind.ALLY),
+        ):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs["focused_ally_target_id"], 5)
+        self.assertNotIn("focused_opponent_target_id", kwargs)
         self.assertNotIn("target_persona_id", kwargs)
 
     def test_noncombat_path_adds_target_persona_id(self) -> None:
@@ -99,7 +122,9 @@ class CmdDeclareTechniqueTests(TestCase):
 
         with (
             patch.object(cmd, "_resolve_technique_id", return_value=99),
+            patch.object(cmd, "_resolve_technique", return_value=MagicMock()),
             patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch(_DERIVE, return_value=ConditionTargetKind.ENEMY),
             patch("world.combat.models.CombatOpponent") as MockOpponent,
         ):
             MockOpponent.objects.filter.return_value = [opp1, opp2]
