@@ -11,9 +11,11 @@ resolves) so that the combat read-path — ``_sum_active_flat_bonuses`` and
 ``CombatPull`` row during resolution.
 
 ``build_cast_pull_declaration`` is the single ID→declaration resolver for the web
-path: given a character sheet plus ``resonance_id`` / ``tier`` / ``thread_ids`` IDs
-(as sent by the frontend over JSON), it resolves ORM instances and builds a
-``CastPullDeclaration``.  The non-combat cast serializer
+path: given the caster's sheet PK plus ``resonance_id`` / ``tier`` / ``thread_ids``
+IDs (as sent by the frontend over JSON), it resolves ORM instances and builds a
+``CastPullDeclaration``.  Accepting an ``int`` instead of a ``CharacterSheet``
+instance avoids a superfluous SELECT when the caller holds only a cached FK id
+(e.g. ``persona.character_sheet_id``).  The non-combat cast serializer
 (``world.scenes.action_serializers._validate_cast_pull``) delegates its core
 resolution to this helper so the logic lives in exactly one place.
 
@@ -36,13 +38,13 @@ if TYPE_CHECKING:
 
 
 def build_cast_pull_declaration(
-    sheet: CharacterSheet,
+    owner_sheet_id: int,
     *,
     resonance_id: int,
     tier: int,
     thread_ids: list[int],
 ) -> CastPullDeclaration:
-    """Resolve raw pull IDs into a ``CastPullDeclaration`` scoped to *sheet*.
+    """Resolve raw pull IDs into a ``CastPullDeclaration`` scoped to *owner_sheet_id*.
 
     This is the single ID→declaration resolver shared between the web combat
     dispatch path (which sends JSON IDs) and the non-combat cast serializer
@@ -50,7 +52,10 @@ def build_cast_pull_declaration(
     pre-built ``CastPullDeclaration`` objects and does not use this function.
 
     Args:
-        sheet: The caster's ``CharacterSheet``; threads must be owned by this sheet.
+        owner_sheet_id: PK of the caster's ``CharacterSheet``; threads must be owned
+            by this sheet.  Accepting an ``int`` instead of the ORM instance avoids an
+            extra SELECT when the caller already holds the cached FK id (e.g.
+            ``persona.character_sheet_id`` or ``sheet.pk`` on a loaded instance).
         resonance_id: PK of the ``Resonance`` the pull is declared on.
         tier: Pull tier (1–3).
         thread_ids: Ordered list of ``Thread`` PKs to include in the pull.
@@ -80,7 +85,7 @@ def build_cast_pull_declaration(
     threads = list(
         Thread.objects.filter(
             pk__in=thread_ids,
-            owner_id=sheet.pk,
+            owner_id=owner_sheet_id,
             resonance_id=resonance.pk,
             retired_at__isnull=True,
         )
@@ -148,7 +153,7 @@ def resolve_pull_from_kwargs(
     thread_ids = kwargs.get("pull_thread_ids")
     if resonance_id is not None and tier is not None and thread_ids is not None:
         return build_cast_pull_declaration(
-            sheet,
+            sheet.pk,
             resonance_id=int(resonance_id),
             tier=int(tier),
             thread_ids=[int(t) for t in thread_ids],

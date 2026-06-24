@@ -176,7 +176,7 @@ class BuildCastPullDeclarationTests(TestCase):
 
         data = _make_web_pull_setup()
         decl = build_cast_pull_declaration(
-            data["sheet"],
+            data["sheet"].pk,
             resonance_id=data["resonance"].pk,
             tier=1,
             thread_ids=[data["thread"].pk],
@@ -194,7 +194,7 @@ class BuildCastPullDeclarationTests(TestCase):
         data = _make_web_pull_setup()
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
-                data["sheet"],
+                data["sheet"].pk,
                 resonance_id=999999,
                 tier=1,
                 thread_ids=[data["thread"].pk],
@@ -209,7 +209,7 @@ class BuildCastPullDeclarationTests(TestCase):
         other_sheet = CharacterSheetFactory()
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
-                other_sheet,
+                other_sheet.pk,
                 resonance_id=data["resonance"].pk,
                 tier=1,
                 thread_ids=[data["thread"].pk],
@@ -230,7 +230,7 @@ class BuildCastPullDeclarationTests(TestCase):
         thread.save()
         with self.assertRaises(InvalidImbueAmount):
             build_cast_pull_declaration(
-                data["sheet"],
+                data["sheet"].pk,
                 resonance_id=data["resonance"].pk,
                 tier=1,
                 thread_ids=[thread.pk],

@@ -187,7 +187,7 @@ def _validate_cast_pull(attrs: dict) -> dict:
 
     try:
         declaration = build_cast_pull_declaration(
-            persona.character_sheet,
+            persona.character_sheet_id,
             resonance_id=pull["resonance_id"],
             tier=pull["tier"],
             thread_ids=pull["thread_ids"],
