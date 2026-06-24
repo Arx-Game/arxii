@@ -758,14 +758,14 @@ export function YourTurn({
               data-testid="open-pull-dialog-btn"
               className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {selectedPull !== null ? 'Change Pull' : 'Pull Threads'}
+              {selectedPull === null ? 'Pull Threads' : 'Change Pull'}
             </button>
           </div>
         </div>
         {selectedPull !== null && (
           <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
             Tier {selectedPull.tier} pull — {selectedPull.thread_ids.length} thread
-            {selectedPull.thread_ids.length !== 1 ? 's' : ''} selected
+            {selectedPull.thread_ids.length === 1 ? '' : 's'} selected
           </p>
         )}
       </div>

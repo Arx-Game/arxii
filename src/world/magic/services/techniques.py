@@ -699,7 +699,55 @@ def _emit_cast_events(  # noqa: PLR0913 - frozen event payload fields
         )
 
 
-def use_technique(  # noqa: PLR0913, C901, PLR0915  — orchestrator; multiple small responsibilities
+def _charge_cast_pull(
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    cast_pull: CastPullDeclaration,
+    effective_power: int,
+) -> tuple[int, int]:
+    """Charge a non-combat cast pull and return updated ``(pull_flat_bonus, effective_power)``.
+
+    Spends the resonance, iterates resolved effects, accumulates FLAT_BONUS into
+    *pull_flat_bonus* (forwarded to ``resolve_fn`` as ``extra_modifiers``), and
+    adds INTENSITY_BUMP to *effective_power* in-place.
+
+    Returns the 2-tuple ``(pull_flat_bonus, effective_power)`` so callers don't
+    mutate upvalue locals.  Extracting this block reduces ``use_technique``'s
+    cognitive complexity (C901).
+    """
+    from world.magic.constants import EffectKind  # noqa: PLC0415
+    from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    pull_flat_bonus = 0
+    pull_sheet = _get_character_sheet(character)
+    if pull_sheet is None:
+        return pull_flat_bonus, effective_power
+
+    pull_result = spend_resonance_for_pull(
+        pull_sheet,
+        cast_pull.resonance,
+        cast_pull.tier,
+        list(cast_pull.threads),
+        PullActionContext(
+            combat_encounter=None,
+            involved_techniques=(technique.pk,),
+        ),
+    )
+    pull_intensity_bonus = 0
+    for eff in pull_result.resolved_effects:
+        if eff.inactive or not eff.scaled_value:
+            continue
+        if eff.kind == EffectKind.FLAT_BONUS:
+            pull_flat_bonus += eff.scaled_value
+        elif eff.kind == EffectKind.INTENSITY_BUMP:
+            pull_intensity_bonus += eff.scaled_value
+    effective_power += pull_intensity_bonus
+    return pull_flat_bonus, effective_power
+
+
+def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibilities
     *,
     character: ObjectDB,
     technique: Technique,
@@ -823,31 +871,12 @@ def use_technique(  # noqa: PLR0913, C901, PLR0915  — orchestrator; multiple s
     # Combat pulls are committed separately.
     pull_flat_bonus = 0
     if cast_pull is not None:
-        from world.magic.constants import EffectKind  # noqa: PLC0415
-        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
-        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
-
-        pull_sheet = _get_character_sheet(character)
-        if pull_sheet is not None:
-            pull_result = spend_resonance_for_pull(
-                pull_sheet,
-                cast_pull.resonance,
-                cast_pull.tier,
-                list(cast_pull.threads),
-                PullActionContext(
-                    combat_encounter=None,
-                    involved_techniques=(technique.pk,),
-                ),
-            )
-            pull_intensity_bonus = 0
-            for eff in pull_result.resolved_effects:
-                if eff.inactive or not eff.scaled_value:
-                    continue
-                if eff.kind == EffectKind.FLAT_BONUS:
-                    pull_flat_bonus += eff.scaled_value
-                elif eff.kind == EffectKind.INTENSITY_BUMP:
-                    pull_intensity_bonus += eff.scaled_value
-            effective_power += pull_intensity_bonus
+        pull_flat_bonus, effective_power = _charge_cast_pull(
+            character=character,
+            technique=technique,
+            cast_pull=cast_pull,
+            effective_power=effective_power,
+        )
 
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)

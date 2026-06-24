@@ -60,6 +60,11 @@ _EFFORT_PREFIX = "effort="
 _SECONDARY_KEYWORD = "secondary"
 # Keyword prefix used to parse strain=<n> from clash command args.
 _STRAIN_PREFIX = "strain="
+# Usage hint for the clash command (shared across three error sites in _parse_args).
+_CLASH_USAGE = (
+    "Usage: clash <opponent> with <technique> [strain=<n>]"
+    " [pull=<thread> resonance=<name> [tier=N]]"
+)
 
 # Mapping from ActionCategory to the corresponding passive CombatActionSlot.
 _SECONDARY_SLOT: dict[str, str] = {
@@ -139,7 +144,7 @@ class _CombatCommandMixin:
 
         lower = tok.lower()
         return any(lower.startswith(k + "=") for k in pull_keys) or bool(
-            re.match(r"(?i)^(effort=|secondary$)", tok)
+            re.match(r"(?i)^(?:effort=|secondary$)", tok)
         )
 
     @staticmethod
@@ -700,11 +705,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            msg = (
-                "Usage: clash <opponent> with <technique> [strain=<n>]"
-                " [pull=<thread> resonance=<name> [tier=N]]"
-            )
-            raise CommandError(msg)
+            raise CommandError(_CLASH_USAGE)
 
         # Strip pull=<threads>, resonance=<name>, tier=<1-3> FIRST — order-independent.
         # _extract_pull_keywords also validates tier range and pull+resonance pairing.
@@ -724,21 +725,13 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
         # Split on " with " (case-insensitive) to separate opponent from technique.
         with_index = raw.lower().find(" with ")
         if with_index == -1:
-            msg = (
-                "Usage: clash <opponent> with <technique> [strain=<n>]"
-                " [pull=<thread> resonance=<name> [tier=N]]"
-            )
-            raise CommandError(msg)
+            raise CommandError(_CLASH_USAGE)
 
         self._opponent_name = raw[:with_index].strip()
         self._technique_name = raw[with_index + len(" with ") :].strip()
 
         if not self._opponent_name or not self._technique_name:
-            msg = (
-                "Usage: clash <opponent> with <technique> [strain=<n>]"
-                " [pull=<thread> resonance=<name> [tier=N]]"
-            )
-            raise CommandError(msg)
+            raise CommandError(_CLASH_USAGE)
 
         self._strain = strain
         self._pull_thread_str = pull_thread_str
