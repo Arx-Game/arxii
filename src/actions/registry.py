@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from actions.base import Action
 from actions.definitions.cast import CastTechniqueAction
+from actions.definitions.combat_maneuvers import FleeAction
 from actions.definitions.communication import (
     MutterAction,
     PemitAction,
@@ -111,6 +112,7 @@ _ALL_ACTIONS: list[Action] = [
     DisarmTrapAction(),
     PassRoundAction(),
     ForceResolveRoundAction(),
+    FleeAction(),
     ChallengeAction(),
     AcceptChallengeAction(),
     DeclineChallengeAction(),

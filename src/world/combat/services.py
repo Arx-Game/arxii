@@ -1050,6 +1050,17 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     return action
 
 
+def toggle_action_ready(action: CombatRoundAction) -> CombatRoundAction:
+    """Flip the ready flag on a round action and persist it.
+
+    Extracted from the inline toggle that lived in the web ``ready`` endpoint so
+    both the telnet/web shared ``ReadyAction`` and any caller use one code path.
+    """
+    action.is_ready = not action.is_ready
+    action.save(update_fields=["is_ready"])
+    return action
+
+
 def declare_cover(
     participant: CombatParticipant,
     ally: CombatParticipant,
