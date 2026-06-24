@@ -21,6 +21,7 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
+from commands.combat_maneuvers import CmdCombat
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -177,6 +178,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDeclareTechnique,
             # Clash contribution (#1451)
             CmdClashCommit,
+            # Shared combat verbs: combat <subverb> (#1453, #1452)
+            CmdCombat,
         )
         for command_cls in command_classes:
             self.add(command_cls())
