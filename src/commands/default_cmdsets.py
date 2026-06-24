@@ -69,6 +69,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.gossip import CmdGossip
 from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.weave import CmdWeaveThread
@@ -167,6 +168,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSineater,
             # #1429 — the telnet face of the secret-victim grievance prompt.
             CmdGrievance,
+            # #1450 — the pull/browse face of the public-reaction news feed.
+            CmdGossip,
             # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
         )
