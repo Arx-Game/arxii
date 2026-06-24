@@ -1,0 +1,125 @@
+"""E2E: combat verbs through the shared dispatch seam (#1453, #1452).
+
+Each test dispatches a verb's REGISTRY ``ActionRef`` via ``dispatch_player_action``
+— the exact path both telnet (``CmdCombat``) and the web viewset use — and asserts
+real encounter state, proving telnet/web convergence end to end.
+"""
+
+from __future__ import annotations
+
+from django.test import TestCase
+
+from actions.constants import ActionBackend
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef
+from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import (
+    CombatManeuver,
+    EncounterStatus,
+    EncounterType,
+    ParticipantStatus,
+)
+from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.models import CombatParticipant, CombatRoundAction
+from world.vitals.models import CharacterVitals
+
+
+def _ref(registry_key: str) -> ActionRef:
+    return ActionRef(backend=ActionBackend.REGISTRY, registry_key=registry_key)
+
+
+class CombatManeuverDispatchE2E(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.char = CharacterFactory(db_key="e2echar")
+        cls.sheet = CharacterSheetFactory(character=cls.char)
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            character_sheet=cls.sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=cls.sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
+
+    def _round_action(self) -> CombatRoundAction:
+        return CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+
+    def test_flee_then_ready_toggle(self) -> None:
+        result = dispatch_player_action(self.char, _ref("combat_flee"), {})
+        self.assertTrue(result.detail.success, result.detail.message)
+        action = self._round_action()
+        self.assertEqual(action.maneuver, CombatManeuver.FLEE)
+        self.assertTrue(action.is_ready)  # flee auto-readies
+        dispatch_player_action(self.char, _ref("combat_ready"), {})
+        action.refresh_from_db()
+        self.assertFalse(action.is_ready)
+
+    def test_cover_targets_ally(self) -> None:
+        ally = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=CharacterSheetFactory(character=CharacterFactory(db_key="e2eally")),
+            status=ParticipantStatus.ACTIVE,
+        )
+        result = dispatch_player_action(
+            self.char, _ref("combat_cover"), {"ally_participant_id": ally.pk}
+        )
+        self.assertTrue(result.detail.success, result.detail.message)
+        action = self._round_action()
+        self.assertEqual(action.maneuver, CombatManeuver.COVER)
+        self.assertEqual(action.focused_ally_target_id, ally.pk)
+
+    def test_interpose_no_target(self) -> None:
+        result = dispatch_player_action(self.char, _ref("combat_interpose"), {})
+        self.assertTrue(result.detail.success, result.detail.message)
+        action = self._round_action()
+        self.assertEqual(action.maneuver, CombatManeuver.INTERPOSE)
+        self.assertIsNone(action.focused_ally_target_id)
+
+
+class JoinLeaveDispatchE2E(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.encounter = CombatEncounterFactory(
+            encounter_type=EncounterType.OPEN_ENCOUNTER,
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            round_number=1,
+        )
+        # An anchor participant so the leave does not abandon the encounter.
+        CombatParticipantFactory(
+            encounter=cls.encounter,
+            character_sheet=CharacterSheetFactory(character=CharacterFactory(db_key="anchore2e")),
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.joiner = CharacterFactory(db_key="joindispatch")
+        cls.joiner_sheet = CharacterSheetFactory(character=cls.joiner)
+
+    def test_join_then_leave(self) -> None:
+        joined = dispatch_player_action(
+            self.joiner,
+            _ref("combat_join"),
+            {"encounter_id": self.encounter.pk, "character_sheet_id": self.joiner_sheet.pk},
+        )
+        self.assertTrue(joined.detail.success, joined.detail.message)
+        self.assertTrue(
+            CombatParticipant.objects.filter(
+                encounter=self.encounter,
+                character_sheet=self.joiner_sheet,
+                status=ParticipantStatus.ACTIVE,
+            ).exists()
+        )
+        left = dispatch_player_action(self.joiner, _ref("combat_leave"), {})
+        self.assertTrue(left.detail.success, left.detail.message)
+        self.assertFalse(
+            CombatParticipant.objects.filter(
+                encounter=self.encounter,
+                character_sheet=self.joiner_sheet,
+                status=ParticipantStatus.ACTIVE,
+            ).exists()
+        )
