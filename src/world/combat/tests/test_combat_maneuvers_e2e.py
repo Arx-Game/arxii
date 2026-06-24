@@ -123,3 +123,16 @@ class JoinLeaveDispatchE2E(TestCase):
                 status=ParticipantStatus.ACTIVE,
             ).exists()
         )
+
+    def test_join_resolves_room_encounter_without_id(self) -> None:
+        """Telnet path: no ids — encounter resolves from the actor's room, sheet from the actor."""
+        self.joiner.location = self.encounter.room
+        result = dispatch_player_action(self.joiner, _ref("combat_join"), {})
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertTrue(
+            CombatParticipant.objects.filter(
+                encounter=self.encounter,
+                character_sheet=self.joiner_sheet,
+                status=ParticipantStatus.ACTIVE,
+            ).exists()
+        )
