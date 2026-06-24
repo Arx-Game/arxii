@@ -175,12 +175,16 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
-        # Strip off standalone "secondary" keyword (case-insensitive, whole-word
-        # suffix). Must come after effort= stripping so the remaining raw is clean.
+        # Strip a standalone trailing "secondary" keyword (case-insensitive, whole
+        # word). Plain string ops avoid a backtracking-prone regex (ReDoS). Must come
+        # after effort= stripping so the remaining raw is clean.
         secondary = False
         stripped = raw.rstrip()
-        if re.search(r"(?i)\bsecondary$", stripped):
-            raw = re.sub(r"(?i)\s+secondary$", "", stripped).strip()
+        kw = _SECONDARY_KEYWORD
+        if stripped.lower().endswith(kw) and (
+            len(stripped) == len(kw) or stripped[-len(kw) - 1].isspace()
+        ):
+            raw = stripped[: -len(kw)].rstrip()
             secondary = True
 
         # Split on the first " at " (case-insensitive) to separate technique from
