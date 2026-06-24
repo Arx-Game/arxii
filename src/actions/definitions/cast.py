@@ -147,13 +147,34 @@ class CastTechniqueAction(Action):
         technique_id: int | None = None,
         **kwargs: Any,
     ) -> tuple[Any, dict[str, Any]] | None:
-        """Declare into a COMBAT round when inside a CombatRoundContext, else None."""
+        """Declare into a COMBAT round when inside a CombatRoundContext, else None.
+
+        When a ``cast_pull`` (a ``CastPullDeclaration``) is present and the context is
+        a ``CombatRoundContext``, the pull is committed immediately at declaration time
+        via ``spend_resonance_for_pull`` so the combat read-path
+        (``_sum_active_flat_bonuses`` / ``_sum_intensity_bump_pulls``) can apply the
+        bonus during round resolution.
+
+        The one-pull-per-round cap is enforced by the ``(participant, round_number)``
+        unique constraint on ``CombatPull``.  A duplicate attempt raises
+        ``ActionDispatchError(PULL_ALREADY_COMMITTED)`` so the dispatcher surfaces a
+        clean "already pulled" message rather than propagating an ``IntegrityError``.
+
+        ``cast_pull`` is intentionally NOT forwarded into ``decl_kwargs`` — combat pulls
+        come from the ``CombatPull`` read-path, not from the declaration kwargs, to avoid
+        double-charging.
+        """
         from actions.constants import ActionBackend, CombatActionSlot  # noqa: PLC0415
         from actions.types import ActionRef, PlayerAction  # noqa: PLC0415
         from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
         if not isinstance(ctx, CombatRoundContext) or technique_id is None:
             return None
+
+        # Commit an optional thread pull at declaration time.
+        cast_pull: CastPullDeclaration | None = kwargs.get("cast_pull")
+        if cast_pull is not None:
+            self._commit_combat_pull(cast_pull, ctx, technique_id)
 
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
@@ -174,4 +195,59 @@ class CastTechniqueAction(Action):
         focused_ally_id = kwargs.get("focused_ally_target_id")
         if focused_ally_id is not None:
             decl_kwargs["focused_ally_target_id"] = focused_ally_id
+        # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
+        # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _commit_combat_pull(
+        cast_pull: CastPullDeclaration,
+        ctx: Any,
+        technique_id: int,
+    ) -> None:
+        """Commit a thread pull as a ``CombatPull`` row at declaration time.
+
+        Resolves the caster's ``CharacterSheet``, ``CombatParticipant``, and
+        ``CombatEncounter`` from ``ctx`` (a ``CombatRoundContext``), then calls
+        ``spend_resonance_for_pull`` with a combat ``PullActionContext`` so:
+
+        1. A ``CombatPull`` row is persisted (unique per ``(participant, round_number)``).
+        2. Resonance and anima are debited atomically.
+        3. ``CombatPullResolvedEffect`` snapshots are written for the read-path.
+
+        Raises:
+            ActionDispatchError(PULL_ALREADY_COMMITTED): When the unique constraint fires
+                (duplicate pull in the same round).
+            ActionDispatchError(PULL_INVALID): When ``spend_resonance_for_pull`` raises a
+                ``MagicError`` (invalid pull declaration — e.g. thread not in action,
+                insufficient balance).
+        """
+        from django.db import IntegrityError  # noqa: PLC0415
+
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+        from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+        participant = ctx.participant
+        encounter = participant.encounter
+        sheet = participant.character_sheet
+
+        action_context = PullActionContext(
+            combat_encounter=encounter,
+            participant=participant,
+            involved_techniques=(technique_id,),
+        )
+
+        try:
+            spend_resonance_for_pull(
+                character_sheet=sheet,
+                resonance=cast_pull.resonance,
+                tier=cast_pull.tier,
+                threads=list(cast_pull.threads),
+                action_context=action_context,
+            )
+        except IntegrityError as exc:
+            raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
+        except MagicError as exc:
+            raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
