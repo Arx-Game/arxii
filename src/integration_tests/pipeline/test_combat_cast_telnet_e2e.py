@@ -211,3 +211,61 @@ class CombatCastTelnetE2ETests(TestCase):
             self.opponent.max_health,
             "opponent health should have decreased after resolve_round",
         )
+
+    def test_round_declaration_honors_action_slot_kwarg(self) -> None:
+        """round_declaration uses action_slot kwarg to select the physical passive slot.
+
+        Drives CastTechniqueAction.round_declaration() with action_slot="passive-physical"
+        and a PHYSICAL technique, then asserts:
+        - The recorded CombatRoundAction row has physical_passive=technique.
+        - focused_action is null (passive slots never touch the focused slot).
+        - action_slot is NOT in decl_kwargs (it belongs only on the ActionRef).
+        """
+        from actions.constants import CombatActionSlot
+        from actions.definitions.cast import CastTechniqueAction
+        from world.combat.round_context import CombatRoundContext
+
+        action = CastTechniqueAction()
+        ctx = CombatRoundContext(self.participant)
+
+        # round_declaration with passive-physical slot
+        result = action.round_declaration(
+            ctx,
+            technique_id=self.technique.pk,
+            action_slot=CombatActionSlot.PASSIVE_PHYSICAL,
+        )
+
+        # Must return a (PlayerAction, decl_kwargs) tuple — not None
+        self.assertIsNotNone(result, "expected a declaration tuple from round_declaration")
+        player_action, decl_kwargs = result
+
+        # action_slot must NOT be in decl_kwargs — it belongs on the ref only
+        self.assertNotIn(
+            "action_slot",
+            decl_kwargs,
+            "action_slot must not be forwarded into decl_kwargs",
+        )
+
+        # The ActionRef must carry the correct slot
+        self.assertEqual(
+            player_action.ref.action_slot,
+            CombatActionSlot.PASSIVE_PHYSICAL,
+            "ActionRef.action_slot should be PASSIVE_PHYSICAL",
+        )
+
+        # Record the declaration and verify the DB row
+        ctx.record_declaration(self.sheet, player_action, decl_kwargs)
+
+        row = CombatRoundAction.objects.get(
+            participant=self.participant,
+            round_number=1,
+        )
+        self.assertEqual(
+            row.physical_passive_id,
+            self.technique.pk,
+            "physical_passive should be the declared technique",
+        )
+        self.assertIsNone(
+            row.focused_action_id,
+            "focused_action should be null when declaring into a passive slot",
+        )

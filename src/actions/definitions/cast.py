@@ -132,7 +132,7 @@ class CastTechniqueAction(Action):
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             technique_id=technique_id,
-            action_slot=CombatActionSlot.FOCUSED,
+            action_slot=kwargs.get("action_slot", CombatActionSlot.FOCUSED),
         )
         pa = PlayerAction(
             backend=ActionBackend.COMBAT,
