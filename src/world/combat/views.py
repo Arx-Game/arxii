@@ -11,6 +11,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -19,7 +20,10 @@ from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
+from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef, ActionResult, DispatchResult
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     ClashStatus,
@@ -64,17 +68,10 @@ from world.combat.services import (
     add_opponent,
     add_participant,
     begin_declaration_phase,
-    declare_cover,
-    declare_flee,
-    declare_interpose,
     end_encounter,
-    join_encounter,
-    leave_encounter,
     remove_participant,
     resolve_round,
-    revert_combo_upgrade,
     run_combo_detection,
-    upgrade_action_to_combo,
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
@@ -505,8 +502,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NO_ACTION},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        current_action.is_ready = not current_action.is_ready
-        current_action.save(update_fields=["is_ready"])
+        self._dispatch_combat_action(participant.character_sheet.character, "combat_ready")
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.GET])
@@ -557,22 +553,23 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer = UpgradeComboSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         combo_id = serializer.validated_data["combo_id"]
-        combo = get_object_or_404(ComboDefinition, pk=combo_id)
+        get_object_or_404(ComboDefinition, pk=combo_id)
         current_action = self._current_round_action(participant, encounter)
         if not current_action:
             return Response(
                 {"detail": _ERR_NO_ACTION},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        try:
-            upgrade_action_to_combo(current_action, combo)
-        except ValueError:
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_combo",
+            {"combo_id": combo_id},
+        )
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_COMBO_UPGRADE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        current_action.is_ready = False
-        current_action.save(update_fields=["is_ready"])
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -591,9 +588,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NO_ACTION},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        revert_combo_upgrade(current_action)
-        current_action.is_ready = False
-        current_action.save(update_fields=["is_ready"])
+        self._dispatch_combat_action(participant.character_sheet.character, "combat_revert")
         return self._serialize_encounter(request, encounter)
 
     # --- Participation ---
@@ -623,15 +618,24 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         sheet = get_object_or_404(CharacterSheet, pk=sheet_pk)
-        try:
-            new_participant = join_encounter(encounter, sheet)
-        except ValueError:
+        result = self._dispatch_combat_action(
+            sheet.character,
+            "combat_join",
+            {"encounter_id": encounter.pk, "character_sheet_id": sheet.pk},
+        )
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_ALREADY_JOINED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Update cached participant list in-place
-        encounter.participants_cached.append(new_participant)
+        # Refresh the cached participant list with the newly-created row.
+        new_participant = CombatParticipant.objects.filter(
+            encounter=encounter,
+            character_sheet=sheet,
+            status=ParticipantStatus.ACTIVE,
+        ).first()
+        if new_participant is not None:
+            encounter.participants_cached.append(new_participant)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -648,9 +652,8 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        try:
-            declare_flee(participant)
-        except ValueError:
+        result = self._dispatch_combat_action(participant.character_sheet.character, "combat_flee")
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -671,9 +674,8 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        try:
-            leave_encounter(participant)
-        except ValueError:
+        result = self._dispatch_combat_action(participant.character_sheet.character, "combat_leave")
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_INVALID_STATUS},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -703,9 +705,12 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         ally_id = serializer.validated_data["ally_participant_id"]
         ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
-        try:
-            declare_cover(participant, ally)
-        except ValueError:
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_cover",
+            {"ally_participant_id": ally.pk},
+        )
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -736,9 +741,12 @@ class CombatEncounterViewSet(ModelViewSet):
             if ally_id is not None
             else None
         )
-        try:
-            declare_interpose(participant, ally)
-        except ValueError:
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_interpose",
+            {"ally_participant_id": ally.pk if ally is not None else None},
+        )
+        if not self._action_succeeded(result):
             return Response(
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -833,3 +841,22 @@ class CombatEncounterViewSet(ModelViewSet):
             ),
             None,
         )
+
+    def _dispatch_combat_action(
+        self,
+        actor: ObjectDB,
+        registry_key: str,
+        action_kwargs: dict | None = None,
+    ) -> DispatchResult:
+        """Run a registry combat action through the shared ``dispatch_player_action`` seam.
+
+        The web and telnet now converge on the same Action; the viewset keeps its
+        request-scoped ownership/participant checks and serialized-encounter contract.
+        """
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key=registry_key)
+        return dispatch_player_action(actor, ref, action_kwargs or {})
+
+    @staticmethod
+    def _action_succeeded(result: DispatchResult) -> bool:
+        """True when a REGISTRY dispatch ran its action and it reported success."""
+        return isinstance(result.detail, ActionResult) and result.detail.success
