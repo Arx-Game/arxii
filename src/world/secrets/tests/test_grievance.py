@@ -62,6 +62,23 @@ class RegisterSecretGrievanceServiceTests(TestCase):
                 roster_entry=self.entry, secret=self.secret, option=self.option
             )
 
+    def test_grieving_is_one_shot_per_secret(self) -> None:
+        from world.secrets.models import SecretGrievance
+
+        grant_secret_knowledge(roster_entry=self.entry, secret=self.secret)
+        register_secret_grievance(roster_entry=self.entry, secret=self.secret, option=self.option)
+        # A second attempt is rejected — no stacking grudge swings.
+        with self.assertRaises(SecretError):
+            register_secret_grievance(
+                roster_entry=self.entry, secret=self.secret, option=self.option
+            )
+        assert (
+            SecretGrievance.objects.filter(
+                secret=self.secret, victim_sheet=self.entry.character_sheet
+            ).count()
+            == 1
+        )
+
 
 class SecretGrievanceAPITests(TestCase):
     def setUp(self) -> None:

@@ -67,7 +67,7 @@ class CmdGrievance(ArxCommand):
             self.msg(str(exc))
 
     def _grievable_secrets(self, entry: RosterEntry) -> QuerySet[Secret]:
-        """Secrets the caller is an entitled victim of: a SecretVictim *and* a knower."""
+        """Secrets the caller may still answer: a SecretVictim + a knower, not yet grieved."""
         from world.secrets.models import Secret  # noqa: PLC0415
 
         return (
@@ -75,6 +75,7 @@ class CmdGrievance(ArxCommand):
                 victims__persona__character_sheet=entry.character_sheet,
                 known_by__roster_entry=entry,
             )
+            .exclude(grievances__victim_sheet=entry.character_sheet)
             .distinct()
             .order_by("-created_date")
         )

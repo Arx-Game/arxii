@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.db.models import Exists, OuterRef
+from django.db.models import BooleanField, Exists, ExpressionWrapper, OuterRef
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.generics import ListAPIView
@@ -55,18 +55,24 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         viewer = self._viewer_entry()
         if viewer is None:
             return SecretKnowledge.objects.none()
-        # Shared with the telnet +secrets command (`known_secrets_for`); the `subject` FilterSet
-        # narrows to one tab. #1429 — annotate whether the viewer is a wronged party (one Exists
-        # subquery, no N+1) so the tab can show a "Respond" affordance only where one's available.
-        from world.secrets.models import SecretVictim  # noqa: PLC0415
+        # Shared with the telnet sheet/secret section (`known_secrets_for`); the `subject` FilterSet
+        # narrows to one tab. #1429 — `can_grieve`: the viewer is a wronged party who hasn't yet
+        # answered this secret (two Exists subqueries, no N+1), so the "Respond" prompt shows once
+        # and disappears after they grieve.
+        from world.secrets.models import SecretGrievance, SecretVictim  # noqa: PLC0415
 
-        return known_secrets_for(viewer).annotate(
-            can_grieve=Exists(
-                SecretVictim.objects.filter(
-                    secret=OuterRef("secret"),
-                    persona__character_sheet=viewer.character_sheet,
-                )
+        is_victim = Exists(
+            SecretVictim.objects.filter(
+                secret=OuterRef("secret"), persona__character_sheet=viewer.character_sheet
             )
+        )
+        already_grieved = Exists(
+            SecretGrievance.objects.filter(
+                secret=OuterRef("secret"), victim_sheet=viewer.character_sheet
+            )
+        )
+        return known_secrets_for(viewer).annotate(
+            can_grieve=ExpressionWrapper(is_victim & ~already_grieved, output_field=BooleanField())
         )
 
     def _viewer_entry(self) -> RosterEntry | None:
