@@ -9646,6 +9646,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/news/feed/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The active character's public news feed — deeds + scandals its societies are aware of. */
+    get: operations['news_feed_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/npc-services/cooldowns/': {
     parameters: {
       query?: never;
@@ -22348,6 +22365,20 @@ export interface components {
       /** @description Possessive pronoun (e.g., 'his') */
       possessive: string;
     };
+    /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
+    PublicFeedItem: {
+      kind: components['schemas']['PublicFeedItemKindEnum'];
+      headline: string;
+      subject: string;
+      /** Format: date-time */
+      occurred_at: string;
+    };
+    /**
+     * @description * `deed` - Deed
+     *     * `scandal` - Scandal
+     * @enum {string}
+     */
+    PublicFeedItemKindEnum: 'deed' | 'scandal';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull commit.
      *
@@ -38570,6 +38601,28 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  news_feed_list: {
+    parameters: {
+      query: {
+        /** @description RosterEntry pk of the active viewing character (the caller's own). */
+        viewer: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublicFeedItem'][];
+        };
       };
     };
   };
