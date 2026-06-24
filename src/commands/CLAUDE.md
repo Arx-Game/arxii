@@ -108,6 +108,15 @@ actions, backends, and service functions.
     which calls `declare_clash_contribution` (writes a `ClashContributionDeclaration`
     consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
     extra anima beyond the technique's base cost (default 0).
+- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452) — the shared-verb
+  namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
+  `interpose [ally]` / `join` / `leave` / `ready` / `combo <name>` / `revert` / `yield`)
+  to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
+  seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub (mirrors
+  `CmdSheet`). Verbs are namespaced — not bare top-level keys — to avoid exit/channel/alias
+  collisions (mirrors `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
+  combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
+  the existing `YieldAction`.
 - **`pull.py`**: `CmdPull` (`pull`) — resonance pull command with optional `preview`
   mode; parses `pull [preview] resonance=<name> tier=<1-3> thread=<name|id>[,...]
   [trait=<name>] [technique=<name>]`. Preview mode returns cost estimate without

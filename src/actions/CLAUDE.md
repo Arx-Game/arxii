@@ -32,7 +32,14 @@ They do not use the command system, dispatchers, or handlers.
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
   `CmdRitual` and the web `RitualPerformView`, #1331;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
-  seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below)
+  seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
+  `combat_maneuvers.py` (#1453/#1452) — the non-cast/non-clash combat verbs as REGISTRY
+  actions: `FleeAction`/`CoverAction`/`InterposeAction`/`ReadyAction`/`UpgradeComboAction`/
+  `RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction` (keys prefixed `combat_`).
+  Each `execute()` resolves the actor's active `CombatParticipant`/encounter and calls the
+  existing combat service; shared by telnet `CmdCombat` (`combat <subverb>`) and the web
+  `CombatEncounterViewSet`. `yield` is not here — `YieldAction` (`duels.py`) is reused. The one
+  new service is `toggle_action_ready`, extracted from the inline web `ready` toggle)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
