@@ -45,7 +45,7 @@ older path, it's a **frontend-follows** note, listed but never counted as a bloc
 | **Cast a technique** (in or out of a scene) | **Yes** | `test_noncombat_cast_telnet_e2e.py`, `test_combat_cast_telnet_e2e.py` | — | Web cast uses an older path (`SceneActionRequestViewSet.cast` → `request_technique_cast` directly) instead of the shared scene-adaptive cast. Re-point afterward — already routed here by #1351's own follow-up and tracked in #1444. |
 | **Perform a ritual** (incl. multi-person sessions) | **Yes** | `test_ritual_telnet_e2e.py`, `test_ritual_session_telnet_e2e.py` | — | Web and backend already share the ritual path. |
 | **Weave → imbue → pull a thread** | **Mostly** | `test_weave_imbue_pull_journey_e2e.py`, `test_weave_telnet_e2e.py` | **Acquiring the unlock**: no backend command to accept the teaching offer that grants thread-weaving, so the journey can't be driven from the very start. | Web imbue uses an older path (`PerformRitualAction`) vs the backend's imbue finisher; same end result. Re-point afterward. |
-| **Fight a combat sequence** | **Partial** | `test_combat_cast_telnet_e2e.py` (declaring a technique only) | **The rest of a player's combat moves have no backend command**: commit to a clash, flee, take cover, interpose, join/leave, ready, combo up/down. A player can declare a technique but can't drive a full fight. **This is the biggest real gap.** | Web has these (encounter viewset); they're not yet drivable in the backend, so not yet testable end-to-end. |
+| **Fight a combat sequence** | **Partial** | `test_combat_cast_telnet_e2e.py`, `test_combat_clash_telnet_e2e.py` | **Declaring a technique (with effort / target / secondary slot) and committing to a clash (with strain) are now drivable** (#1330/#1451). The remaining player moves still have no backend command: flee, take cover, interpose, join/leave, ready, combo up/down (#1453). A player can declare + clash but can't yet drive a full fight. | Web has the rest (encounter viewset); not yet drivable in the backend, so not yet testable end-to-end. |
 | **Drive a social scene** | **Yes** | `test_consent_telnet_e2e.py`, `test_social_pipeline.py` | — | Say/pose and the targeted social actions (intimidate, accept/deny) share the same backend path web uses. |
 
 **Reading the combat row:** GM-only steps (start an encounter, resolve a round, add opponents)
@@ -77,10 +77,10 @@ backend services with no player command.
 
 **Real backend work — these unblock testable journeys:**
 
-1. **Combat player moves** — give a player backend commands for clash-commit, flee, cover,
-   interpose, join/leave, ready, combo up/down (over the existing combat services), so a full fight
-   is drivable and a combat journey test can exist. *Largest gap; needs its own issue or a widened
-   combat-journey issue.*
+1. **Combat player moves** — declare-with-options (#1330) and clash-commit (#1451) now ship telnet
+   commands. The remaining moves — flee, cover, interpose, join/leave, ready, combo up/down — still
+   need backend commands over the existing combat services (#1453), so a full fight is drivable and a
+   combat journey test can cover it.
 2. **Thread-weaving unlock** — a backend command to accept the teaching offer, so the weave→imbue→pull
    journey is drivable from acquisition.
 3. **The broad-pass journeys** above — each child issue adds the backend command(s) + one journey test.

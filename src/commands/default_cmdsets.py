@@ -20,7 +20,7 @@ from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
-from commands.combat import CmdDeclareTechnique
+from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -172,6 +172,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTidings,
             # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
+            # Clash contribution (#1451)
+            CmdClashCommit,
         )
         for command_cls in command_classes:
             self.add(command_cls())
