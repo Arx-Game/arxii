@@ -24,7 +24,6 @@ vi.mock('@/magic/queries', () => ({
   useThreadHubSummary: vi.fn(),
   useCharacterResonances: vi.fn(),
   useThreads: vi.fn().mockReturnValue({ data: { results: [] } }),
-  useCommitPull: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
   usePatchThreadNarrative: vi.fn(),
   useRetireThread: vi.fn(),
   useImbueThread: vi.fn(),

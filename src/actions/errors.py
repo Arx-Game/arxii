@@ -15,6 +15,8 @@ class ActionDispatchError(Exception):
     TARGET_OUT_OF_REACH = "target_out_of_reach"
     ANTI_SPAM_COOLDOWN = "anti_spam_cooldown"
     ROUND_REPEAT_BLOCKED = "round_repeat_blocked"
+    PULL_ALREADY_COMMITTED = "pull_already_committed"
+    PULL_INVALID = "pull_invalid"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -23,6 +25,8 @@ class ActionDispatchError(Exception):
         TARGET_OUT_OF_REACH: "Target is out of reach for this technique.",
         ANTI_SPAM_COOLDOWN: "You must wait before acting again.",
         ROUND_REPEAT_BLOCKED: "You have already acted this round.",
+        PULL_ALREADY_COMMITTED: "You have already pulled a thread this round.",
+        PULL_INVALID: "That pull cannot be applied to this action.",
     }
     _FALLBACK = "That action could not be completed."
 

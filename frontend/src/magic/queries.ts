@@ -22,7 +22,6 @@ import type {
   DissolveRequest,
   EntryFlourishRespondRequest,
   PatchThreadRequest,
-  PullCommitRequest,
   RescueRequest,
   SineatingRequest,
   SineatingRespondRequest,
@@ -413,25 +412,6 @@ export function useCrossXPLock() {
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * Commit a thread pull: spends resonance and applies effects.
- * Invalidates threadHubSummary and characterResonanceList on success.
- *
- * Note: previewPull is a plain async helper (api.previewPull), not a hook,
- * because previews are user-driven and ephemeral. Components should debounce
- * calls to api.previewPull manually.
- */
-export function useCommitPull() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: PullCommitRequest) => api.commitPull(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() }).catch(() => {});
     },
   });
 }

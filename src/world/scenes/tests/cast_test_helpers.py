@@ -29,6 +29,7 @@ from world.magic.factories import (
     TechniqueFactory,
     ThreadFactory,
     ThreadPullCostFactory,
+    ThreadPullEffectFactory,
 )
 from world.magic.models import CharacterResonance, Resonance, Technique, Thread
 from world.magic.models.techniques import ConditionTargetKind
@@ -173,6 +174,15 @@ def make_cast_pull_fixture(
         resonance_cost=resonance_cost,
         anima_per_thread=1,
         label="firm",
+    )
+    # A FLAT_BONUS effect for this (target_kind, resonance, tier) is required so that
+    # spend_resonance_for_pull finds at least one applicable (non-inactive) effect.
+    # Without this row the guard introduced in a60283db raises InvalidImbueAmount.
+    ThreadPullEffectFactory(
+        target_kind=TargetKind.TECHNIQUE,
+        resonance=resonance,
+        tier=tier,
+        flat_bonus_amount=1,
     )
     return technique, character_resonance, resonance, thread
 

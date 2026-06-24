@@ -13,7 +13,9 @@ from world.magic.services.techniques import calculate_effective_anima_cost
 from world.mechanics.factories import CharacterEngagementFactory
 
 
-def _noop_resolve(*, power: int, ledger: object = None) -> SimpleNamespace:
+def _noop_resolve(
+    *, power: int, ledger: object = None, extra_modifiers: int = 0
+) -> SimpleNamespace:
     return SimpleNamespace(check_result=None)
 
 

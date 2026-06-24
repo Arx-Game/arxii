@@ -1,5 +1,10 @@
 /**
- * ThreadPullDialog — multi-thread pull commit surface.
+ * ThreadPullDialog — thread pull selector (select-only surface).
+ *
+ * Calls `onSelect` with the chosen resonance/tier/threads so the caller
+ * (e.g. combat cast dispatch or clash commit) can include the pull inline
+ * in its own request. Pull no longer commits standalone — it rides
+ * cast/clash everywhere.
  *
  * Ephemeral mode (no `combat` prop): only ALWAYS_IN_ACTION_KINDS are eligible.
  * Combat mode (`combat` prop set): TRAIT/TECHNIQUE threads additionally
@@ -18,8 +23,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { previewPull } from '../../api';
-import { useCharacterResonances, useCommitPull, useThreads } from '../../queries';
+import { useCharacterResonances, useThreads } from '../../queries';
 import type { PullPreviewResponse, Thread } from '../../types';
+
+// ---------------------------------------------------------------------------
+// Pull selection shape — returned via onSelect in combat / inline mode.
+// ---------------------------------------------------------------------------
+
+export interface PullSelection {
+  resonance_id: number;
+  tier: 1 | 2 | 3;
+  thread_ids: number[];
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -50,6 +65,13 @@ export interface ThreadPullDialogProps {
     involvedTraitIds: number[];
     involvedTechniqueIds: number[];
   };
+  /**
+   * Called with the chosen pull parameters when the player confirms their
+   * selection. The caller (e.g. combat cast/clash dispatch) includes these as
+   * kwargs in its own dispatch request — the pull rides the action, not a
+   * standalone commit endpoint. The dialog closes after calling onSelect.
+   */
+  onSelect: (selection: PullSelection) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,10 +96,10 @@ export function ThreadPullDialog({
   open,
   onClose,
   combat,
+  onSelect,
 }: ThreadPullDialogProps) {
   const { data: allThreads } = useThreads();
   const { data: resonances } = useCharacterResonances(characterSheetId);
-  const { mutate: commitPull, isPending: committing } = useCommitPull();
 
   const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
   const [selectedTier, setSelectedTier] = useState<1 | 2 | 3>(1);
@@ -85,7 +107,6 @@ export function ThreadPullDialog({
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [commitError, setCommitError] = useState<string | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -98,7 +119,6 @@ export function ThreadPullDialog({
       setPreview(null);
       setPreviewLoading(false);
       setPreviewError(null);
-      setCommitError(null);
     }
   }, [open]);
 
@@ -157,30 +177,18 @@ export function ThreadPullDialog({
     );
   }
 
-  function handleCommit() {
+  function handleSelect() {
     if (selectedResonanceId === null || selectedThreadIds.length === 0) return;
-    setCommitError(null);
-    commitPull(
-      {
-        character_sheet_id: characterSheetId,
-        resonance_id: selectedResonanceId,
-        tier: selectedTier,
-        thread_ids: selectedThreadIds,
-      },
-      {
-        onSuccess: () => onClose(),
-        onError: (err: unknown) => {
-          setCommitError(err instanceof Error ? err.message : 'Could not commit pull.');
-        },
-      }
-    );
+    onSelect({
+      resonance_id: selectedResonanceId,
+      tier: selectedTier,
+      thread_ids: selectedThreadIds,
+    });
+    onClose();
   }
 
-  const canCommit =
-    selectedResonanceId !== null &&
-    selectedThreadIds.length > 0 &&
-    (preview?.affordable ?? false) &&
-    !committing;
+  const canSelect =
+    selectedResonanceId !== null && selectedThreadIds.length > 0 && (preview?.affordable ?? false);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -339,21 +347,14 @@ export function ThreadPullDialog({
               )}
             </div>
           )}
-
-          {/* Commit error */}
-          {commitError && (
-            <p className="text-sm text-destructive" role="alert" data-testid="commit-error">
-              {commitError}
-            </p>
-          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={committing}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleCommit} disabled={!canCommit} data-testid="commit-pull-btn">
-            {committing ? 'Committing…' : 'Commit Pull'}
+          <Button onClick={handleSelect} disabled={!canSelect} data-testid="commit-pull-btn">
+            Select Pull
           </Button>
         </DialogFooter>
       </DialogContent>

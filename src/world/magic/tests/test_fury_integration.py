@@ -333,7 +333,7 @@ class StrainAndFuryStackedTests(TestCase):
         sheet = CharacterSheetFactory(character=character)
         return character, sheet, anima
 
-    def _noop_resolve(self, *, power: int, ledger: object = None):  # noqa: ARG002
+    def _noop_resolve(self, *, power: int, ledger: object = None, extra_modifiers: int = 0):  # noqa: ARG002
         from types import SimpleNamespace
 
         return SimpleNamespace(check_result=None)

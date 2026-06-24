@@ -592,7 +592,9 @@ Components and APIs consumed without modification:
   existing services (the ViewSet actions in `world/combat/views.py` are named
   `upgrade_combo` / `revert_combo`; the underlying service functions carry the
   longer names)
-- `previewPull`, `commitPull` — existing APIs
+- `previewPull` — existing API (preview endpoint unchanged).
+  `commitPull` / `thread-pull-commit` endpoint removed (#1455); pull is now a
+  modifier on the cast/clash declaration dispatch, not a separate commit.
 
 ## §8 — New backend pieces
 

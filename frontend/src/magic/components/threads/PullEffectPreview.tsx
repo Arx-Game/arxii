@@ -5,28 +5,13 @@
  * - Debounced preview call (250ms) via api.previewPull on every tier change
  * - Shows cost (resonance + anima), affordability flag, capped_intensity warning
  * - Lists resolved_effects with kind/scaled_value/inactive_reason
- * - [Pull Now (RP)] button opens ThreadPullDialog in ephemeral mode (always-in-action anchors)
  *
- * Always-in-action (non-combat) anchor kinds: if a thread's anchor is NOT in
- * this set, the pull button is disabled with a tooltip.
+ * Standalone pull commit is not available here — pulls must be declared inline
+ * during a combat cast/clash dispatch. This panel is read-only preview only.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { previewPull } from '../../api';
 import type { PreviewedEffect, PullPreviewResponse, Thread } from '../../types';
-import { ThreadPullDialog } from './ThreadPullDialog';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Anchor kinds that are always in action (non-combat context is fine). */
-const ALWAYS_IN_ACTION_KINDS = new Set([
-  'RELATIONSHIP_TRACK',
-  'RELATIONSHIP_CAPSTONE',
-  'FACET',
-  'COVENANT_ROLE',
-]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,11 +62,8 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
   const [preview, setPreview] = useState<PullPreviewResponse | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [pullDialogOpen, setPullDialogOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const isAlwaysInAction = ALWAYS_IN_ACTION_KINDS.has(thread.target_kind);
 
   const fetchPreview = useCallback(
     (selectedTier: 1 | 2 | 3) => {
@@ -196,29 +178,11 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
         </div>
       )}
 
-      {/* Pull Now — opens ThreadPullDialog in ephemeral mode */}
-      <div className="flex items-center gap-3">
-        <Button
-          type="button"
-          disabled={!isAlwaysInAction}
-          data-testid="pull-now-button"
-          title={!isAlwaysInAction ? 'Requires combat context' : undefined}
-          onClick={() => setPullDialogOpen(true)}
-        >
-          Pull Now (RP)
-        </Button>
-        {!isAlwaysInAction && (
-          <span className="text-xs text-muted-foreground" data-testid="pull-combat-context-note">
-            Requires combat context
-          </span>
-        )}
-      </div>
-
-      <ThreadPullDialog
-        characterSheetId={thread.owner}
-        open={pullDialogOpen}
-        onClose={() => setPullDialogOpen(false)}
-      />
+      {/* Note: Pulls are declared inline during combat cast/clash dispatch.
+          This panel is read-only preview only. */}
+      <p className="text-xs text-muted-foreground" data-testid="pull-preview-note">
+        To pull this thread, select it when declaring a combat cast or clash.
+      </p>
     </div>
   );
 }

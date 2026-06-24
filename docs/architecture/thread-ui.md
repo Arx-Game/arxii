@@ -1,7 +1,10 @@
 # Thread Spending UI Design
 
 **Date:** 2026-05-08
-**Status:** Approved (autonomous-mode design conversation)
+**Status:** Superseded for the pull surface (#1455). The `thread-pull-commit` endpoint and
+`CmdPull` standalone pull verb described in §10 were removed; thread pulls are now a
+modifier on the `cast`/`clash` declaration (telnet + web). Preview (`thread-pull-preview`)
+and all Imbue/Weave surfaces remain accurate. Original approved spec below.
 **Related:**
 - `docs/architecture/resonance-threads.md` — Thread + currency pivot (the source-of-truth for what these models do)
 - `docs/architecture/anima-ritual-ui.md` — most recent Ritual surface; established `RitualPerformView`-as-dispatch and per-anchor field renderers

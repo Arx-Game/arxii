@@ -754,6 +754,46 @@ class CastEndpointTestCase(APITestCase):
         character_resonance.refresh_from_db()
         assert character_resonance.balance == self._STARTING_BALANCE
 
+    def test_pull_validation_does_not_fetch_character_sheet(self) -> None:
+        """Serializer pull validation uses persona.character_sheet_id (free cached FK).
+
+        Regression guard for the query-avoidance fix in #1455: previously
+        ``_validate_cast_pull`` called ``build_cast_pull_declaration(persona.character_sheet, ...)``
+        which triggered a SELECT on CharacterSheet.  The fix passes
+        ``persona.character_sheet_id`` so no extra round-trip is issued.
+
+        This test counts queries for the validation path (400 on hostile cast —
+        aborts before the cast itself) and asserts the sheet SELECT is absent.
+        We reuse the hostile fixture because it short-circuits early, giving us a
+        tight query window around exactly the validation code.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        technique, _cr, resonance, thread = self._make_pull_fixture(hostile=True)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "target_persona": self.target_persona.pk,
+            "pull": {
+                "resonance_id": resonance.pk,
+                "tier": self._PULL_TIER,
+                "thread_ids": [thread.pk],
+            },
+        }
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # No query should touch character_sheets_charactersheet for the persona lookup
+        # (persona.character_sheet_id is a cached FK id — no SELECT needed).
+        sheet_fetches = [
+            q["sql"] for q in ctx.captured_queries if "character_sheets_charactersheet" in q["sql"]
+        ]
+        assert sheet_fetches == [], (
+            f"Unexpected CharacterSheet SELECT(s) in pull validation: {sheet_fetches}"
+        )
+
     def test_cast_response_includes_action_interaction(self) -> None:
         """Immediate cast response exposes action_interaction as the FK integer."""
         technique = make_castable_technique()

@@ -26,7 +26,6 @@ import {
   useRetireThread,
   useImbueThread,
   useCrossXPLock,
-  useCommitPull,
   useAcceptTeachingOffer,
   useNextPathOptions,
   magicKeys,
@@ -56,7 +55,6 @@ vi.mock('../api', () => ({
   retireThread: vi.fn(),
   imbueThreadAuto: vi.fn(),
   crossXPLock: vi.fn(),
-  commitPull: vi.fn(),
   acceptTeachingOffer: vi.fn(),
   __resetImbuingRitualIdCacheForTests: vi.fn(),
   getNextPathOptions: vi.fn(),
@@ -812,47 +810,6 @@ describe('useCrossXPLock', () => {
     });
 
     expect(api.crossXPLock).toHaveBeenCalledWith(7, vars.body);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// useCommitPull
-// ---------------------------------------------------------------------------
-
-describe('useCommitPull', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('commits pull with correct body and succeeds', async () => {
-    const mockResponse = {
-      resonance_spent: 10,
-      anima_spent: 2,
-      resolved_effects: [],
-    };
-    vi.mocked(api.commitPull).mockResolvedValue(mockResponse);
-
-    const { result } = renderHook(() => useCommitPull(), {
-      wrapper: createWrapper(),
-    });
-
-    const body = {
-      character_sheet_id: 10,
-      resonance_id: 3,
-      tier: 1 as const,
-      thread_ids: [7],
-    };
-
-    await act(async () => {
-      await result.current.mutateAsync(body);
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(api.commitPull).toHaveBeenCalledWith(body);
-    expect(result.current.data).toEqual(mockResponse);
   });
 });
 

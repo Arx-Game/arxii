@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.magic.types.pull import CastPullDeclaration
 
 
 @dataclass
@@ -49,7 +50,7 @@ class CastTechniqueAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
-    def execute(
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -57,9 +58,18 @@ class CastTechniqueAction(Action):
         technique_id: int,
         target_persona_id: int | None = None,
         confirm_soulfray_risk: bool = False,
+        cast_pull: CastPullDeclaration | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
+
+        Args:
+            cast_pull: An optional ``CastPullDeclaration`` resolved by the
+                telnet command (or passed directly).  When provided it is
+                forwarded into ``request_technique_cast`` so the pull is
+                charged and applied as part of the cast.  Rejected on hostile
+                techniques (``request_technique_cast`` raises; we surface a
+                clean failure).
 
         Returns:
             ``success=False`` when the soulfray gate fires (pending consent).
@@ -88,13 +98,25 @@ class CastTechniqueAction(Action):
             except Persona.DoesNotExist:
                 return ActionResult(success=False, message="Target persona not found.")
 
-        cast = request_technique_cast(
-            scene=scene,
-            initiator_persona=initiator,
-            target_persona=target,
-            technique=technique,
-            confirm_soulfray_risk=confirm_soulfray_risk,
-        )
+        try:
+            cast = request_technique_cast(
+                scene=scene,
+                initiator_persona=initiator,
+                target_persona=target,
+                technique=technique,
+                confirm_soulfray_risk=confirm_soulfray_risk,
+                cast_pull=cast_pull,
+            )
+        except Exception as exc:
+            # Surface magic-layer exceptions (e.g. MagicError subclasses for
+            # invalid/inert pull declarations) as clean failure results rather
+            # than propagating as crashes.  Re-raise anything that is not a
+            # MagicError so programming errors are still visible.
+            from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+            if not isinstance(exc, MagicError):
+                raise
+            return ActionResult(success=False, message=str(exc))
 
         if cast.soulfray_warning is not None and not confirm_soulfray_risk:
             from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415
@@ -125,13 +147,40 @@ class CastTechniqueAction(Action):
         technique_id: int | None = None,
         **kwargs: Any,
     ) -> tuple[Any, dict[str, Any]] | None:
-        """Declare into a COMBAT round when inside a CombatRoundContext, else None."""
+        """Declare into a COMBAT round when inside a CombatRoundContext, else None.
+
+        When a ``cast_pull`` (a ``CastPullDeclaration``) is present and the context is
+        a ``CombatRoundContext``, the pull is committed immediately at declaration time
+        via ``spend_resonance_for_pull`` so the combat read-path
+        (``_sum_active_flat_bonuses`` / ``_sum_intensity_bump_pulls``) can apply the
+        bonus during round resolution.
+
+        The one-pull-per-round cap is enforced by the ``(participant, round_number)``
+        unique constraint on ``CombatPull``.  A duplicate attempt raises
+        ``ActionDispatchError(PULL_ALREADY_COMMITTED)`` so the dispatcher surfaces a
+        clean "already pulled" message rather than propagating an ``IntegrityError``.
+
+        ``cast_pull`` is intentionally NOT forwarded into ``decl_kwargs`` — combat pulls
+        come from the ``CombatPull`` read-path, not from the declaration kwargs, to avoid
+        double-charging.
+        """
         from actions.constants import ActionBackend, CombatActionSlot  # noqa: PLC0415
         from actions.types import ActionRef, PlayerAction  # noqa: PLC0415
         from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
         if not isinstance(ctx, CombatRoundContext) or technique_id is None:
             return None
+
+        # Commit an optional thread pull at declaration time.
+        # resolve_pull_from_kwargs normalises both the telnet path (pre-built
+        # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
+        # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+        from world.combat.pull_helpers import resolve_pull_from_kwargs  # noqa: PLC0415
+
+        sheet = ctx.participant.character_sheet
+        cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
+        if cast_pull is not None:
+            self._commit_combat_pull(cast_pull, ctx, technique_id)
 
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
@@ -152,4 +201,36 @@ class CastTechniqueAction(Action):
         focused_ally_id = kwargs.get("focused_ally_target_id")
         if focused_ally_id is not None:
             decl_kwargs["focused_ally_target_id"] = focused_ally_id
+        # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
+        # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _commit_combat_pull(
+        cast_pull: CastPullDeclaration,
+        ctx: Any,
+        technique_id: int,
+    ) -> None:
+        """Commit a thread pull as a ``CombatPull`` row at declaration time.
+
+        Delegates to ``world.combat.pull_helpers.commit_combat_pull`` so the
+        commit logic is shared with the clash-contribution path and is not
+        duplicated here.
+
+        Raises:
+            ActionDispatchError(PULL_ALREADY_COMMITTED): When the unique constraint fires
+                (duplicate pull in the same round).
+            ActionDispatchError(PULL_INVALID): When ``spend_resonance_for_pull`` raises a
+                ``MagicError`` (invalid pull declaration — e.g. thread not in action,
+                insufficient balance).
+        """
+        from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
+
+        participant = ctx.participant
+        encounter = participant.encounter
+        commit_combat_pull(
+            cast_pull=cast_pull,
+            participant=participant,
+            encounter=encounter,
+            technique_id=technique_id,
+        )

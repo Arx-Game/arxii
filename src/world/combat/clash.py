@@ -258,15 +258,18 @@ def commit_to_clash(  # noqa: PLR0913
     captured_power: int = 0
     captured_ledger: PowerLedger | None = None
 
-    def resolve_fn(*, power: int, ledger: PowerLedger) -> object:
+    def resolve_fn(*, power: int, ledger: PowerLedger, extra_modifiers: int = 0) -> object:
         nonlocal captured_power, captured_ledger
         captured_power = power
         captured_ledger = ledger
+        # extra_modifiers carries FLAT_BONUS pull effects from use_technique; combat
+        # pulls already apply their flat bonus via the CombatAction offense path and
+        # cast_pull is never set in clash, so extra_modifiers will always be 0 here.
         return perform_check(
             objectdb,
             check_type,
             target_difficulty=0,
-            extra_modifiers=check_extra_modifiers,
+            extra_modifiers=check_extra_modifiers + extra_modifiers,
         )
 
     # 4. Route through the full magic pipeline (anima cost, Soulfray, mishap,

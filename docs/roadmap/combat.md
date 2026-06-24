@@ -271,6 +271,18 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
   expiring HP buff never drops the character below their current health. Pull costs are
   paid up-front via `spend_resonance_for_pull`. See `docs/systems/magic.md` for the full
   model lineup.
+- **Thread-pull proven across contexts (SHIPPED — #1455):** A thread pull is a modifier
+  carried by the `cast`/`clash` declaration (telnet + web) — there is no standalone pull
+  verb or separate commit endpoint. Telnet: `cast`/`clash` accept
+  `pull=<thread>[,…] resonance=<name> [tier=<1-3>]` via the shared
+  `_CombatCommandMixin` pull parser. Web: non-combat cast uses `CastPullRequestSerializer`;
+  combat cast/clash pass `pull_resonance_id`/`pull_tier`/`pull_thread_ids` through dispatch.
+  All paths converge on `commit_combat_pull` (combat) or `request_technique_cast(cast_pull=…)`
+  (non-combat) via `world/combat/pull_helpers.py` (`commit_combat_pull`,
+  `build_cast_pull_declaration`, `resolve_pull_from_kwargs`). One pull per round cap
+  (`PULL_ALREADY_COMMITTED`). Inert-effect rule: apply what fits, refuse-without-charge
+  when nothing applies. Preview kept at `POST /api/magic/thread-pull-preview/`
+  (read-only, unchanged).
 - **Survivability pipeline (world.vitals.services):** `process_damage_consequences()` is the system-agnostic entry point for damage consequences. Uses `perform_check` with scaled difficulty for knockout (below 20% health), death (at or below 0%), and permanent wound (hit > 50% max health) checks. Callable by combat, missions, traps, or any damage source
 - **DEAL_DAMAGE effect handler:** Connected — `ConsequenceEffect` with `EffectType.DEAL_DAMAGE` applies damage to CharacterVitals and triggers the survivability pipeline. Works for combat, missions, traps, and challenges
 - **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round,

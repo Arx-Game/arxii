@@ -12981,27 +12981,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ThreadHubSummary'
           description: ''
-  /api/magic/thread-pull-commit/:
-    post:
-      operationId: magic_thread_pull_commit_create
-      description: Dispatch the pull and return the commit result.
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ThreadPullCommitRequestRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ThreadPullCommitResponse'
-          description: ''
   /api/magic/thread-pull-preview/:
     post:
       operationId: magic_thread_pull_preview_create
@@ -24151,11 +24130,7 @@ components:
       - name
     CastPullRequestRequest:
       type: object
-      description: |-
-        Nested pull declaration on the cast endpoint (#854).
-
-        Field shapes mirror ThreadPullCommitRequestSerializer
-        (world/magic/serializers.py).
+      description: Nested pull declaration on the cast endpoint (#854).
       properties:
         resonance_id:
           type: integer
@@ -40313,40 +40288,6 @@ components:
       description: |-
         * `deed` - Deed
         * `scandal` - Scandal
-    PullActionContextCommitRequest:
-      type: object
-      description: |-
-        Wire shape for the optional ``action_context`` block in a pull commit.
-
-        Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
-        the additional fields the commit path consumes: ``combat_participant_id`` and
-        the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
-        pulls omit them entirely.
-      properties:
-        action_kind:
-          type: string
-        anchors_in_play:
-          type: array
-          items:
-            type: integer
-        combat_encounter_id:
-          type: integer
-          nullable: true
-        combat_participant_id:
-          type: integer
-          nullable: true
-        involved_trait_ids:
-          type: array
-          items:
-            type: integer
-        involved_technique_ids:
-          type: array
-          items:
-            type: integer
-        involved_object_ids:
-          type: array
-          items:
-            type: integer
     PullActionContextRequest:
       type: object
       description: |-
@@ -40951,59 +40892,6 @@ components:
           nullable: true
       required:
       - authored_value
-      - inactive
-      - inactive_reason
-      - kind
-      - level_multiplier
-      - narrative_snippet
-      - scaled_value
-      - source_thread_id
-      - source_thread_level
-      - source_tier
-      - vital_target
-    ResolvedPullEffectCommit:
-      type: object
-      description: |-
-        Wire shape for a single ResolvedPullEffect in the commit response.
-
-        Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
-        ``granted_capability_id`` (which the commit path includes) and uses
-        source-accessor notation for ``source_thread_id``.
-      properties:
-        kind:
-          type: string
-        authored_value:
-          type: integer
-          nullable: true
-        level_multiplier:
-          type: integer
-        scaled_value:
-          type: integer
-          nullable: true
-        vital_target:
-          type: string
-          nullable: true
-        source_thread_id:
-          type: integer
-        source_thread_level:
-          type: integer
-        source_tier:
-          type: integer
-        granted_capability_id:
-          type: integer
-          nullable: true
-          description: Return the granted_capability PK, or None if absent.
-          readOnly: true
-        narrative_snippet:
-          type: string
-        inactive:
-          type: boolean
-        inactive_reason:
-          type: string
-          nullable: true
-      required:
-      - authored_value
-      - granted_capability_id
       - inactive
       - inactive_reason
       - kind
@@ -45000,55 +44888,6 @@ components:
       - weavable_techniques
       - weavable_traits
       - weaving_eligibility
-    ThreadPullCommitRequestRequest:
-      type: object
-      description: |-
-        Request serializer for POST /api/magic/thread-pull-commit/.
-
-        ``character_sheet_id`` is required and must identify a CharacterSheet owned
-        by the requesting account (staff may pass any sheet).
-
-        ``action_context`` carries optional combat context.  If
-        ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
-        set (and vice versa).  Omitting the whole dict or leaving both fields
-        absent signals an ephemeral (RP) pull with no CombatPull row written.
-      properties:
-        character_sheet_id:
-          type: integer
-        resonance_id:
-          type: integer
-        tier:
-          type: integer
-          maximum: 3
-          minimum: 1
-        thread_ids:
-          type: array
-          items:
-            type: integer
-          maxItems: 20
-        action_context:
-          $ref: '#/components/schemas/PullActionContextCommitRequest'
-      required:
-      - character_sheet_id
-      - resonance_id
-      - thread_ids
-      - tier
-    ThreadPullCommitResponse:
-      type: object
-      description: Response serializer for POST /api/magic/thread-pull-commit/.
-      properties:
-        resonance_spent:
-          type: integer
-        anima_spent:
-          type: integer
-        resolved_effects:
-          type: array
-          items:
-            $ref: '#/components/schemas/ResolvedPullEffectCommit'
-      required:
-      - anima_spent
-      - resolved_effects
-      - resonance_spent
     ThreadPullPreviewRequestRequest:
       type: object
       description: |-

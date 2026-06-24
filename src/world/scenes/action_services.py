@@ -741,12 +741,12 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     technique_result = use_technique(
         character=character,
         technique=technique,
-        resolve_fn=lambda *, power, ledger: start_action_resolution(  # noqa: ARG005
+        resolve_fn=lambda *, power, ledger, extra_modifiers=0: start_action_resolution(  # noqa: ARG005
             character=character,
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=effort_modifier,
+            extra_modifiers=effort_modifier + extra_modifiers,
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,

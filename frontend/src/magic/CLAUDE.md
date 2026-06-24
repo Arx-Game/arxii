@@ -35,9 +35,6 @@ TypeScript types for the magic module.
 - `PreviewedEffect` — `components['schemas']['ResolvedPullEffect']` — preview effect shape
 - `PullPreviewResponse` — `components['schemas']['ThreadPullPreviewResponse']` (generated;
   fields: resonance_cost, anima_cost, affordable, resolved_effects, capped_intensity)
-- `ResolvedPullEffect` — `components['schemas']['ResolvedPullEffectCommit']` — commit effect shape
-- `PullCommitRequest` — `components['schemas']['ThreadPullCommitRequestRequest']` (generated)
-- `PullCommitResponse` — `components['schemas']['ThreadPullCommitResponse']` (generated)
 
 **Alteration resolution re-exports** (generated schema):
 
@@ -132,7 +129,6 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 - `imbueThread(body)` — wraps `performRitual` with imbuing ritual id + kwargs
 - `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves ritual id then imbues
 - `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`
-- `commitPull(body)` — POST `/api/magic/thread-pull-commit/` → `PullCommitResponse`
 
 **Teaching offer mutations:**
 
@@ -219,7 +215,6 @@ React Query hooks with a `magicKeys` query key factory.
   invalidates `thread(id)`, `threadHubSummary`, `characterResonanceList`
 - `useCrossXPLock()` — takes `{ threadId, body }`;
   invalidates `thread(id)`, `threadHubSummary`
-- `useCommitPull()` — invalidates `threadHubSummary`, `characterResonanceList`
 - `useAcceptTeachingOffer()` — takes `{ offerId, body? }`;
   invalidates `teachingOffers`, `threadHubSummary`
 - `useDeclarePathIntent()` — takes `{ characterId, pathId }`; calls `api.putPathIntent`;
@@ -238,7 +233,7 @@ Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdva
 `useThreads`, `useCharacterResonances`, `useDissolveSoulTether`, `useRespondToSineating`,
 `useThreadHubSummary`, `useThread`, `useTeachingOffers`, `useWeaveThread`,
 `usePatchThreadNarrative`, `useRetireThread`, `useImbueThread`, `useCrossXPLock`,
-`useCommitPull`, `useAcceptTeachingOffer`, and `magicKeys` shape assertions.
+`useAcceptTeachingOffer`, and `magicKeys` shape assertions.
 
 The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
 
@@ -311,8 +306,8 @@ and calls `useCrossXPLock`.
 
 ### `components/threads/PullEffectPreview.tsx`
 
-Panel in `ThreadDetailPage` for previewing and committing a thread pull. Calls `api.previewPull`
-then `useCommitPull`. Shows resolved effects and affordability.
+Panel in `ThreadDetailPage` for previewing a thread pull (read-only). Calls `api.previewPull`
+and shows resolved effects and affordability. Pull commit now rides cast/clash.
 
 ### `components/threads/ThreadRenameDialog.tsx`
 

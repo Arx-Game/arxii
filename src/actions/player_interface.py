@@ -635,10 +635,25 @@ def _dispatch_clash_contribution(
     within ruff's C901 limit.  Called only when ``ref.clash_id is not None`` and
     ``ctx.is_declaration_open`` is ``True`` (both guaranteed by the caller).
 
+    When ``cast_pull`` is present in *kwargs*, commits the pull immediately via
+    ``world.combat.pull_helpers.commit_combat_pull`` so the clash read-path
+    (``_sum_active_flat_bonuses`` / ``compute_intensity_for_clash``) reflects the
+    pull during round resolution.  The one-pull-per-round unique constraint on
+    ``CombatPull`` enforces the cap; a duplicate attempt raises
+    ``ActionDispatchError(PULL_ALREADY_COMMITTED)``.
+
+    ``cast_pull`` is intentionally NOT forwarded into ``declare_clash_contribution``
+    — the bonus comes from the ``CombatPull`` read-path, not from the declaration
+    kwargs, to avoid double-charging.
+
     Raises:
         ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if ``technique_id`` is
             missing from ``kwargs``, ``ctx`` is not a ``CombatRoundContext``, or
             either the ``Clash`` or ``Technique`` pk does not exist.
+        ActionDispatchError: With ``PULL_ALREADY_COMMITTED`` when the player has
+            already committed a pull this round.
+        ActionDispatchError: With ``PULL_INVALID`` when the pull declaration is
+            invalid (e.g. thread not anchored to the technique, insufficient balance).
     """
     from world.combat.models import Clash  # noqa: PLC0415
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
@@ -663,6 +678,27 @@ def _dispatch_clash_contribution(
         technique = Technique.objects.get(pk=technique_id)
     except Technique.DoesNotExist as exc:
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+    # Commit an optional thread pull at declaration time.  The pull bonus is
+    # sourced from the CombatPull read-path during resolution; do not forward
+    # cast_pull into declare_clash_contribution (avoids double-charge).
+    # resolve_pull_from_kwargs normalises both the telnet path (pre-built
+    # CastPullDeclaration in kwargs["cast_pull"]) and the web path (raw IDs:
+    # pull_resonance_id / pull_tier / pull_thread_ids) into one optional declaration.
+    from world.combat.pull_helpers import (  # noqa: PLC0415
+        commit_combat_pull,
+        resolve_pull_from_kwargs,
+    )
+
+    sheet = ctx.participant.character_sheet
+    cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
+    if cast_pull is not None:
+        commit_combat_pull(
+            cast_pull=cast_pull,
+            participant=ctx.participant,
+            encounter=ctx.participant.encounter,
+            technique_id=technique_id,
+        )
 
     declare_clash_contribution(
         participant=ctx.participant,

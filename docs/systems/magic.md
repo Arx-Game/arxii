@@ -259,7 +259,35 @@ thread anchors — they appear here only as unlock dimensions.
 | `CharacterThreadWeavingUnlock` | Per-character purchase record | `character` FK CharacterSheet, `unlock` FK, `acquired_at`, `xp_spent` (actual — in-Path=xp_cost, out-of-Path=xp_cost × multiplier), optional `teacher` FK RosterTenure. Unique per (character, unlock) |
 | `ThreadWeavingTeachingOffer` | Teacher-side offer | `teacher` FK RosterTenure, `unlock` FK, `pitch`, `gold_cost`, `banked_ap`, `created_at`. Mirrors `CodexTeachingOffer` |
 
-### Combat Pulls (live in `world/combat`, Spec A §3.8 / §2.1)
+### Thread Pull — Declaration Modifier (#1455) [BUILT & WIRED]
+
+A thread pull is a **modifier carried by a `cast` or `clash` declaration**, not a
+standalone action. Both telnet and web converge on the same commit paths.
+
+**Telnet surface:** `cast`/`clash` accept `pull=<thread>[,…] resonance=<name> [tier=<1-3>]`
+parsed by the shared `_CombatCommandMixin` pull parser. The pull rides the declaration;
+one pull per combat round (cap → `PULL_ALREADY_COMMITTED`).
+
+**Web surface:**
+- Non-combat cast: `CastPullRequestSerializer` nested inside the cast request body.
+- Combat cast/clash: `pull_resonance_id` / `pull_tier` / `pull_thread_ids` in the dispatch
+  kwargs (passed alongside the `ActionRef`).
+
+**Shared commit paths (`world/combat/pull_helpers.py`):**
+- `build_cast_pull_declaration(...)` — builds the pull declaration from kwargs.
+- `resolve_pull_from_kwargs(...)` — resolves thread ids + resonance + tier from kwargs.
+- `commit_combat_pull(...)` — the authoritative commit entry point for all combat contexts
+  (combat cast and clash).
+- Non-combat cast calls `request_technique_cast(cast_pull=…)`.
+
+**Inert-effect rule:** effects that don't apply to the current context are applied as far
+as they fit; the declaration is refused without charge only when none apply.
+
+**Preview (kept):** `preview_resonance_pull` (`POST /api/magic/thread-pull-preview/`) is
+the read-only preview endpoint; it is unchanged and remains the way to preview cost +
+effects before committing.
+
+**Models (live in `world/combat`):**
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|

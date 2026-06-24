@@ -457,7 +457,7 @@ class PvpNonLethalCapSoulfrayTests(TestCase):
         return use_technique(
             character=self.sheet.character,
             technique=self.technique,
-            resolve_fn=lambda *, power, ledger: "resolved",  # noqa: ARG005
+            resolve_fn=lambda *, power, ledger, extra_modifiers=0: "resolved",  # noqa: ARG005
             confirm_soulfray_risk=True,
             lethal=False,
         )
