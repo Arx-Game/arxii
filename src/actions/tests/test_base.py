@@ -172,6 +172,7 @@ class ActionRegistryTests(TestCase):
             "disarm_trap",
             "pass_round",
             "force_resolve_round",
+            "set_round_mode",
             "intimidate",
             "persuade",
             "deceive",

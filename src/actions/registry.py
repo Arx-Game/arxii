@@ -62,6 +62,7 @@ from actions.definitions.rounds import (
     JoinRoundAction,
     LeaveRoundAction,
     PassRoundAction,
+    SetRoundModeAction,
     StartRoundAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
@@ -120,6 +121,7 @@ _ALL_ACTIONS: list[Action] = [
     DisarmTrapAction(),
     PassRoundAction(),
     ForceResolveRoundAction(),
+    SetRoundModeAction(),
     FleeAction(),
     CoverAction(),
     InterposeAction(),
