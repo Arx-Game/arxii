@@ -669,6 +669,9 @@ action consent flow, and a three-mode non-combat round framework.
     Public API consumed by combat to record fighters as first-class scene participants.
   - **Round framework (`round_services.py`, #1351):**
     - `get_scene_round_defaults_config() -> SceneRoundDefaultsConfig` (`models.py`) — get-or-create the singleton config.
+    - `active_round_for_room(room) -> SceneRound | None` — public service; returns the active
+      (non-completed) round for a room, or None. One-active-round-per-room constraint makes
+      `.first()` unambiguous. Consumed by `SceneDetailSerializer.get_active_round` (#1467).
     - `actions_this_round(scene_round, participant) -> int` — declaration count for a participant.
     - `distinct_actors_this_round(scene_round) -> int` — distinct participants with declarations this round.
     - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
@@ -713,7 +716,14 @@ action consent flow, and a three-mode non-combat round framework.
   - `SetRoundModeAction` (key `"set_round_mode"`, `actions/definitions/rounds.py`) — changes mode/knobs of active round; gated by `actor_can_administer_scene`; `costs_turn=False`.
 - **`CmdScene`** (`commands/scene.py`) — telnet face for `scene start [name]` / `scene finish` / `scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `scene status`. Thin over the three Actions above; no business logic.
 - **`is_story_runner`** character property (`typeclasses/characters.py`) — `False` on base `Character`; `True` on `GMCharacter` and `StaffCharacter` (`typeclasses/gm_characters.py`); used by `actor_can_administer_scene` as the GM/Staff fast-path.
-- **New API endpoint:** `POST /api/scenes/{id}/set-round-mode/` — coarse-gated `IsSceneGMOrOwnerOrStaff`; dispatches `SetRoundModeAction`; returns updated scene detail.
+- **API endpoint:** `POST /api/scenes/{id}/set-round-mode/` — coarse-gated `IsSceneGMOrOwnerOrStaff`; dispatches `SetRoundModeAction`; returns updated scene detail.
+- **`active_round` read field on `SceneDetailSerializer`** (#1467): nullable nested field serialized by
+  `SceneRoundSerializer` (read-only). Exposes `mode`, `advance_quorum_pct`, `max_actions_per_round`,
+  `per_target_repeat_lock`, `status`, `round_number`, `is_danger`. `null` when no location or no active round.
+- **`RoundSettingsDialog`** (React, `frontend/src/scenes/components/RoundSettingsDialog.tsx`, #1467):
+  GM/owner/staff-gated (`viewer_can_gm && is_active`) dialog for setting round mode and knobs;
+  consumes `active_round` from the scene detail and dispatches `useSetRoundMode` →
+  `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),

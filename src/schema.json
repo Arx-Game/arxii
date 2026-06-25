@@ -33227,6 +33227,16 @@ components:
       description: |-
         * `open` - Open
         * `restricted` - Restricted
+    Mode081Enum:
+      enum:
+      - open
+      - pose_order
+      - strict
+      type: string
+      description: |-
+        * `open` - Open (immediate, unbounded)
+        * `pose_order` - Pose order (immediate, quota-gated)
+        * `strict` - Strict (declare, batch-resolved)
     Mode8baEnum:
       enum:
       - pose
@@ -42015,7 +42025,13 @@ components:
           items:
             $ref: '#/components/schemas/PersonaPosition'
           readOnly: true
+        active_round:
+          allOf:
+          - $ref: '#/components/schemas/SceneRound'
+          nullable: true
+          readOnly: true
       required:
+      - active_round
       - date_started
       - id
       - is_owner
@@ -42174,6 +42190,34 @@ components:
       - name
       - participants
       - viewer_can_gm
+    SceneRound:
+      type: object
+      description: Read-only view of a scene's active round, for the round-settings
+        control (#1467).
+      properties:
+        mode:
+          $ref: '#/components/schemas/Mode081Enum'
+        advance_quorum_pct:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        max_actions_per_round:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        per_target_repeat_lock:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/Status4e6Enum'
+        round_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_danger:
+          type: boolean
+          readOnly: true
+      required:
+      - is_danger
     SceneSummaryRevision:
       type: object
       properties:
@@ -42347,16 +42391,6 @@ components:
           minimum: 1
       required:
       - persona_id
-    SetRoundModeRequestModeEnum:
-      enum:
-      - open
-      - pose_order
-      - strict
-      type: string
-      description: |-
-        * `open` - Open (immediate, unbounded)
-        * `pose_order` - Pose order (immediate, quota-gated)
-        * `strict` - Strict (declare, batch-resolved)
     SetRoundModeRequestRequest:
       type: object
       description: |-
@@ -42367,7 +42401,7 @@ components:
         a generic message if none are, because the service is a no-op update).
       properties:
         mode:
-          $ref: '#/components/schemas/SetRoundModeRequestModeEnum'
+          $ref: '#/components/schemas/Mode081Enum'
         advance_quorum_pct:
           type: integer
           maximum: 100
