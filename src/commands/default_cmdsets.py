@@ -77,6 +77,7 @@ from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
+from commands.who import CmdWho
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -175,6 +176,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdTidings,
             # #1463 — public presence/navigation: who's about, in coloured area paths.
             CmdWhere,
+            # #1463 — online roster: who's online, by active persona, coarse idle.
+            CmdWho,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # Unified scene-adaptive cast (#1351)

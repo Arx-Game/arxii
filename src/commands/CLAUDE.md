@@ -155,6 +155,10 @@ actions, backends, and service functions.
   each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,
   colouring each segment by `Area.color` with cascade-down inheritance). Private rooms /
   private RP never appear (the #1287 invariant). Colours are author-set flavour (PLACEHOLDER).
+- **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
+  `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
+  idle marker (active / idle / away — never exact, so identical idle times can't out an account's
+  alts). The web game-view "Who" tab + the `/api/areas/presence/` endpoint share the same service.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

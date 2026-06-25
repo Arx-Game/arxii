@@ -3,6 +3,20 @@ from rest_framework import serializers
 from world.areas.models import Area
 
 
+class WhereEntrySerializer(serializers.Serializer):
+    """A `where` row: a present character + its Evennia-colour-coded room path (#1463)."""
+
+    persona_name = serializers.CharField(read_only=True)
+    room_path = serializers.CharField(read_only=True)
+
+
+class WhoEntrySerializer(serializers.Serializer):
+    """A `who` row: a present character's active-persona name + coarse idle (#1463)."""
+
+    name = serializers.CharField(read_only=True)
+    idle = serializers.CharField(read_only=True, allow_blank=True)
+
+
 class AreaBreadcrumbSerializer(serializers.Serializer):
     """Lightweight serializer for area ancestry breadcrumbs."""
 
