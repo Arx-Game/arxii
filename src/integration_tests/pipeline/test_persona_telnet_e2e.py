@@ -23,7 +23,6 @@ from evennia.utils.idmapper import models as idmapper_models
 from actions.constants import ActionBackend
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
-from commands.exceptions import CommandError
 from commands.persona import CmdPersona
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import PersonaType
@@ -72,7 +71,7 @@ class PersonaTelnetE2ETests(TestCase):
         primary_name = self.sheet.primary_persona.name
         self.assertIn(primary_name, sent, "primary persona should appear in listing")
         self.assertIn("Alt Face", sent, "alt persona should appear in listing")
-        self.assertIn("active", sent, "active marker should appear in listing")
+        self.assertIn(" ◄ active", sent, "active marker should appear in listing")
 
         self.character.msg.reset_mock()
 
@@ -124,24 +123,41 @@ class PersonaTelnetE2ETests(TestCase):
     def test_foreign_persona_rejected_via_telnet(self) -> None:
         """A persona from another sheet is rejected; active persona is unchanged.
 
-        ``CmdPersona.func()`` catches ``CommandError`` and messages the caller,
-        so we assert the raise by calling ``resolve_action_args()`` directly
-        (mirroring how ``test_persona_command.py`` tests the unknown-name path).
+        ``CmdPersona.func()`` sets ``self._name`` then calls ``super().func()``
+        (``DispatchCommand.func()``), which catches ``CommandError`` from
+        ``resolve_action_args()`` and sends the message to the caller via
+        ``self.msg()`` — no exception propagates to the caller.  This test
+        exercises the full real telnet path rather than calling
+        ``resolve_action_args()`` directly.
         """
         other_sheet = CharacterSheetFactory()
         foreign_name = other_sheet.primary_persona.name
 
-        primary_before = self.sheet.primary_persona
+        primary_pk = self.sheet.primary_persona.pk
 
         cmd = _cmd(self.character, foreign_name)
-        cmd._name = foreign_name
+        # Full real telnet path — func() must NOT raise; DispatchCommand.func()
+        # catches CommandError and routes it to self.msg().
+        cmd.func()
 
-        with self.assertRaises(CommandError, msg="foreign persona name should raise CommandError"):
-            cmd.resolve_action_args()
+        # Caller must have been messaged with the error.
+        self.assertTrue(
+            self.character.msg.called,
+            "msg should have been called with an error after foreign-name rejection",
+        )
+        sent = " ".join(
+            str(call.args[0]) for call in self.character.msg.call_args_list if call.args
+        )
+        self.assertIn(
+            foreign_name,
+            sent,
+            "error message should mention the unrecognised persona name",
+        )
 
+        # DB state unchanged: active persona pk is still the primary's pk.
         self.sheet.refresh_from_db()
         self.assertEqual(
-            active_persona_for_sheet(self.sheet),
-            primary_before,
-            "active persona must be unchanged after rejected switch",
+            active_persona_for_sheet(self.sheet).pk,
+            primary_pk,
+            "active persona pk must be unchanged after rejected switch",
         )
