@@ -201,6 +201,8 @@ class ActionRegistryTests(TestCase):
             "combat_revert",
             "combat_join",
             "combat_leave",
+            "start_scene",
+            "finish_scene",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -64,6 +64,7 @@ from actions.definitions.rounds import (
     PassRoundAction,
     StartRoundAction,
 )
+from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
     deceive,
     entrance,
@@ -134,6 +135,8 @@ _ALL_ACTIONS: list[Action] = [
     YieldAction(),
     AcknowledgeRiskAction(),
     CastTechniqueAction(),
+    StartSceneAction(),
+    FinishSceneAction(),
     intimidate,
     persuade,
     deceive,
