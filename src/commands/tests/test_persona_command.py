@@ -72,6 +72,19 @@ class CmdPersonaTests(TestCase):
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
 
+    def test_ambiguous_case_collision_raises(self) -> None:
+        """Two own personas whose names differ only in case → CommandError (>1 iexact match)."""
+        PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED, name="Echo"
+        )
+        PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED, name="echo"
+        )
+        cmd = _cmd(self.character, "echo")
+        cmd._name = "echo"
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
     def test_case_insensitive_name_match(self) -> None:
         """Matching is case-insensitive."""
         cmd = _cmd(self.character, "alt face")

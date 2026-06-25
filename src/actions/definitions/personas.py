@@ -44,17 +44,16 @@ class SetActivePersonaAction(Action):
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.services import ActivePersonaError, set_active_persona  # noqa: PLC0415
 
-        uniform = "That isn't one of this character's identities."
         sheet = actor.sheet_data
         persona = Persona.objects.filter(
             pk=kwargs.get("persona_id"), character_sheet_id=sheet.pk
         ).first()
         if persona is None:
-            return ActionResult(success=False, message=uniform)
+            return ActionResult(success=False, message=ActivePersonaError.user_message)
         try:
             set_active_persona(sheet, persona)
         except ActivePersonaError:
-            return ActionResult(success=False, message=uniform)
+            return ActionResult(success=False, message=ActivePersonaError.user_message)
         return ActionResult(
             success=True,
             message=f"You present as {persona.name}.",

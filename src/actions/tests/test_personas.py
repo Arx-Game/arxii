@@ -6,7 +6,7 @@ from actions.definitions.personas import SetActivePersonaAction
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
-from world.scenes.services import active_persona_for_sheet
+from world.scenes.services import ActivePersonaError, active_persona_for_sheet
 
 
 class SetActivePersonaActionTests(TestCase):
@@ -36,3 +36,4 @@ class SetActivePersonaActionTests(TestCase):
     def test_rejects_unknown_id(self) -> None:
         result = SetActivePersonaAction().run(actor=self.character, persona_id=999999)
         self.assertFalse(result.success)
+        self.assertEqual(result.message, ActivePersonaError.user_message)
