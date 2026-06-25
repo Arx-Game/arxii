@@ -18402,6 +18402,13 @@ export interface components {
      */
     MissionVisibilityEnum: 'open' | 'restricted';
     /**
+     * @description * `open` - Open (immediate, unbounded)
+     *     * `pose_order` - Pose order (immediate, quota-gated)
+     *     * `strict` - Strict (declare, batch-resolved)
+     * @enum {string}
+     */
+    Mode081Enum: 'open' | 'pose_order' | 'strict';
+    /**
      * @description * `pose` - Pose
      *     * `emit` - Emit
      *     * `say` - Say
@@ -23193,6 +23200,7 @@ export interface components {
       readonly positions: components['schemas']['PositionSummary'][];
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly persona_positions: components['schemas']['PersonaPosition'][];
+      readonly active_round: components['schemas']['SceneRound'] | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {
@@ -23269,6 +23277,16 @@ export interface components {
       }[];
       readonly is_owner: string;
       readonly viewer_can_gm: boolean;
+    };
+    /** @description Read-only view of a scene's active round, for the round-settings control (#1467). */
+    SceneRound: {
+      mode?: components['schemas']['Mode081Enum'];
+      advance_quorum_pct?: number;
+      max_actions_per_round?: number;
+      per_target_repeat_lock?: boolean;
+      status?: components['schemas']['Status4e6Enum'];
+      round_number?: number;
+      readonly is_danger: boolean;
     };
     SceneSummaryRevision: {
       readonly id: number;
@@ -23361,13 +23379,6 @@ export interface components {
       persona_id: number;
     };
     /**
-     * @description * `open` - Open (immediate, unbounded)
-     *     * `pose_order` - Pose order (immediate, quota-gated)
-     *     * `strict` - Strict (declare, batch-resolved)
-     * @enum {string}
-     */
-    SetRoundModeRequestModeEnum: 'open' | 'pose_order' | 'strict';
-    /**
      * @description POST body for the #1445 set-round-mode endpoint.
      *
      *     All fields are optional — callers may change the mode, one or more knobs, or any
@@ -23375,7 +23386,7 @@ export interface components {
      *     a generic message if none are, because the service is a no-op update).
      */
     SetRoundModeRequestRequest: {
-      mode?: components['schemas']['SetRoundModeRequestModeEnum'];
+      mode?: components['schemas']['Mode081Enum'];
       advance_quorum_pct?: number;
       max_actions_per_round?: number;
       per_target_repeat_lock?: boolean;

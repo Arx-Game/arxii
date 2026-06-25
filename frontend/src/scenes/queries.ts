@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
-import type { HighlightReel, Interaction } from './types';
+import type { HighlightReel, Interaction, SceneRoundModeValue } from './types';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -28,6 +28,7 @@ export type {
   SceneDetail,
   Interaction,
   HighlightReel,
+  SceneRoundModeValue,
 } from './types';
 
 export async function fetchScenes(params: string) {
@@ -63,6 +64,25 @@ export async function updateScene(id: string, data: { name?: string; description
 export async function finishScene(id: string) {
   const res = await apiFetch(`/api/scenes/${id}/finish/`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to finish scene');
+  return res.json();
+}
+
+export interface SetRoundModePayload {
+  mode?: SceneRoundModeValue;
+  advance_quorum_pct?: number;
+  max_actions_per_round?: number;
+  per_target_repeat_lock?: boolean;
+}
+
+export async function setRoundMode(id: string, payload: SetRoundModePayload) {
+  const res = await apiFetch(`/api/scenes/${id}/set-round-mode/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to set round mode');
+  }
   return res.json();
 }
 
@@ -243,5 +263,13 @@ export function useCreateSceneEntryEndorsement(sceneId: string) {
   return useMutation({
     mutationFn: createSceneEntryEndorsement,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
+export function useSetRoundMode(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetRoundModePayload) => setRoundMode(sceneId, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene', sceneId] }),
   });
 }

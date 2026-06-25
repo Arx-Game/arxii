@@ -340,6 +340,45 @@ class SetRoundModeViewTestCase(APITestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data["detail"] == "No active character."
 
+    def test_scene_detail_active_round_null_when_none(self):
+        self.round.delete()
+        self.client.force_authenticate(self.account)
+        resp = self.client.get(f"/api/scenes/{self.scene.id}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.data["active_round"])
+
+    def test_scene_detail_active_round_payload(self):
+        self.round.delete()
+        rnd = SceneRound.objects.create(
+            room=self.scene.location,
+            scene=self.scene,
+            mode=SceneRoundMode.STRICT,
+            advance_quorum_pct=50,
+            max_actions_per_round=2,
+            per_target_repeat_lock=True,
+            start_reason=SceneRoundStartReason.OPT_IN,
+        )
+        self.client.force_authenticate(self.account)
+        resp = self.client.get(f"/api/scenes/{self.scene.id}/")
+        ar = resp.data["active_round"]
+        self.assertEqual(ar["mode"], SceneRoundMode.STRICT)
+        self.assertEqual(ar["advance_quorum_pct"], 50)
+        self.assertEqual(ar["max_actions_per_round"], 2)
+        self.assertTrue(ar["per_target_repeat_lock"])
+        self.assertEqual(ar["round_number"], rnd.round_number)
+        self.assertFalse(ar["is_danger"])
+
+    def test_scene_detail_active_round_is_danger(self):
+        self.round.delete()
+        SceneRound.objects.create(
+            room=self.scene.location,
+            scene=self.scene,
+            start_reason=SceneRoundStartReason.DANGER,
+        )
+        self.client.force_authenticate(self.account)
+        resp = self.client.get(f"/api/scenes/{self.scene.id}/")
+        self.assertTrue(resp.data["active_round"]["is_danger"])
+
 
 class PersonaViewSetTestCase(APITestCase):
     def setUp(self):

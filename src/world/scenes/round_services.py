@@ -89,6 +89,15 @@ def set_scene_round_mode(
     return scene_round
 
 
+def active_round_for_room(room: ObjectDB) -> SceneRound | None:
+    """Return the active (non-completed) SceneRound for a room, or None.
+
+    One active round per room (the ``one_active_scene_round_per_room`` constraint),
+    so ``.first()`` is unambiguous.
+    """
+    return SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
+
+
 def actions_this_round(scene_round: SceneRound, participant: SceneRoundParticipant) -> int:
     """Return the number of action declarations for a participant in the current round."""
     return scene_round.action_declarations.filter(

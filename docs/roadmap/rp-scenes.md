@@ -170,10 +170,24 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 an acute peril ensures an ordinary STRICT `SceneRound(start_reason=DANGER)` that ticks the
 peril at presence-gated resolution and auto-ends when it clears.
 
-**Deferred follow-ups (filed as issues):**
+### Web Round-Mode Control — DONE (#1467, parity for #1445)
 
-- React round-mode control for frontend parity (linked to #1328): `scene round` is
-  telnet-only; a web panel is a follow-up.
+Frontend parity for `scene round` (telnet):
+
+- **`active_round` read field** on `SceneDetailSerializer` — `SceneRoundSerializer` (read-only)
+  nested under the scene detail. Fields: `mode`, `advance_quorum_pct`, `max_actions_per_round`,
+  `per_target_repeat_lock`, `status`, `round_number`, `is_danger`. `null` when no active round.
+- **`active_round_for_room(room) -> SceneRound | None`** promoted to a public service in
+  `round_services.py` (was a private action helper); consumed by `SceneDetailSerializer.get_active_round`.
+- **`RoundSettingsDialog`** (`frontend/src/scenes/components/RoundSettingsDialog.tsx`) — GM/owner/
+  staff-gated React dialog; reads `active_round` from the scene detail and dispatches
+  `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
+
+**Deferred follow-up — reconcile the web danger lock with #1466:** `RoundSettingsDialog`
+still locks danger rounds (`modeLocked = is_danger`, "Danger rounds resolve on their own
+and can't be reconfigured"). #1466 retired the forced-OPEN self-resolving danger path, so
+the web control should let a scene admin reconfigure a live danger round's knobs (linked to
+#1328 web/telnet parity).
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 
