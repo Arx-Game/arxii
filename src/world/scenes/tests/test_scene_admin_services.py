@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import (
@@ -20,6 +22,7 @@ from world.scenes.models import SceneParticipation
 from world.scenes.scene_admin_services import (
     actor_can_administer_scene,
     add_present_as_co_owners,
+    finish_scene_full,
     resolve_actor_account,
 )
 
@@ -174,3 +177,63 @@ class AddPresentAsCoOwnersTests(TestCase):
         assert SceneParticipation.objects.filter(
             scene=scene, account=account_pc, is_owner=True
         ).exists()
+
+
+class FinishSceneFullTests(TestCase):
+    _PATCH_BASE = "world.scenes.scene_admin_services"
+
+    def test_sets_is_active_false_and_date_finished(self):
+        scene = SceneFactory(is_active=True)
+        assert scene.is_finished is False
+
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        scene.refresh_from_db()
+        assert scene.is_active is False
+        assert scene.date_finished is not None
+        assert scene.is_finished is True
+
+    def test_calls_on_scene_finished(self):
+        scene = SceneFactory(is_active=True)
+
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished") as mock_on_finished,
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        mock_on_finished.assert_called_once_with(scene)
+
+    def test_idempotent_when_already_finished(self):
+        """Calling finish_scene_full on an already-finished scene is a no-op."""
+        scene = SceneFactory(is_active=True)
+        # First finish
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        scene.refresh_from_db()
+        first_date_finished = scene.date_finished
+
+        # Second call should be a no-op
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished") as mock_on_finished,
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets") as mock_fatigue,
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message") as mock_broadcast,
+        ):
+            finish_scene_full(scene)
+
+        mock_on_finished.assert_not_called()
+        mock_fatigue.assert_not_called()
+        mock_broadcast.assert_not_called()
+        scene.refresh_from_db()
+        assert scene.date_finished == first_date_finished
