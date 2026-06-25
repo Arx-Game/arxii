@@ -47,25 +47,16 @@ def set_scene_round_mode(
 ) -> SceneRound:
     """Apply mode and/or knob changes to *scene_round* in-place.
 
-    Guard order (both raise :class:`RoundModeError`):
-
-    1. **DANGER block**: a DANGER round resolves on its own — its mode is not
-       user-settable.
-    2. **Out-of-STRICT guard**: switching *away* from STRICT while a pending
-       non-immediate declaration exists would orphan those declarations; the
-       caller must force-resolve first.
+    **Out-of-STRICT guard** (raises :class:`RoundModeError`): switching *away* from
+    STRICT while a pending non-immediate declaration exists would orphan those
+    declarations; the caller must force-resolve first.
 
     Only the supplied (non-None) fields are written; ``save(update_fields=...)``
     touches nothing else.
     """
     from world.scenes.models import SceneActionDeclaration  # noqa: PLC0415
 
-    # Guard 1 — DANGER rounds resolve autonomously; mode is fixed at OPEN.
-    if scene_round.start_reason == SceneRoundStartReason.DANGER:
-        msg = "A danger round resolves on its own; its mode can't be changed."
-        raise RoundModeError(msg)
-
-    # Guard 2 — switching away from STRICT with pending deferred declarations.
+    # Guard — switching away from STRICT with pending deferred declarations.
     leaving_strict = (
         scene_round.mode == SceneRoundMode.STRICT
         and mode is not None
@@ -211,11 +202,12 @@ def end_scene_round(scene_round: SceneRound) -> SceneRound:
 
 @transaction.atomic
 def advance_scene_round_for_action(scene_round: SceneRound) -> SceneRound:
-    """Drive one tick of a scene round in response to a participant's action.
+    """Drive one tick of an OPEN/POSE_ORDER scene round in response to a participant's action.
 
     Cycles BETWEEN_ROUNDS -> DECLARING -> (tick) -> BETWEEN_ROUNDS, reusing the
-    foundation lifecycle services. For a DANGER-started round, auto-ends
-    (COMPLETED) once no ACTIVE participant is Bleeding-Out (stabilized/removed/dead).
+    foundation lifecycle services. STRICT rounds (including danger rounds, which are
+    always STRICT) never reach here — they resolve via the presence-gated
+    ``maybe_resolve_scene_round`` path, which owns the danger auto-end.
     """
     rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
     if rnd.status == RoundStatus.BETWEEN_ROUNDS:
@@ -223,9 +215,6 @@ def advance_scene_round_for_action(scene_round: SceneRound) -> SceneRound:
         rnd.refresh_from_db()
     if rnd.status == RoundStatus.DECLARING:
         advance_scene_round(rnd)
-        rnd.refresh_from_db()
-    if rnd.start_reason == SceneRoundStartReason.DANGER and not _danger_persists(rnd):
-        end_scene_round(rnd)
         rnd.refresh_from_db()
     scene_round.refresh_from_db()
     return scene_round
@@ -268,16 +257,25 @@ def _present_character_sheets(room: ObjectDB) -> list[CharacterSheet]:
 
 
 @transaction.atomic
-def auto_start_or_extend_danger_round(character_sheet: CharacterSheet) -> SceneRound | None:
-    """Ensure a DANGER scene round exists for the character's room and enrol all present
-    characters. Returns the round, or None if the character has no room. Caller guarantees
-    the character is NOT in active combat. One active round per room (foundation constraint)."""
+def ensure_round_for_acute_condition(character_sheet: CharacterSheet) -> SceneRound | None:
+    """Ensure an active scene round exists for the character's room and enrol all present
+    characters. Returns the round, or None if the character has no room.
+
+    When no round is active, creates a **STRICT** ``SceneRound(start_reason=DANGER)`` —
+    danger is no longer a separate round type, just an acute condition any active round
+    ticks. When a round of any mode is already active (one active round per room), the
+    peril simply rides that round. Caller guarantees the character is NOT in active combat.
+    """
     room = character_sheet.character.location
     if room is None:
         return None
     rnd = SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
     if rnd is None:
-        rnd = SceneRound.objects.create(room=room, start_reason=SceneRoundStartReason.DANGER)
+        rnd = SceneRound.objects.create(
+            room=room,
+            start_reason=SceneRoundStartReason.DANGER,
+            mode=SceneRoundMode.STRICT,
+        )
         start_scene_round(rnd)
         rnd.refresh_from_db()
     for sheet in _present_character_sheets(room):
@@ -287,8 +285,13 @@ def auto_start_or_extend_danger_round(character_sheet: CharacterSheet) -> SceneR
 
 def scene_round_is_complete(scene_round: SceneRound) -> bool:
     """Presence-gated completion: True when every ACTIVE participant present in the room
-    has a declaration/pass row for the current round. Absent participants are implicit
-    passes (never block). No timer — presence is the idle signal (AFK-safety)."""
+    who *can act* has a declaration/pass row for the current round. Absent participants
+    are implicit passes (never block); present-but-``not can_act`` participants (e.g. an
+    unconscious bleeding victim) are also implicit passes, so they cannot deadlock the
+    round — a conscious bystander's declaration alone drives resolution. No timer —
+    presence is the idle signal (AFK-safety)."""
+    from world.vitals.services import can_act  # noqa: PLC0415
+
     present_ids = {s.character_id for s in _present_character_sheets(scene_round.room)}
     active = scene_round.participants.filter(
         status=SceneRoundParticipantStatus.ACTIVE
@@ -298,17 +301,26 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
             round_number=scene_round.round_number, is_immediate=False
         ).values_list("participant_id", flat=True)
     )
-    present_active = [p for p in active if p.character_sheet.character_id in present_ids]
+    present_active = [
+        p
+        for p in active
+        if p.character_sheet.character_id in present_ids and can_act(p.character_sheet)
+    ]
     if not present_active:
-        return False  # nobody present to drive resolution
+        return False  # nobody present and able to drive resolution
     return all(p.pk in declared_ids for p in present_active)
 
 
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
-    """Unconditionally resolve a DECLARING social round: execute declared CHALLENGE actions
-    in initiative order, fire the shared END tick, delete the round's bridge rows, then
-    advance to the next round (DECLARING).
+    """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
+    initiative order, fire the shared END tick (which advances acute conditions — DoTs,
+    bleed-out, plummet), delete the round's bridge rows, then either advance to the next
+    round or auto-end.
+
+    Auto-end: a ``start_reason==DANGER`` round ends (COMPLETED) once no ACTIVE participant
+    still carries an acute danger condition (``_danger_persists`` — the peril has cleared).
+    Any other round advances to the next round (DECLARING).
 
     Callers gate WHEN to resolve: ``maybe_resolve_scene_round`` resolves only once the
     presence-gated completion rule is met; a GM force-resolve calls this directly to resolve
@@ -316,12 +328,6 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     rnd = SceneRound.objects.select_for_update().get(pk=scene_round.pk)
     if rnd.status != RoundStatus.DECLARING:
         msg = f"Cannot resolve scene round: status is {rnd.status}, expected declaring."
-        raise ValueError(msg)
-    if rnd.start_reason == SceneRoundStartReason.DANGER:
-        # Danger rounds are the #1046 acute tier: they tick via advance_scene_round_for_action
-        # and auto-end on _danger_persists. They must never be resolved as a social round
-        # (that would bypass the danger auto-end). This is the social-only resolver.
-        msg = "Cannot resolve a danger round as a social round; it ticks via the acute tier."
         raise ValueError(msg)
     rnd.status = RoundStatus.RESOLVING
     rnd.save(update_fields=["status"])
@@ -338,7 +344,10 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
 
     rnd.status = RoundStatus.BETWEEN_ROUNDS
     rnd.save(update_fields=["status"])
-    start_scene_round(rnd)  # -> DECLARING, round_number += 1
+    if rnd.start_reason == SceneRoundStartReason.DANGER and not _danger_persists(rnd):
+        end_scene_round(rnd)  # peril cleared -> the danger round is done
+    else:
+        start_scene_round(rnd)  # -> DECLARING, round_number += 1
     scene_round.refresh_from_db()
     return scene_round
 

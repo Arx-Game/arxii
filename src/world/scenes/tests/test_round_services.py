@@ -6,7 +6,12 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.scenes.constants import InteractionMode, RoundStatus, SceneRoundStartReason
+from world.scenes.constants import (
+    InteractionMode,
+    RoundStatus,
+    SceneRoundMode,
+    SceneRoundStartReason,
+)
 from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
 from world.scenes.models import Interaction, SceneActionDeclaration
 from world.scenes.round_services import (
@@ -74,17 +79,49 @@ class SceneRoundServiceTests(TestCase):
         assert rnd.status == RoundStatus.BETWEEN_ROUNDS  # opt-in round stays active
 
     def test_danger_round_ends_when_no_bleedout_remains(self):
-        from world.scenes.round_services import advance_scene_round_for_action
+        # Under #1466, a danger round is STRICT and auto-ends inside resolve_scene_round
+        # once no ACTIVE participant carries an acute danger condition.
+        from evennia_extensions.factories import ObjectDBFactory
 
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         rnd = SceneRoundFactory(
-            status=RoundStatus.BETWEEN_ROUNDS,
+            room=room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
+            mode=SceneRoundMode.STRICT,
         )
         sheet = CharacterSheetFactory()
         SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
-        advance_scene_round_for_action(rnd)  # nobody Bleeding-Out -> danger round ends
+        resolve_scene_round(rnd)  # nobody Bleeding-Out -> danger round auto-ends
         rnd.refresh_from_db()
         assert rnd.status == RoundStatus.COMPLETED
+
+    def test_danger_round_persists_while_bleedout_remains(self):
+        # A danger round keeps going (advances to the next round) while a participant is
+        # still Bleeding-Out.
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.conditions.constants import BLEED_OUT_CONDITION_NAME
+
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        rnd = SceneRoundFactory(
+            room=room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            start_reason=SceneRoundStartReason.DANGER,
+            mode=SceneRoundMode.STRICT,
+        )
+        sheet = CharacterSheetFactory()
+        SceneRoundParticipantFactory(scene_round=rnd, character_sheet=sheet)
+        bleed_template = ConditionTemplateFactory(
+            name=BLEED_OUT_CONDITION_NAME,
+            default_duration_type=DurationType.UNTIL_CURED,
+        )
+        ConditionInstanceFactory(target=sheet.character, condition=bleed_template)
+        resolve_scene_round(rnd)
+        rnd.refresh_from_db()
+        assert rnd.status == RoundStatus.DECLARING  # peril persists -> next round
+        assert rnd.round_number == 2
 
 
 class SceneRoundResolutionTests(TestCase):

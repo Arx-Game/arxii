@@ -145,24 +145,25 @@ class SetRoundModeActionRefusalTests(TestCase):
         self.assertFalse(result.success)
         self.assertIn("round", result.message.lower())
 
-    def test_danger_round_mode_change_refused(self):
-        """DANGER rounds cannot have their mode changed (service raises RoundModeError)."""
+    def test_danger_round_mode_change_allowed(self):
+        """#1466: a danger round is an ordinary STRICT round; its mode can be changed
+        (no DANGER-specific block) when there are no pending declarations."""
         room = _make_room()
         char, _sheet, account = _create_pc_with_account("Hank", location=room)
         scene = SceneFactory(location=room, is_active=True)
         SceneOwnerParticipationFactory(scene=scene, account=account)
-        # DANGER round — mode is forced to OPEN at creation; service guards against changes.
-        SceneRound.objects.create(
+        rnd = SceneRound.objects.create(
             room=room,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
+            mode=SceneRoundMode.STRICT,
         )
         action = SetRoundModeAction()
         result = action.run(char, mode=SceneRoundMode.POSE_ORDER)
-        self.assertFalse(result.success)
-        # The service's RoundModeError message surfaces as success=False
-        self.assertIn("danger", result.message.lower())
+        self.assertTrue(result.success)
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.mode, SceneRoundMode.POSE_ORDER)
 
     def test_success_message_names_new_mode(self):
         """Success result mentions the new mode when mode was set."""

@@ -1219,12 +1219,6 @@ class SceneRound(AbstractRound):
             ),
         ]
 
-    def save(self, *args: object, **kwargs: object) -> None:
-        if self._state.adding:
-            if self.start_reason == SceneRoundStartReason.DANGER:
-                self.mode = SceneRoundMode.OPEN
-        super().save(*args, **kwargs)
-
     def __str__(self) -> str:
         return f"SceneRound(room={self.room_id}, round={self.round_number}, {self.status})"
 

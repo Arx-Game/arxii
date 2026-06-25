@@ -327,16 +327,16 @@ def _applied_bleed_out(pending: PendingResolution) -> bool:
 
 
 def _maybe_danger_round_on_bleed_out(character_sheet: CharacterSheet) -> None:
-    """Outside combat, dropping into Bleeding-Out spins up / extends a danger scene
-    round among present characters (acute, action-driven). In combat, combat drives
-    the tick, so this is a no-op."""
+    """Outside combat, dropping into Bleeding-Out ensures a STRICT scene round among
+    present characters that ticks the peril (acute, action-driven). In combat, combat
+    drives the tick, so this is a no-op."""
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
 
     if resolve_combat_round_context(character_sheet) is not None:
         return
-    from world.scenes.round_services import auto_start_or_extend_danger_round  # noqa: PLC0415
+    from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
 
-    auto_start_or_extend_danger_round(character_sheet)
+    ensure_round_for_acute_condition(character_sheet)
 
 
 def _applied_unconscious(pending: PendingResolution) -> bool:

@@ -318,9 +318,10 @@ def _tick_scene_round_if_active(ctx: RoundContext | None) -> None:
 def _drive_scene_round_for_turn_cost(action_obj: Action, ctx: RoundContext | None) -> None:
     """Drive an active scene round after a turn-costing REGISTRY action.
 
-    No-op unless *action_obj* is turn-costing and a scene round is active. Social
-    (declaration-open) rounds gather-and-resolve via presence-gated resolution;
-    danger rounds tick immediately."""
+    No-op unless *action_obj* is turn-costing and a scene round is active. STRICT
+    (declaration-open) rounds — including danger rounds, which are STRICT —
+    gather-and-resolve via presence-gated resolution; OPEN/POSE_ORDER rounds tick
+    immediately."""
     if not action_obj.costs_turn or ctx is None:
         return
     if ctx.is_declaration_open:
@@ -330,10 +331,12 @@ def _drive_scene_round_for_turn_cost(action_obj: Action, ctx: RoundContext | Non
 
 
 def _maybe_resolve_scene_round(ctx: RoundContext | None) -> None:
-    """Resolve an active SOCIAL scene round if the presence-gated completion rule is met.
+    """Resolve an active scene round if the presence-gated completion rule is met.
 
     Called after a turn-costing declaration/action. No-op for combat contexts and for
-    danger rounds (which tick immediately via ``_tick_scene_round_if_active``)."""
+    OPEN/POSE_ORDER rounds (which tick immediately via ``_tick_scene_round_if_active``).
+    A danger round is STRICT, so it resolves here — and ``resolve_scene_round`` owns the
+    danger auto-end once the peril clears."""
     from world.scenes.round_context import SceneRoundContext  # noqa: PLC0415
 
     if isinstance(ctx, SceneRoundContext):

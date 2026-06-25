@@ -287,8 +287,8 @@ direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventN
 **FELL consumer (`world/areas/positioning/plummet.py`, #1228).** A room-owned system
 trigger (`fall_to_plummet`, `source_condition=None`) dispatches `EventName.FELL` to
 `begin_plummet_handler` via a CALL_SERVICE_FUNCTION flow step. `begin_plummet(faller,
-position)` then (a) starts/extends an AFK-safe DANGER `SceneRound` with the faller
-enrolled (`auto_start_or_extend_danger_round`), (b) applies the seeded `Plummeting`
+position)` then (a) ensures an AFK-safe STRICT `SceneRound(start_reason=DANGER)` with the
+faller enrolled (`ensure_round_for_acute_condition`), (b) applies the seeded `Plummeting`
 condition, and (c) instantiates the seeded **"Catch the Faller"** `ChallengeInstance`
 bound to the faller via `target_object`. It is idempotent — a no-op when the faller
 already carries the Plummeting condition. The trigger definition is seeded by
@@ -312,20 +312,21 @@ and deactivates the bound catch `ChallengeInstance`. `caught` is **not inert** �
 the terminal room narration via `_narrate_plummet_end` (relieved safe-landing line when
 `caught=True`, grim impact line when `caught=False`), so the catch path (no impact) reads
 differently from the floor impact. The descent is **AFK-safe**: empty
-`tick_round_for_targets` targets ⇒ no tick ⇒ no descent. `_danger_persists`
-(`world/scenes/round_services.py`) keeps a DANGER round ticking while any participant is
-Bleeding-Out **or** Plummeting, so the round auto-ends once the fall resolves.
+`tick_round_for_targets` targets ⇒ no tick ⇒ no descent. The danger round is an ordinary
+STRICT round (#1466): the descent advances at round resolution (presence-gated
+`maybe_resolve_scene_round`), and `_danger_persists` (`world/scenes/round_services.py`),
+checked in `resolve_scene_round`, keeps the round going while any participant is Bleeding-Out
+**or** Plummeting — the round auto-ends (COMPLETED) once the fall resolves.
 
 **Bystander catch resolution (`plummet.py`, #1228, Task 7).** A bystander with a qualifying
 catch capability resolves the faller's catch challenge. The catch reuses existing machinery —
 no new dispatch surface: `dispatch_catch(catcher, faller, *, approach)` calls
 `get_available_actions(catcher, location)` (which surfaces only the catch approaches the
 catcher's capabilities qualify for — a catcher with no catch capability gets nothing, so it
-raises `LookupError`), selects the catch action bound to the faller, resolves it via
-`resolve_challenge` (the same synchronous immediate-challenge path a DANGER round drives
-through `_dispatch_immediate_challenge`, since `is_declaration_open` is False in a DANGER
-round), then translates the graded outcome through `resolve_catch(faller, catcher,
-resolution_result)`:
+raises `LookupError`), selects the catch action bound to the faller, resolves it directly via
+`resolve_challenge` (a synchronous immediate-challenge call — `dispatch_catch` bypasses the
+round-declaration seam entirely, so it resolves now regardless of the round's mode), then
+translates the graded outcome through `resolve_catch(faller, catcher, resolution_result)`:
 
 - **clean catch** (a SUCCESS check outcome, or any `ResolutionType.DESTROY` resolution): set
   the faller down on the catcher's safe non-CHASM position, or — when the catcher is themselves
@@ -380,7 +381,7 @@ entries in the player's move list until the gating challenge is resolved.
   gated-edge instantiation requires the absent `instantiate_situation()` service (which
   mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
 - **Reactive fall catch + multi-round plummet (built — #1228):** `EventName.FELL` is consumed
-  by `begin_plummet` (`plummet.py`), which starts the DANGER round, applies `Plummeting`, and
+  by `begin_plummet` (`plummet.py`), which ensures the STRICT danger round, applies `Plummeting`, and
   binds the catch challenge to the faller (Task 5); `advance_plummet` walks the descent down
   the `elevation_anchor` chain with impact consequences in the round tick (Task 6); and
   `dispatch_catch` → `resolve_catch` lets a capability-gated bystander catch the faller —

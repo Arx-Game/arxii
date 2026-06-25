@@ -35,9 +35,11 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`InteractionTargetPersona`**: Explicit IC targets for thread derivation
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
 - **`SceneRound`**: Non-combat round/turn structure anchored to a room. Fields: `mode` (`SceneRoundMode`),
-  `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`. A `start_reason=DANGER` round
-  is forced to `mode=OPEN` at creation time. One active round per room (UniqueConstraint on non-COMPLETED
-  status).
+  `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`. `mode` and `start_reason` are
+  fully orthogonal — the persistence layer never rewrites one from the other (#1466). Danger is no longer
+  a round *type*: an acute peril ensures a STRICT `SceneRound(start_reason=DANGER)` via
+  `ensure_round_for_acute_condition`, ticked at round resolution like any STRICT round. One active round
+  per room (UniqueConstraint on non-COMPLETED status).
 - **`SceneRoundDefaultsConfig`** (singleton pk=1): staff-tunable defaults for new scene rounds. Fields:
   `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
   `anti_spam_seconds`. Retrieved via `get_scene_round_defaults_config()` (get-or-create pattern).
@@ -50,12 +52,13 @@ the unified Persona identity system, and non-combat scene rounds.
 ### `constants.py`
 - **`SceneRoundMode`** (`TextChoices`): `OPEN` (immediate, unbounded), `POSE_ORDER` (immediate,
   quota-gated — quorum advances the round), `STRICT` (declare-then-batch-resolve).
-  Social rounds default to `POSE_ORDER`; DANGER rounds are always `OPEN`.
+  Social rounds default to `POSE_ORDER`; danger rounds are `STRICT` (#1466).
 
 ### `round_context.py`
 - **`SceneRoundContext`**: `RoundContext` implementation backed by a `SceneRound`.
-  - `is_declaration_open`: `True` only when `mode==STRICT` and status is DECLARING (non-danger round).
-    POSE_ORDER and OPEN rounds resolve immediately — declarations are never gathered.
+  - `is_declaration_open`: `True` only when `mode==STRICT` and status is DECLARING. Danger rounds are
+    STRICT, so they gather declarations like any other STRICT round (no special-case). POSE_ORDER and
+    OPEN rounds resolve immediately — declarations are never gathered.
   - `is_repeat_blocked(actor, action_ref, target_persona)`: OPEN → always False; STRICT → True when the
     declaration window is closed; POSE_ORDER → True when `actions_this_round >= max_actions_per_round`
     or `per_target_repeat_lock` and the target was already hit this round.
@@ -73,12 +76,20 @@ Key service functions for scene round lifecycle:
   actors ≥ `ceil(advance_quorum_pct / 100 × active_participant_count)`. Round stays DECLARING.
 - `start_scene_round`, `advance_scene_round`, `end_scene_round`: Lifecycle transitions
   (BETWEEN_ROUNDS → DECLARING → RESOLVING → BETWEEN_ROUNDS → COMPLETED).
-- `resolve_scene_round(scene_round)`: Social-only resolver — runs declared CHALLENGE actions in initiative
-  order, fires end-round tick, advances to the next round. Rejects DANGER rounds.
+- `resolve_scene_round(scene_round)`: Unconditional resolver — runs declared CHALLENGE actions in
+  initiative order, fires the end-round tick (which advances acute conditions — DoTs, bleed-out, plummet),
+  then either advances to the next round or **auto-ends** (a `start_reason==DANGER` round COMPLETES once
+  `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition).
+- `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
+  for the character's room (enrolling everyone present). When none is active, creates a STRICT
+  `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller
+  guarantees the character is not in active combat. (Renamed from `auto_start_or_extend_danger_round`.)
 - `maybe_resolve_scene_round(scene_round)`: Resolves only when presence-gated completion is met
-  (every present ACTIVE participant has a deferred declaration row).
-- `scene_round_is_complete(scene_round) -> bool`: True when all present ACTIVE participants have a
-  deferred (`is_immediate=False`) declaration for the current round.
+  (every present ACTIVE participant who *can act* has a deferred declaration row).
+- `scene_round_is_complete(scene_round) -> bool`: True when all present ACTIVE participants who *can act*
+  have a deferred (`is_immediate=False`) declaration for the current round. Absent and present-but-`not
+  can_act` participants (e.g. an unconscious bleeding victim) are implicit passes — they never block, so a
+  conscious bystander's declaration alone can drive resolution (AFK-safety + no deadlock).
 
 ### `views.py`
 - **`SceneViewSet`**: Scene CRUD operations and filtering
@@ -119,11 +130,12 @@ Scene rounds support three action-gating modes (orthogonal to `start_reason`):
 
 | Mode | Behavior |
 |------|----------|
-| `OPEN` | Every action resolves immediately, no quota. Used for DANGER rounds. |
+| `OPEN` | Every action resolves immediately, no quota. |
 | `POSE_ORDER` | Actions resolve immediately; after `ceil(quorum_pct × active_count)` distinct actors |
 | | have acted, `round_number` advances. Default for social rounds. |
 | `STRICT` | Actions are declared into a ledger while `is_declaration_open`; the full round |
-| | resolves batch when presence-gated completion is met or a GM force-resolves. |
+| | resolves batch when presence-gated completion is met or a GM force-resolves. Danger |
+| | rounds (#1466) are STRICT: the peril ticks at resolution; the round auto-ends when it clears. |
 
 `SceneRoundDefaultsConfig` (singleton pk=1, accessed via `get_scene_round_defaults_config()`) lets
 staff tune `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
