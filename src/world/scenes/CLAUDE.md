@@ -93,7 +93,10 @@ Key service functions for scene round lifecycle:
 
 ### `views.py`
 - **`SceneViewSet`**: Scene CRUD operations and filtering
-- **`PersonaViewSet`**: Persona management
+- **`PersonaViewSet`**: Persona management. `set_active` dispatches `SetActivePersonaAction`
+  (key `"set_active_persona"`, `actions/definitions/personas.py`) via `dispatch_player_action`
+  — the same seam the telnet `CmdPersona` uses. `set_active_persona` (service) remains the
+  sole mutator of `CharacterSheet.active_persona`; the action wraps it.
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
 ### `interaction_views.py`
