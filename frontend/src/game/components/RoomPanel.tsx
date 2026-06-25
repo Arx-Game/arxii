@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useMutation } from '@tanstack/react-query';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
 import type { RoomStateObject, SceneSummary } from '@/hooks/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RoomHeader } from './room-panel/RoomHeader';
 import { RoomDescription } from './room-panel/RoomDescription';
 import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { ObjectsList } from './room-panel/ObjectsList';
+import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 
 export interface RoomData {
   id: number;
@@ -18,18 +21,29 @@ export interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  is_owner: boolean;
+  is_public: boolean;
 }
 
 interface RoomPanelProps {
   character: string | null;
+  /** The active puppet's ObjectDB pk, for owner-gated room editing (#1470). */
+  characterId?: number | null;
   room: RoomData | null;
   scene: SceneSummary | null;
   onCharacterClick?: (character: RoomStateObject) => void;
 }
 
-export function RoomPanel({ character, room, scene, onCharacterClick }: RoomPanelProps) {
+export function RoomPanel({
+  character,
+  characterId,
+  room,
+  scene,
+  onCharacterClick,
+}: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
+  const [editOpen, setEditOpen] = useState(false);
 
   const start = useMutation({
     mutationFn: () => {
@@ -75,7 +89,30 @@ export function RoomPanel({ character, room, scene, onCharacterClick }: RoomPane
         onEndScene={() => end.mutate()}
         isStartPending={start.isPending}
         isEndPending={end.isPending}
+        canEdit={Boolean(room.is_owner) && characterId != null}
+        onEditRoom={() => setEditOpen(true)}
       />
+
+      {room.is_owner && characterId != null && (
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit room</DialogTitle>
+            </DialogHeader>
+            <RoomEditorPanel
+              characterId={characterId}
+              initialName={room.name}
+              initialDescription={room.description}
+              initialIsPublic={Boolean(room.is_public)}
+              onSaved={() => {
+                setEditOpen(false);
+                send(character, 'look');
+              }}
+              onCancel={() => setEditOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {room.thumbnail_url && (
         <div className="border-b">

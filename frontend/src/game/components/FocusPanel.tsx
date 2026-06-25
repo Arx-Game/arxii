@@ -116,6 +116,7 @@ export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusP
       body = (
         <RoomPanel
           character={roomCharacter}
+          characterId={observerId}
           room={roomData}
           scene={sceneData}
           onCharacterClick={onCharacterClickFromRoom}
