@@ -9,7 +9,6 @@ from world.combat.constants import (
     ActionCategory,
     ClashFlavor,
     ClashStatus,
-    EncounterStatus,
 )
 from world.combat.factories import (
     BreakClashFactory,
@@ -25,6 +24,7 @@ from world.combat.services import detect_available_combos
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.scenes.constants import RoundStatus
 
 
 class ClashComboPrereqTests(TestCase):
@@ -46,7 +46,7 @@ class ClashComboPrereqTests(TestCase):
         Returns (encounter, participants, actions).
         """
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participants = []

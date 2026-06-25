@@ -31,7 +31,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
     ClashStatus,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -56,6 +55,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -102,7 +102,7 @@ class CombatClashTelnetE2ETests(TestCase):
 
         # -- Encounter: DECLARING so dispatch_player_action accepts a declaration --
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
 

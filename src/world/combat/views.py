@@ -28,7 +28,6 @@ from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     ClashStatus,
     DuelChallengeStatus,
-    EncounterStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -75,7 +74,7 @@ from world.combat.services import (
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
-from world.scenes.constants import PersonaType
+from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -464,7 +463,7 @@ class CombatEncounterViewSet(ModelViewSet):
     def end(self, request: Request, pk: int | None = None) -> Response:
         """GM: force-end the encounter as ABANDONED (#876)."""
         encounter = self.get_object()
-        if encounter.status == EncounterStatus.COMPLETED:
+        if encounter.status == RoundStatus.COMPLETED:
             return Response(
                 {"detail": _ERR_ALREADY_COMPLETED},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -476,7 +475,7 @@ class CombatEncounterViewSet(ModelViewSet):
             # status read. Re-check so an unrelated ValueError from the seam's
             # tail isn't misreported as already-completed.
             encounter.refresh_from_db()
-            if encounter.status != EncounterStatus.COMPLETED:
+            if encounter.status != RoundStatus.COMPLETED:
                 raise
             return Response(
                 {"detail": _ERR_ALREADY_COMPLETED},

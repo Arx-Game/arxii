@@ -39,6 +39,8 @@ interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  is_owner: boolean;
+  is_public: boolean;
 }
 
 interface Session {
@@ -91,6 +93,8 @@ const createRoomData = (
   characters: [],
   objects,
   exits,
+  is_owner: false,
+  is_public: false,
 });
 
 const createRoomStateObject = (

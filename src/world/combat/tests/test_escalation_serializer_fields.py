@@ -14,7 +14,6 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -25,6 +24,7 @@ from world.combat.serializers import ParticipantSerializer
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement, end_engagement
 from world.roster.factories import RosterTenureFactory
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -155,7 +155,7 @@ class EncounterEscalationCurveFieldTests(TestCase):
         # otherwise leak cached prefetch attrs across tests.
         self.encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
         )
         CombatParticipantFactory(
             encounter=self.encounter,

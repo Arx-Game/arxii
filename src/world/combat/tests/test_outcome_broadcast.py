@@ -18,7 +18,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ActionCategory,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -41,7 +40,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 from world.vitals.models import CharacterVitals
@@ -65,7 +64,7 @@ class OutcomeBroadcastTest(TestCase):
         scene = SceneFactory()
         encounter = CombatEncounterFactory(
             scene=scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()

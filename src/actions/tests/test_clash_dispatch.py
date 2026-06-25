@@ -6,7 +6,7 @@ from actions.errors import ActionDispatchError
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionBackend, ActionRef
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ClashActionSlot, ClashStatus, EncounterStatus
+from world.combat.constants import ClashActionSlot, ClashStatus
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -15,6 +15,7 @@ from world.combat.factories import (
 )
 from world.combat.models import ClashContributionDeclaration
 from world.magic.factories import TechniqueFactory
+from world.scenes.constants import RoundStatus
 
 
 class ClashContributionDispatchTests(TestCase):
@@ -26,7 +27,7 @@ class ClashContributionDispatchTests(TestCase):
 
     def test_dispatch_writes_clash_contribution_declaration(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         sheet = CharacterSheetFactory()
@@ -63,13 +64,13 @@ class ClashContributionDispatchTests(TestCase):
 
     def test_forged_clash_id_raises_unknown_action_ref(self) -> None:
         """A clash_id that doesn't belong to the character's encounter is rejected."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         technique = TechniqueFactory()
 
         # Build a clash on a *different* encounter the character is not part of.
-        other_encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        other_encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         forged_clash = ClashFactory(encounter=other_encounter, status=ClashStatus.ACTIVE)
 
         ref = ActionRef(
@@ -91,7 +92,7 @@ class ClashContributionDispatchTests(TestCase):
 
     def test_missing_technique_id_raises_unknown_action_ref(self) -> None:
         """Omitting technique_id from kwargs is rejected before any DB write."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         clash = ClashFactory(encounter=encounter, status=ClashStatus.ACTIVE)
@@ -115,7 +116,7 @@ class ClashContributionDispatchTests(TestCase):
 
     def test_forged_technique_id_raises_unknown_action_ref_not_http404(self) -> None:
         """A technique_id pointing to a non-existent pk raises ActionDispatchError, not Http404."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         clash = ClashFactory(encounter=encounter, status=ClashStatus.ACTIVE)

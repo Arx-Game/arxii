@@ -21,7 +21,6 @@ from world.combat.cast_seed import _opponent_kwargs_from_sheet
 from world.combat.constants import (
     DuelChallengeStatus,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -34,6 +33,7 @@ from world.combat.services import (
     add_participant,
     complete_encounter,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.services import can_act
 
 if TYPE_CHECKING:
@@ -127,7 +127,7 @@ def create_pvp_duel(
         room=room,
         scene=_scene_for_duel(room),
         risk_level=risk_level,
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
     )
 
     participant_a = add_participant(enc, challenger_sheet)
@@ -194,7 +194,7 @@ def create_lethal_duel(
         room=room,
         scene=_scene_for_duel(room),
         risk_level=RiskLevel.LETHAL,
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
     )
 
     add_participant(enc, pc_sheet)
@@ -251,7 +251,7 @@ def resolve_duel_end(  # noqa: PLR0911 - distinct duel end conditions read clear
     """
     if encounter.encounter_type != EncounterType.DUEL:
         return None
-    if encounter.status == EncounterStatus.COMPLETED:
+    if encounter.status == RoundStatus.COMPLETED:
         return None
 
     mirrors = list(

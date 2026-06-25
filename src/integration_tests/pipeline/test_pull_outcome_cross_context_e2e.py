@@ -36,7 +36,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
     ClashStatus,
-    EncounterStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -65,6 +64,7 @@ from world.magic.factories import (
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.traits.factories import CheckSystemSetupFactory
 from world.vitals.models import CharacterVitals
@@ -288,7 +288,7 @@ class CombatCastPullFlatBonusReadPathE2ETests(TestCase):
 
         # Combat encounter in DECLARING status.
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
 
@@ -432,7 +432,7 @@ class CombatClashPullIntensityReadPathE2ETests(TestCase):
         self.action_template = ensure_technique_cast_content()
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
 

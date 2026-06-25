@@ -9,7 +9,6 @@ from rest_framework.test import APITestCase
 from actions.types import TargetType
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -23,6 +22,7 @@ from world.scenes.action_models import (
     SceneActionTarget,
     SceneCastPullDeclaration,
 )
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import (
     PlaceFactory,
     SceneActionRequestFactory,
@@ -593,7 +593,7 @@ class CastEndpointTestCase(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert "encounter" in response.data
         encounter_data = response.data["encounter"]
-        assert encounter_data["status"] == EncounterStatus.DECLARING
+        assert encounter_data["status"] == RoundStatus.DECLARING
 
     def test_cast_technique_without_action_template_returns_400(self) -> None:
         """Casting a known technique that has no action_template → 400 (not castable standalone)."""

@@ -1,4 +1,10 @@
-"""Integration tests for the #520 acute-tier: danger rounds, AFK-safety, combat precedence."""
+"""Integration tests for the #520 acute-tier under #1466's unified model.
+
+Danger is now an ordinary STRICT scene round: a peril ensures the round, and the peril
+ticks at *round resolution* (presence-gated ``maybe_resolve_scene_round``), which fires
+the shared end-tick. AFK-safety is inherited from presence-gating — no declaration, no
+resolution, no tick. Combat precedence is unchanged (combat drives its own tick).
+"""
 
 from django.test import TestCase
 
@@ -6,11 +12,11 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.constants import BLEED_OUT_CONDITION_NAME, DurationType
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.scenes.constants import RoundStatus, SceneRoundStartReason
-from world.scenes.models import SceneRound
+from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
+from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
 from world.scenes.round_services import (
-    advance_scene_round_for_action,
-    auto_start_or_extend_danger_round,
+    ensure_round_for_acute_condition,
+    maybe_resolve_scene_round,
 )
 
 
@@ -25,64 +31,73 @@ def _char_in_room(room):
     return sheet
 
 
+def _declare_pass(rnd, sheet):
+    participant = SceneRoundParticipant.objects.get(scene_round=rnd, character_sheet=sheet)
+    return SceneActionDeclaration.objects.create(
+        scene_round=rnd,
+        round_number=rnd.round_number,
+        participant=participant,
+        is_pass=True,
+        is_immediate=False,
+    )
+
+
 class BleedOutDangerRoundTickTest(TestCase):
-    """Test 1: bleed-out outside combat → danger round spun up; action drives the tick."""
+    """Test 1: bleed-out outside combat -> STRICT danger round; resolution ticks the peril."""
 
     def setUp(self):
         self.room = _make_room()
 
-    def test_bleed_out_creates_danger_round_and_action_ticks_dot(self):
-        """Danger round enrols bystander; advance_scene_round_for_action ticks a DoT condition."""
+    def test_bleed_out_creates_strict_round_and_resolution_ticks_dot(self):
+        """Danger round enrols bystander; presence-gated resolution ticks a DoT condition
+        and the round persists while Bleeding-Out remains."""
         victim = _char_in_room(self.room)
-        _char_in_room(self.room)  # bystander enrolled by auto_start_or_extend_danger_round
+        bystander = _char_in_room(self.room)  # enrolled by ensure_round_for_acute_condition
 
-        # Spin up the danger round (mimics _maybe_danger_round_on_bleed_out logic)
-        rnd = auto_start_or_extend_danger_round(victim)
+        rnd = ensure_round_for_acute_condition(victim)
         assert rnd is not None
         assert rnd.start_reason == SceneRoundStartReason.DANGER
+        assert rnd.mode == SceneRoundMode.STRICT
         assert rnd.status == RoundStatus.DECLARING
 
-        # Put a ROUNDS-duration DoT condition on the victim so we can assert the tick fired
+        # A ROUNDS-duration DoT lets us prove the end-tick fired for participants.
         template = ConditionTemplateFactory(
             default_duration_type=DurationType.ROUNDS, default_duration_value=5
         )
         dot = ConditionInstanceFactory(
             target=victim.character, condition=template, rounds_remaining=5
         )
-
-        # Give the victim a Bleeding-Out condition so the danger round does NOT auto-end
+        # An UNTIL_CURED Bleeding-Out keeps the danger round alive (does not auto-end).
         bleed_template = ConditionTemplateFactory(
             name=BLEED_OUT_CONDITION_NAME,
             default_duration_type=DurationType.UNTIL_CURED,
         )
         ConditionInstanceFactory(target=victim.character, condition=bleed_template)
 
-        # An action drives one tick
-        advance_scene_round_for_action(rnd)
+        # Both present conscious participants declare -> presence-complete -> resolve.
+        _declare_pass(rnd, victim)
+        _declare_pass(rnd, bystander)
+        maybe_resolve_scene_round(rnd)
 
         dot.refresh_from_db()
-        # rounds_remaining decremented proves the per-action tick fired for participants
-        assert dot.rounds_remaining == 4
+        assert dot.rounds_remaining == 4  # end-tick fired for participants
         rnd.refresh_from_db()
-        # Danger round persists (Bleeding-Out still present)
-        assert rnd.status in {RoundStatus.BETWEEN_ROUNDS, RoundStatus.DECLARING}
+        # Bleeding-Out persists -> the danger round advanced to the next round, not COMPLETED.
+        assert rnd.status == RoundStatus.DECLARING
 
 
-class AkfSafetyNoAutoTickTest(TestCase):
-    """Test 2: AFK-safety — progression is action-gated, not clock-driven."""
+class AfkSafetyNoAutoTickTest(TestCase):
+    """Test 2: AFK-safety — progression is presence-gated, not clock-driven."""
 
     def setUp(self):
         self.room = _make_room()
 
-    def test_danger_round_does_not_tick_without_an_action(self):
-        """A DoT condition on a solo victim is UNCHANGED until advance_scene_round_for_action fires.
-
-        Proves progression is action-gated, not clock-driven.
-        """
+    def test_danger_round_does_not_tick_without_a_declaration(self):
+        """A DoT on a lone victim is UNCHANGED until a present participant declares
+        (driving resolution). Proves progression is presence-gated, not clock-driven."""
         victim = _char_in_room(self.room)
 
-        # Spin up a danger round (victim alone in room)
-        rnd = auto_start_or_extend_danger_round(victim)
+        rnd = ensure_round_for_acute_condition(victim)  # victim alone in room
         assert rnd is not None
 
         template = ConditionTemplateFactory(
@@ -92,14 +107,13 @@ class AkfSafetyNoAutoTickTest(TestCase):
             target=victim.character, condition=template, rounds_remaining=3
         )
 
-        # No action dispatched — just check state is unchanged
-        dot.refresh_from_db()
-        assert dot.rounds_remaining == 3  # no tick without an action call
+        # No declaration -> maybe_resolve is a no-op -> nothing ticks.
+        maybe_resolve_scene_round(rnd)
 
-        # No exception was raised (system is stable without action)
-        # Confirm round exists but has not auto-advanced
+        dot.refresh_from_db()
+        assert dot.rounds_remaining == 3  # no tick without a declaration
         rnd.refresh_from_db()
-        assert rnd.status == RoundStatus.DECLARING
+        assert rnd.status == RoundStatus.DECLARING  # did not advance
 
 
 class CombatPrecedenceNoDangerRoundTest(TestCase):
@@ -110,12 +124,12 @@ class CombatPrecedenceNoDangerRoundTest(TestCase):
 
     def test_in_combat_character_skips_danger_round(self):
         """_maybe_danger_round_on_bleed_out is a no-op for active combat participants."""
-        from world.combat.constants import EncounterStatus, ParticipantStatus
+        from world.combat.constants import ParticipantStatus
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
         from world.vitals.services import _maybe_danger_round_on_bleed_out
 
         sheet = _char_in_room(self.room)
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
@@ -124,5 +138,5 @@ class CombatPrecedenceNoDangerRoundTest(TestCase):
 
         _maybe_danger_round_on_bleed_out(sheet)
 
-        # Combat drives the tick; no SceneRound should be created for this room
+        # Combat drives the tick; no SceneRound should be created for this room.
         assert not SceneRound.objects.filter(room=self.room).exists()

@@ -88,6 +88,10 @@ export interface RoomStateObject {
   thumbnail_url: string | null;
   commands: string[];
   description?: string;
+  /** Whether the viewing character's active persona owns this room (#1470). */
+  is_owner?: boolean;
+  /** Whether the room is publicly listed (the editor's privacy toggle state). */
+  is_public?: boolean;
 }
 
 export interface RoomStatePayload {

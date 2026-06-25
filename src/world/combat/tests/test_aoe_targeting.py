@@ -370,10 +370,11 @@ class ResolveTargetsAoEExpansionTests(TestCase):
         from actions.constants import ActionBackend, ActionTargetType
         from actions.round_context import get_active_round_context
         from actions.types import ActionRef, PlayerAction
-        from world.combat.constants import EncounterStatus, ParticipantStatus
+        from world.combat.constants import ParticipantStatus
+        from world.scenes.constants import RoundStatus
         from world.vitals.models import CharacterVitals
 
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
         sheet = participant.character_sheet
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)

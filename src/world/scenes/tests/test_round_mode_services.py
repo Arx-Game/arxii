@@ -63,18 +63,38 @@ class SetSceneRoundModeTests(TestCase):
         self.assertEqual(rnd.mode, SceneRoundMode.OPEN)
         self.assertIs(result, rnd)
 
-    def test_danger_round_raises(self):
-        """Any mode/knob change on a DANGER round is blocked."""
-        # DANGER rounds are forced to OPEN at creation (model.save), so start_reason is enough.
-        rnd = SceneRoundFactory(start_reason=SceneRoundStartReason.DANGER)
-        with self.assertRaises(RoundModeError):
-            set_scene_round_mode(rnd, mode=SceneRoundMode.OPEN)
+    def test_danger_round_knob_change_allowed(self):
+        """#1466: a danger round is an ordinary STRICT round; there is no DANGER-specific
+        block. Knob changes apply like any other round (no pending declarations)."""
+        rnd = SceneRoundFactory(
+            start_reason=SceneRoundStartReason.DANGER, mode=SceneRoundMode.STRICT
+        )
+        set_scene_round_mode(rnd, advance_quorum_pct=50)
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.advance_quorum_pct, 50)
 
-    def test_danger_round_raises_even_for_knob_only(self):
-        """Knob-only changes on a DANGER round are also blocked (DANGER guard fires first)."""
-        rnd = SceneRoundFactory(start_reason=SceneRoundStartReason.DANGER)
+    def test_danger_round_leaving_strict_with_pending_still_guarded(self):
+        """The out-of-STRICT guard still applies to a danger round with pending deferreds."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        rnd = SceneRoundFactory(
+            start_reason=SceneRoundStartReason.DANGER,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            mode=SceneRoundMode.STRICT,
+        )
+        participant = SceneRoundParticipantFactory(
+            scene_round=rnd, character_sheet=CharacterSheetFactory()
+        )
+        SceneActionDeclaration.objects.create(
+            scene_round=rnd,
+            round_number=1,
+            participant=participant,
+            is_immediate=False,
+            is_pass=True,
+        )
         with self.assertRaises(RoundModeError):
-            set_scene_round_mode(rnd, advance_quorum_pct=50)
+            set_scene_round_mode(rnd, mode=SceneRoundMode.POSE_ORDER)
 
     def test_only_changed_fields_saved(self):
         """save(update_fields=...) is called with only the supplied fields (no extra writes)."""

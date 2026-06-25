@@ -50,7 +50,7 @@ from world.scenes.serializers import (
     SetActivePersonaRequestSerializer,
     SetRoundModeRequestSerializer,
 )
-from world.scenes.services import ActivePersonaError, broadcast_scene_message, set_active_persona
+from world.scenes.services import broadcast_scene_message
 from world.societies.renown_serializers import (
     RenownCardSerializer,
     RenownSerializer,
@@ -455,20 +455,25 @@ class PersonaViewSet(
         body.is_valid(raise_exception=True)
         puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
         sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
-        if sheet is None:
+        if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."
             raise serializers.ValidationError(msg)
-        persona = Persona.objects.filter(
-            pk=body.validated_data["persona_id"], character_sheet_id=sheet.pk
-        ).first()
-        if persona is None:
-            msg = "That isn't one of this character's identities."
-            raise serializers.ValidationError(msg)
-        try:
-            set_active_persona(sheet, persona)
-        except ActivePersonaError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-        return Response(ActivePersonaResultSerializer({"active_persona_id": persona.pk}).data)
+        from actions.constants import ActionBackend  # noqa: PLC0415
+        from actions.player_interface import dispatch_player_action  # noqa: PLC0415
+        from actions.types import ActionRef  # noqa: PLC0415
+
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="set_active_persona")
+        result = dispatch_player_action(
+            puppet, ref, {"persona_id": body.validated_data["persona_id"]}
+        )
+        detail = result.detail  # ActionResult (REGISTRY dispatch is never deferred)
+        if not detail.success:
+            raise serializers.ValidationError(detail.message)
+        return Response(
+            ActivePersonaResultSerializer(
+                {"active_persona_id": detail.data["active_persona_id"]}
+            ).data
+        )
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])

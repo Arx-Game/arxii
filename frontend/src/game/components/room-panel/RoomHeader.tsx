@@ -10,6 +10,9 @@ interface RoomHeaderProps {
   onEndScene: () => void;
   isStartPending: boolean;
   isEndPending: boolean;
+  /** Show the "Edit" affordance — true only when the viewer owns this room (#1470). */
+  canEdit?: boolean;
+  onEditRoom?: () => void;
 }
 
 export function RoomHeader({
@@ -19,10 +22,19 @@ export function RoomHeader({
   onEndScene,
   isStartPending,
   isEndPending,
+  canEdit = false,
+  onEditRoom,
 }: RoomHeaderProps) {
   return (
     <div className="border-b px-3 py-2">
-      <h3 className="text-sm font-semibold">{name}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{name}</h3>
+        {canEdit && onEditRoom && (
+          <Button variant="ghost" size="sm" className="h-5 px-1 text-xs" onClick={onEditRoom}>
+            Edit
+          </Button>
+        )}
+      </div>
       {scene ? (
         <div className="mt-1 flex items-center gap-2">
           <Link to={`/scenes/${scene.id}`}>

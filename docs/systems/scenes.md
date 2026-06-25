@@ -505,10 +505,10 @@ active_round_for_room(room) -> SceneRound | None
 from world.scenes.round_services import set_scene_round_mode, RoundModeError
 
 # Apply mode and/or knob changes to scene_round in-place.
-# Guards (both raise RoundModeError):
-#   1. DANGER rounds are autonomous — mode is fixed at OPEN, not user-settable.
-#   2. Leaving STRICT while pending non-immediate declarations exist is blocked;
-#      caller must force-resolve first.
+# Guard (raises RoundModeError):
+#   - Leaving STRICT while pending non-immediate declarations exist is blocked;
+#     caller must force-resolve first. (#1466 removed the DANGER-specific block —
+#     a danger round is an ordinary STRICT round whose mode/knobs are settable.)
 # Only supplied (non-None) fields are written (update_fields pattern).
 set_scene_round_mode(
     scene_round,
@@ -528,8 +528,8 @@ Changes the mode and/or knobs of the active scene round. Guard order in `execute
 2. The room must have an active scene (requires scene context — start one first).
 3. The actor must be a scene admin per `actor_can_administer_scene`.
 4. The room must have an active round to modify.
-5. `set_scene_round_mode` validates the mode transition (DANGER immutable; STRICT-exit blocked
-   by pending deferred declarations).
+5. `set_scene_round_mode` validates the mode transition (STRICT-exit blocked by pending deferred
+   declarations).
 
 `costs_turn = False` — mode changes do not consume a round action.
 
@@ -564,11 +564,6 @@ authoritative permission check runs inside `SetRoundModeAction`. The viewset res
 requesting account's active character as the action actor so that telnet and web converge on
 the same `action.run()` seam. Returns the updated scene detail on success.
 
-**Deferred follow-up:**
-- DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
-  user-settable; a future slice will allow a scene admin to unify a live DANGER round
-  into the three-mode framework.
-
 ### Web round-mode control — RoundSettingsDialog (#1467)
 
 `RoundSettingsDialog` (`frontend/src/scenes/components/RoundSettingsDialog.tsx`) is the
@@ -581,8 +576,12 @@ React-side parity for `scene round` (telnet, #1445).
 - When `scene.active_round` is `null` (no active round), the dialog body shows an
   informational message; Save is disabled.
 - When a round exists, the dialog exposes mode (Select), advance quorum % (Input),
-  max actions per round (Input), and repeat-target lock (Switch). The mode selector is
-  disabled when `active_round.is_danger` is true (DANGER rounds stay in OPEN mode).
+  max actions per round (Input), and repeat-target lock (Switch). All controls are
+  editable for every round, including danger rounds — since #1466 a danger round is an
+  ordinary STRICT round and `set_scene_round_mode` accepts knob/mode changes for it like
+  any other round (web/telnet parity, #1328, #1476). When `active_round.is_danger` is
+  true the dialog shows a non-blocking informational note explaining the round was started
+  by an unfolding peril and auto-ends when it clears; it does **not** lock anything.
 - On Save, dispatches `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/` with a
   `SetRoundModePayload`; closes the dialog on success.
 
@@ -603,6 +602,9 @@ nested field serialized by `SceneRoundSerializer` (read-only). Fields:
 | `is_danger` | bool | Derived: `True` when `start_reason == DANGER` |
 
 `active_round` is `null` when the scene has no location or no active round exists.
+
+The `is_danger` field remains a read-side hint: the dialog uses it only to show the
+informational note above, never to disable controls (#1476 cleared the old danger lock).
 
 ---
 

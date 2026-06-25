@@ -17,7 +17,6 @@ from django.db import transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -28,6 +27,7 @@ from world.combat.factories import (
 from world.combat.models import CombatPull, CombatPullResolvedEffect
 from world.combat.services import begin_declaration_phase, expire_pulls_for_round
 from world.magic.constants import EffectKind, VitalBonusTarget
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -195,7 +195,7 @@ class BeginDeclarationPhaseExpiryTests(TestCase):
         sheet = CharacterSheetFactory()
         encounter = CombatEncounterFactory(
             round_number=2,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
         )
         # begin_declaration_phase requires at least one active opponent.
         CombatOpponentFactory(encounter=encounter)

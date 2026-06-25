@@ -14,8 +14,9 @@ import django.test
 
 from actions.constants import ActionBackend, ActionTargetType
 from actions.types import TargetType
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.scenes.constants import RoundStatus
 
 
 class TechniqueTargetSpecTests(django.test.TestCase):
@@ -34,7 +35,7 @@ class TechniqueTargetSpecTests(django.test.TestCase):
         from world.magic.models.techniques import ConditionTargetKind
 
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(

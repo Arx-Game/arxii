@@ -102,10 +102,10 @@ class FleeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import declare_flee  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         try:
@@ -133,10 +133,10 @@ class CoverAction(Action):
         ally_participant_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import declare_cover  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         if ally_participant_id is None:
@@ -169,10 +169,10 @@ class InterposeAction(Action):
         ally_participant_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import declare_interpose  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         ally = _resolve_ally(participant, ally_participant_id)
@@ -201,10 +201,10 @@ class ReadyAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import toggle_action_ready  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         action = _current_round_action(participant)
@@ -233,11 +233,11 @@ class UpgradeComboAction(Action):
         combo_id: int | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.models import ComboDefinition  # noqa: PLC0415
         from world.combat.services import upgrade_action_to_combo  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         action = _current_round_action(participant)
@@ -272,10 +272,10 @@ class RevertComboAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import revert_combo_upgrade  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.DECLARING})
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
             return ActionResult(success=False, message="You are not in an active combat round.")
         action = _current_round_action(participant)
@@ -292,8 +292,8 @@ class RevertComboAction(Action):
 
 def _active_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
     """Return the newest joinable encounter in *actor*'s room, or None (telnet join path)."""
-    from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     room = actor.location
     if room is None:
@@ -301,7 +301,7 @@ def _active_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
     return (
         CombatEncounter.objects.filter(
             room=room,
-            status__in={EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS},
+            status__in={RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS},
         )
         .order_by("-created_at")
         .first()
@@ -372,10 +372,10 @@ class LeaveEncounterAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.constants import EncounterStatus  # noqa: PLC0415
         from world.combat.services import leave_encounter  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
-        participant = _active_combat_participant(actor, {EncounterStatus.BETWEEN_ROUNDS})
+        participant = _active_combat_participant(actor, {RoundStatus.BETWEEN_ROUNDS})
         if participant is None:
             return ActionResult(
                 success=False,

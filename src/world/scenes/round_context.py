@@ -14,7 +14,6 @@ from world.scenes.constants import (
     RoundStatus,
     SceneRoundMode,
     SceneRoundParticipantStatus,
-    SceneRoundStartReason,
 )
 from world.scenes.models import SceneActionDeclaration, SceneRoundParticipant
 
@@ -40,10 +39,10 @@ class SceneRoundContext(RoundContext):
     @property
     def is_declaration_open(self) -> bool:
         # Only STRICT rounds gather declarations. POSE_ORDER and OPEN rounds resolve
-        # immediately. DANGER rounds use the #1046 acute-tier behavior.
+        # immediately. Danger rounds are STRICT, so they gather declarations like any
+        # other STRICT round (#1466 — danger is no longer a separate path).
         return (
             self._scene_round.status == RoundStatus.DECLARING
-            and self._scene_round.start_reason != SceneRoundStartReason.DANGER
             and self._scene_round.mode == SceneRoundMode.STRICT
         )
 

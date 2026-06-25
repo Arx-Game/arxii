@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ClashStatus, EncounterStatus
+from world.combat.constants import ClashStatus
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -17,6 +17,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.roster.factories import RosterTenureFactory
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -47,7 +48,7 @@ class EncounterDetailClashesFieldTests(TestCase):
         # previous test's prefetch run.
         self.encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
         )
         CombatParticipantFactory(
             encounter=self.encounter,

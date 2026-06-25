@@ -392,8 +392,9 @@ def _active_duel_participant(actor: ObjectDB) -> object | None:
 
     "Active DUEL" means an encounter with encounter_type==DUEL and status not COMPLETED.
     """
-    from world.combat.constants import EncounterStatus, EncounterType  # noqa: PLC0415
+    from world.combat.constants import EncounterType  # noqa: PLC0415
     from world.combat.models import CombatParticipant  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     actor_sheet = _sheet(actor)
     if actor_sheet is None:
@@ -403,7 +404,7 @@ def _active_duel_participant(actor: ObjectDB) -> object | None:
             character_sheet=actor_sheet,
             encounter__encounter_type=EncounterType.DUEL,
         )
-        .exclude(encounter__status=EncounterStatus.COMPLETED)
+        .exclude(encounter__status=RoundStatus.COMPLETED)
         .select_related("encounter")
         .first()
     )

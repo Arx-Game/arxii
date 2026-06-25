@@ -409,8 +409,8 @@ effects for graph mutation and flight).
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
-  `dispatch_catch` → `resolve_catch` (`plummet.py`) — DANGER round + `Plummeting` + per-round
-  descent/impact + capability-gated bystander catch
+  `dispatch_catch` → `resolve_catch` (`plummet.py`) — STRICT danger round (#1466) + `Plummeting` +
+  per-round descent/impact + capability-gated bystander catch
 - **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
@@ -646,7 +646,8 @@ action consent flow, and a three-mode non-combat round framework.
   `SceneCastPullDeclaration`,
   **Round framework (#1351):** `SceneRound` (room-anchored non-combat round; fields: `mode`
   (`SceneRoundMode`), `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`;
-  DANGER start_reason forces `mode=OPEN`), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
+  `mode`/`start_reason` orthogonal — danger rounds are STRICT, ensured via
+  `ensure_round_for_acute_condition`, #1466), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
   defaults: `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
   `anti_spam_seconds`; accessed via `get_scene_round_defaults_config()`), `SceneActionDeclaration`
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
@@ -684,7 +685,8 @@ action consent flow, and a three-mode non-combat round framework.
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
     - `add_present_as_co_owners(scene, room)` — mark every present character with a controlling account as a co-owner at scene creation (anti-grab: latecomers are non-owners).
     - `finish_scene_full(scene, by_account=None)` — full scene-finish orchestration: `finish_scene()` → `on_scene_finished()` → deferred fatigue resets → `broadcast_scene_message(END)`. Idempotent.
-    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` for DANGER rounds (immutable) or STRICT-exit with pending declarations.
+    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` on STRICT-exit with pending declarations (#1466 removed the DANGER-immutable block — danger rounds are ordinary STRICT rounds).
+    - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None` (`round_services.py`) — ensure an active scene round for the room (enrolling everyone present); creates a STRICT `SceneRound(start_reason=DANGER)` when none active, else the peril rides the existing round (#1466; renamed from `auto_start_or_extend_danger_round`).
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -1313,8 +1315,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `EncounterStatus`,
-  `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `RoundStatus` (shared with
+  `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
+  COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
   yield, flee, my_action, available_combos), duel challenge endpoints

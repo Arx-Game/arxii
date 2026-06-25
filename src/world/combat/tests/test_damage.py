@@ -13,7 +13,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, EncounterStatus, OpponentStatus, OpponentTier
+from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
     CombatEncounterFactory,
@@ -39,6 +39,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
@@ -201,7 +202,7 @@ class KnockoutDeathProcessingTest(TestCase):
         npc_damage: int = 30,
     ) -> tuple:
         """Create encounter with 1 PC, 1 NPC, NPC targeting PC."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
         entry = ThreatPoolEntryFactory(pool=pool, base_damage=npc_damage)
         opponent = CombatOpponentFactory(
@@ -289,7 +290,7 @@ class KnockoutDeathProcessingTest(TestCase):
         from world.covenants.factories import CovenantRoleFactory
         from world.traits.factories import CheckOutcomeFactory
 
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool, base_damage=10)
         CombatOpponentFactory(
@@ -501,7 +502,7 @@ class NpcActionInteractionLazyCreationTests(TestCase):
 
     def _setup_encounter(self, *, pc_health: int = 100, npc_damage: int = 5):
         """Create an encounter: 1 PC, 1 NPC (mook), NPC targeting PC."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
         entry = ThreatPoolEntryFactory(pool=pool, base_damage=npc_damage)
         opponent = CombatOpponentFactory(

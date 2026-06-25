@@ -239,18 +239,24 @@ class PassRoundActionTests(TestCase):
         self.assertIsNotNone(action)
         self.assertTrue(action.costs_turn)
 
-    def test_pass_round_danger_round_returns_failure_no_row(self) -> None:
-        """A danger round is the acute tier; passing is a social-round concept only."""
+    def test_pass_round_danger_round_records_pass(self) -> None:
+        """#1466: a danger round is an ordinary STRICT round. A present bystander passing
+        is exactly how the presence-gated resolution (which ticks the peril) is driven —
+        so passing records a deferred pass row, not a failure."""
         from actions.definitions.rounds import PassRoundAction
-        from world.scenes.constants import SceneRoundStartReason
+        from world.scenes.constants import SceneRoundMode, SceneRoundStartReason
 
         self.round.start_reason = SceneRoundStartReason.DANGER
-        self.round.save(update_fields=["start_reason"])
+        self.round.mode = SceneRoundMode.STRICT
+        self.round.save(update_fields=["start_reason", "mode"])
 
         result = PassRoundAction().execute(actor=self.actor)
 
-        self.assertFalse(result.success)
-        self.assertFalse(SceneActionDeclaration.objects.filter(scene_round=self.round).exists())
+        self.assertTrue(result.success)
+        row = SceneActionDeclaration.objects.get(
+            scene_round=self.round, participant=self.participant, is_immediate=False
+        )
+        self.assertTrue(row.is_pass)
 
     def test_pass_round_with_existing_immediate_declarations_does_not_raise(self) -> None:
         """Regression: pass must not raise MultipleObjectsReturned when immediate rows exist.
@@ -355,17 +361,20 @@ class ForceResolveRoundActionTests(TestCase):
 
         self.assertIsNotNone(get_action("force_resolve_round"))
 
-    def test_force_resolve_danger_round_returns_failure_unchanged(self) -> None:
-        """force_resolve must not resolve a DANGER round (it bypasses the acute auto-end)."""
+    def test_force_resolve_danger_round_resolves_and_auto_ends(self) -> None:
+        """#1466: a danger round is an ordinary STRICT round. force_resolve resolves it
+        like any other round; resolve_scene_round owns the danger auto-end, so with no
+        peril remaining the round COMPLETES."""
         from actions.definitions.rounds import ForceResolveRoundAction
-        from world.scenes.constants import SceneRoundStartReason
+        from world.scenes.constants import SceneRoundMode, SceneRoundStartReason
 
         self.round.start_reason = SceneRoundStartReason.DANGER
-        self.round.save(update_fields=["start_reason"])
+        self.round.mode = SceneRoundMode.STRICT
+        self.round.save(update_fields=["start_reason", "mode"])
 
         result = ForceResolveRoundAction().execute(actor=self.actor)
 
-        self.assertFalse(result.success)
+        self.assertTrue(result.success)
         self.round.refresh_from_db()
-        self.assertEqual(self.round.round_number, 1)
-        self.assertEqual(self.round.status, RoundStatus.DECLARING)
+        # No ACTIVE participant carries an acute danger condition -> auto-ended.
+        self.assertEqual(self.round.status, RoundStatus.COMPLETED)

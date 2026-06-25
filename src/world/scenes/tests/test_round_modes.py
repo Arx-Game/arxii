@@ -20,9 +20,14 @@ class SceneRoundModeTests(TestCase):
         b = get_scene_round_defaults_config()
         self.assertEqual(a.pk, b.pk)
 
-    def test_danger_round_is_open_mode(self):
-        rnd = SceneRoundFactory(start_reason=SceneRoundStartReason.DANGER)
-        self.assertEqual(rnd.mode, SceneRoundMode.OPEN)
+    def test_start_reason_no_longer_forces_a_mode(self):
+        # #1466: start_reason and mode are fully orthogonal — the model no longer rewrites
+        # mode from start_reason. Danger rounds become STRICT only via
+        # ensure_round_for_acute_condition, not the persistence layer.
+        rnd = SceneRoundFactory(
+            start_reason=SceneRoundStartReason.DANGER, mode=SceneRoundMode.STRICT
+        )
+        self.assertEqual(rnd.mode, SceneRoundMode.STRICT)
 
     def test_policy_columns_default_from_config(self):
         rnd = SceneRoundFactory()

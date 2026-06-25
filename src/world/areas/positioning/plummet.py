@@ -8,8 +8,8 @@ A room-owned system trigger (the escalation pattern, ``source_condition=None``)
 dispatches the FELL event to ``begin_plummet_handler`` via a CALL_SERVICE_FUNCTION
 flow step. ``begin_plummet`` then:
 
-1. starts (or extends) an AFK-safe DANGER ``SceneRound`` with the faller and any
-   other present characters enrolled (``auto_start_or_extend_danger_round``);
+1. ensures an AFK-safe STRICT ``SceneRound`` (start_reason=DANGER) with the faller and
+   any other present characters enrolled (``ensure_round_for_acute_condition``);
 2. applies the seeded "Plummeting" :class:`ConditionTemplate` to the faller; and
 3. instantiates the seeded "Catch the Faller" :class:`ChallengeInstance` bound to
    the faller via ``target_object`` (so Task 7's catch action can find "the catch
@@ -80,21 +80,21 @@ def _create_catch_challenge_for(faller: ObjectDB, position: Position) -> None:  
 def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECTDB_PARAM
     """Begin a plummet for *faller* who has entered CHASM *position*.
 
-    Starts an AFK-safe DANGER scene round (enrolling present characters), applies
-    the seeded Plummeting condition, and instantiates the catch challenge bound to
-    the faller. Idempotent — no-op if the faller is already plummeting.
+    Ensures an AFK-safe STRICT scene round (enrolling present characters) that ticks
+    the peril, applies the seeded Plummeting condition, and instantiates the catch
+    challenge bound to the faller. Idempotent — no-op if the faller is already plummeting.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.scenes.round_services import (  # noqa: PLC0415
-        auto_start_or_extend_danger_round,
+        ensure_round_for_acute_condition,
     )
 
     if _faller_is_plummeting(faller):
         return
 
     sheet = faller.sheet_data
-    auto_start_or_extend_danger_round(sheet)
+    ensure_round_for_acute_condition(sheet)
     apply_condition(faller, ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME))
     _create_catch_challenge_for(faller, position)
 

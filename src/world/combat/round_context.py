@@ -38,7 +38,7 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
@@ -46,13 +46,14 @@ from world.combat.models import (
     CombatRoundActionTarget,
     RoundChallengeDeclaration,
 )
+from world.scenes.constants import RoundStatus
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
 _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
     {
-        EncounterStatus.DECLARING,
-        EncounterStatus.RESOLVING,
-        EncounterStatus.BETWEEN_ROUNDS,
+        RoundStatus.DECLARING,
+        RoundStatus.RESOLVING,
+        RoundStatus.BETWEEN_ROUNDS,
     }
 )
 
@@ -87,7 +88,7 @@ class CombatRoundContext(RoundContext):
     @property
     def is_declaration_open(self) -> bool:
         """True when the encounter is in the DECLARING phase."""
-        return self._encounter.status == EncounterStatus.DECLARING
+        return self._encounter.status == RoundStatus.DECLARING
 
     def is_repeat_blocked(
         self,

@@ -23,7 +23,7 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.fatigue.constants import EffortLevel
@@ -35,6 +35,7 @@ from world.mechanics.factories import (
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance
+from world.scenes.constants import RoundStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -199,7 +200,7 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -318,7 +319,7 @@ class TestGetPlayerActionsCombatWindowClosed(django.test.TestCase):
         """Encounter in RESOLVING → is_declaration_open is False → no COMBAT actions."""
         from actions.player_interface import get_player_actions
 
-        character, _technique = self._make_participant_with_technique(EncounterStatus.RESOLVING)
+        character, _technique = self._make_participant_with_technique(RoundStatus.RESOLVING)
         actions = get_player_actions(character)
         combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
         self.assertEqual(
@@ -331,9 +332,7 @@ class TestGetPlayerActionsCombatWindowClosed(django.test.TestCase):
         """Encounter in BETWEEN_ROUNDS → is_declaration_open is False → no COMBAT actions."""
         from actions.player_interface import get_player_actions
 
-        character, _technique = self._make_participant_with_technique(
-            EncounterStatus.BETWEEN_ROUNDS
-        )
+        character, _technique = self._make_participant_with_technique(RoundStatus.BETWEEN_ROUNDS)
         actions = get_player_actions(character)
         combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
         self.assertEqual(
@@ -652,7 +651,7 @@ class TestDispatchPlayerActionCombatDeferred(django.test.TestCase):
         from world.vitals.models import CharacterVitals
 
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -729,7 +728,7 @@ class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
         from world.vitals.models import CharacterVitals
 
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(

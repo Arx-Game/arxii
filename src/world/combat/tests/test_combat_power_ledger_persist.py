@@ -20,7 +20,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ActionCategory,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -41,6 +40,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -61,7 +61,7 @@ class CombatPowerLedgerPersistTests(TestCase):
     def _setup_encounter(self):
         """1 PC, 1 mook, declaration phase, full magic-pipeline requirements."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()

@@ -27,14 +27,14 @@ hostile one."
 
 from __future__ import annotations
 
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.models import CombatParticipant, CombatRoundAction
 from world.magic.models import Technique
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.cast_services import request_technique_cast
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.models import Interaction
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -284,7 +284,7 @@ class TestHostileCastCombatSeed(_BaseCastIntegrationTest):
         """The seeded encounter must be in DECLARING status."""
         cast = self._do_hostile_cast()
         cast.encounter.refresh_from_db()
-        self.assertEqual(cast.encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(cast.encounter.status, RoundStatus.DECLARING)
 
     def test_hostile_cast_request_status_resolved(self) -> None:
         """The audit SceneActionRequest for a hostile cast must be RESOLVED."""

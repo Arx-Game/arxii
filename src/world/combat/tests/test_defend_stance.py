@@ -16,7 +16,7 @@ Pipeline:
 
 from django.test import TestCase, tag
 
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.defend_content import (
     DEFEND_PASSIVE_NAME,
     SHIELDED_CONDITION_NAME,
@@ -36,6 +36,7 @@ from world.combat.services import (
 )
 from world.conditions.models import ConditionInstance
 from world.magic.models.techniques import ConditionTargetKind, Technique
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 # ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ def _setup_encounter_with_ally():
     - room:     the encounter's room (used for character.location)
     """
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
         round_number=1,
     )
     room = encounter.room
@@ -198,7 +199,7 @@ class ShieldedConditionHalvesDamageTest(TestCase):
         NPC_DAMAGE with no damage_type (so the only reduction is Shielded's 0.5).
         """
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         room = encounter.room

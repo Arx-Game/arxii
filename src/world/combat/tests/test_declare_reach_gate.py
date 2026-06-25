@@ -21,7 +21,7 @@ from world.areas.positioning.services import (
     create_position,
     place_in_position,
 )
-from world.combat.constants import ActionCategory, EncounterStatus
+from world.combat.constants import ActionCategory
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -32,6 +32,7 @@ from world.fatigue.constants import EffortLevel
 from world.magic.constants import TechniqueReach
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.roster.factories import RosterTenureFactory
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -63,7 +64,7 @@ class DeclareActionReachGateOpponentTests(TestCase):
         # Create encounter and participant. Use the same room so that
         # CombatOpponentFactory places its ephemeral NPC there too.
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING, round_number=1, room=self.room
+            status=RoundStatus.DECLARING, round_number=1, room=self.room
         )
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         _wire_vitals(self.participant)
@@ -142,7 +143,7 @@ class DeclareActionReachGateLenientTests(TestCase):
         self.effect_type = EffectTypeFactory(name="LenientAtk", base_power=20)
         self.gift = GiftFactory()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         _wire_vitals(self.participant)
 

@@ -6,7 +6,6 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.combat.constants import (
     ActionCategory,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -21,6 +20,7 @@ from world.combat.models import (
     ThreatPoolEntry,
 )
 from world.covenants.factories import CovenantRoleFactory
+from world.scenes.constants import RoundStatus
 
 
 class CombatEncounterTests(TestCase):
@@ -32,7 +32,7 @@ class CombatEncounterTests(TestCase):
         encounter = CombatEncounterFactory()
         self.assertEqual(encounter.encounter_type, EncounterType.PARTY_COMBAT)
         self.assertEqual(encounter.round_number, 0)
-        self.assertEqual(encounter.status, EncounterStatus.BETWEEN_ROUNDS)
+        self.assertEqual(encounter.status, RoundStatus.BETWEEN_ROUNDS)
         self.assertEqual(encounter.risk_level, RiskLevel.MODERATE)
         self.assertEqual(encounter.stakes_level, StakesLevel.LOCAL)
         self.assertIsNotNone(encounter.scene)
@@ -49,7 +49,7 @@ class CombatEncounterTests(TestCase):
 
         encounter = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
         )
         expected = "Open Encounter (Round 1, Resolving)"

@@ -256,13 +256,14 @@ class MaybeDangerRoundOnBleedOutTest(TestCase):
 
     def test_in_combat_character_skips_danger_round(self) -> None:
         """A character already in active combat does NOT create a SceneRound."""
-        from world.combat.constants import EncounterStatus, ParticipantStatus
+        from world.combat.constants import ParticipantStatus
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+        from world.scenes.constants import RoundStatus
         from world.scenes.models import SceneRound
         from world.vitals.services import _maybe_danger_round_on_bleed_out
 
         sheet = self._char_in_room()
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,

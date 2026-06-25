@@ -118,7 +118,7 @@ model with a split where the initiator controls effort and each defender control
 
 Non-combat scene rounds (`SceneRound`) now support three action-gating modes:
 
-- **OPEN** — every action resolves immediately, no quota (used for DANGER rounds).
+- **OPEN** — every action resolves immediately, no quota.
 - **POSE_ORDER** — default for social rounds; actions resolve immediately and `round_number` advances
   once `ceil(advance_quorum_pct × active_count)` distinct participants have acted this round.
 - **STRICT** — actions are declared into a ledger while `is_declaration_open`; the round resolves as a
@@ -155,8 +155,8 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 - **Service functions** (`scene_admin_services.py`): `resolve_actor_account`,
   `add_present_as_co_owners`, `finish_scene_full` (extracted from the viewset).
 - **`set_scene_round_mode`** (`round_services.py`) + `RoundModeError`: applies mode/knob
-  changes in-place; guards against DANGER rounds (immutable) and STRICT-exit with pending
-  deferred declarations.
+  changes in-place; guards against STRICT-exit with pending deferred declarations (#1466
+  removed the DANGER-immutable guard — danger rounds are ordinary STRICT rounds).
 - **Actions:** `StartSceneAction` (key `"start_scene"`), `FinishSceneAction`
   (key `"finish_scene"`) in `actions/definitions/scenes.py`; `SetRoundModeAction`
   (key `"set_round_mode"`) in `actions/definitions/rounds.py`.
@@ -166,11 +166,9 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 - **Web:** `POST /api/scenes/{id}/set-round-mode/` (gated `IsSceneGMOrOwnerOrStaff`,
   dispatches `SetRoundModeAction`).
 
-**Deferred follow-up:**
-
-- DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
-  user-settable; a future slice allows a scene admin to shift a live DANGER round into
-  the three-mode framework.
+**DANGER → STRICT unification — DONE (#1466):** danger is no longer a separate round type;
+an acute peril ensures an ordinary STRICT `SceneRound(start_reason=DANGER)` that ticks the
+peril at presence-gated resolution and auto-ends when it clears.
 
 ### Web Round-Mode Control — DONE (#1467, parity for #1445)
 
@@ -185,7 +183,31 @@ Frontend parity for `scene round` (telnet):
   staff-gated React dialog; reads `active_round` from the scene detail and dispatches
   `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
 
+**Web danger lock reconciled — DONE (#1476):** `RoundSettingsDialog` no longer locks
+danger rounds. Since #1466 a danger round is an ordinary STRICT round, so the dialog lets
+a scene admin reconfigure a live danger round's knobs/mode like any other round (web/telnet
+parity, #1328). `is_danger` now only drives a non-blocking informational note.
+
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
+
+### Persona Telnet Switch + Shared set-active Path — DONE (#1347)
+
+Web/telnet parity for active-persona management. Before this, `PersonaViewSet.set_active`
+called `set_active_persona` directly (bypassing `action.run()`); telnet had no way to switch.
+
+- **`SetActivePersonaAction`** (key `"set_active_persona"`, REGISTRY, `target_type=SELF`,
+  kwarg `persona_id`) in `actions/definitions/personas.py` — validates persona ownership,
+  wraps `world.scenes.services.set_active_persona` (still the sole mutator).
+- **`PersonaViewSet.set_active`** now routes through `dispatch_player_action` → the action
+  instead of calling the service directly. API request/response unchanged.
+- **`CmdPersona`** (`persona`, alias `wear-face`) in `commands/persona.py` — thin
+  `DispatchCommand`; bare `persona`/`persona list` renders the caller's faces (active marked
+  `◄ active`); `persona <name>` or `wear-face <name>` dispatches the action.
+- **E2E:** `src/integration_tests/pipeline/test_persona_telnet_e2e.py` (telnet list/switch,
+  web/telnet parity, negative cases).
+- **Scope boundary:** pose/sdesc reflection of the presented persona remains **#1109**.
+
+**Details:** [appearance_and_identity.md](../systems/appearance_and_identity.md) §"Layer 1 — Persona"
 
 ### Positioning in Scenes — DONE (#1017)
 - **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.

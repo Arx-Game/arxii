@@ -14,7 +14,6 @@ from flows.constants import EventName
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -34,6 +33,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -102,7 +102,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
     def test_affected_emitted_per_target_for_attack_against_mook(self) -> None:
         """TECHNIQUE_AFFECTED fires once with the mook's ObjectDB as target."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -153,7 +153,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
     def test_affected_emitted_for_self_targeted_buff(self) -> None:
         """Self-targeted buff: TECHNIQUE_AFFECTED fires once with the caster as target."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
         )
         room = _create_room()
@@ -193,7 +193,7 @@ class TechniqueAffectedFiringTests(EvenniaTestCase):
     def test_affected_emitted_for_ally_targeted_buff(self) -> None:
         """Ally-targeted buff: TECHNIQUE_AFFECTED fires with the ally's character ObjectDB."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
         )
         room = _create_room()

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from world.combat.constants import CombatManeuver, EncounterStatus, ParticipantStatus
+from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.interpose_content import (
     INTERPOSE_CHALLENGE_NAME,
@@ -31,6 +31,7 @@ from world.combat.interpose_content import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import _ensure_interpose_challenges
 from world.mechanics.models import ChallengeInstance, ChallengeTemplate
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -66,7 +67,7 @@ class EnsureInterposeChallengesToSpecificAllyTest(TestCase):
         idmapper_models.flush_cache()
         ensure_interpose_content()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.RESOLVING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
         self.interposer = CombatParticipantFactory(encounter=self.encounter)
         self.ally = CombatParticipantFactory(encounter=self.encounter)
         _make_vitals(self.interposer)
@@ -153,7 +154,7 @@ class EnsureInterposeChallengesToAllAlliesTest(TestCase):
         idmapper_models.flush_cache()
         ensure_interpose_content()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.RESOLVING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
         self.interposer = CombatParticipantFactory(encounter=self.encounter)
         self.ally_a = CombatParticipantFactory(encounter=self.encounter)
         self.ally_b = CombatParticipantFactory(encounter=self.encounter)
@@ -234,7 +235,7 @@ class EnsureInterposeChallengeIdempotencyTest(TestCase):
         idmapper_models.flush_cache()
         ensure_interpose_content()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.RESOLVING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
         self.interposer = CombatParticipantFactory(encounter=self.encounter)
         self.ally = CombatParticipantFactory(encounter=self.encounter)
         _make_vitals(self.interposer)

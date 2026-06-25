@@ -26,7 +26,7 @@ and verify issue number↔title before any mutation. Temporary — removal track
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.
   After a squash-merge: `git checkout main && git pull && git branch -D feature-name`.
-- **`main` uses a merge queue (#991).** Once a PR is green, **enqueue it**
+- **`main` uses a merge queue (#991; see ADR-0021).** Once a PR is green, **enqueue it**
   (`gh pr merge --auto --squash`, or `enqueue-pr.sh` in the `issue-to-merged-pr`
   skill) and stop — do not re-sync with main or merge by hand. The queue
   re-tests the PR on top of the latest main and merges in order; a human
@@ -50,7 +50,7 @@ and verify issue number↔title before any mutation. Temporary — removal track
 ### Spec review happens on the issue, gated by labels
 
 New feature specs live in the **GitHub issue body** (between `<!-- spec:start -->`
-and `<!-- spec:end -->`), not as committed files. (Pre-convention specs still live
+and `<!-- spec:end -->`), not as committed files (see ADR-0020). (Pre-convention specs still live
 in `docs/superpowers/`; being triaged — see #660.) The `issue-to-merged-pr` flow
 drafts the spec, flags the team, then **stops** until a human org member approves.
 **Labels are the source of truth:**
@@ -108,6 +108,21 @@ file `src/.env`; Django commands run from `src/`.
 - **Django development** (models, views, APIs, tests) — `django_notes.md`.
 - **Evennia migration quirks** — `docs/evennia-quirks.md`. Use `arx manage
   makemigrations` (custom command that prevents phantom Evennia-library migrations).
+- **Decision log** — `docs/adr/README.md` before changing architecture, a
+  pipeline/contract, models, or a design tenet; an ADR records *why* a decision was
+  made and the alternative that was rejected. Don't re-litigate a recorded decision.
+- **Glossary** — `AGENT_GLOSSARY_MAP.md` (+ the app's `AGENT_GLOSSARY.md` next to its
+  code) before designing or naming anything; use the canonical terms, not the
+  `_Avoid_` synonyms.
+
+### Decisions & Vocabulary
+
+ADRs (`docs/adr/`) hold the *why* behind hard, surprising, traded-off decisions and
+the rejected alternatives; the glossary (`AGENT_GLOSSARY_MAP.md` → per-app
+`AGENT_GLOSSARY.md`) holds the canonical ubiquitous language. The
+`domain-glossary-and-adr` skill keeps both current; `design-vocabulary` and
+`architecture-cleanup` enable periodic deepening. (Note: "module" stays a code
+unit — it is NOT redefined to mean "component".)
 
 ## Docs Are Directives — Keep Them in Tandem
 
@@ -126,6 +141,11 @@ service-function signatures, update the docs that describe them as part of the w
 - **Architecture doc** — update the relevant `docs/architecture/*.md` (including its
   diagrams) when you change a pipeline, contract, or flow it documents.
 - **Roadmap** — mark the relevant `docs/roadmap/*.md` and record *what was built*.
+- **Decision log** — when you make a hard-to-reverse, surprising, real-trade-off
+  decision, record it as a one-paragraph ADR in `docs/adr/` in the same PR; when you
+  reverse one, mark the old ADR superseded.
+- **Glossary** — when you add, rename, or remove a domain term, update the app's
+  `AGENT_GLOSSARY.md` (+ the root `AGENT_GLOSSARY_MAP.md`) in the same PR.
 - **Fix-on-sight** — if you touch code a doc describes and find the doc already wrong,
   correct it at the source in the same PR (use the `verify-against-code` skill's
   `[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` labeling).
@@ -152,9 +172,9 @@ recurring-traps list. **Use it.**
 
 Database design:
 
-- **No JSON fields.** Each setting/configuration is a proper column with validation
-  and indexing. Use foreign keys, real data types, DB constraints — all data
-  queryable with standard Django ORM.
+- **No JSON fields** (see ADR-0007). Each setting/configuration is a proper column
+  with validation and indexing. Use foreign keys, real data types, DB constraints —
+  all data queryable with standard Django ORM.
 - **Avoid direct FKs to ObjectDB.** Evennia's ObjectDB is a generic base for all
   game objects; an FK to it is almost always too broad. Use a specific model
   (Persona, RosterEntry, CharacterSheet, RoomProfile). Ask: "could this be a vase of
@@ -164,7 +184,7 @@ Database design:
   when ObjectDB is genuinely right. Lint scope expands one app at a time (the
   `files:` regex in `.pre-commit-config.yaml`); new code in in-scope modules must
   pass clean.
-- **FK direction — depend specific→general.** When a link joins two systems, decide
+- **FK direction — depend specific→general** (see ADR-0010). When a link joins two systems, decide
   which side the FK belongs on *deliberately*: it lives on the more specific/dependent
   system and points at the reusable primitive, **never** on the primitive. Don't anchor
   it on whichever app you happen to be editing — a general model (e.g. `Secret`) must not
@@ -174,12 +194,12 @@ Database design:
 Code quality (always-on; full list in `django_notes.md`):
 
 - **No relative imports** — absolute only (`from world.roster.models import Roster`).
-- **No Django signals** — explicit, testable service-function calls instead.
+- **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
 - **No data migrations pre-production** — schema migrations only; no `RunPython`
-  backfills (no meaningful rows yet).
+  backfills (no meaningful rows yet) (see ADR-0013).
 - **Preserve the dev database** — never drop/flush/destroy it except in dire need.
 - **PostgreSQL only (production)** — use PG features directly (CTEs, materialized
-  views, `DISTINCT ON`, JSONB); no DB-agnostic workarounds.
+  views, `DISTINCT ON`, JSONB); no DB-agnostic workarounds (see ADR-0012).
 - **100-char line limit.** Use `.env` for configurable settings.
 
 The full standards (type annotations + `ty`, model-instance preference, avoid dict
@@ -199,7 +219,7 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
   non-lookup kwargs when the row pre-exists) + the `_create` fix: see `django_notes.md`.
 - **New apps: avoid multiple migrations during development** — see
   `docs/evennia-quirks.md`.
-- **SharedMemoryModel** — all concrete models use it (import from
+- **SharedMemoryModel** (see ADR-0008) — all concrete models use it (import from
   `evennia.utils.idmapper.models`, **never** `evennia.utils.models`). It's the
   identity-map cache: trust it; don't reinvent `resolve_*`/`batch_fetch_*` helpers
   or cache-flushing. See the `sharedmemory-model` skill.

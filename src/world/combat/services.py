@@ -67,7 +67,6 @@ from world.combat.constants import (
     ActionCategory,
     CombatManeuver,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -113,9 +112,8 @@ from world.combat.types import (
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
-from world.mechanics.challenge_resolution import resolve_challenge
-from world.mechanics.services import get_available_actions
 from world.mechanics.types import ChallengeResolutionResult
+from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -944,7 +942,7 @@ def join_encounter(
     Can join during DECLARING or BETWEEN_ROUNDS status.
     Raises ValueError if already participating or encounter is completed.
     """
-    allowed = {EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS}
+    allowed = {RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS}
     if encounter.status not in allowed:
         msg = "Can only join during declaration or between rounds."
         raise ValueError(msg)
@@ -979,7 +977,7 @@ def leave_encounter(participant: CombatParticipant) -> None:
     - the participant is not ACTIVE.
     """
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
-    if enc.status != EncounterStatus.BETWEEN_ROUNDS:
+    if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
             f"Cannot leave: encounter status is "
             f"'{enc.get_status_display()}', expected 'Between Rounds'."
@@ -1020,7 +1018,7 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     encounter = participant.encounter
 
     # Encounter status check
-    if encounter.status != EncounterStatus.DECLARING:
+    if encounter.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot flee: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
@@ -1080,7 +1078,7 @@ def declare_cover(
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
-    if encounter.status != EncounterStatus.DECLARING:
+    if encounter.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot cover: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
@@ -1133,7 +1131,7 @@ def declare_interpose(
     from world.vitals.services import is_dead  # noqa: PLC0415
 
     encounter = participant.encounter
-    if encounter.status != EncounterStatus.DECLARING:
+    if encounter.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot interpose: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
@@ -1445,7 +1443,7 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     Raises ValueError if the encounter is not BETWEEN_ROUNDS.
     """
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
-    if enc.status != EncounterStatus.BETWEEN_ROUNDS:
+    if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
             f"Cannot begin declaration phase: encounter status is "
             f"'{enc.get_status_display()}', expected 'Between Rounds'."
@@ -1467,7 +1465,7 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
         assert_duel_lethality_valid(enc)
 
     enc.round_number += 1
-    enc.status = EncounterStatus.DECLARING
+    enc.status = RoundStatus.DECLARING
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
@@ -1715,7 +1713,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         raise ValueError(msg)
 
     # Encounter status check
-    if encounter.status != EncounterStatus.DECLARING:
+    if encounter.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot declare action: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
@@ -1932,7 +1930,7 @@ def select_npc_actions(
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
-    if encounter.status != EncounterStatus.DECLARING:
+    if encounter.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot select NPC actions: encounter status is "
             f"'{encounter.get_status_display()}', expected 'Declaring'."
@@ -3754,11 +3752,11 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     flip with the aftermath/cleanup tail skipped — the double-completion guard
     would otherwise block any retry. Inside resolve_round it is a savepoint.
     """
-    if encounter.status == EncounterStatus.COMPLETED:
+    if encounter.status == RoundStatus.COMPLETED:
         msg = f"Encounter {encounter.pk} is already completed."
         raise ValueError(msg)
 
-    encounter.status = EncounterStatus.COMPLETED
+    encounter.status = RoundStatus.COMPLETED
     encounter.outcome = outcome
     encounter.completed_at = timezone.now()
     encounter.save(update_fields=["status", "outcome", "completed_at"])
@@ -3772,6 +3770,43 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     _emit_encounter_completed(encounter, outcome)
     cleanup_completed_encounter(encounter)
+    _hand_off_acute_peril_to_scene_round(encounter)
+
+
+def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
+    """After combat ends, ensure any participant still Bleeding-Out or Plummeting is
+    covered by a scene round so the peril keeps ticking (Task 6 — #1466).
+
+    Guards:
+    - Only PC participants (``CombatParticipant``), never NPC opponents.
+    - Skip characters who are somehow still in another active encounter (paranoid guard).
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
+
+    acute_condition_names = [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
+            "character_sheet__character"
+        )
+    )
+    for participant in participants:
+        sheet = participant.character_sheet
+        character = sheet.character
+        has_acute = ConditionInstance.objects.filter(
+            target=character,
+            condition__name__in=acute_condition_names,
+        ).exists()
+        if not has_acute:
+            continue
+        # Paranoid guard: skip if the character is already in another active encounter.
+        if resolve_combat_round_context(sheet) is not None:
+            continue
+        ensure_round_for_acute_condition(sheet)
 
 
 def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
@@ -3999,6 +4034,12 @@ def _resolve_declared_challenges(
     The delete of bridge rows runs inside the caller's @transaction.atomic so it
     is consistent with the rest of round resolution.
     """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.scenes.round_services import (  # noqa: PLC0415
+        ChallengeResolutionRequest,
+        resolve_challenge_declarations,
+    )
+
     declarations = list(
         RoundChallengeDeclaration.objects.filter(
             encounter=encounter,
@@ -4036,57 +4077,21 @@ def _resolve_declared_challenges(
     # final-round) come after, preserving their insertion order.
     ordered.extend(decl_by_participant.values())
 
-    outcomes: list[ChallengeResolutionResult] = []
-    for decl in ordered:
-        character = decl.participant.character_sheet.character
-        challenge_instance = decl.challenge_instance
-        approach = decl.challenge_approach
-        location = challenge_instance.location
-
-        # Re-validate eligibility: character must still have a matching AvailableAction.
-        available_actions = get_available_actions(character, location)
-        matching = next(
-            (
-                a
-                for a in available_actions
-                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
-            ),
-            None,
-        )
-        if matching is None:
-            logger.warning(
-                "Skipping deferred challenge declaration for participant %s "
-                "(challenge_instance=%s, approach=%s): "
-                "no matching AvailableAction at resolution time.",
-                decl.participant_id,
-                challenge_instance.pk,
-                approach.pk,
-            )
-            continue
-
-        outcome = resolve_challenge(
-            character,
-            challenge_instance,
-            approach,
-            matching.capability_source,
-        )
-        outcomes.append(outcome)
-
-        # Broadcast a durable, Narrator-authored OUTCOME line for this challenge,
-        # mirroring the per-action broadcast in _resolve_pc_action (#644).
-        from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
-        from world.scenes.interaction_services import (  # noqa: PLC0415
-            render_challenge_outcome_narration,
-        )
-
-        narration = render_challenge_outcome_narration(
+    requests = [
+        ChallengeResolutionRequest(
+            character=decl.participant.character_sheet.character,
+            challenge_instance=decl.challenge_instance,
+            approach=decl.challenge_approach,
             actor_label=str(decl.participant),
-            challenge_name=outcome.challenge_name,
-            approach_name=outcome.approach_name,
-            outcome_label=outcome.check_result.outcome_name,
-            success_level=outcome.check_result.success_level,
         )
-        broadcast_action_outcome(encounter=encounter, narration=narration)
+        for decl in ordered
+    ]
+    outcomes = resolve_challenge_declarations(
+        requests,
+        broadcast=lambda narration: broadcast_action_outcome(
+            encounter=encounter, narration=narration
+        ),
+    )
 
     # Delete all bridge rows for this round inside the outer atomic block.
     RoundChallengeDeclaration.objects.filter(
@@ -4266,7 +4271,7 @@ def _try_interpose(
     covering the same target is a follow-up.
     """
     encounter = participant.encounter
-    if encounter.status != EncounterStatus.RESOLVING:
+    if encounter.status != RoundStatus.RESOLVING:
         return
 
     action = (
@@ -4521,14 +4526,14 @@ def resolve_round(
         ``RoundResolutionResult`` with outcomes and phase transitions.
     """
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
-    if enc.status != EncounterStatus.DECLARING:
+    if enc.status != RoundStatus.DECLARING:
         msg = (
             f"Cannot resolve round: encounter status is "
             f"'{enc.get_status_display()}', expected 'Declaring'."
         )
         raise ValueError(msg)
 
-    enc.status = EncounterStatus.RESOLVING
+    enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])
 
     round_number = enc.round_number
@@ -4644,7 +4649,7 @@ def resolve_round(
     # (yield_duel routes through complete_encounter). Re-fetch status to avoid
     # double-completing or flipping a COMPLETED duel back to BETWEEN_ROUNDS.
     enc.refresh_from_db(fields=["status"])
-    if enc.status == EncounterStatus.COMPLETED:
+    if enc.status == RoundStatus.COMPLETED:
         result.encounter_completed = True
     elif enc.encounter_type == EncounterType.DUEL:
         # Duels have their own end conditions (mirror DEFEATED → winner; lethal
@@ -4657,7 +4662,7 @@ def resolve_round(
         if resolve_duel_end(enc) is not None:
             result.encounter_completed = True
         else:
-            enc.status = EncounterStatus.BETWEEN_ROUNDS
+            enc.status = RoundStatus.BETWEEN_ROUNDS
             enc.save(update_fields=["status"])
     elif _check_encounter_completion(encounter):
         result.encounter_completed = True
@@ -4668,7 +4673,7 @@ def resolve_round(
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from
         # BETWEEN_ROUNDS to DECLARING for the next round.
-        enc.status = EncounterStatus.BETWEEN_ROUNDS
+        enc.status = RoundStatus.BETWEEN_ROUNDS
         enc.round_started_at = None
         enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()

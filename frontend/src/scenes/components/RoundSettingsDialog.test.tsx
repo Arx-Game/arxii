@@ -103,11 +103,12 @@ describe('RoundSettingsDialog', () => {
     });
   });
 
-  it('disables the mode select and Save button when the active round is a danger round', async () => {
+  it('lets a GM reconfigure a danger round (mode select and Save enabled)', async () => {
+    // After #1466 a danger round is an ordinary STRICT round: fully reconfigurable.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const dangerRound: SceneRoundState = {
       ...activeRound,
-      mode: 'open',
+      mode: 'strict',
       is_danger: true,
     };
     renderWith({ ...base, active_round: dangerRound });
@@ -119,8 +120,11 @@ describe('RoundSettingsDialog', () => {
     });
 
     const trigger = screen.getByLabelText(/mode/i);
-    expect(trigger).toHaveAttribute('disabled');
+    expect(trigger).not.toHaveAttribute('disabled');
 
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /save/i })).toBeEnabled();
+
+    // The danger context note is shown, but it never locks the controls.
+    expect(screen.getByText(/started by an unfolding danger/i)).toBeInTheDocument();
   });
 });

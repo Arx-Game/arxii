@@ -93,14 +93,15 @@ class _CombatCommandMixin:
         caller is not in an active DECLARING combat round so the non-combat path can
         proceed without branching the dispatch regime.
         """
-        from world.combat.constants import EncounterStatus, ParticipantStatus  # noqa: PLC0415
+        from world.combat.constants import ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatParticipant  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
         return (
             CombatParticipant.objects.filter(
                 character_sheet=self.caller.sheet_data,
                 status=ParticipantStatus.ACTIVE,
-                encounter__status=EncounterStatus.DECLARING,
+                encounter__status=RoundStatus.DECLARING,
             )
             .select_related("encounter")
             .order_by("-encounter__created_at")

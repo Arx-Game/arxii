@@ -32,13 +32,14 @@ class _RiskAckTestBase(EvenniaTestCase):
 
     @staticmethod
     def _make_encounter(scene, room, risk_level):
-        from world.combat.constants import EncounterStatus, EncounterType
+        from world.combat.constants import EncounterType
         from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
 
         return CombatEncounter.objects.create(
             room=room,
             scene=scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
             encounter_type=EncounterType.PARTY_COMBAT,
         )

@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionBackend, ActionRef
-from world.combat.constants import ClashActionSlot, ClashStatus, EncounterStatus
+from world.combat.constants import ClashActionSlot, ClashStatus
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -29,7 +29,7 @@ from world.combat.models import (
     CombatPull,
 )
 from world.magic.factories import TechniqueFactory, ThreadFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import InteractionFactory, SceneFactory
 from world.scenes.interaction_link_services import auto_link_pose_to_actions
 from world.scenes.models import Interaction, InteractionAction
@@ -56,7 +56,7 @@ class CombatUIRoundTripIntegrationTests(TestCase):
 
         # --- Combat setup ---
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(encounter=self.encounter)
