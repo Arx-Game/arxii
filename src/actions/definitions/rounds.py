@@ -18,6 +18,7 @@ from world.scenes.constants import (
 from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
 from world.scenes.round_services import (
     RoundModeError,
+    active_round_for_room,
     end_scene_round,
     resolve_scene_round,
     set_scene_round_mode,
@@ -44,7 +45,7 @@ def _sheet(actor: ObjectDB) -> CharacterSheet | None:
 
 def _active_round_for_room(room: ObjectDB) -> SceneRound | None:
     """Return the active (non-completed) SceneRound for a room, or None."""
-    return SceneRound.objects.filter(room=room, status__in=ACTIVE_SCENE_ROUND_STATUSES).first()
+    return active_round_for_room(room)
 
 
 @dataclass

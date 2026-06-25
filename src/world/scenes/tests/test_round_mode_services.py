@@ -1,10 +1,11 @@
-"""Tests for set_scene_round_mode and RoundModeError."""
+"""Tests for set_scene_round_mode, RoundModeError, and active_round_for_room."""
 
 from django.test import TestCase
 
-from world.scenes.constants import SceneRoundMode, SceneRoundStartReason
+from evennia_extensions.factories import ObjectDBFactory
+from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
 from world.scenes.factories import SceneRoundFactory, SceneRoundParticipantFactory
-from world.scenes.models import SceneActionDeclaration
+from world.scenes.models import SceneActionDeclaration, SceneRound
 from world.scenes.round_services import RoundModeError, set_scene_round_mode
 
 
@@ -107,3 +108,23 @@ class SetSceneRoundModeTests(TestCase):
         rnd.refresh_from_db()
         self.assertEqual(rnd.mode, SceneRoundMode.POSE_ORDER)
         self.assertIs(result, rnd)
+
+
+class ActiveRoundForRoomTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.room = ObjectDBFactory()
+
+    def test_active_round_for_room_returns_active_round(self):
+        from world.scenes.round_services import active_round_for_room
+
+        rnd = SceneRound.objects.create(room=self.room, start_reason=SceneRoundStartReason.OPT_IN)
+        self.assertEqual(active_round_for_room(self.room), rnd)
+
+    def test_active_round_for_room_none_when_only_completed(self):
+        from world.scenes.round_services import active_round_for_room
+
+        SceneRound.objects.create(
+            room=self.room, start_reason=SceneRoundStartReason.OPT_IN, status=RoundStatus.COMPLETED
+        )
+        self.assertIsNone(active_round_for_room(self.room))
