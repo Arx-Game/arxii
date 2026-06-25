@@ -23365,6 +23365,26 @@ export interface components {
       persona_id: number;
     };
     /**
+     * @description * `open` - Open (immediate, unbounded)
+     *     * `pose_order` - Pose order (immediate, quota-gated)
+     *     * `strict` - Strict (declare, batch-resolved)
+     * @enum {string}
+     */
+    SetRoundModeRequestModeEnum: 'open' | 'pose_order' | 'strict';
+    /**
+     * @description POST body for the #1445 set-round-mode endpoint.
+     *
+     *     All fields are optional — callers may change the mode, one or more knobs, or any
+     *     combination. At least one field should be provided (the action will succeed with
+     *     a generic message if none are, because the service is a no-op update).
+     */
+    SetRoundModeRequestRequest: {
+      mode?: components['schemas']['SetRoundModeRequestModeEnum'];
+      advance_quorum_pct?: number;
+      max_actions_per_round?: number;
+      per_target_repeat_lock?: boolean;
+    };
+    /**
      * @description * `positive` - Positive
      *     * `negative` - Negative
      * @enum {string}
@@ -42166,7 +42186,7 @@ export interface operations {
     };
     requestBody?: {
       content: {
-        'application/json': components['schemas']['SceneDetailRequest'];
+        'application/json': components['schemas']['SetRoundModeRequestRequest'];
       };
     };
     responses: {

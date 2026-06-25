@@ -272,6 +272,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
 
+    @extend_schema(
+        request=SetRoundModeRequestSerializer, responses=SceneDetailSerializer, tags=["scenes"]
+    )
     @action(detail=True, methods=[HTTPMethod.POST], url_path="set-round-mode")
     def set_round_mode(self, request: Request, pk: int | None = None) -> Response:
         """#1445 — Set mode and/or knobs on the active scene round.

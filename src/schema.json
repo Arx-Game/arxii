@@ -19744,7 +19744,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneDetailRequest'
+              $ref: '#/components/schemas/SetRoundModeRequestRequest'
       security:
       - cookieAuth: []
       responses:
@@ -42352,6 +42352,36 @@ components:
           minimum: 1
       required:
       - persona_id
+    SetRoundModeRequestModeEnum:
+      enum:
+      - open
+      - pose_order
+      - strict
+      type: string
+      description: |-
+        * `open` - Open (immediate, unbounded)
+        * `pose_order` - Pose order (immediate, quota-gated)
+        * `strict` - Strict (declare, batch-resolved)
+    SetRoundModeRequestRequest:
+      type: object
+      description: |-
+        POST body for the #1445 set-round-mode endpoint.
+
+        All fields are optional — callers may change the mode, one or more knobs, or any
+        combination. At least one field should be provided (the action will succeed with
+        a generic message if none are, because the service is a no-op update).
+      properties:
+        mode:
+          $ref: '#/components/schemas/SetRoundModeRequestModeEnum'
+        advance_quorum_pct:
+          type: integer
+          maximum: 100
+          minimum: 0
+        max_actions_per_round:
+          type: integer
+          minimum: 0
+        per_target_repeat_lock:
+          type: boolean
     SignEnum:
       enum:
       - positive
