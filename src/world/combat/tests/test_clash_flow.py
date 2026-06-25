@@ -28,7 +28,6 @@ from world.combat.constants import (
     ClashActionSlot,
     ClashFlavor,
     ClashStatus,
-    EncounterStatus,
     LockPcRole,
     OpponentTier,
     ParticipantStatus,
@@ -74,6 +73,7 @@ from world.magic.factories import (
 )
 from world.magic.models import PendingAlteration
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -212,7 +212,7 @@ class ClashFlavorFlowTests(TestCase):
     def setUp(self) -> None:
         # Per-test encounter + participants + boss (involves Evennia ObjectDB).
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = _make_participant(self.encounter)
@@ -340,7 +340,7 @@ class SuppressFlowTests(TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = _make_participant(self.encounter)
@@ -513,7 +513,7 @@ class BreakFreeFlowTests(TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = _make_participant(self.encounter)
@@ -626,7 +626,7 @@ class WardFlowTests(TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = _make_participant(self.encounter)
@@ -750,7 +750,7 @@ class BreakFlavorFlowTests(TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = _make_participant(self.encounter)
@@ -945,7 +945,7 @@ class AudereDuringClashTests(TestCase):
     def setUp(self) -> None:
         # Per-test encounter + participants + boss (involves Evennia ObjectDB).
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
 

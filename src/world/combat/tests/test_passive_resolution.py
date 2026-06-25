@@ -8,7 +8,7 @@ combo-opening probing to active opponents.
 
 from django.test import TestCase
 
-from world.combat.constants import ActionCategory, EncounterStatus
+from world.combat.constants import ActionCategory
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -38,6 +38,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
+from world.scenes.constants import RoundStatus
 
 
 class ApplyPassiveTechniqueSelfBuffTest(TestCase):
@@ -101,7 +102,7 @@ class ResolveRoundAppliesPassiveTest(TestCase):
         from world.vitals.models import CharacterVitals
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(encounter=self.encounter)
@@ -217,7 +218,7 @@ class DefensivePassiveLowersNpcAttackTest(TestCase):
         from world.vitals.models import CharacterVitals
 
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = CombatParticipantFactory(encounter=encounter)
@@ -299,7 +300,7 @@ class ComboOpeningPassiveUnlocksGatedComboTest(TestCase):
         from world.vitals.models import CharacterVitals
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(encounter=self.encounter)

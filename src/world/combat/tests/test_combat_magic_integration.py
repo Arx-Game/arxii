@@ -16,7 +16,6 @@ from flows.events.payloads import TechniqueCastPayload, TechniquePreCastPayload
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -37,6 +36,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -50,7 +50,7 @@ def _setup_pc_attacking_mook(
 ):
     """Build the standard test scenario: 1 PC, 1 mook, technique ready."""
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.RESOLVING,
+        status=RoundStatus.RESOLVING,
         round_number=1,
     )
     pool = ThreatPoolFactory()

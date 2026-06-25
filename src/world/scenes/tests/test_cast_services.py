@@ -12,7 +12,6 @@ from evennia import create_object
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import RoomProfileFactory
 from world.combat.constants import (
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     ParticipantStatus,
@@ -60,7 +59,7 @@ from world.scenes.cast_services import (
     request_technique_cast,
     resolve_accepted_cast,
 )
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.models import Interaction, Scene
 from world.scenes.tests.cast_test_helpers import (
@@ -262,7 +261,7 @@ class TestRequestTechniqueCastRouting(CastScenarioMixin):
 
         self.assertIsNotNone(cast.encounter)
         cast.encounter.refresh_from_db()
-        self.assertEqual(cast.encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(cast.encounter.status, RoundStatus.DECLARING)
         self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
 
 
@@ -786,7 +785,7 @@ class HostileCastRiskGateTests(CastScenarioMixin):
         return CombatEncounter.objects.create(
             room=self.scene.location,
             scene=self.scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
@@ -824,7 +823,7 @@ class HostileCastRiskGateTests(CastScenarioMixin):
         )
         self.assertFalse(EncounterRiskAcknowledgement.objects.filter(encounter=encounter).exists())
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.BETWEEN_ROUNDS)
+        self.assertEqual(encounter.status, RoundStatus.BETWEEN_ROUNDS)
 
     def test_hostile_cast_into_extreme_encounter_goes_pending(self) -> None:
         """EXTREME gates too — the gate set is {EXTREME, LETHAL}."""
@@ -845,7 +844,7 @@ class HostileCastRiskGateTests(CastScenarioMixin):
         self.assertIsNotNone(cast.encounter)
         self.assertEqual(cast.encounter.pk, encounter.pk)
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
     def test_accept_resolves_hostile_request_into_combat(self) -> None:
         """ACCEPT on the gated request seeds combat and records both acknowledgements."""
@@ -928,4 +927,4 @@ class HostileCastRiskGateTests(CastScenarioMixin):
         self.assertIsNotNone(cast.encounter)
         self.assertEqual(cast.encounter.pk, encounter.pk)
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)

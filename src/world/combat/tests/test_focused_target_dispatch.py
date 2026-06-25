@@ -20,7 +20,7 @@ from actions.factories import ActionTemplateFactory
 from actions.player_interface import dispatch_player_action
 from actions.round_context import get_active_round_context
 from actions.types import ActionRef, PlayerAction
-from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
+from world.combat.constants import ActionCategory, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -35,6 +35,7 @@ from world.magic.factories import (
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -68,7 +69,7 @@ class TestFocusedTargetRecordDeclaration(django.test.TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(
@@ -124,7 +125,7 @@ class TestFocusedTargetRecordDeclaration(django.test.TestCase):
     def test_opponent_target_id_from_other_encounter_rejected(self) -> None:
         """An opponent belonging to a different encounter must not be targetable."""
         other_encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         foreign_opponent = CombatOpponentFactory(encounter=other_encounter)
@@ -149,7 +150,7 @@ class TestFocusedTargetEndToEnd(django.test.TestCase):
         idmapper_models.flush_cache()
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(
@@ -204,7 +205,7 @@ class TestFocusedAllyTargetDispatch(django.test.TestCase):
         idmapper_models.flush_cache()
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(

@@ -3,9 +3,10 @@
 from django.test import TestCase
 import pytest
 
-from world.combat.constants import CombatManeuver, EncounterStatus, ParticipantStatus
+from world.combat.constants import CombatManeuver, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import declare_interpose
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -14,7 +15,7 @@ class DeclareInterposeServiceTest(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         self.ally = CombatParticipantFactory(encounter=self.encounter)
         CharacterVitals.objects.create(
@@ -42,7 +43,7 @@ class DeclareInterposeServiceTest(TestCase):
 
     def test_interpose_rejects_outside_declaring(self) -> None:
         """Cannot interpose outside DECLARING status."""
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         with pytest.raises(ValueError, match="expected 'Declaring'"):
             declare_interpose(self.participant, self.ally)
@@ -68,7 +69,7 @@ class DeclareInterposeServiceTest(TestCase):
             declare_interpose(self.participant, self.ally)
 
         # Foreign encounter ally
-        other_encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        other_encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         foreign_ally = CombatParticipantFactory(encounter=other_encounter)
         CharacterVitals.objects.create(
             character_sheet=foreign_ally.character_sheet, health=50, max_health=100

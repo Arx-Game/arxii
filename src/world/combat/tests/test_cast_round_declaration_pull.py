@@ -22,7 +22,7 @@ from django.test import TestCase
 from evennia.utils.idmapper import models as idmapper_models
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatPull
 from world.combat.round_context import CombatRoundContext
@@ -38,6 +38,7 @@ from world.magic.factories import (
     ThreadPullEffectFactory,
 )
 from world.magic.types.pull import CastPullDeclaration
+from world.scenes.constants import RoundStatus
 
 
 def _make_pull_setup(
@@ -117,7 +118,7 @@ def _make_pull_setup(
 
     # Combat context.
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
         round_number=1,
     )
     participant = CombatParticipantFactory(

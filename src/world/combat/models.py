@@ -30,7 +30,6 @@ from world.combat.constants import (
     ComboLearningMethod,
     DuelChallengeStatus,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     LockPcRole,
     OpponentStatus,
@@ -45,6 +44,7 @@ from world.combat.constants import (
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
+from world.scenes.constants import RoundStatus
 from world.stories.types import TrustLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -83,8 +83,8 @@ class CombatEncounter(SharedMemoryModel):
     round_number = models.PositiveIntegerField(default=0)
     status = models.CharField(
         max_length=30,
-        choices=EncounterStatus.choices,
-        default=EncounterStatus.BETWEEN_ROUNDS,
+        choices=RoundStatus.choices,
+        default=RoundStatus.BETWEEN_ROUNDS,
     )
     outcome = models.CharField(
         max_length=20,

@@ -30,12 +30,13 @@ import django.test
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import DuelChallengeStatus, EncounterStatus
+from world.combat.constants import DuelChallengeStatus
 from world.combat.duels import create_pvp_duel
 from world.combat.factories import DuelChallengeFactory
 from world.combat.models import DuelChallenge
 from world.consent.factories import SocialConsentPreferenceFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import RoundStatus
 
 
 def _make_room(name: str = "TestRoom") -> object:
@@ -512,7 +513,7 @@ class YieldActionActiveDuelTests(django.test.TestCase):
 
         self.assertTrue(result.success, msg=result.message)
         self.encounter.refresh_from_db()
-        self.assertEqual(self.encounter.status, EncounterStatus.COMPLETED)
+        self.assertEqual(self.encounter.status, RoundStatus.COMPLETED)
 
     def test_yield_makes_other_duelist_duel_winner(self) -> None:
         from actions.registry import get_action

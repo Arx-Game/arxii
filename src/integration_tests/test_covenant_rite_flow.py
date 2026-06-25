@@ -19,7 +19,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import ObjectDBFactory
-from world.combat.constants import EncounterStatus
 from world.combat.factories import CombatEncounterFactory
 from world.combat.services import cleanup_completed_encounter
 from world.conditions.services import get_condition_instance, get_condition_modifier_total
@@ -39,6 +38,7 @@ from world.magic.models.sessions import (
 )
 from world.magic.services.sessions import fire_session
 from world.mechanics.models import ModifierTarget
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 
 
@@ -101,7 +101,7 @@ class CovenantRiteFlowIntegrationTest(TestCase):
         self.encounter = CombatEncounterFactory(
             room=self.room,
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
         )
 
         # ===== Phase 4: Build a fireable RitualSession =====
@@ -373,7 +373,7 @@ class CovenantRiteRolePackageFlowIntegrationTest(TestCase):
         self.encounter = CombatEncounterFactory(
             room=self.room,
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
         )
 
         # Build + fire the rite session.

@@ -28,7 +28,6 @@ from world.combat.achievement_counters import (
 from world.combat.constants import (
     ActionCategory,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -55,7 +54,7 @@ from world.magic.factories import (
 )
 from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
@@ -126,7 +125,7 @@ class _CompletionSeamTestBase(TestCase):
     def _make_encounter(self, **overrides: object) -> CombatEncounter:
         defaults: dict[str, object] = {
             "scene": SceneFactory(),
-            "status": EncounterStatus.BETWEEN_ROUNDS,
+            "status": RoundStatus.BETWEEN_ROUNDS,
         }
         defaults.update(overrides)
         return CombatEncounterFactory(**defaults)
@@ -222,7 +221,7 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
         complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
 
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.COMPLETED)
+        self.assertEqual(encounter.status, RoundStatus.COMPLETED)
         self.assertEqual(encounter.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(encounter.completed_at)
 
@@ -449,7 +448,7 @@ class ResolveRoundCompletionTests(TestCase):
     def test_resolve_round_records_victory(self) -> None:
         """Defeating the last opponent stamps VICTORY + completed_at via resolve_round."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -492,7 +491,7 @@ class ResolveRoundCompletionTests(TestCase):
 
         self.assertTrue(result.encounter_completed)
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.COMPLETED)
+        self.assertEqual(encounter.status, RoundStatus.COMPLETED)
         self.assertEqual(encounter.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(encounter.completed_at)
 
@@ -540,7 +539,7 @@ class EndEncounterApiTests(TestCase):
         client.force_authenticate(user=self.gm_account)
         response = client.post(f"/api/combat/{self.encounter.pk}/end/")
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
-        self.assertEqual(response.data["status"], EncounterStatus.COMPLETED)
+        self.assertEqual(response.data["status"], RoundStatus.COMPLETED)
         self.assertEqual(response.data["outcome"], EncounterOutcome.ABANDONED)
         self.encounter.refresh_from_db()
         self.assertIsNotNone(self.encounter.completed_at)

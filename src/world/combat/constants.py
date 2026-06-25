@@ -26,15 +26,6 @@ class EncounterType(models.TextChoices):
     DUEL = "duel", "Duel"
 
 
-class EncounterStatus(models.TextChoices):
-    """Lifecycle status of a combat encounter."""
-
-    DECLARING = "declaring", "Declaring"
-    RESOLVING = "resolving", "Resolving"
-    BETWEEN_ROUNDS = "between_rounds", "Between Rounds"
-    COMPLETED = "completed", "Completed"
-
-
 class EncounterOutcome(models.TextChoices):
     """Typed result recorded when an encounter completes (#876)."""
 

@@ -14,7 +14,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import EncounterStatus, EncounterType, ParticipantStatus
+from world.combat.constants import EncounterType, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -34,6 +34,7 @@ from world.magic.factories import (
 )
 from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
@@ -138,7 +139,7 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         self.encounter.refresh_from_db()
-        self.assertEqual(self.encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(self.encounter.status, RoundStatus.DECLARING)
         self.assertEqual(self.encounter.round_number, 1)
 
     def test_begin_round_non_gm_denied(self) -> None:
@@ -215,7 +216,7 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         # Encounter must be in DECLARING state with round_number set
         declaring_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = CombatParticipantFactory(
@@ -316,7 +317,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         # Use a separate encounter in DECLARING status for the flee test
         flee_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         flee_participant = CombatParticipantFactory(
@@ -353,7 +354,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         flee_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         client = APIClient()
@@ -368,7 +369,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         # Encounter is BETWEEN_ROUNDS — declare_flee raises ValueError
         non_declaring_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=0,
         )
         CombatParticipantFactory(
@@ -389,7 +390,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
 
         cover_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cover_participant = CombatParticipantFactory(
@@ -442,7 +443,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         cover_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         client = APIClient()
@@ -458,7 +459,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         """POST /cover with an ally from a different encounter returns 404."""
         cover_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         CombatParticipantFactory(
@@ -491,7 +492,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
 
         cover_encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self_participant = CombatParticipantFactory(
@@ -597,7 +598,7 @@ class DeclareAndResolveE2ETest(TestCase):
         # --- Build encounter infrastructure ---
         encounter = CombatEncounterFactory(
             scene=self.scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -741,7 +742,7 @@ class LeaveViewTest(CombatEncounterViewSetTestBase):
     """Tests for POST /api/combat/{id}/leave/."""
 
     def setUp(self) -> None:
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.encounter_type = EncounterType.OPEN_ENCOUNTER
         self.encounter.save(update_fields=["status", "encounter_type"])
         self.client = APIClient()
@@ -766,7 +767,7 @@ class LeaveViewTest(CombatEncounterViewSetTestBase):
         self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
 
     def test_leave_returns_400_when_not_between_rounds(self) -> None:
-        self.encounter.status = EncounterStatus.DECLARING
+        self.encounter.status = RoundStatus.DECLARING
         self.encounter.round_number = 1
         self.encounter.save(update_fields=["status", "round_number"])
         response = self.client.post(f"/api/combat/{self.encounter.pk}/leave/")

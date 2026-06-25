@@ -547,10 +547,10 @@ def _clash_contribution_actions(
     from world.combat.constants import (  # noqa: PLC0415
         ClashActionSlot,
         ClashStatus,
-        EncounterStatus,
         ParticipantStatus,
     )
     from world.combat.models import Clash, CombatParticipant  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     # Find an active participant in a non-completed encounter.
     participant = (
@@ -558,9 +558,9 @@ def _clash_contribution_actions(
             character_sheet=sheet,
             status=ParticipantStatus.ACTIVE,
             encounter__status__in={
-                EncounterStatus.DECLARING,
-                EncounterStatus.RESOLVING,
-                EncounterStatus.BETWEEN_ROUNDS,
+                RoundStatus.DECLARING,
+                RoundStatus.RESOLVING,
+                RoundStatus.BETWEEN_ROUNDS,
             },
         )
         .select_related("encounter")

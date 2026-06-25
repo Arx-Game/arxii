@@ -27,7 +27,6 @@ from world.combat.constants import (
     INTERPOSE_BASE_FATIGUE_COST,
     ActionCategory,
     CombatManeuver,
-    EncounterStatus,
     ParticipantStatus,
 )
 from world.combat.factories import (
@@ -39,6 +38,7 @@ from world.combat.interpose_content import ensure_interpose_content
 from world.combat.services import apply_damage_to_participant
 from world.fatigue.constants import EffortLevel
 from world.fatigue.models import FatiguePool
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ class InterposeArmedButNotFiredCostsNothingTest(TestCase):
         idmapper_models.flush_cache()
         ensure_interpose_content()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.guardian_participant = CombatParticipantFactory(
             encounter=self.encounter, status=ParticipantStatus.ACTIVE
         )
@@ -152,7 +152,7 @@ class InterposeFiredChargesFatigueTest(TestCase):
 
         self.room = create_object("typeclasses.rooms.Room", key="CostTestRoom", nohome=True)
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
             room=self.room,
         )
@@ -311,7 +311,7 @@ class DefendAndInterposeBothReduceDamageTest(TestCase):
 
         self.room = create_object("typeclasses.rooms.Room", key="ComposeTestRoom", nohome=True)
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
             room=self.room,
         )

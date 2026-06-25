@@ -23,13 +23,13 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     CombatManeuver,
-    EncounterStatus,
     EncounterType,
     ParticipantStatus,
 )
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatParticipant, CombatRoundAction
 from world.combat.services import declare_flee
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -41,7 +41,7 @@ class CombatManeuverActionTestBase(TestCase):
         cls.character = CharacterFactory(db_key="maneuverchar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -94,7 +94,7 @@ class CoverInterposeActionTest(CombatManeuverActionTestBase):
         self.assertFalse(result.success)
 
     def test_cover_foreign_ally_fails(self) -> None:
-        other_enc = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        other_enc = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         foreign = CombatParticipantFactory(
             encounter=other_enc,
             character_sheet=CharacterSheetFactory(character=CharacterFactory(db_key="foreign")),
@@ -154,7 +154,7 @@ class JoinLeaveActionTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.encounter = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.character = CharacterFactory(db_key="joinerchar")
@@ -183,7 +183,7 @@ class JoinLeaveActionTest(TestCase):
     def test_leave_between_rounds_removes_participant(self) -> None:
         between = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
         )
         leaver = CharacterFactory(db_key="leaverchar")
@@ -212,7 +212,7 @@ class JoinLeaveActionTest(TestCase):
     def test_leave_while_declaring_fails(self) -> None:
         declaring = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         mover = CharacterFactory(db_key="moverchar")

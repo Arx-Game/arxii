@@ -20,7 +20,7 @@ from actions.factories import ActionTemplateFactory
 from actions.player_interface import dispatch_player_action
 from actions.round_context import get_active_round_context
 from actions.types import ActionRef, PlayerAction
-from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
+from world.combat.constants import ActionCategory, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatRoundAction
 from world.fatigue.constants import EffortLevel
@@ -29,13 +29,14 @@ from world.magic.factories import (
     EffectTypeFactory,
     TechniqueFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
 def _make_declaring_encounter_with_vitals() -> tuple:
     """Create a DECLARING encounter, ACTIVE participant, and ALIVE CharacterVitals."""
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
         round_number=1,
     )
     participant = CombatParticipantFactory(
@@ -164,7 +165,7 @@ class TestPassiveDispatchEndToEnd(django.test.TestCase):
         idmapper_models.flush_cache()
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(

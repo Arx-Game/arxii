@@ -11,7 +11,6 @@ from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ENTITY_TYPE_PC,
     ActionCategory,
-    EncounterStatus,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -50,7 +49,7 @@ from world.mechanics.factories import (
 )
 from world.mechanics.models import CharacterChallengeRecord
 from world.mechanics.types import AvailableAction, CapabilitySource
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
@@ -81,7 +80,7 @@ class ResolveRoundBasicTests(TestCase):
         offense_check_fn to route through resolve_combat_technique.
         """
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -142,7 +141,7 @@ class ResolveRoundBasicTests(TestCase):
         # Should transition to BETWEEN_ROUNDS or COMPLETED
         self.assertIn(
             encounter.status,
-            [EncounterStatus.BETWEEN_ROUNDS, EncounterStatus.COMPLETED],
+            [RoundStatus.BETWEEN_ROUNDS, RoundStatus.COMPLETED],
         )
 
     def test_pc_deals_damage(self) -> None:
@@ -198,7 +197,7 @@ class ResolveRoundBasicTests(TestCase):
     def test_wrong_status_raises(self) -> None:
         """Resolving a non-DECLARING encounter raises ValueError."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
         )
         with self.assertRaises(ValueError):
@@ -207,7 +206,7 @@ class ResolveRoundBasicTests(TestCase):
     def test_encounter_completes_when_opponent_defeated(self) -> None:
         """Encounter completes when all opponents are defeated."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -257,7 +256,7 @@ class ResolveRoundBasicTests(TestCase):
 
         self.assertTrue(result.encounter_completed)
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.COMPLETED)
+        self.assertEqual(encounter.status, RoundStatus.COMPLETED)
         opponent.refresh_from_db()
         self.assertEqual(opponent.status, OpponentStatus.DEFEATED)
 
@@ -274,7 +273,7 @@ class ResolveRoundComboTests(TestCase):
     def test_combo_deals_bonus_damage_bypassing_soak(self) -> None:
         """A combo-upgraded action deals bonus damage that bypasses soak."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -342,7 +341,7 @@ class ResolveRoundDefenseCheckTests(TestCase):
     def test_defense_check_reduces_damage(self) -> None:
         """With defense_check_type and a partial success, damage is reduced."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -430,7 +429,7 @@ class ResolveRoundBossPhaseTests(TestCase):
     def test_boss_phase_advances_during_round(self) -> None:
         """Boss phase transitions when health drops below trigger."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool_p1 = ThreatPoolFactory(name="Boss Phase 1")
@@ -516,7 +515,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
     def _setup_encounter(self) -> tuple:
         """Create encounter: 1 PC, 1 mook, PC action declared."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -643,7 +642,7 @@ class ResolveDeclaredChallengesTests(TestCase):
     ) -> tuple[object, object]:
         """Create a DECLARING encounter with one ACTIVE participant."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         sheet = CharacterSheetFactory()

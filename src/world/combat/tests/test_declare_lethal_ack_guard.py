@@ -14,7 +14,7 @@ ack) must not be blocked either, hence the DUEL-only scoping.
 
 from django.test import TestCase
 
-from world.combat.constants import EncounterStatus, EncounterType, RiskLevel
+from world.combat.constants import EncounterType, RiskLevel
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -23,6 +23,7 @@ from world.combat.factories import (
 from world.combat.models import EncounterRiskAcknowledgement
 from world.combat.services import acknowledge_encounter_risk, declare_action
 from world.fatigue.constants import EffortLevel
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -43,7 +44,7 @@ class LethalDuelAckGuardTests(TestCase):
         encounter = CombatEncounterFactory(
             encounter_type=EncounterType.DUEL,
             risk_level=RiskLevel.LETHAL,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = _participant_in(encounter)
@@ -56,7 +57,7 @@ class LethalDuelAckGuardTests(TestCase):
         encounter = CombatEncounterFactory(
             encounter_type=EncounterType.DUEL,
             risk_level=RiskLevel.LETHAL,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = _participant_in(encounter)
@@ -69,7 +70,7 @@ class LethalDuelAckGuardTests(TestCase):
         encounter = CombatEncounterFactory(
             encounter_type=EncounterType.DUEL,
             risk_level=RiskLevel.MODERATE,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = _participant_in(encounter)
@@ -88,7 +89,7 @@ class LethalDuelAckGuardTests(TestCase):
         encounter = CombatEncounterFactory(
             encounter_type=EncounterType.PARTY_COMBAT,
             risk_level=RiskLevel.LETHAL,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participant = _participant_in(encounter)

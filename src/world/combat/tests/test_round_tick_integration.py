@@ -6,7 +6,6 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
-    EncounterStatus,
     ParticipantStatus,
 )
 from world.combat.factories import (
@@ -21,6 +20,7 @@ from world.conditions.factories import (
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -33,7 +33,7 @@ def _make_active_round_encounter():
     pool entry and no NPC action, so no damage is dealt to the PC.
     """
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
         round_number=1,
     )
     sheet = CharacterSheetFactory()
@@ -90,7 +90,7 @@ class RoundTickIntegrationTests(EvenniaTestCase):
         # Set up an encounter in BETWEEN_ROUNDS so begin_declaration_phase
         # can advance it.
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
         )
         sheet = CharacterSheetFactory()
@@ -164,7 +164,7 @@ class RoundTickBeginDeclarationTests(EvenniaTestCase):
         """Active opponents should receive process_round_start at begin of
         next round."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
         )
         CombatOpponentFactory(

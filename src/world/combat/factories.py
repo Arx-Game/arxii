@@ -614,7 +614,6 @@ class PlayableCombatScenarioFactory:
         round_number: int = 1,
     ) -> PlayableCombatScenario:
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.combat.constants import EncounterStatus
         from world.magic.factories import (
             CharacterAnimaFactory,
             CharacterResonanceFactory,
@@ -623,6 +622,7 @@ class PlayableCombatScenarioFactory:
             TechniqueFactory,
             ThreadFactory,
         )
+        from world.scenes.constants import RoundStatus
         from world.scenes.factories import SceneFactory
         from world.vitals.models import CharacterVitals
 
@@ -634,7 +634,7 @@ class PlayableCombatScenarioFactory:
         scene = SceneFactory()
         encounter = CombatEncounterFactory(
             scene=scene,
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=round_number,
         )
 

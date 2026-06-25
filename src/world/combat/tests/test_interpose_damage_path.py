@@ -27,7 +27,6 @@ from django.test import TestCase, tag
 
 from world.combat.constants import (
     CombatManeuver,
-    EncounterStatus,
     ParticipantStatus,
 )
 from world.combat.factories import (
@@ -37,6 +36,7 @@ from world.combat.factories import (
 )
 from world.combat.interpose_content import ensure_interpose_content
 from world.combat.services import _try_interpose, apply_damage_to_participant
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ class TryInterposeNoOpOutsideResolvingTest(TestCase):
         idmapper_models.flush_cache()
         ensure_interpose_content()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         _make_vitals(self.participant)
 
@@ -105,9 +105,9 @@ class TryInterposeNoOpOutsideResolvingTest(TestCase):
         """No mutation when encounter is COMPLETED."""
         from flows.events.payloads import DamagePreApplyPayload, DamageSource
 
-        self.encounter.status = EncounterStatus.COMPLETED
+        self.encounter.status = RoundStatus.COMPLETED
         self.encounter.save(update_fields=["status"])
-        self.participant.encounter.status = EncounterStatus.COMPLETED
+        self.participant.encounter.status = RoundStatus.COMPLETED
 
         pre_payload = DamagePreApplyPayload(
             target=self.participant.character_sheet.character,
@@ -142,7 +142,7 @@ class ApplyDamageZeroAfterInterposeTest(TestCase):
 
         idmapper_models.flush_cache()
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.RESOLVING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         self.vitals = _make_vitals(self.participant, health=80, max_health=100)
 
@@ -229,7 +229,7 @@ class InterposeReducesAllyDamageTest(TestCase):
         self.room = create_object("typeclasses.rooms.Room", key="InterposeRoom", nohome=True)
 
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=1,
             room=self.room,
         )

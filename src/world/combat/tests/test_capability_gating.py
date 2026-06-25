@@ -17,7 +17,7 @@ Tiering:
 from django.test import TestCase, tag
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ActionCategory, EncounterStatus
+from world.combat.constants import ActionCategory
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -42,6 +42,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
 from world.vitals.services import can_act
@@ -66,7 +67,7 @@ def _make_unconscious_condition():
 
 def _make_declaring_encounter_with_participant():
     """Create a DECLARING encounter, a participant with ALIVE vitals, and one opponent."""
-    encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+    encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
     participant = CombatParticipantFactory(encounter=encounter)
     CharacterVitals.objects.create(
         character_sheet=participant.character_sheet,
