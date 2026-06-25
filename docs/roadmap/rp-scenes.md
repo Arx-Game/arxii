@@ -183,11 +183,10 @@ Frontend parity for `scene round` (telnet):
   staff-gated React dialog; reads `active_round` from the scene detail and dispatches
   `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
 
-**Deferred follow-up — reconcile the web danger lock with #1466:** `RoundSettingsDialog`
-still locks danger rounds (`modeLocked = is_danger`, "Danger rounds resolve on their own
-and can't be reconfigured"). #1466 retired the forced-OPEN self-resolving danger path, so
-the web control should let a scene admin reconfigure a live danger round's knobs (linked to
-#1328 web/telnet parity).
+**Web danger lock reconciled — DONE (#1476):** `RoundSettingsDialog` no longer locks
+danger rounds. Since #1466 a danger round is an ordinary STRICT round, so the dialog lets
+a scene admin reconfigure a live danger round's knobs/mode like any other round (web/telnet
+parity, #1328). `is_danger` now only drives a non-blocking informational note.
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 

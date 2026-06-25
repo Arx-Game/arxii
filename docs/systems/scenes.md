@@ -576,8 +576,12 @@ React-side parity for `scene round` (telnet, #1445).
 - When `scene.active_round` is `null` (no active round), the dialog body shows an
   informational message; Save is disabled.
 - When a round exists, the dialog exposes mode (Select), advance quorum % (Input),
-  max actions per round (Input), and repeat-target lock (Switch). The mode selector is
-  currently disabled when `active_round.is_danger` is true (`modeLocked`).
+  max actions per round (Input), and repeat-target lock (Switch). All controls are
+  editable for every round, including danger rounds — since #1466 a danger round is an
+  ordinary STRICT round and `set_scene_round_mode` accepts knob/mode changes for it like
+  any other round (web/telnet parity, #1328, #1476). When `active_round.is_danger` is
+  true the dialog shows a non-blocking informational note explaining the round was started
+  by an unfolding peril and auto-ends when it clears; it does **not** lock anything.
 - On Save, dispatches `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/` with a
   `SetRoundModePayload`; closes the dialog on success.
 
@@ -599,12 +603,8 @@ nested field serialized by `SceneRoundSerializer` (read-only). Fields:
 
 `active_round` is `null` when the scene has no location or no active round exists.
 
-**Deferred follow-up — frontend/backend reconciliation:** `RoundSettingsDialog` still
-locks danger rounds (`modeLocked = is_danger`, "Danger rounds resolve on their own and
-can't be reconfigured"). That copy and lock predate #1466, which retired the forced-OPEN
-self-resolving danger path — danger is now a STRICT, reconfigurable scene round. The web
-control should be updated to allow reconfiguring a danger round's knobs (linked to #1328
-web/telnet parity).
+The `is_danger` field remains a read-side hint: the dialog uses it only to show the
+informational note above, never to disable controls (#1476 cleared the old danger lock).
 
 ---
 
