@@ -112,8 +112,6 @@ from world.combat.types import (
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
-from world.mechanics.challenge_resolution import resolve_challenge
-from world.mechanics.services import get_available_actions
 from world.mechanics.types import ChallengeResolutionResult
 from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
@@ -3999,6 +3997,12 @@ def _resolve_declared_challenges(
     The delete of bridge rows runs inside the caller's @transaction.atomic so it
     is consistent with the rest of round resolution.
     """
+    from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
+    from world.scenes.round_services import (  # noqa: PLC0415
+        ChallengeResolutionRequest,
+        resolve_challenge_declarations,
+    )
+
     declarations = list(
         RoundChallengeDeclaration.objects.filter(
             encounter=encounter,
@@ -4036,57 +4040,21 @@ def _resolve_declared_challenges(
     # final-round) come after, preserving their insertion order.
     ordered.extend(decl_by_participant.values())
 
-    outcomes: list[ChallengeResolutionResult] = []
-    for decl in ordered:
-        character = decl.participant.character_sheet.character
-        challenge_instance = decl.challenge_instance
-        approach = decl.challenge_approach
-        location = challenge_instance.location
-
-        # Re-validate eligibility: character must still have a matching AvailableAction.
-        available_actions = get_available_actions(character, location)
-        matching = next(
-            (
-                a
-                for a in available_actions
-                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
-            ),
-            None,
-        )
-        if matching is None:
-            logger.warning(
-                "Skipping deferred challenge declaration for participant %s "
-                "(challenge_instance=%s, approach=%s): "
-                "no matching AvailableAction at resolution time.",
-                decl.participant_id,
-                challenge_instance.pk,
-                approach.pk,
-            )
-            continue
-
-        outcome = resolve_challenge(
-            character,
-            challenge_instance,
-            approach,
-            matching.capability_source,
-        )
-        outcomes.append(outcome)
-
-        # Broadcast a durable, Narrator-authored OUTCOME line for this challenge,
-        # mirroring the per-action broadcast in _resolve_pc_action (#644).
-        from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
-        from world.scenes.interaction_services import (  # noqa: PLC0415
-            render_challenge_outcome_narration,
-        )
-
-        narration = render_challenge_outcome_narration(
+    requests = [
+        ChallengeResolutionRequest(
+            character=decl.participant.character_sheet.character,
+            challenge_instance=decl.challenge_instance,
+            approach=decl.challenge_approach,
             actor_label=str(decl.participant),
-            challenge_name=outcome.challenge_name,
-            approach_name=outcome.approach_name,
-            outcome_label=outcome.check_result.outcome_name,
-            success_level=outcome.check_result.success_level,
         )
-        broadcast_action_outcome(encounter=encounter, narration=narration)
+        for decl in ordered
+    ]
+    outcomes = resolve_challenge_declarations(
+        requests,
+        broadcast=lambda narration: broadcast_action_outcome(
+            encounter=encounter, narration=narration
+        ),
+    )
 
     # Delete all bridge rows for this round inside the outer atomic block.
     RoundChallengeDeclaration.objects.filter(

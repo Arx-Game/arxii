@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
@@ -9,6 +11,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
+from world.mechanics.challenge_resolution import resolve_challenge
+from world.mechanics.services import get_available_actions
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
@@ -23,6 +27,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.mechanics.models import ChallengeApproach, ChallengeInstance
+    from world.mechanics.types import ChallengeResolutionResult
 
 logger = logging.getLogger(__name__)
 
@@ -344,12 +350,91 @@ def maybe_resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     return scene_round
 
 
+@dataclass
+class ChallengeResolutionRequest:
+    """Pre-built resolution request for one declared challenge action.
+
+    Callers construct these from their own declaration rows (ordered appropriately),
+    then pass the list to :func:`resolve_challenge_declarations`.
+    """
+
+    character: ObjectDB
+    challenge_instance: ChallengeInstance
+    approach: ChallengeApproach
+    actor_label: str
+
+
+def resolve_challenge_declarations(
+    requests: list[ChallengeResolutionRequest],
+    *,
+    broadcast: Callable[[str], None],
+) -> list[ChallengeResolutionResult]:
+    """Resolve a PRE-ORDERED list of declared challenge actions.
+
+    For each request:
+
+    1. Re-validate eligibility via ``get_available_actions`` — skip+log if no match.
+    2. Call ``resolve_challenge``; skip if outcome is None.
+    3. Render + broadcast the OUTCOME narration line when ``outcome.check_result`` is set.
+
+    The caller is responsible for:
+    - Ordering ``requests`` (initiative order, resolution_order, etc.).
+    - Deleting bridge rows after this function returns.
+    - Scoping the outer ``transaction.atomic`` block.
+
+    Returns the list of non-None outcomes in resolution order.
+    """
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        render_challenge_outcome_narration,
+    )
+
+    outcomes: list[ChallengeResolutionResult] = []
+    for req in requests:
+        location = req.challenge_instance.location
+        available_actions = get_available_actions(req.character, location)
+        matching = next(
+            (
+                a
+                for a in available_actions
+                if (
+                    a.challenge_instance_id == req.challenge_instance.pk
+                    and a.approach_id == req.approach.pk
+                )
+            ),
+            None,
+        )
+        if matching is None:
+            logger.warning(
+                "Skipping deferred challenge declaration for character %s "
+                "(challenge_instance=%s, approach=%s): no matching AvailableAction.",
+                req.character.pk,
+                req.challenge_instance.pk,
+                req.approach.pk,
+            )
+            continue
+        outcome = resolve_challenge(
+            req.character, req.challenge_instance, req.approach, matching.capability_source
+        )
+        if outcome is None:
+            continue
+        outcomes.append(outcome)
+        if outcome.check_result is not None:
+            narration = render_challenge_outcome_narration(
+                actor_label=req.actor_label,
+                challenge_name=outcome.challenge_name,
+                approach_name=outcome.approach_name,
+                outcome_label=outcome.check_result.outcome_name,
+                success_level=outcome.check_result.success_level,
+            )
+            broadcast(narration)
+    return outcomes
+
+
 def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     """Resolve declared CHALLENGE actions for the round in initiative order, re-validating
     eligibility via get_available_actions (mirrors combat _resolve_declared_challenges),
     then delete ALL bridge rows for the round. Pass rows resolve to nothing."""
-    from world.mechanics.challenge_resolution import resolve_challenge  # noqa: PLC0415
-    from world.mechanics.services import get_available_actions  # noqa: PLC0415
+    from world.scenes.interaction_services import broadcast_scene_outcome  # noqa: PLC0415
 
     declarations = list(
         scene_round.action_declarations.filter(
@@ -365,45 +450,19 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
         )
         .order_by("participant__initiative_order", "declared_at", "pk")
     )
-    for decl in declarations:
-        character = decl.participant.character_sheet.character
-        challenge_instance = decl.challenge_instance
-        approach = decl.challenge_approach
-        location = challenge_instance.location
-        available_actions = get_available_actions(character, location)
-        matching = next(
-            (
-                a
-                for a in available_actions
-                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
-            ),
-            None,
+    requests = [
+        ChallengeResolutionRequest(
+            character=decl.participant.character_sheet.character,
+            challenge_instance=decl.challenge_instance,
+            approach=decl.challenge_approach,
+            actor_label=decl.participant.character_sheet.character.db_key,
         )
-        if matching is None:
-            logger.warning(
-                "Skipping deferred scene challenge declaration for participant %s "
-                "(challenge_instance=%s, approach=%s): no matching AvailableAction.",
-                decl.participant_id,
-                challenge_instance.pk,
-                approach.pk,
-            )
-            continue
-        outcome = resolve_challenge(
-            character, challenge_instance, approach, matching.capability_source
-        )
-        if outcome is not None and outcome.check_result is not None:
-            from world.scenes.interaction_services import (  # noqa: PLC0415
-                broadcast_scene_outcome,
-                render_challenge_outcome_narration,
-            )
-
-            narration = render_challenge_outcome_narration(
-                actor_label=character.db_key,
-                challenge_name=outcome.challenge_name,
-                approach_name=outcome.approach_name,
-                outcome_label=outcome.check_result.outcome_name,
-                success_level=outcome.check_result.success_level,
-            )
-            broadcast_scene_outcome(scene_round=scene_round, narration=narration)
-
+        for decl in declarations
+    ]
+    resolve_challenge_declarations(
+        requests,
+        broadcast=lambda narration: broadcast_scene_outcome(
+            scene_round=scene_round, narration=narration
+        ),
+    )
     scene_round.action_declarations.filter(round_number=scene_round.round_number).delete()
