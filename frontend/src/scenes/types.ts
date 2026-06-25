@@ -67,6 +67,21 @@ export interface PersonaPosition {
   position: PositionSummary | null;
 }
 
+/** Round resolution mode wire values (matches SceneRoundMode TextChoices). */
+export type SceneRoundModeValue = 'open' | 'pose_order' | 'strict';
+
+/** The scene's active round state, for the round-settings control (#1467). */
+export interface SceneRoundState {
+  mode: SceneRoundModeValue;
+  advance_quorum_pct: number;
+  max_actions_per_round: number;
+  per_target_repeat_lock: boolean;
+  status: string;
+  round_number: number;
+  /** DANGER rounds are forced to OPEN and are immutable — the form locks the mode field. */
+  is_danger: boolean;
+}
+
 export interface SceneDetail extends SceneListItem {
   is_active: boolean;
   is_owner: boolean;
@@ -80,6 +95,8 @@ export interface SceneDetail extends SceneListItem {
   position_adjacency: PositionAdjacencyItem[];
   /** Current position for each persona in the scene (#1017). */
   persona_positions: PersonaPosition[];
+  /** Active scene round (#1467); null when no round is in progress. */
+  active_round: SceneRoundState | null;
 }
 
 export interface InteractionPersona {
