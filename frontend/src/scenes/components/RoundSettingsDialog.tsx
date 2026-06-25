@@ -56,15 +56,17 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
   if (!scene.viewer_can_gm || !scene.is_active) return null;
 
   const noRound = round === null;
-  const modeLocked = round?.is_danger ?? false;
+  // A danger round is an ordinary STRICT round (#1466): fully reconfigurable, just
+  // started by an unfolding peril. We surface that context but never lock the controls.
+  const isDanger = round?.is_danger ?? false;
 
   function handleSave() {
     const payload: SetRoundModePayload = {
+      mode,
       advance_quorum_pct: quorum,
       max_actions_per_round: maxActions,
       per_target_repeat_lock: repeatLock,
     };
-    if (!modeLocked) payload.mode = mode;
     mutation.mutate(payload, { onSuccess: () => setOpen(false) });
   }
 
@@ -87,13 +89,16 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
           </p>
         ) : (
           <div className="space-y-4">
+            {isDanger && (
+              <p className="text-xs text-muted-foreground">
+                This round was started by an unfolding danger. It resolves each round and ends on
+                its own once the peril clears — but you can still adjust its settings below.
+              </p>
+            )}
+
             <div className="space-y-1">
               <Label htmlFor="round-mode">Mode</Label>
-              <Select
-                value={mode}
-                onValueChange={(v) => setMode(v as SceneRoundModeValue)}
-                disabled={modeLocked}
-              >
+              <Select value={mode} onValueChange={(v) => setMode(v as SceneRoundModeValue)}>
                 <SelectTrigger id="round-mode">
                   <SelectValue />
                 </SelectTrigger>
@@ -105,11 +110,6 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
                   ))}
                 </SelectContent>
               </Select>
-              {modeLocked && (
-                <p className="text-xs text-muted-foreground">
-                  Danger rounds resolve on their own and can&apos;t be reconfigured.
-                </p>
-              )}
             </div>
 
             <div className="space-y-1">
@@ -121,7 +121,6 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
                 max={100}
                 value={quorum}
                 onChange={(e) => setQuorum(Number(e.target.value))}
-                disabled={modeLocked}
               />
             </div>
 
@@ -133,28 +132,18 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
                 min={0}
                 value={maxActions}
                 onChange={(e) => setMaxActions(Number(e.target.value))}
-                disabled={modeLocked}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <Label htmlFor="round-repeat-lock">Lock repeat actions on the same target</Label>
-              <Switch
-                id="round-repeat-lock"
-                checked={repeatLock}
-                onCheckedChange={setRepeatLock}
-                disabled={modeLocked}
-              />
+              <Switch id="round-repeat-lock" checked={repeatLock} onCheckedChange={setRepeatLock} />
             </div>
           </div>
         )}
 
         <DialogFooter>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={noRound || modeLocked || mutation.isPending}
-          >
+          <Button type="button" onClick={handleSave} disabled={noRound || mutation.isPending}>
             Save
           </Button>
         </DialogFooter>
