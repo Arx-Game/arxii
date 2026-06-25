@@ -554,6 +554,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/AreaList'
           description: ''
+  /api/areas/presence/:
+    get:
+      operationId: areas_presence_retrieve
+      description: |-
+        Online presence for the web `who`/`where` surfaces (#1463).
+
+        GET → ``{"who": [...], "where": [...]}``. ``who`` lists online characters by active
+        persona + a coarse idle state; ``where`` lists characters in public rooms with their
+        Evennia-colour-coded area path (the frontend renders the colours). Both are read-only.
+      tags:
+      - areas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/areas/rooms/:
     get:
       operationId: areas_rooms_list
