@@ -222,6 +222,28 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "theme": realm.theme,
         }
 
+    def _is_room_owner(self, caller: BaseState, room: BaseState) -> bool:
+        """Whether the caller's ACTIVE persona owns this room (#1470 editor gate).
+
+        Active persona, never primary — gating on primary would leak alt ownership.
+        """
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.locations.services import is_owner  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        try:
+            sheet = caller.obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False
+        return is_owner(active_persona_for_sheet(sheet), room.obj)
+
+    def _is_room_public(self, room: BaseState) -> bool:
+        """Whether the room is publicly listed (the editor's privacy toggle state)."""
+        from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+
+        return room_is_publicly_listed(room.obj)
+
     def to_representation(self, instance):
         """Convert room state data to structured payload."""
         if isinstance(instance, dict):
@@ -236,6 +258,8 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         room_data["description"] = room.description
         room_data["ancestry"] = self._get_ancestry(room)
         room_data["realm"] = self._get_realm(room)
+        room_data["is_owner"] = self._is_room_owner(caller, room)
+        room_data["is_public"] = self._is_room_public(room)
 
         # Serialize characters, objects, and exits
         characters, objects, exits = self._serialize_contents(room, caller)

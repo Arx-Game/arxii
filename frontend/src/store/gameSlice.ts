@@ -16,6 +16,8 @@ interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  is_owner: boolean;
+  is_public: boolean;
 }
 
 interface Session {

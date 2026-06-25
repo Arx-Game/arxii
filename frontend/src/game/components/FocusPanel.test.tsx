@@ -69,6 +69,8 @@ function makeRoomData(): RoomData {
     ],
     objects: [],
     exits: [],
+    is_owner: false,
+    is_public: false,
   };
 }
 

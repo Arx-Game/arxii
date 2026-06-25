@@ -20,6 +20,8 @@ export function handleRoomStatePayload(
         characters: payload.characters ?? [],
         objects: payload.objects,
         exits: payload.exits,
+        is_owner: payload.room.is_owner ?? false,
+        is_public: payload.room.is_public ?? false,
       },
     })
   );

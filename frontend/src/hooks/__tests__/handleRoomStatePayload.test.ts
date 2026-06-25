@@ -71,6 +71,8 @@ describe('handleRoomStatePayload', () => {
           characters: [],
           objects: payload.objects,
           exits: payload.exits,
+          is_owner: false,
+          is_public: false,
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(3);
@@ -389,6 +391,8 @@ describe('handleRoomStatePayload', () => {
           characters: [],
           objects: [],
           exits: [],
+          is_owner: false,
+          is_public: false,
         },
       });
     });
@@ -480,6 +484,8 @@ describe('handleRoomStatePayload', () => {
           characters: [],
           objects: [],
           exits: [],
+          is_owner: false,
+          is_public: false,
         },
       });
     });
@@ -563,6 +569,8 @@ describe('handleRoomStatePayload', () => {
           characters: [],
           objects,
           exits,
+          is_owner: false,
+          is_public: false,
         },
       });
 

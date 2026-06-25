@@ -126,6 +126,11 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert "description" in payload["room"]
 
+    def test_room_data_includes_is_owner_false_for_non_owner(self):
+        """Room payload carries an is_owner flag (#1470); False without ownership."""
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["room"]["is_owner"] is False
+
     def test_exits_still_in_exits(self):
         """Exits should still appear in the 'exits' list."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
