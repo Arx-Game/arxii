@@ -48,6 +48,7 @@ class GMCharacter(_MechanicallyImmuneCharacterMixin, Character):
     querying the account's GMProfile.level — not by the typeclass itself.
     """
 
+    is_story_runner: bool = True
     TARGETING_REJECTION = (
         "The GM gives you a knowing look. "
         "'I appreciate the enthusiasm, but I'm just here to tell the story.'"
@@ -63,6 +64,7 @@ class StaffCharacter(_MechanicallyImmuneCharacterMixin, Character):
     authorship is tracked via GMProfile, not this typeclass.
     """
 
+    is_story_runner: bool = True
     TARGETING_REJECTION = (
         "The staff character raises an eyebrow. "
         "'Bold move. Unfortunately, I exist outside the narrative.'"
