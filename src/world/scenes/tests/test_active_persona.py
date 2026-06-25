@@ -108,6 +108,7 @@ class SetActivePersonaEndpointTests(TestCase):
         _, other_sheet = _sheet()
         resp = self._post(puppet=self.character, persona_id=other_sheet.primary_persona.pk)
         self.assertEqual(resp.status_code, 400)
+        self.assertIn("That isn't one of this character's identities.", str(resp.data))
 
     def test_no_played_character_400(self):
         resp = self._post(puppet=None, persona_id=self.alt.pk)

@@ -190,6 +190,25 @@ parity, #1328). `is_danger` now only drives a non-blocking informational note.
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 
+### Persona Telnet Switch + Shared set-active Path — DONE (#1347)
+
+Web/telnet parity for active-persona management. Before this, `PersonaViewSet.set_active`
+called `set_active_persona` directly (bypassing `action.run()`); telnet had no way to switch.
+
+- **`SetActivePersonaAction`** (key `"set_active_persona"`, REGISTRY, `target_type=SELF`,
+  kwarg `persona_id`) in `actions/definitions/personas.py` — validates persona ownership,
+  wraps `world.scenes.services.set_active_persona` (still the sole mutator).
+- **`PersonaViewSet.set_active`** now routes through `dispatch_player_action` → the action
+  instead of calling the service directly. API request/response unchanged.
+- **`CmdPersona`** (`persona`, alias `wear-face`) in `commands/persona.py` — thin
+  `DispatchCommand`; bare `persona`/`persona list` renders the caller's faces (active marked
+  `◄ active`); `persona <name>` or `wear-face <name>` dispatches the action.
+- **E2E:** `src/integration_tests/pipeline/test_persona_telnet_e2e.py` (telnet list/switch,
+  web/telnet parity, negative cases).
+- **Scope boundary:** pose/sdesc reflection of the presented persona remains **#1109**.
+
+**Details:** [appearance_and_identity.md](../systems/appearance_and_identity.md) §"Layer 1 — Persona"
+
 ### Positioning in Scenes — DONE (#1017)
 - **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.
 - **Frontend:** `RoomPositionsPanel` component (`frontend/src/scenes/components/`) renders positions, persona placement, move action, and a staff "Set the stage" control. `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).

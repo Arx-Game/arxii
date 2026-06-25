@@ -150,6 +150,13 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
+  personas or switch the active one. Bare `persona`/`persona list` renders all the
+  caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
+  <name>` resolves the name among the caller's own faces and dispatches `SetActivePersonaAction`
+  (key `"set_active_persona"`, REGISTRY backend) through `dispatch_player_action` — the same
+  seam the web `PersonaViewSet.set_active` uses. Pose/sdesc reflection of the presented
+  persona is #1109's scope, not this command.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

@@ -74,6 +74,17 @@ artist changes persona with an *identical* body; a curse changes the body and
   auto-attached across personas** (see *Privacy invariant*). It is *not* on the form
   value — one shared form must be able to carry different descriptors per persona.
 - Active face resolves via `active_persona_for_sheet` (**#1044**).
+- **Switching the active face** flows through `SetActivePersonaAction` (key
+  `"set_active_persona"`, `actions/definitions/personas.py`, **#1347**) — a REGISTRY
+  action with `target_type=SELF` and kwarg `persona_id`. Both the web
+  (`PersonaViewSet.set_active`) and telnet (`CmdPersona` / `wear-face` alias,
+  `commands/persona.py`) route through `dispatch_player_action` → `action.run()`;
+  `world.scenes.services.set_active_persona` remains the sole mutator underneath.
+  Bare `persona`/`persona list` on telnet renders the caller's own personas and marks
+  the active one; `persona <name>` or `wear-face <name>` triggers the switch.
+  **Scope boundary:** the pose/sdesc read-path (`record_interaction` /
+  `_characters_to_active_personas`) is **not** changed here — making poses reflect the
+  presented persona (with privacy/discovery/freeze) is **#1109**'s scope.
 
 ## Layer 2 — Form (physical body, REAL)
 
@@ -199,7 +210,7 @@ path copies a descriptor from a sibling persona.
 
 | Surface | Verdict | Evidence |
 |---|---|---|
-| `Persona` + `active_persona` resolution | **BUILT & WIRED** | `world/scenes/models.py`; `active_persona_for_sheet` (#1044) |
+| `Persona` + `active_persona` resolution | **BUILT & WIRED** | `world/scenes/models.py`; `active_persona_for_sheet` (#1044); set-active wired via `SetActivePersonaAction` (web + telnet, #1347) |
 | `PersonaDiscovery` | **BUILT** | `world/scenes` (per scenes guide) |
 | `CharacterForm` / `FormType` (TRUE/ALTERNATE/DISGUISE) / `CharacterFormState` / `switch_form` / `get_apparent_form` | **BUILT, partly wired** | `world/forms/models.py:202-302`, `services.py:18-64`; wired to a forms API endpoint, **not** to character-appearance rendering (`_build_appearance` reads the TRUE form) |
 | `DurationType` + `TemporaryFormChange` | **BUILT** | `world/forms/models.py:215-318` — covers shapeshift/overlay durations |

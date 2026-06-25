@@ -42,7 +42,12 @@ They do not use the command system, dispatchers, or handlers.
   new service is `toggle_action_ready`, extracted from the inline web `ready` toggle;
   `locations.py` — `RoomEditAction`, key `"edit_room"` (#1470), owner-gated
   (`IsRoomOwnerPrerequisite`) edit of the current room's name/description/public-listing via
-  `world.locations.services.set_room_display_data`; shared by telnet `CmdManageRoom` + web dispatch)
+  `world.locations.services.set_room_display_data`; shared by telnet `CmdManageRoom` + web dispatch;
+  `personas.py` — `SetActivePersonaAction`, key `"set_active_persona"` (#1347), REGISTRY backend,
+  `target_type=SELF`, kwarg `persona_id`; the single action.run() path for set-active shared by
+  telnet `CmdPersona` and the web `PersonaViewSet.set_active`. Validates the persona belongs to
+  the actor's own sheet; wraps `world.scenes.services.set_active_persona` (the sole mutator).
+  Pose/sdesc reflection of the active persona is #1109's scope, not this action.)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
