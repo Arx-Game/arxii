@@ -11616,6 +11616,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/scenes/{id}/set-round-mode/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1445 — Set mode and/or knobs on the active scene round.
+     *
+     *     Coarse-gated by ``IsSceneGMOrOwnerOrStaff``; authoritative permission
+     *     check lives in ``SetRoundModeAction`` (ownership + scene-admin verification).
+     *     Resolves the requesting account's active character as the action's actor so
+     *     telnet and web converge on the same ``action.run()`` seam.
+     */
+    post: operations['scenes_set_round_mode_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/spotlight/': {
     parameters: {
       query?: never;
@@ -42126,6 +42150,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['HighlightReel'];
+        };
+      };
+    };
+  };
+  scenes_set_round_mode_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['SceneDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneDetail'];
         };
       };
     };

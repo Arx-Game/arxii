@@ -48,6 +48,7 @@ from world.scenes.serializers import (
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
+    SetRoundModeRequestSerializer,
 )
 from world.scenes.services import ActivePersonaError, broadcast_scene_message, set_active_persona
 from world.societies.renown_serializers import (
@@ -203,8 +204,8 @@ class SceneViewSet(viewsets.ModelViewSet):
         """
         Instantiate and return the list of permissions required for this view.
         """
-        if self.action == "finish":
-            # Only scene owners/GMs or staff can finish scenes
+        if self.action in ["finish", "set_round_mode"]:
+            # Only scene owners/GMs or staff can finish scenes or set round mode
             permission_classes = [IsSceneGMOrOwnerOrStaff]
         elif self.action in ["update", "partial_update", "destroy"]:
             # Only scene owners or staff can modify/delete scenes
@@ -270,6 +271,37 @@ class SceneViewSet(viewsets.ModelViewSet):
         finish_scene_full(scene)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="set-round-mode")
+    def set_round_mode(self, request: Request, pk: int | None = None) -> Response:
+        """#1445 — Set mode and/or knobs on the active scene round.
+
+        Coarse-gated by ``IsSceneGMOrOwnerOrStaff``; authoritative permission
+        check lives in ``SetRoundModeAction`` (ownership + scene-admin verification).
+        Resolves the requesting account's active character as the action's actor so
+        telnet and web converge on the same ``action.run()`` seam.
+        """
+        from actions.definitions.rounds import SetRoundModeAction  # noqa: PLC0415
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        scene = self.get_object()
+        serializer = SetRoundModeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        active_sheet = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=request.user,
+            roster_entry__tenures__end_date__isnull=True,
+        ).first()
+        if active_sheet is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+
+        actor = active_sheet.character
+        result = SetRoundModeAction().run(actor=actor, **serializer.validated_data)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        response_serializer = self.get_serializer(scene)
+        return Response(response_serializer.data)
 
     @extend_schema(responses=SceneActivitySerializer, tags=["scenes"])
     @action(detail=True, methods=[HTTPMethod.GET])

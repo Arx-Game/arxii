@@ -19721,6 +19721,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/HighlightReel'
           description: ''
+  /api/scenes/{id}/set-round-mode/:
+    post:
+      operationId: scenes_set_round_mode_create
+      description: |-
+        #1445 — Set mode and/or knobs on the active scene round.
+
+        Coarse-gated by ``IsSceneGMOrOwnerOrStaff``; authoritative permission
+        check lives in ``SetRoundModeAction`` (ownership + scene-admin verification).
+        Resolves the requesting account's active character as the action's actor so
+        telnet and web converge on the same ``action.run()`` seam.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SceneDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDetail'
+          description: ''
   /api/scenes/spotlight/:
     get:
       operationId: scenes_spotlight_retrieve
