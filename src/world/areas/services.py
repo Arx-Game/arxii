@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
@@ -39,6 +40,85 @@ def get_ancestor_at_level(area: Area, target_level: AreaLevel) -> Area | None:
         if ancestor.level == target_level:
             return ancestor
     return None
+
+
+# ---------------------------------------------------------------------------
+# `where` — the public presence / navigation surface (#1463)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WhereEntry:
+    """One ``where`` row: a present character's display name + its coloured room path."""
+
+    persona_name: str
+    room_path: str
+
+
+def _room_display_name(room: ObjectDB) -> str:
+    """A room's display name (edited longname if any, else its key)."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return room.display_data.get_display_name()
+    except (AttributeError, ObjectDoesNotExist):
+        return room.key
+
+
+def colored_area_path(room: ObjectDB) -> str:
+    """Render a room's full area-hierarchy path with per-area colours (#1463).
+
+    Walks the area ancestry outermost→innermost; each area uses its own ``color`` or
+    inherits the nearest coloured ancestor's, so a colour set on a region/house cascades
+    down. Ends with the room's display name. Returns the plain room name when it has no
+    area. Segments are joined by " - " (the Arx-1 shape).
+    """
+    room_name = _room_display_name(room)
+    profile = getattr(room, "room_profile", None)  # noqa: GETATTR_LITERAL — reverse OneToOne
+    if profile is None or profile.area is None:
+        return room_name
+    segments: list[str] = []
+    current_color = ""
+    for area in get_ancestry(profile.area):
+        current_color = area.color or current_color
+        segments.append(f"{current_color}{area.name}|n")
+    segments.append(f"{current_color}{room_name}|n")
+    return " - ".join(segments)
+
+
+def where_listing() -> list[WhereEntry]:
+    """Characters currently in PUBLIC rooms, with their coloured location paths (#1463).
+
+    The pull/navigation surface of the public world — who's out and about to be RP'd with.
+    Characters in non-public rooms (``RoomProfile.is_public=False``) or in no room are
+    omitted, so private RP stays off ``where`` (the #1287 privacy invariant). One entry per
+    character, keyed on its **active** persona (a TEMPORARY mask shows that face, by design),
+    sorted by name.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from evennia import SESSION_HANDLER  # noqa: PLC0415
+
+    from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    seen: set[int] = set()
+    entries: list[WhereEntry] = []
+    for session in SESSION_HANDLER.get_sessions():
+        puppet = getattr(session, "puppet", None)  # noqa: GETATTR_LITERAL
+        if puppet is None or puppet.id in seen:
+            continue
+        seen.add(puppet.id)
+        room = puppet.location
+        if room is None or not room_is_publicly_listed(room):
+            continue
+        try:
+            sheet = puppet.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        persona = active_persona_for_sheet(sheet)
+        entries.append(WhereEntry(persona_name=persona.name, room_path=colored_area_path(room)))
+    entries.sort(key=lambda entry: entry.persona_name.lower())
+    return entries
 
 
 def get_effective_realm(area: Area) -> Realm | None:

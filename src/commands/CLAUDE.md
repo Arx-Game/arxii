@@ -150,6 +150,11 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.
+  Thin read over `world.areas.services.where_listing`: characters in **public** rooms,
+  each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,
+  colouring each segment by `Area.color` with cascade-down inheritance). Private rooms /
+  private RP never appear (the #1287 invariant). Colours are author-set flavour (PLACEHOLDER).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

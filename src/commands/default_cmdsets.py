@@ -76,6 +76,7 @@ from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.weave import CmdWeaveThread
+from commands.where import CmdWhere
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -172,6 +173,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrievance,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
+            # #1463 — public presence/navigation: who's about, in coloured area paths.
+            CmdWhere,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # Unified scene-adaptive cast (#1351)
