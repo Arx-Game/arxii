@@ -62,6 +62,7 @@ from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
 from commands.persona import CmdPersona
+from commands.presence import CmdAfk, CmdHide
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
 from commands.social.blocking import (
@@ -77,6 +78,8 @@ from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.weave import CmdWeaveThread
+from commands.where import CmdWhere
+from commands.who import CmdWho
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -173,6 +176,13 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrievance,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
+            # #1463 — public presence/navigation: who's about, in coloured area paths.
+            CmdWhere,
+            # #1463 — online roster: who's online, by active persona, coarse idle.
+            CmdWho,
+            # #1463 — self-presence toggles: transient away + persistent quiet/hidden mode.
+            CmdAfk,
+            CmdHide,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # Unified scene-adaptive cast (#1351)

@@ -349,6 +349,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/areas/presence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Online presence for the web `who`/`where` surfaces (#1463).
+     *
+     *     GET → ``{"who": [...], "where": [...]}``. ``who`` lists online characters by active
+     *     persona + a coarse idle state; ``where`` lists characters in public rooms with their
+     *     Evennia-colour-coded area path (the frontend renders the colours). Both are read-only.
+     */
+    get: operations['areas_presence_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/rooms/': {
     parameters: {
       query?: never;
@@ -25692,6 +25715,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AreaList'];
         };
+      };
+    };
+  };
+  areas_presence_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

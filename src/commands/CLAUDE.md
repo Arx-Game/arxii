@@ -157,6 +157,20 @@ actions, backends, and service functions.
   (key `"set_active_persona"`, REGISTRY backend) through `dispatch_player_action` — the same
   seam the web `PersonaViewSet.set_active` uses. Pose/sdesc reflection of the presented
   persona is #1109's scope, not this command.
+- **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.
+  Thin read over `world.areas.services.where_listing`: characters in **public** rooms,
+  each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,
+  colouring each segment by `Area.color` with cascade-down inheritance). Private rooms /
+  private RP never appear (the #1287 invariant). Colours are author-set flavour (PLACEHOLDER).
+- **`who.py`**: `CmdWho` (`who`, #1463) — the online roster. Thin read over
+  `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
+  idle marker (active / idle / away — never exact, so identical idle times can't out an account's
+  alts). The web game-view "Who" tab + the `/api/areas/presence/` endpoint share the same service.
+- **`presence.py`**: `CmdAfk` (`afk`) + `CmdHide` (`hide`/`unhide`, #1463) — self-presence
+  privacy toggles. `afk` is a transient away marker (puppet ndb → `who` shows `away`); `hide`
+  toggles persistent quiet mode (`TenureDisplaySettings.appear_offline` via
+  `world.roster.services.display.set_appear_offline`): off where/who + unpageable except the
+  caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

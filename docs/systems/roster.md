@@ -42,7 +42,7 @@ from world.roster.models import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `TenureDisplaySettings` | Per-tenure UI preferences (1:1) | `tenure` (OneToOne), `public_character_info`, `show_online_status`, `allow_pages`, `allow_tells`, `rp_preferences`, `plot_involvement` |
+| `TenureDisplaySettings` | Per-tenure UI preferences (1:1) | `tenure` (OneToOne), `public_character_info`, `show_online_status`, `allow_pages`, `allow_tells`, `appear_offline` (quiet/hidden mode #1463 — drops off where/who + unpageable except allowlist; read via `world.scenes.presence.character_appears_offline`, written via `world.roster.services.display.set_appear_offline`), `rp_preferences`, `plot_involvement` |
 | `TenureGallery` | Named collection of media for a tenure | `tenure` (FK), `name`, `is_public`, `allowed_viewers` (M2M RosterTenure) |
 | `TenureMedia` | Bridge between player media and tenures | `tenure` (FK), `media` (FK PlayerMedia), `gallery` (FK TenureGallery, nullable), `sort_order` |
 

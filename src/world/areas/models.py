@@ -37,6 +37,15 @@ class Area(SharedMemoryModel):
         ),
     )
     description = models.TextField(blank=True)
+    color = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text=(
+            "Evennia colour tag for this area in the `where` hierarchy path (e.g. '|y', "
+            "'|520'). Inherited by descendants that leave their own colour blank, so a "
+            "colour set on a region/house cascades down. Author-set flavour (#1463)."
+        ),
+    )
 
     # Ward-level permit configuration. Only meaningful at level WARD;
     # other levels keep the defaults and ignore them. The buildings app
