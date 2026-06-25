@@ -67,11 +67,12 @@ class SceneRoundJourneyTest(TestCase):
             db_key="JourneyRoom",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        # Owner is in the room when scene start runs → becomes co-owner.
+        # Owner AND co-owner are both in the room when scene start runs → both become co-owners.
         self.owner, self.owner_account = _create_pc_with_account("JOwner", location=self.room)
-        # Outsider is NOT in the room during scene start; moved in after.
+        self.coowner, self.coowner_account = _create_pc_with_account("JCoOwner", location=self.room)
+        # Latecomer is NOT in the room during scene start; moved in after.
         # They will be a non-owner participant for permission-denial tests.
-        self.outsider, self.outsider_account = _create_pc_with_account("JOutsider")
+        self.latecomer, self.latecomer_account = _create_pc_with_account("JLatecomer")
 
     # ------------------------------------------------------------------
     # Step 1: owner runs `scene start` → scene active, owner is co-owner.
@@ -94,6 +95,13 @@ class SceneRoundJourneyTest(TestCase):
                 scene=scene, account=self.owner_account, is_owner=True
             ).exists(),
             "Owner should be a co-owner",
+        )
+        # Co-owner was also in the room at start → becomes a co-owner too (key co-ownership design).
+        self.assertTrue(
+            SceneParticipation.objects.filter(
+                scene=scene, account=self.coowner_account, is_owner=True
+            ).exists(),
+            "Second PC present at scene start should also be a co-owner",
         )
 
     # ------------------------------------------------------------------
@@ -120,16 +128,24 @@ class SceneRoundJourneyTest(TestCase):
             ).exists(),
             "Owner should be a co-owner",
         )
-        # Outsider was NOT in the room → no participation row yet.
+        # Second PC (co-owner) was also in the room at start → co-owner too
+        # (key co-ownership design point).
+        self.assertTrue(
+            SceneParticipation.objects.filter(
+                scene=scene, account=self.coowner_account, is_owner=True
+            ).exists(),
+            "Second PC present at scene start should also be a co-owner",
+        )
+        # Latecomer was NOT in the room → no participation row yet.
         self.assertFalse(
-            SceneParticipation.objects.filter(scene=scene, account=self.outsider_account).exists(),
-            "Outsider (not present at start) should have no participation row",
+            SceneParticipation.objects.filter(scene=scene, account=self.latecomer_account).exists(),
+            "Latecomer (not present at start) should have no participation row",
         )
 
         # ---- Step 2: get an active round ------------------------------
-        # Create a DECLARING SceneRound directly (StartRoundAction requires a
-        # CharacterSheet which owner has; using the action path to stay on the
-        # action seam).
+        # StartRoundAction is invoked directly here because CmdScene has no round-*start*
+        # subcommand — its `round` subcommand only sets mode on an existing round.
+        # Using StartRoundAction is intentional, not a bypass of the telnet layer.
         from actions.definitions.rounds import StartRoundAction
 
         result = StartRoundAction().run(actor=self.owner)
@@ -171,10 +187,11 @@ class SceneRoundJourneyTest(TestCase):
         msgs = _run_scene_cmd(self.owner, "round pose_order")
         rnd.refresh_from_db()
 
-        # The guard message should mention force-resolve.
+        # The guard message is the exact service text from round_services.set_scene_round_mode:
+        # "Resolve the current declarations first (force-resolve), then change the mode."
         full_text = " ".join(msgs).lower()
         self.assertIn(
-            "force",
+            "force-resolve",
             full_text,
             f"Expected force-resolve guard message; got: {msgs}",
         )
@@ -202,34 +219,53 @@ class SceneRoundJourneyTest(TestCase):
         )
 
         # ---- Step 7: owner scene round pose_order → SUCCEEDS ---------
-        # After resolve, a new round with a higher round_number is in DECLARING.
-        rnd.refresh_from_db()
+        # After force-resolve, the round may have advanced to a new row.  Re-fetch the
+        # genuinely-active round rather than asserting on the possibly-stale `rnd` object.
+        from actions.definitions.rounds import _active_round_for_room
+
         msgs = _run_scene_cmd(self.owner, "round pose_order")
-        rnd.refresh_from_db()
+        active_rnd = _active_round_for_room(self.room)
+        self.assertIsNotNone(active_rnd, "An active round should still exist after step 7")
         self.assertEqual(
-            rnd.mode,
+            active_rnd.mode,
             SceneRoundMode.POSE_ORDER,
-            f"Mode should be POSE_ORDER after successful change; got {rnd.mode}. Messages: {msgs}",
+            f"Mode should be POSE_ORDER after successful change; got {active_rnd.mode}."
+            f" Messages: {msgs}",
         )
 
-        # ---- Step 8: non-owner outsider tries scene round open → REFUSED ----
-        # Move outsider into the room so they have a location; they are still not a co-owner.
-        self.outsider.location = self.room
-        msgs_second = _run_scene_cmd(self.outsider, "round open")
-        rnd.refresh_from_db()
+        # ---- Step 8: non-owner latecomer tries scene round open → REFUSED ----
+        # Latecomer arrives AFTER scene started so they are not a co-owner.
+        # Persist their location so caller.location is non-None when the action runs.
+        self.latecomer.location = self.room
+        self.latecomer.save()
+        msgs_second = _run_scene_cmd(self.latecomer, "round open")
+        active_rnd_after_8 = _active_round_for_room(self.room)
+        self.assertIsNotNone(
+            active_rnd_after_8, "Active round should survive the non-owner attempt"
+        )
         # Mode must not change.
         self.assertEqual(
-            rnd.mode,
+            active_rnd_after_8.mode,
             SceneRoundMode.POSE_ORDER,
             "Mode should still be POSE_ORDER after non-owner attempt",
         )
-        # Caller receives a permission-denial message.
+        # Denial message must NOT indicate a missing room or missing scene (those would mean
+        # the test environment is broken, not that the permission path was exercised).
         denial_text = " ".join(msgs_second).lower()
-        self.assertTrue(
-            any(
-                kw in denial_text
-                for kw in ("owner", "gm", "only", "permission", "cannot", "can't", "may not")
-            ),
+        self.assertNotIn(
+            "not in a room",
+            denial_text,
+            "Latecomer must have a room location; 'not in a room' means location was not saved",
+        )
+        self.assertNotIn(
+            "no active scene",
+            denial_text,
+            "'no active scene' indicates wrong path — permission gate should fire first",
+        )
+        # The refusal must be the permission-denial message from SetRoundModeAction.
+        self.assertIn(
+            "only the scene",
+            denial_text,
             f"Expected permission-denial message for non-owner; got: {msgs_second}",
         )
 
@@ -239,4 +275,10 @@ class SceneRoundJourneyTest(TestCase):
 
         scene.refresh_from_db()
         self.assertFalse(scene.is_active, "Scene should be inactive after 'scene finish'")
-        self.assertIn("close", " ".join(msgs).lower())
+        # The exact success message from FinishSceneAction.execute():
+        # "The scene comes to a close."
+        self.assertIn(
+            "the scene comes to a close",
+            " ".join(msgs).lower(),
+            f"Expected finish success message; got: {msgs}",
+        )
