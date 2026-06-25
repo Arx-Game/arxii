@@ -45,6 +45,7 @@ from actions.definitions.items import (
     UnequipAction,
     UseItemAction,
 )
+from actions.definitions.locations import RoomEditAction
 from actions.definitions.movement import (
     DropAction,
     GetAction,
@@ -96,6 +97,7 @@ _ALL_ACTIONS: list[Action] = [
     GiveAction(),
     EquipAction(),
     UnequipAction(),
+    RoomEditAction(),
     PutInAction(),
     TakeOutAction(),
     ActivatePermitAction(),

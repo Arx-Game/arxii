@@ -59,6 +59,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
+from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
@@ -181,6 +182,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCombat,
             # Scene lifecycle telnet command (#1445)
             CmdScene,
+            # #1470 — owner-gated room editor (name/description/public-private).
+            CmdManageRoom,
         )
         for command_cls in command_classes:
             self.add(command_cls())
