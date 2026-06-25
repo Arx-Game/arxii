@@ -44,7 +44,7 @@ from world.combat.constants import (
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
-from world.scenes.constants import RoundStatus
+from world.scenes.round_models import AbstractRound
 from world.stories.types import TrustLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -58,7 +58,7 @@ COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
 
 
-class CombatEncounter(SharedMemoryModel):
+class CombatEncounter(AbstractRound):
     """Top-level container for a combat encounter."""
 
     encounter_type = models.CharField(
@@ -80,12 +80,6 @@ class CombatEncounter(SharedMemoryModel):
         help_text="Room where the encounter takes place. Ephemeral CombatNPC "
         "ObjectDBs are placed here at creation.",
     )
-    round_number = models.PositiveIntegerField(default=0)
-    status = models.CharField(
-        max_length=30,
-        choices=RoundStatus.choices,
-        default=RoundStatus.BETWEEN_ROUNDS,
-    )
     outcome = models.CharField(
         max_length=20,
         choices=EncounterOutcome.choices,
@@ -93,7 +87,6 @@ class CombatEncounter(SharedMemoryModel):
         default="",
         help_text="Typed result recorded at completion (#876); empty until completed.",
     )
-    completed_at = models.DateTimeField(null=True, blank=True)
     risk_level = models.CharField(
         max_length=20,
         choices=RiskLevel.choices,
@@ -113,13 +106,7 @@ class CombatEncounter(SharedMemoryModel):
         default=DEFAULT_PACE_TIMER_MINUTES,
         help_text="Minutes before auto-resolving in timed mode.",
     )
-    round_started_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the current declaration phase began.",
-    )
     is_paused = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
     escalation_curve = models.ForeignKey(
         "combat.EscalationCurve",
         on_delete=models.PROTECT,

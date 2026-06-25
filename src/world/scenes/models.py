@@ -24,6 +24,7 @@ from world.scenes.constants import (
     SummaryStatus,
 )
 from world.scenes.managers import InteractionManager, SceneManager
+from world.scenes.round_models import AbstractRound
 from world.societies.constants import FameTier
 
 if TYPE_CHECKING:
@@ -1171,7 +1172,7 @@ class SceneCheckModifier(SharedMemoryModel):
         return f"{self.scene.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
-class SceneRound(SharedMemoryModel):
+class SceneRound(AbstractRound):
     """A non-combat round/turn structure anchored to a room.
 
     Mirrors CombatEncounter's lifecycle without coupling to combat. One active
@@ -1191,10 +1192,6 @@ class SceneRound(SharedMemoryModel):
         blank=True,
         related_name="scene_rounds",
     )
-    round_number = models.PositiveIntegerField(default=0)
-    status = models.CharField(
-        max_length=20, choices=RoundStatus.choices, default=RoundStatus.BETWEEN_ROUNDS
-    )
     start_reason = models.CharField(
         max_length=20,
         choices=SceneRoundStartReason.choices,
@@ -1206,9 +1203,6 @@ class SceneRound(SharedMemoryModel):
     advance_quorum_pct = models.PositiveSmallIntegerField(default=60)
     max_actions_per_round = models.PositiveSmallIntegerField(default=1)
     per_target_repeat_lock = models.BooleanField(default=False)
-    round_started_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

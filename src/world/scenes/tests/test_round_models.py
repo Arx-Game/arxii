@@ -3,8 +3,12 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.factories import CombatEncounterFactory
+from world.combat.models import CombatEncounter
 from world.scenes.constants import RoundStatus, SceneRoundParticipantStatus
+from world.scenes.factories import SceneRoundFactory
 from world.scenes.models import SceneRound, SceneRoundParticipant
+from world.scenes.round_models import AbstractRound
 
 
 class RoundEnumTests(TestCase):
@@ -89,3 +93,31 @@ class SceneActionDeclarationTests(TestCase):
             ).count(),
             2,
         )
+
+
+class AbstractRoundInheritanceTests(TestCase):
+    """SceneRound and CombatEncounter both inherit AbstractRound."""
+
+    def test_scene_round_is_subclass_of_abstract_round(self):
+        assert issubclass(SceneRound, AbstractRound)
+
+    def test_combat_encounter_is_subclass_of_abstract_round(self):
+        assert issubclass(CombatEncounter, AbstractRound)
+
+    def test_scene_round_exposes_lifecycle_fields(self):
+        rnd = SceneRoundFactory()
+        for field in ("round_number", "status", "round_started_at", "created_at", "completed_at"):
+            assert hasattr(rnd, field), f"SceneRound missing field: {field}"
+
+    def test_combat_encounter_exposes_lifecycle_fields(self):
+        enc = CombatEncounterFactory()
+        for field in ("round_number", "status", "round_started_at", "created_at", "completed_at"):
+            assert hasattr(enc, field), f"CombatEncounter missing field: {field}"
+
+    def test_scene_round_status_default(self):
+        rnd = SceneRoundFactory()
+        assert rnd.status == RoundStatus.BETWEEN_ROUNDS
+
+    def test_combat_encounter_status_default(self):
+        enc = CombatEncounterFactory()
+        assert enc.status == RoundStatus.BETWEEN_ROUNDS
