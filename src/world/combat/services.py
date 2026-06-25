@@ -3770,6 +3770,43 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     _emit_encounter_completed(encounter, outcome)
     cleanup_completed_encounter(encounter)
+    _hand_off_acute_peril_to_scene_round(encounter)
+
+
+def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
+    """After combat ends, ensure any participant still Bleeding-Out or Plummeting is
+    covered by a scene round so the peril keeps ticking (Task 6 — #1466).
+
+    Guards:
+    - Only PC participants (``CombatParticipant``), never NPC opponents.
+    - Skip characters who are somehow still in another active encounter (paranoid guard).
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
+
+    acute_condition_names = [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+
+    participants = list(
+        CombatParticipant.objects.filter(encounter=encounter).select_related(
+            "character_sheet__character"
+        )
+    )
+    for participant in participants:
+        sheet = participant.character_sheet
+        character = sheet.character
+        has_acute = ConditionInstance.objects.filter(
+            target=character,
+            condition__name__in=acute_condition_names,
+        ).exists()
+        if not has_acute:
+            continue
+        # Paranoid guard: skip if the character is already in another active encounter.
+        if resolve_combat_round_context(sheet) is not None:
+            continue
+        ensure_round_for_acute_condition(sheet)
 
 
 def end_encounter(encounter: CombatEncounter) -> CombatEncounter:
