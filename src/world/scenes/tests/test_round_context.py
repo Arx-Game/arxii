@@ -52,9 +52,22 @@ class DeclarationGatingTests(TestCase):
         )
         assert SceneRoundContext(rnd).is_declaration_open is True
 
-    def test_danger_round_is_not_declaration_open(self):
+    def test_danger_round_is_declaration_open_when_strict(self):
+        # #1466: a danger round is an ordinary STRICT round -> it gathers declarations
+        # like any other STRICT round (no special-case).
         rnd = SceneRoundFactory(
-            start_reason=SceneRoundStartReason.DANGER, status=RoundStatus.DECLARING
+            start_reason=SceneRoundStartReason.DANGER,
+            status=RoundStatus.DECLARING,
+            mode=SceneRoundMode.STRICT,
+        )
+        assert SceneRoundContext(rnd).is_declaration_open is True
+
+    def test_open_round_is_not_declaration_open(self):
+        # OPEN rounds resolve immediately and never gather declarations.
+        rnd = SceneRoundFactory(
+            start_reason=SceneRoundStartReason.OPT_IN,
+            status=RoundStatus.DECLARING,
+            mode=SceneRoundMode.OPEN,
         )
         assert SceneRoundContext(rnd).is_declaration_open is False
 

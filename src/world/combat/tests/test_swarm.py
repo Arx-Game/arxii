@@ -3,7 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ENTITY_TYPE_NPC, EncounterStatus, OpponentStatus
+from world.combat.constants import ENTITY_TYPE_NPC, OpponentStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -18,6 +18,7 @@ from world.combat.services import (
     swarm_attack_count,
     swarm_kills,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -69,7 +70,7 @@ class SwarmOffenseTests(TestCase):
 
     def test_high_count_swarm_emits_multiple_attacks(self):
         """30 bodies / 6 per attack = 5 raw, capped at 2 acting PCs → 2 actions."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool)
         swarm = SwarmOpponentFactory(
@@ -96,7 +97,7 @@ class SwarmOffenseTests(TestCase):
         same first PC. With ≥2 acting PCs and ≥2 attacks, each action should
         land on a distinct PC.
         """
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool)
         # 30 bodies / 6 per attack = 5 raw, capped at 3 acting PCs → 3 actions.
@@ -129,7 +130,7 @@ class SwarmResolutionTests(TestCase):
 
     def test_swarm_resolves_multiple_attacks_per_round(self):
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()

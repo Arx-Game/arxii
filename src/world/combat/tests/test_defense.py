@@ -9,7 +9,6 @@ from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
     DEFENSE_REDUCED_MULTIPLIER,
-    EncounterStatus,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -23,6 +22,7 @@ from world.combat.services import (
     _damage_multiplier_for_success,
     resolve_npc_attack,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -67,7 +67,7 @@ class ResolveNpcAttackTests(TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
@@ -241,7 +241,7 @@ class DefensiveFashionWiringTests(TestCase):
 
         # --- encounter wired to the scene ---
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
             scene=self.scene,
         )

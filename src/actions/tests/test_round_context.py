@@ -19,11 +19,12 @@ from actions.factories import ActionTemplateFactory
 from actions.types import ActionRef, PlayerAction
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import ChallengeApproachFactory, ChallengeInstanceFactory
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -43,7 +44,7 @@ class TestGetActiveRoundContextDeclaring(django.test.TestCase):
 
     def setUp(self) -> None:
         self.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         self.participant = CombatParticipantFactory(
@@ -79,7 +80,7 @@ class TestGetActiveRoundContextNotDeclaring(django.test.TestCase):
 
     def test_is_declaration_open_false_when_resolving(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=2,
         )
         participant = CombatParticipantFactory(
@@ -97,7 +98,7 @@ class TestGetActiveRoundContextNotDeclaring(django.test.TestCase):
 
     def test_is_declaration_open_false_when_between_rounds(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=3,
         )
         participant = CombatParticipantFactory(
@@ -118,7 +119,7 @@ class TestGetActiveRoundContextCompletedEncounter(django.test.TestCase):
     """Character in a COMPLETED encounter → returns None (encounter is over)."""
 
     def test_completed_encounter_returns_none(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        encounter = CombatEncounterFactory(status=RoundStatus.COMPLETED)
         CombatParticipantFactory(
             encounter=encounter,
             status=ParticipantStatus.ACTIVE,
@@ -137,7 +138,7 @@ class TestGetActiveRoundContextInactiveParticipant(django.test.TestCase):
     """Character with FLED/REMOVED participant status → returns None."""
 
     def test_fled_participant_returns_none(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         participant = CombatParticipantFactory(
             encounter=encounter,
             status=ParticipantStatus.FLED,
@@ -150,7 +151,7 @@ class TestGetActiveRoundContextInactiveParticipant(django.test.TestCase):
         self.assertIsNone(result)
 
     def test_removed_participant_returns_none(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         participant = CombatParticipantFactory(
             encounter=encounter,
             status=ParticipantStatus.REMOVED,
@@ -166,7 +167,7 @@ class TestGetActiveRoundContextInactiveParticipant(django.test.TestCase):
 def _make_declaring_encounter_with_vitals() -> tuple:
     """Create a DECLARING encounter, ACTIVE participant, and ALIVE CharacterVitals."""
     encounter = CombatEncounterFactory(
-        status=EncounterStatus.DECLARING,
+        status=RoundStatus.DECLARING,
         round_number=1,
     )
     participant = CombatParticipantFactory(
@@ -400,7 +401,7 @@ class TestRecordDeclarationClosedWindow(django.test.TestCase):
     def test_resolving_encounter_raises_dispatch_error(self) -> None:
         """RESOLVING encounter → ROUND_DECLARATION_CLOSED."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.RESOLVING,
+            status=RoundStatus.RESOLVING,
             round_number=2,
         )
         participant = CombatParticipantFactory(

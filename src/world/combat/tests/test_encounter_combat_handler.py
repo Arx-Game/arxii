@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from world.combat.constants import ClashStatus, EncounterStatus
+from world.combat.constants import ClashStatus
 from world.combat.factories import (
     ClashFactory,
     CombatEncounterFactory,
@@ -18,6 +18,7 @@ from world.combat.factories import (
     CombatRoundActionFactory,
 )
 from world.combat.handlers import EncounterCombatHandler
+from world.scenes.constants import RoundStatus
 
 
 class EncounterCombatHandlerCachingTests(TestCase):
@@ -26,7 +27,7 @@ class EncounterCombatHandlerCachingTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         # Avoid setUpTestData — Evennia DbHolder isn't deepcopy-safe.
-        self.encounter = CombatEncounterFactory(round_number=1, status=EncounterStatus.DECLARING)
+        self.encounter = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
         self.participant_a = CombatParticipantFactory(encounter=self.encounter)
         self.participant_b = CombatParticipantFactory(encounter=self.encounter)
         self.action_a = CombatRoundActionFactory(participant=self.participant_a, round_number=1)

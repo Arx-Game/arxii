@@ -102,7 +102,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 - **Scene-adaptive cast + three-mode round framework (#1351, complete):**
   - `SceneRoundMode` TextChoices (`OPEN` / `POSE_ORDER` / `STRICT`) on `SceneRound`. Social rounds
-    default to `POSE_ORDER` (immediate, quorum-driven advancement). DANGER rounds are forced to `OPEN`.
+    default to `POSE_ORDER` (immediate, quorum-driven advancement). Danger rounds are `STRICT` (#1466).
     STRICT rounds gather declarations and resolve batch. `SceneRoundDefaultsConfig` (singleton pk=1)
     lets staff tune `default_mode`, `advance_quorum_pct`, `max_actions_per_round`,
     `per_target_repeat_lock`, and `anti_spam_seconds`.

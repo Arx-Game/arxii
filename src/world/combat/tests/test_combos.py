@@ -7,7 +7,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
     ComboLearningMethod,
-    EncounterStatus,
     OpponentTier,
 )
 from world.combat.factories import (
@@ -30,6 +29,7 @@ from world.combat.services import (
     upgrade_action_to_combo,
 )
 from world.magic.factories import EffectTypeFactory, GiftFactory, ResonanceFactory, TechniqueFactory
+from world.scenes.constants import RoundStatus
 
 
 class ComboDefinitionModelTests(TestCase):
@@ -136,7 +136,7 @@ class DetectAvailableCombosTests(TestCase):
     def _setup_encounter_with_actions(self, *, num_pcs: int = 2):
         """Create an encounter with PCs who have declared actions."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         participants = []
@@ -340,7 +340,7 @@ class DetectAvailableCombosTests(TestCase):
     def test_no_actions_returns_empty(self) -> None:
         """No round actions means no combos."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         available = detect_available_combos(encounter, 1)
@@ -353,7 +353,7 @@ class UpgradeRevertComboTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.sheet = CharacterSheetFactory()
@@ -425,7 +425,7 @@ class ResonanceMatchingTests(TestCase):
     ) -> tuple[object, list[object]]:
         """Create an encounter with a single PC whose gift has the given resonance."""
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         gift = GiftFactory(name=f"Gift-{gift_resonance}")
@@ -491,7 +491,7 @@ class ResonanceMatchingTests(TestCase):
         PC-A->Slot2.
         """
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
 

@@ -65,12 +65,12 @@ def _make_rite(*, covenant, ritual, condition_template) -> CovenantRite:
 
 def _make_active_encounter(room, scene):
     """Create a CombatEncounter in RESOLVING status for the given room and scene."""
-    from world.combat.constants import EncounterStatus
     from world.combat.factories import CombatEncounterFactory
     from world.combat.models import CombatEncounter
+    from world.scenes.constants import RoundStatus
 
     encounter = CombatEncounterFactory(room=room, scene=scene)
-    CombatEncounter.objects.filter(pk=encounter.pk).update(status=EncounterStatus.RESOLVING)
+    CombatEncounter.objects.filter(pk=encounter.pk).update(status=RoundStatus.RESOLVING)
     encounter.refresh_from_db()
     return encounter
 
@@ -291,13 +291,11 @@ class PerformCovenantRiteGateTests(_RiteSceneTestCase):
 
     def test_no_active_encounter_raises_and_rolls_back(self) -> None:
         """No active encounter in room → NoActiveBattleError, no rows."""
-        from world.combat.constants import EncounterStatus
         from world.combat.models import CombatEncounter
         from world.covenants.exceptions import NoActiveBattleError
+        from world.scenes.constants import RoundStatus
 
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.COMPLETED
-        )
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(status=RoundStatus.COMPLETED)
         self.encounter.refresh_from_db()
 
         with self.assertRaises(NoActiveBattleError):
@@ -453,12 +451,10 @@ class FoldArrivalIntoActiveRitesTests(_RiteSceneTestCase):
 
     def test_completed_instance_ignored(self) -> None:
         """If the instance's encounter is COMPLETED, arriving member is ignored."""
-        from world.combat.constants import EncounterStatus
         from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
 
-        CombatEncounter.objects.filter(pk=self.encounter.pk).update(
-            status=EncounterStatus.COMPLETED
-        )
+        CombatEncounter.objects.filter(pk=self.encounter.pk).update(status=RoundStatus.COMPLETED)
         self.encounter.refresh_from_db()
 
         _place_character_in_room(self.mem_c.character_sheet.character, self.room)

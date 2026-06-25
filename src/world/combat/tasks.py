@@ -8,8 +8,9 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
-from world.combat.constants import EncounterStatus, PaceMode
+from world.combat.constants import PaceMode
 from world.combat.models import CombatEncounter
+from world.scenes.constants import RoundStatus
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def check_and_resolve_timed_encounters() -> list[int]:
     # Find candidates without locking
     candidate_ids = list(
         CombatEncounter.objects.filter(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             pace_mode=PaceMode.TIMED,
             is_paused=False,
             round_started_at__isnull=False,
@@ -43,7 +44,7 @@ def check_and_resolve_timed_encounters() -> list[int]:
             with transaction.atomic():
                 enc = CombatEncounter.objects.select_for_update().get(
                     pk=enc_id,
-                    status=EncounterStatus.DECLARING,  # Re-check under lock
+                    status=RoundStatus.DECLARING,  # Re-check under lock
                 )
                 deadline = enc.round_started_at + timedelta(
                     minutes=enc.pace_timer_minutes,

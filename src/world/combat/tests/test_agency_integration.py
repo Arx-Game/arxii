@@ -21,7 +21,7 @@ from django.test import TestCase, tag
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
+from world.combat.constants import ActionCategory, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -46,6 +46,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
@@ -81,7 +82,7 @@ def _make_declaring_setup(
     participants is a list of length *num_participants*.
     Each participant has alive vitals already created.
     """
-    encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+    encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
     participants = []
     for _ in range(num_participants):
         participant = CombatParticipantFactory(encounter=encounter)
@@ -362,7 +363,7 @@ class EncounterLossWhenAllPCsDownTests(TestCase):
 
     def _setup_encounter_with_active_opponent(self) -> tuple:
         """Return (encounter, participants) — opponent still active."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(
             encounter=encounter,
             status=ParticipantStatus.ACTIVE,

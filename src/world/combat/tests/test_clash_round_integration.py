@@ -14,7 +14,6 @@ from world.combat.constants import (
     ActionCategory,
     ClashActionSlot,
     ClashStatus,
-    EncounterStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -43,7 +42,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
@@ -87,7 +86,7 @@ class ResolveRoundClashIntegrationTests(TestCase):
 
     def _make_encounter(self, *, round_number: int = 1) -> CombatEncounter:
         return CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=round_number,
         )
 
@@ -383,7 +382,7 @@ class ResolveRoundClashIntegrationTests(TestCase):
 
         # --- Round 2: the resolved clash is NOT re-processed ---
         encounter.round_number = 2
-        encounter.status = EncounterStatus.DECLARING
+        encounter.status = RoundStatus.DECLARING
         encounter.save(update_fields=["round_number", "status"])
 
         opponent.health = 30

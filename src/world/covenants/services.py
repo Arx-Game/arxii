@@ -1199,10 +1199,10 @@ def _fold_arrival_into_covenant_rite(
     No-op when there is no active rite instance for this covenant in the room,
     or when the character is already a participant.
     """
-    from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     # Find an active rite instance for this covenant in this room.
     instance: CovenantRiteInstance | None = (
@@ -1211,7 +1211,7 @@ def _fold_arrival_into_covenant_rite(
             completed_at__isnull=True,
             combat_encounter__room=room,
         )
-        .exclude(combat_encounter__status=EncounterStatus.COMPLETED)
+        .exclude(combat_encounter__status=RoundStatus.COMPLETED)
         .select_related("rite", "rite__granted_condition")
         .first()
     )
@@ -1435,12 +1435,12 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     scaled condition buff to each via bulk_apply_conditions, and emits a
     NarrativeMessage. Returns the new CovenantRiteInstance.
     """
-    from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.combat.models import CombatEncounter  # noqa: PLC0415
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     # 1. Resolve the CovenantRite sidecar from the session's ritual.
     rite: CovenantRite = session.ritual.covenant_rite
@@ -1463,7 +1463,7 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
     # 4b. Gate: active combat encounter in room.
     encounter = (
         CombatEncounter.objects.filter(room=room)
-        .exclude(status=EncounterStatus.COMPLETED)
+        .exclude(status=RoundStatus.COMPLETED)
         .order_by("-id")
         .first()
     )

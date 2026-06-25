@@ -99,12 +99,12 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
 
     def test_seeds_new_encounter_when_none_exists(self):
         from world.combat.cast_seed import seed_or_feed_encounter_from_cast
-        from world.combat.constants import EncounterStatus
         from world.combat.models import (
             CombatOpponent,
             CombatParticipant,
             CombatRoundAction,
         )
+        from world.scenes.constants import RoundStatus
 
         caster, target = self._make_caster_and_target()
         technique = self._make_damage_technique()
@@ -119,7 +119,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         )
 
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
         self.assertEqual(encounter.scene, scene)
 
         # Caster is a participant.
@@ -140,8 +140,9 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
 
     def test_feeds_existing_active_encounter(self):
         from world.combat.cast_seed import seed_or_feed_encounter_from_cast
-        from world.combat.constants import EncounterStatus, EncounterType, RiskLevel
+        from world.combat.constants import EncounterType, RiskLevel
         from world.combat.models import CombatEncounter
+        from world.scenes.constants import RoundStatus
 
         caster, target = self._make_caster_and_target()
         technique = self._make_damage_technique()
@@ -150,7 +151,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         existing = CombatEncounter.objects.create(
             room=room,
             scene=scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
@@ -167,7 +168,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         self.assertEqual(encounter.pk, existing.pk)
         self.assertEqual(CombatEncounter.objects.filter(scene=scene).count(), 1)
         encounter.refresh_from_db()
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
     def test_declaring_feed_reuses_existing_active_opponent(self):
         from world.combat.models import CombatOpponent, CombatRoundAction
@@ -209,8 +210,8 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         self.assertEqual(actions.get().focused_action, second_technique)
 
     def test_declaring_feed_joins_caster_not_yet_participating(self):
-        from world.combat.constants import EncounterStatus
         from world.combat.models import CombatParticipant
+        from world.scenes.constants import RoundStatus
 
         caster, target = self._make_caster_and_target()
         second_caster, _ = self._make_caster_and_target()
@@ -218,7 +219,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         scene, room = self._make_scene_with_room()
 
         encounter = self._seed(caster, target, technique, scene, room)
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
         # A different caster casts into the now-DECLARING encounter → joins it.
         self._seed(second_caster, target, technique, scene, room)
@@ -229,15 +230,15 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         )
 
     def test_cross_encounter_retarget_creates_fresh_opponent_row(self):
-        from world.combat.constants import EncounterStatus
         from world.combat.models import CombatOpponent
+        from world.scenes.constants import RoundStatus
 
         caster, target = self._make_caster_and_target()
         technique = self._make_damage_technique()
         scene, room = self._make_scene_with_room()
 
         old = self._seed(caster, target, technique, scene, room)
-        old.status = EncounterStatus.COMPLETED
+        old.status = RoundStatus.COMPLETED
         old.save(update_fields=["status"])
 
         new = self._seed(caster, target, technique, scene, room)
@@ -247,7 +248,7 @@ class SeedOrFeedEncounterFromCastTests(EvenniaTestCase):
         self.assertEqual(new_row.objectdb, target.character)
         # The completed encounter was not fed; its historical row survives.
         old.refresh_from_db()
-        self.assertEqual(old.status, EncounterStatus.COMPLETED)
+        self.assertEqual(old.status, RoundStatus.COMPLETED)
         self.assertTrue(CombatOpponent.objects.filter(encounter=old).exists())
 
     def test_defeated_target_in_same_encounter_raises(self):

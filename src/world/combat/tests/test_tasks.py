@@ -5,15 +5,16 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from world.combat.constants import EncounterStatus, PaceMode
+from world.combat.constants import PaceMode
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.tasks import check_and_resolve_timed_encounters
+from world.scenes.constants import RoundStatus
 
 
 class CombatTimerTaskTest(TestCase):
     def test_resolves_expired_encounter(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             pace_mode=PaceMode.TIMED,
             pace_timer_minutes=10,
             round_started_at=timezone.now() - timedelta(minutes=15),
@@ -25,11 +26,11 @@ class CombatTimerTaskTest(TestCase):
 
         assert encounter.pk in resolved
         encounter.refresh_from_db()
-        assert encounter.status != EncounterStatus.DECLARING
+        assert encounter.status != RoundStatus.DECLARING
 
     def test_ignores_non_expired_encounter(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             pace_mode=PaceMode.TIMED,
             pace_timer_minutes=10,
             round_started_at=timezone.now() - timedelta(minutes=5),
@@ -41,11 +42,11 @@ class CombatTimerTaskTest(TestCase):
 
         assert encounter.pk not in resolved
         encounter.refresh_from_db()
-        assert encounter.status == EncounterStatus.DECLARING
+        assert encounter.status == RoundStatus.DECLARING
 
     def test_ignores_paused_encounter(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             pace_mode=PaceMode.TIMED,
             is_paused=True,
             pace_timer_minutes=10,
@@ -60,7 +61,7 @@ class CombatTimerTaskTest(TestCase):
 
     def test_ignores_manual_mode(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             pace_mode=PaceMode.MANUAL,
             round_started_at=timezone.now() - timedelta(minutes=15),
             round_number=1,
@@ -72,7 +73,7 @@ class CombatTimerTaskTest(TestCase):
 
     def test_ignores_non_declaring_encounter(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             pace_mode=PaceMode.TIMED,
             round_started_at=timezone.now() - timedelta(minutes=15),
         )

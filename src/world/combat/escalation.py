@@ -173,8 +173,8 @@ def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
     statuses are already persisted and therefore accurate.
     """
     from flows.models import Trigger, TriggerDefinition  # noqa: PLC0415
-    from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     room = encounter.room
     if room is None:
@@ -182,7 +182,7 @@ def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
     shares_room = (
         CombatEncounter.objects.filter(room=room, escalation_curve__isnull=False)
         .exclude(pk=encounter.pk)
-        .exclude(status=EncounterStatus.COMPLETED)
+        .exclude(status=RoundStatus.COMPLETED)
         .exists()
     )
     if shares_room:
@@ -217,10 +217,10 @@ def apply_relationship_escalation_spike(
     (same guard as ``apply_escalation_tick``), so co-located escalating
     encounters cannot double-dip a single fall.
     """
-    from world.combat.constants import EncounterStatus  # noqa: PLC0415
     from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     fallen_sheet = getattr(fallen_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if fallen_sheet is None:
@@ -229,7 +229,7 @@ def apply_relationship_escalation_spike(
     encounters = CombatEncounter.objects.filter(
         room=room,
         escalation_curve__isnull=False,
-    ).exclude(status=EncounterStatus.COMPLETED)
+    ).exclude(status=RoundStatus.COMPLETED)
     encounter_ct = ContentType.objects.get_for_model(CombatEncounter)
 
     for encounter in encounters:

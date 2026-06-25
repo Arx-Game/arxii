@@ -6,7 +6,6 @@ from evennia import create_object
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -19,6 +18,7 @@ from world.combat.duels import (
     yield_duel,
 )
 from world.combat.factories import ThreatPoolFactory
+from world.scenes.constants import RoundStatus
 
 
 class CreatePvpDuelTests(TestCase):
@@ -231,7 +231,7 @@ class ResolveDuelEndTests(TestCase):
 
         self.assertIsNotNone(returned)
         self.assertEqual(enc.duel_winner_id, self.a.pk)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(enc.completed_at)
 
@@ -240,7 +240,7 @@ class ResolveDuelEndTests(TestCase):
         enc = create_pvp_duel(self.a, self.b, self.room)
         self.assertIsNone(resolve_duel_end(enc))
         enc.refresh_from_db()
-        self.assertNotEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertNotEqual(enc.status, RoundStatus.COMPLETED)
 
     def test_already_completed_pvp_not_recompleted(self):
         """A second resolve_duel_end on a COMPLETED duel is a no-op (no double-complete)."""
@@ -269,7 +269,7 @@ class ResolveDuelEndTests(TestCase):
         enc.refresh_from_db()
 
         self.assertEqual(enc.duel_winner_id, self.b.pk)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(enc.completed_at)
 
@@ -287,7 +287,7 @@ class ResolveDuelEndTests(TestCase):
 
         self.assertIsNotNone(returned)
         self.assertEqual(enc.duel_winner_id, self.pc_sheet.pk)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
 
     def test_lethal_pc_down_npc_wins_no_winner(self):
@@ -303,7 +303,7 @@ class ResolveDuelEndTests(TestCase):
 
         self.assertIsNotNone(returned)
         self.assertIsNone(enc.duel_winner_id)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.DEFEAT)
 
     def test_lethal_ongoing_returns_none(self):
@@ -311,7 +311,7 @@ class ResolveDuelEndTests(TestCase):
         enc = create_lethal_duel(self.pc_sheet, self.opponent_kwargs, self.room)
         self.assertIsNone(resolve_duel_end(enc))
         enc.refresh_from_db()
-        self.assertNotEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertNotEqual(enc.status, RoundStatus.COMPLETED)
 
     def test_lethal_yield_npc_wins_no_winner(self):
         """Lethal yield: NPC wins, duel_winner null, DEFEAT."""
@@ -322,7 +322,7 @@ class ResolveDuelEndTests(TestCase):
         enc.refresh_from_db()
 
         self.assertIsNone(enc.duel_winner_id)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.DEFEAT)
 
     # --- Non-duel guard -------------------------------------------------------
@@ -334,7 +334,7 @@ class ResolveDuelEndTests(TestCase):
         enc = CombatEncounterFactory(
             encounter_type=EncounterType.PARTY_COMBAT,
             room=self.room,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
         )
         self.assertIsNone(resolve_duel_end(enc))
 
@@ -363,7 +363,7 @@ class YieldManeuverNonDuelGuardTests(TestCase):
         enc = CombatEncounterFactory(
             encounter_type=EncounterType.PARTY_COMBAT,
             room=self.room,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
         )
         participant = CombatParticipant.objects.create(
             encounter=enc,
@@ -380,6 +380,6 @@ class YieldManeuverNonDuelGuardTests(TestCase):
         enc.refresh_from_db()
         self.assertNotEqual(
             enc.status,
-            EncounterStatus.COMPLETED,
+            RoundStatus.COMPLETED,
             "YIELD maneuver in a non-DUEL encounter must not complete the encounter",
         )

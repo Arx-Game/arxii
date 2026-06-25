@@ -118,7 +118,7 @@ model with a split where the initiator controls effort and each defender control
 
 Non-combat scene rounds (`SceneRound`) now support three action-gating modes:
 
-- **OPEN** — every action resolves immediately, no quota (used for DANGER rounds).
+- **OPEN** — every action resolves immediately, no quota.
 - **POSE_ORDER** — default for social rounds; actions resolve immediately and `round_number` advances
   once `ceil(advance_quorum_pct × active_count)` distinct participants have acted this round.
 - **STRICT** — actions are declared into a ledger while `is_declaration_open`; the round resolves as a
@@ -155,8 +155,8 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 - **Service functions** (`scene_admin_services.py`): `resolve_actor_account`,
   `add_present_as_co_owners`, `finish_scene_full` (extracted from the viewset).
 - **`set_scene_round_mode`** (`round_services.py`) + `RoundModeError`: applies mode/knob
-  changes in-place; guards against DANGER rounds (immutable) and STRICT-exit with pending
-  deferred declarations.
+  changes in-place; guards against STRICT-exit with pending deferred declarations (#1466
+  removed the DANGER-immutable guard — danger rounds are ordinary STRICT rounds).
 - **Actions:** `StartSceneAction` (key `"start_scene"`), `FinishSceneAction`
   (key `"finish_scene"`) in `actions/definitions/scenes.py`; `SetRoundModeAction`
   (key `"set_round_mode"`) in `actions/definitions/rounds.py`.
@@ -166,11 +166,9 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 - **Web:** `POST /api/scenes/{id}/set-round-mode/` (gated `IsSceneGMOrOwnerOrStaff`,
   dispatches `SetRoundModeAction`).
 
-**Deferred follow-up:**
-
-- DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
-  user-settable; a future slice allows a scene admin to shift a live DANGER round into
-  the three-mode framework.
+**DANGER → STRICT unification — DONE (#1466):** danger is no longer a separate round type;
+an acute peril ensures an ordinary STRICT `SceneRound(start_reason=DANGER)` that ticks the
+peril at presence-gated resolution and auto-ends when it clears.
 
 ### Web Round-Mode Control — DONE (#1467, parity for #1445)
 
@@ -184,6 +182,12 @@ Frontend parity for `scene round` (telnet):
 - **`RoundSettingsDialog`** (`frontend/src/scenes/components/RoundSettingsDialog.tsx`) — GM/owner/
   staff-gated React dialog; reads `active_round` from the scene detail and dispatches
   `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
+
+**Deferred follow-up — reconcile the web danger lock with #1466:** `RoundSettingsDialog`
+still locks danger rounds (`modeLocked = is_danger`, "Danger rounds resolve on their own
+and can't be reconfigured"). #1466 retired the forced-OPEN self-resolving danger path, so
+the web control should let a scene admin reconfigure a live danger round's knobs (linked to
+#1328 web/telnet parity).
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 

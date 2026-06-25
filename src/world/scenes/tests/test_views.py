@@ -307,22 +307,25 @@ class SetRoundModeViewTestCase(APITestCase):
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_danger_round_returns_400_with_service_message(self):
-        """DANGER round → action refuses with a 400 carrying the service's message."""
-        # Replace the existing round with a DANGER round.
+    def test_danger_round_mode_change_succeeds(self):
+        """#1466: a danger round is an ordinary STRICT round — there is no DANGER-specific
+        mode-change block, so setting the mode succeeds (200) when no deferreds are pending."""
+        # Replace the existing round with a DANGER round (STRICT, like a real acute round).
         self.round.delete()
-        SceneRound.objects.create(
+        rnd = SceneRound.objects.create(
             room=self.room,
             scene=self.scene,
             status=RoundStatus.DECLARING,
             round_number=1,
             start_reason=SceneRoundStartReason.DANGER,
+            mode=SceneRoundMode.STRICT,
         )
         url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
-        response = self.client.post(url, {"mode": "strict"}, format="json")
+        response = self.client.post(url, {"mode": "pose_order"}, format="json")
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "detail" in response.data
+        assert response.status_code == status.HTTP_200_OK
+        rnd.refresh_from_db()
+        assert rnd.mode == SceneRoundMode.POSE_ORDER
 
     def test_no_active_character_returns_400(self):
         """Account with no active roster tenure → 400 'No active character.'"""

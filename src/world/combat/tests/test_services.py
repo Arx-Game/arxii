@@ -16,7 +16,6 @@ from world.combat.constants import (
     ActionCategory,
     CombatManeuver,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -55,6 +54,7 @@ from world.conditions.services import get_active_conditions
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -125,7 +125,7 @@ class BeginDeclarationPhaseTest(TestCase):
 
         begin_declaration_phase(encounter)
         self.assertEqual(encounter.round_number, 1)
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
     def test_subsequent_call_advances_to_round_2(self) -> None:
         encounter = CombatEncounterFactory()
@@ -135,27 +135,27 @@ class BeginDeclarationPhaseTest(TestCase):
         self.assertEqual(encounter.round_number, 1)
 
         # Reset status to BETWEEN_ROUNDS before calling again
-        encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        encounter.status = RoundStatus.BETWEEN_ROUNDS
         encounter.save(update_fields=["status"])
 
         begin_declaration_phase(encounter)
         self.assertEqual(encounter.round_number, 2)
-        self.assertEqual(encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(encounter.status, RoundStatus.DECLARING)
 
     def test_rejects_non_between_rounds_status(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         CombatOpponentFactory(encounter=encounter)
         with self.assertRaises(ValueError, msg="expected 'Between Rounds'"):
             begin_declaration_phase(encounter)
 
     def test_rejects_completed_status(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        encounter = CombatEncounterFactory(status=RoundStatus.COMPLETED)
         CombatOpponentFactory(encounter=encounter)
         with self.assertRaises(ValueError):
             begin_declaration_phase(encounter)
 
     def test_rejects_no_opponents(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        encounter = CombatEncounterFactory(status=RoundStatus.BETWEEN_ROUNDS)
         with self.assertRaises(ValueError, msg="no active opponents"):
             begin_declaration_phase(encounter)
 
@@ -165,7 +165,7 @@ class SelectNpcActionsTest(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.encounter = CombatEncounterFactory(round_number=1, status=EncounterStatus.DECLARING)
+        self.encounter = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
         self.pool = ThreatPoolFactory()
         self.entry = ThreatPoolEntryFactory(
             pool=self.pool,
@@ -205,13 +205,13 @@ class SelectNpcActionsTest(TestCase):
         self.assertIn(self.participant, targets)
 
     def test_rejects_non_declaring_status(self) -> None:
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         with self.assertRaises(ValueError, msg="expected 'Declaring'"):
             select_npc_actions(self.encounter)
 
     def test_rejects_resolving_status(self) -> None:
-        self.encounter.status = EncounterStatus.RESOLVING
+        self.encounter.status = RoundStatus.RESOLVING
         self.encounter.save(update_fields=["status"])
         with self.assertRaises(ValueError):
             select_npc_actions(self.encounter)
@@ -220,7 +220,7 @@ class SelectNpcActionsTest(TestCase):
         """An entry on cooldown should not be selected."""
         # Use round 3 so cooldown math is clear: cooldown=2 means
         # earliest_allowed = max(1, 3-2+1) = 2, and we used it at round 2.
-        encounter = CombatEncounterFactory(round_number=3, status=EncounterStatus.DECLARING)
+        encounter = CombatEncounterFactory(round_number=3, status=RoundStatus.DECLARING)
         pool = ThreatPoolFactory()
         normal_entry = ThreatPoolEntryFactory(pool=pool, weight=1)
         cooldown_entry = ThreatPoolEntryFactory(
@@ -256,7 +256,7 @@ class DeclareActionTest(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         CharacterVitals.objects.create(
             character_sheet=self.participant.character_sheet,
@@ -282,7 +282,7 @@ class DeclareActionTest(TestCase):
 
     def test_declare_action_wrong_status(self) -> None:
         """Raises ValueError if encounter is not DECLARING."""
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         with self.assertRaises(ValueError, msg="expected 'Declaring'"):
             declare_action(
@@ -337,7 +337,7 @@ class JoinEncounterTest(TestCase):
 
     def test_player_joins_active_encounter(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         CombatOpponentFactory(encounter=encounter)
@@ -347,14 +347,14 @@ class JoinEncounterTest(TestCase):
         assert participant.status == ParticipantStatus.ACTIVE
 
     def test_cannot_join_completed_encounter(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        encounter = CombatEncounterFactory(status=RoundStatus.COMPLETED)
         sheet = CharacterSheetFactory()
         with pytest.raises(ValueError, match="Can only join during declaration or between rounds"):
             join_encounter(encounter, sheet)
 
     def test_cannot_join_twice(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         CombatOpponentFactory(encounter=encounter)
@@ -365,7 +365,7 @@ class JoinEncounterTest(TestCase):
 
     def test_can_join_between_rounds(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
         )
         CombatOpponentFactory(encounter=encounter)
         sheet = CharacterSheetFactory()
@@ -378,7 +378,7 @@ class LeaveEncounterTest(TestCase):
 
     def _make_between_rounds_encounter(self) -> tuple:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             encounter_type=EncounterType.OPEN_ENCOUNTER,
         )
         CombatOpponentFactory(encounter=encounter)
@@ -395,7 +395,7 @@ class LeaveEncounterTest(TestCase):
         assert participant.status == ParticipantStatus.REMOVED
 
     def test_leave_blocked_when_not_between_rounds(self) -> None:
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         CombatOpponentFactory(encounter=encounter)
         participant = CombatParticipantFactory(encounter=encounter)
         with pytest.raises(ValueError, match="Between Rounds"):
@@ -405,12 +405,12 @@ class LeaveEncounterTest(TestCase):
         encounter, participant = self._make_between_rounds_encounter()
         leave_encounter(participant)
         encounter.refresh_from_db()
-        assert encounter.status == EncounterStatus.COMPLETED
+        assert encounter.status == RoundStatus.COMPLETED
         assert encounter.outcome == EncounterOutcome.ABANDONED
 
     def test_leave_with_other_participants_encounter_continues(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             encounter_type=EncounterType.OPEN_ENCOUNTER,
         )
         CombatOpponentFactory(encounter=encounter)
@@ -418,7 +418,7 @@ class LeaveEncounterTest(TestCase):
         _stayer = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
         leave_encounter(leaver)
         encounter.refresh_from_db()
-        assert encounter.status == EncounterStatus.BETWEEN_ROUNDS
+        assert encounter.status == RoundStatus.BETWEEN_ROUNDS
 
     def test_leave_already_removed_raises(self) -> None:
         _encounter, participant = self._make_between_rounds_encounter()
@@ -429,7 +429,7 @@ class LeaveEncounterTest(TestCase):
 
     def test_leave_blocked_when_party_combat(self) -> None:
         encounter = CombatEncounterFactory(
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
         CombatOpponentFactory(encounter=encounter)
@@ -442,7 +442,7 @@ class DeclareFleeTest(TestCase):
     """Tests for declare_flee service function."""
 
     def _make_participant(
-        self, status: str = EncounterStatus.DECLARING, health: int = 50
+        self, status: str = RoundStatus.DECLARING, health: int = 50
     ) -> CombatParticipant:
         encounter = CombatEncounterFactory(status=status, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter)
@@ -469,7 +469,7 @@ class DeclareFleeTest(TestCase):
         assert participant.status == ParticipantStatus.ACTIVE
 
     def test_cannot_flee_outside_declaring(self) -> None:
-        participant = self._make_participant(status=EncounterStatus.BETWEEN_ROUNDS)
+        participant = self._make_participant(status=RoundStatus.BETWEEN_ROUNDS)
         with pytest.raises(ValueError, match="expected 'Declaring'"):
             declare_flee(participant)
 
@@ -477,7 +477,7 @@ class DeclareFleeTest(TestCase):
         """Dead characters (life_state=DEAD) cannot declare flee."""
         from world.vitals.constants import CharacterLifeState
 
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter)
         CharacterVitals.objects.create(
             character_sheet=participant.character_sheet,
@@ -516,7 +516,7 @@ class DeclareFleeTest(TestCase):
 
     def test_redeclare_flee_after_cover_clears_ally_target(self) -> None:
         """Re-declaring flee after cover sets maneuver=FLEE and focused_ally_target=None."""
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         participant = CombatParticipantFactory(encounter=encounter)
         ally = CombatParticipantFactory(encounter=encounter)
         CharacterVitals.objects.create(
@@ -537,7 +537,7 @@ class DeclareCoverTest(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
         self.ally = CombatParticipantFactory(encounter=self.encounter)
         CharacterVitals.objects.create(
@@ -570,7 +570,7 @@ class DeclareCoverTest(TestCase):
             declare_cover(self.participant, self.ally)
 
         # Foreign encounter ally
-        other_encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        other_encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         foreign_ally = CombatParticipantFactory(encounter=other_encounter)
         CharacterVitals.objects.create(
             character_sheet=foreign_ally.character_sheet, health=50, max_health=100
@@ -580,7 +580,7 @@ class DeclareCoverTest(TestCase):
 
     def test_declare_cover_rejects_outside_declaring(self) -> None:
         """Cannot cover outside DECLARING status."""
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         with pytest.raises(ValueError, match="expected 'Declaring'"):
             declare_cover(self.participant, self.ally)
@@ -633,7 +633,7 @@ class ResolveFleeTest(TestCase):
         self,
         opponent_tiers: tuple[str, ...] = (OpponentTier.MOOK,),
     ) -> tuple:
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         opponents = [
             CombatOpponentFactory(encounter=encounter, tier=tier) for tier in opponent_tiers
         ]

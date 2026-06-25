@@ -5,7 +5,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -27,6 +27,7 @@ from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.factories import CharacterEngagementFactory
 from world.mechanics.services import begin_engagement
+from world.scenes.constants import RoundStatus
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -48,7 +49,7 @@ class EngagementLifecycleWiringTests(TestCase):
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
 
     def test_join_encounter_creates_combat_engagement(self):
-        self.encounter.status = EncounterStatus.DECLARING
+        self.encounter.status = RoundStatus.DECLARING
         self.encounter.save(update_fields=["status"])
         sheet = CharacterSheetFactory()
         join_encounter(self.encounter, sheet)
@@ -56,7 +57,7 @@ class EngagementLifecycleWiringTests(TestCase):
         self.assertEqual(eng.engagement_type, EngagementType.COMBAT)
 
     def test_begin_declaration_phase_backfills_engagements(self):
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         CombatOpponentFactory(encounter=self.encounter)
         CharacterEngagement.objects.filter(character=self.character).delete()
@@ -86,7 +87,7 @@ class EngagementLifecycleWiringTests(TestCase):
     def test_flee_success_deletes_engagement(self):
         # Lower speed rank than NPC_SPEED_RANK (15) → the fleer resolves first.
         fast_role = CovenantRoleFactory(speed_rank=3)
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         CombatOpponentFactory(encounter=encounter)
         sheet = CharacterSheetFactory()
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
@@ -119,7 +120,7 @@ class EngagementLifecycleWiringTests(TestCase):
         # A failed flee (success_level < FLEE_PARTIAL_SUCCESS_LEVEL) leaves
         # the participant ACTIVE and the combat engagement intact.
         fast_role = CovenantRoleFactory(speed_rank=3)
-        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         CombatOpponentFactory(encounter=encounter)
         sheet = CharacterSheetFactory()
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
@@ -149,7 +150,7 @@ class EscalationRoundWiringTests(TestCase):
     def setUp(self):
         self.curve = EscalationCurveFactory(start_round=2, intensity_step=2)
         self.encounter = CombatEncounterFactory(
-            escalation_curve=self.curve, status=EncounterStatus.BETWEEN_ROUNDS
+            escalation_curve=self.curve, status=RoundStatus.BETWEEN_ROUNDS
         )
         self.participant = CombatParticipantFactory(
             encounter=self.encounter, status=ParticipantStatus.ACTIVE
@@ -177,7 +178,7 @@ class EscalationRoundWiringTests(TestCase):
     def _run_rounds(self, count):
         """Drive begin_declaration_phase ``count`` times, cycling status back."""
         for _ in range(count):
-            self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+            self.encounter.status = RoundStatus.BETWEEN_ROUNDS
             self.encounter.save(update_fields=["status"])
             begin_declaration_phase(self.encounter)
 
@@ -240,7 +241,7 @@ class EscalationRoundWiringTests(TestCase):
         other = CombatEncounterFactory(
             escalation_curve=self.curve,
             room=room,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
         )
 
         cleanup_completed_encounter(self.encounter)
@@ -248,7 +249,7 @@ class EscalationRoundWiringTests(TestCase):
 
         # Mirror resolve_round's real ordering: the first encounter's COMPLETED
         # status is persisted before the second encounter ever cleans up.
-        self.encounter.status = EncounterStatus.COMPLETED
+        self.encounter.status = RoundStatus.COMPLETED
         self.encounter.save(update_fields=["status"])
 
         cleanup_completed_encounter(other)

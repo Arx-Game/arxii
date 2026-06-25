@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.classes.factories import CharacterClassLevelFactory
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.combat.constants import ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -18,6 +18,7 @@ from world.combat.factories import (
 from world.combat.services import begin_declaration_phase
 from world.covenants.constants import MentorBondAdjusted
 from world.covenants.factories import CovenantFactory, MentorBondFactory, seed_mentor_bond_defaults
+from world.scenes.constants import RoundStatus
 
 
 class BeginDeclarationPhaseDissolvesBondTest(TestCase):
@@ -36,7 +37,7 @@ class BeginDeclarationPhaseDissolvesBondTest(TestCase):
         # Covenant at level 3 → band [1, 5] (level - 2 to level + 2).
         self.covenant = CovenantFactory(level=3)
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.BETWEEN_ROUNDS)
         # Need at least one active opponent for begin_declaration_phase to proceed.
         CombatOpponentFactory(encounter=self.encounter)
 
@@ -105,7 +106,7 @@ class BeginDeclarationPhasePreservesActiveBondTest(TestCase):
         # Covenant at level 6 → band [4, 8].
         self.covenant = CovenantFactory(level=6)
 
-        self.encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        self.encounter = CombatEncounterFactory(status=RoundStatus.BETWEEN_ROUNDS)
         CombatOpponentFactory(encounter=self.encounter)
 
         # Sidekick participant: raw level 2 — OUT of band [4, 8] → bond is NOT graduated.

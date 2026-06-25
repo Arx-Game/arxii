@@ -45,7 +45,6 @@ from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ActionCategory,
     EncounterOutcome,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     RiskLevel,
@@ -78,6 +77,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.services.anima import deduct_anima
+from world.scenes.constants import RoundStatus
 from world.scenes.models import Interaction
 from world.vitals.models import CharacterVitals
 
@@ -294,7 +294,7 @@ class PvpFullRoundTripTests(TestCase):
 
         self.assertIsNotNone(returned)
         self.assertEqual(enc.duel_winner_id, self.sheet_a.pk)
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
         self.assertEqual(enc.outcome, EncounterOutcome.VICTORY)
         self.assertIsNotNone(enc.completed_at)
 
@@ -313,7 +313,7 @@ class PvpFullRoundTripTests(TestCase):
 
         resolve_duel_end(enc)
         enc.refresh_from_db()
-        self.assertEqual(enc.status, EncounterStatus.COMPLETED)
+        self.assertEqual(enc.status, RoundStatus.COMPLETED)
 
         vitals_b.refresh_from_db()
         self.assertEqual(

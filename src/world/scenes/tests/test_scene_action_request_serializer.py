@@ -3,7 +3,7 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from world.combat.constants import EncounterStatus, EncounterType, RiskLevel
+from world.combat.constants import EncounterType, RiskLevel
 from world.combat.models import CombatEncounter
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_serializers import (
@@ -11,6 +11,7 @@ from world.scenes.action_serializers import (
     SceneActionTargetSerializer,
 )
 from world.scenes.cast_services import request_technique_cast
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import (
     PersonaFactory,
     SceneActionRequestFactory,
@@ -54,7 +55,7 @@ class SceneActionRequestSerializerRiskLevelTests(CastScenarioMixin):
         return CombatEncounter.objects.create(
             room=self.scene.location,
             scene=self.scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
@@ -100,7 +101,7 @@ class SceneActionRequestSerializerRiskLevelTests(CastScenarioMixin):
         """State drift: the gating encounter completed after the request went PENDING."""
         encounter = self._make_encounter(RiskLevel.LETHAL)
         cast = self._cast(hostile=True)
-        encounter.status = EncounterStatus.COMPLETED
+        encounter.status = RoundStatus.COMPLETED
         encounter.save(update_fields=["status"])
 
         data = SceneActionRequestSerializer(instance=cast.request).data
@@ -132,7 +133,7 @@ class SceneActionTargetSerializerRiskLevelTests(CastScenarioMixin):
         return CombatEncounter.objects.create(
             room=self.scene.location,
             scene=self.scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=risk_level,
             encounter_type=EncounterType.PARTY_COMBAT,
         )

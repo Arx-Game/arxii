@@ -540,19 +540,20 @@ class DispatchActionViewCombatTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from actions.factories import ActionTemplateFactory
-        from world.combat.constants import EncounterStatus, ParticipantStatus
+        from world.combat.constants import ParticipantStatus
         from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
         from world.magic.factories import (
             BinaryEffectTypeFactory,
             CharacterTechniqueFactory,
             TechniqueFactory,
         )
+        from world.scenes.constants import RoundStatus
 
         cls.owner_account = AccountFactory()
         cls.owner_player_data = PlayerDataFactory(account=cls.owner_account)
 
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(

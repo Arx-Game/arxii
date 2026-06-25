@@ -18,7 +18,6 @@ from django.test import TestCase, tag
 
 from flows.models import Trigger
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus
 from world.combat.escalation import ESCALATION_SPIKE_TRIGGER_NAMES
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -48,6 +47,7 @@ from world.relationships.factories import (
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
 )
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -94,7 +94,7 @@ class BuildToClimaxTests(TestCase):
             control_step_on_botch=0,
         )
         self.encounter = CombatEncounterFactory(
-            escalation_curve=self.curve, status=EncounterStatus.BETWEEN_ROUNDS
+            escalation_curve=self.curve, status=RoundStatus.BETWEEN_ROUNDS
         )
         CombatOpponentFactory(encounter=self.encounter)
         self.sheet = CharacterSheetFactory()
@@ -117,7 +117,7 @@ class BuildToClimaxTests(TestCase):
 
     def _begin_round_and_assert(self, *, modifier: int, intensity: int):
         """Drive one round start; assert the tick state and return runtime stats."""
-        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.status = RoundStatus.BETWEEN_ROUNDS
         self.encounter.save(update_fields=["status"])
         begin_declaration_phase(self.encounter)
         engagement = CharacterEngagement.objects.get(character=self.character)
@@ -224,7 +224,7 @@ class BondedSpikeRealDamagePathTests(TestCase):
             control_step_on_botch=0,
         )
         self.encounter = CombatEncounterFactory(
-            escalation_curve=self.curve, status=EncounterStatus.BETWEEN_ROUNDS
+            escalation_curve=self.curve, status=RoundStatus.BETWEEN_ROUNDS
         )
         CombatOpponentFactory(encounter=self.encounter)
         self.sheet_a = CharacterSheetFactory()

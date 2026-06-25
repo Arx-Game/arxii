@@ -22,7 +22,7 @@ from __future__ import annotations
 import django.test
 
 from actions.constants import ActionBackend
-from world.combat.constants import ClashActionSlot, ClashStatus, EncounterStatus, ParticipantStatus
+from world.combat.constants import ClashActionSlot, ClashStatus, ParticipantStatus
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -31,6 +31,7 @@ from world.combat.factories import (
 )
 from world.combat.models import ClashContributionDeclaration
 from world.magic.factories import TechniqueFactory
+from world.scenes.constants import RoundStatus
 
 
 def _clash_contribution_actions_for(character: object) -> list:
@@ -54,7 +55,7 @@ class ClashPlayerActionsNoClashesTests(django.test.TestCase):
     def setUpTestData(cls) -> None:
         ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -81,7 +82,7 @@ class ClashPlayerActionsOneClashTests(django.test.TestCase):
     def setUpTestData(cls) -> None:
         ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -156,7 +157,7 @@ class ClashPlayerActionsTwoClashesTests(django.test.TestCase):
     def setUpTestData(cls) -> None:
         ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -218,7 +219,7 @@ class ClashPlayerActionsAlreadyDeclaredTests(django.test.TestCase):
     def setUpTestData(cls) -> None:
         ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=2,
         )
         cls.participant = CombatParticipantFactory(
@@ -266,7 +267,7 @@ class ClashPlayerActionsResolvedClashTests(django.test.TestCase):
     def setUpTestData(cls) -> None:
         ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(
@@ -299,7 +300,7 @@ class ClashPlayerActionsOtherEncounterTests(django.test.TestCase):
 
         # PC A — the character under test
         cls.encounter_a = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant_a = CombatParticipantFactory(
@@ -310,7 +311,7 @@ class ClashPlayerActionsOtherEncounterTests(django.test.TestCase):
 
         # PC B — a different PC in a different encounter with an active clash
         encounter_b = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         ClashFactory(encounter=encounter_b, status=ClashStatus.ACTIVE)
@@ -350,7 +351,7 @@ class ClashPlayerActionsDeclarationClosedTests(django.test.TestCase):
     def test_no_clash_actions_when_resolving(self) -> None:
         """Encounter in RESOLVING → is_declaration_open is False → no clash contribution actions."""
         ClashConfigFactory()
-        character = self._make_encounter_with_active_clash(EncounterStatus.RESOLVING)
+        character = self._make_encounter_with_active_clash(RoundStatus.RESOLVING)
         clash_actions = _clash_contribution_actions_for(character)
         self.assertEqual(
             clash_actions,
@@ -361,7 +362,7 @@ class ClashPlayerActionsDeclarationClosedTests(django.test.TestCase):
     def test_no_clash_actions_when_between_rounds(self) -> None:
         """Encounter in BETWEEN_ROUNDS → is_declaration_open is False → no clash actions."""
         ClashConfigFactory()
-        character = self._make_encounter_with_active_clash(EncounterStatus.BETWEEN_ROUNDS)
+        character = self._make_encounter_with_active_clash(RoundStatus.BETWEEN_ROUNDS)
         clash_actions = _clash_contribution_actions_for(character)
         self.assertEqual(
             clash_actions,

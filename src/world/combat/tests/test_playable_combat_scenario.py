@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from world.combat.constants import ClashStatus, EncounterStatus
+from world.combat.constants import ClashStatus
 from world.combat.factories import PlayableCombatScenarioFactory
+from world.scenes.constants import RoundStatus
 
 
 class PlayableCombatScenarioSmokeTest(TestCase):
@@ -19,7 +20,7 @@ class PlayableCombatScenarioSmokeTest(TestCase):
         scenario = PlayableCombatScenarioFactory.create()
 
         # Encounter in DECLARING.
-        self.assertEqual(scenario.encounter.status, EncounterStatus.DECLARING)
+        self.assertEqual(scenario.encounter.status, RoundStatus.DECLARING)
         self.assertIsNotNone(scenario.encounter.scene)
 
         # 2 PC participants by default.

@@ -19,7 +19,6 @@ from django.db import transaction
 
 from world.combat.constants import (
     RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
-    EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
@@ -41,6 +40,7 @@ from world.combat.services import (
     join_encounter,
 )
 from world.fatigue.constants import EffortLevel
+from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -98,7 +98,7 @@ def _feedable_encounter(scene: Scene) -> CombatEncounter | None:
     """The scene's encounter a cast can feed (DECLARING or BETWEEN_ROUNDS), if any."""
     return CombatEncounter.objects.filter(
         scene=scene,
-        status__in=[EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS],
+        status__in=[RoundStatus.DECLARING, RoundStatus.BETWEEN_ROUNDS],
     ).first()
 
 
@@ -149,7 +149,7 @@ def _caster_participant(
     ).first()
     if existing is not None:
         return existing
-    if encounter.status == EncounterStatus.DECLARING:
+    if encounter.status == RoundStatus.DECLARING:
         # join_encounter is the PC self-join path; valid during DECLARING.
         return join_encounter(encounter, caster_sheet)
     return add_participant(encounter, caster_sheet)
@@ -185,7 +185,7 @@ def seed_or_feed_encounter_from_cast(
         encounter = CombatEncounter.objects.create(
             room=room,
             scene=scene,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
@@ -210,7 +210,7 @@ def seed_or_feed_encounter_from_cast(
         encounter, **_opponent_kwargs_from_sheet(target_sheet)
     )
 
-    if encounter.status == EncounterStatus.BETWEEN_ROUNDS:
+    if encounter.status == RoundStatus.BETWEEN_ROUNDS:
         begin_declaration_phase(encounter)
         encounter.refresh_from_db()
 

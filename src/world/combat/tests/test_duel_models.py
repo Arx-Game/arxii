@@ -5,7 +5,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     CombatManeuver,
     DuelChallengeStatus,
-    EncounterStatus,
     EncounterType,
     RiskLevel,
 )
@@ -17,6 +16,7 @@ from world.combat.factories import (
     DuelChallengeFactory,
 )
 from world.combat.services import select_npc_actions
+from world.scenes.constants import RoundStatus
 
 
 class DuelEnumTests(TestCase):
@@ -50,7 +50,7 @@ class DuelMirrorOpponentTests(TestCase):
     def test_mirror_opponent_is_passive_and_links_participant(self):
         participant = CombatParticipantFactory()
         enc = participant.encounter
-        enc.status = EncounterStatus.DECLARING
+        enc.status = RoundStatus.DECLARING
         enc.round_number = 1
         enc.save(update_fields=["status", "round_number"])
         mirror = CombatOpponentFactory(encounter=enc, mirrors_participant=participant)

@@ -100,7 +100,7 @@ class ReactionWindowKind(models.TextChoices):
 
 
 class RoundStatus(models.TextChoices):
-    """Lifecycle status of a non-combat scene round (mirrors combat's EncounterStatus)."""
+    """Lifecycle status of a scene or combat encounter round."""
 
     DECLARING = "declaring", "Declaring"
     RESOLVING = "resolving", "Resolving"

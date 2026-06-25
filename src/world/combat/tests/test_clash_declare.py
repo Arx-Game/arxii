@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError
 
-from world.combat.constants import ClashActionSlot, ClashStatus, EncounterStatus
+from world.combat.constants import ClashActionSlot, ClashStatus
 from world.combat.factories import (
     ClashConfigFactory,
     ClashFactory,
@@ -19,6 +19,7 @@ from world.combat.serializers import DeclareClashContributionSerializer
 from world.combat.services import declare_clash_contribution
 from world.magic.factories import TechniqueFactory
 from world.magic.models import CharacterTechnique
+from world.scenes.constants import RoundStatus
 
 
 class DeclareClashContributionTests(TestCase):
@@ -28,7 +29,7 @@ class DeclareClashContributionTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.config = ClashConfigFactory()
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=2,
         )
         cls.participant = CombatParticipantFactory(encounter=cls.encounter)
@@ -100,7 +101,7 @@ class DeclareClashContributionTests(TestCase):
     def test_defensive_assertion_encounter_mismatch(self) -> None:
         """ValueError raised when clash.encounter != participant.encounter (programmer error)."""
         other_encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         other_clash = ClashFactory(encounter=other_encounter, status=ClashStatus.ACTIVE)
@@ -147,7 +148,7 @@ class DeclareClashContributionSerializerTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.config = ClashConfigFactory(passive_anima_cap=10)
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.participant = CombatParticipantFactory(encounter=cls.encounter)
@@ -208,7 +209,7 @@ class DeclareClashContributionSerializerTests(TestCase):
 
     def test_clash_not_in_participant_encounter_rejected(self) -> None:
         """Clash from a different encounter raises ValidationError."""
-        other_encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        other_encounter = CombatEncounterFactory(status=RoundStatus.DECLARING)
         other_clash = ClashFactory(encounter=other_encounter, status=ClashStatus.ACTIVE)
 
         serializer = DeclareClashContributionSerializer(

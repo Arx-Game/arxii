@@ -16,12 +16,12 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     CombatManeuver,
-    EncounterStatus,
     EncounterType,
     ParticipantStatus,
 )
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatParticipant, CombatRoundAction
+from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -33,7 +33,7 @@ class CombatManeuverDispatchE2E(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.encounter = CombatEncounterFactory(
-            status=EncounterStatus.DECLARING,
+            status=RoundStatus.DECLARING,
             round_number=1,
         )
         cls.char = CharacterFactory(db_key="e2echar")
@@ -88,7 +88,7 @@ class JoinLeaveDispatchE2E(TestCase):
     def setUpTestData(cls) -> None:
         cls.encounter = CombatEncounterFactory(
             encounter_type=EncounterType.OPEN_ENCOUNTER,
-            status=EncounterStatus.BETWEEN_ROUNDS,
+            status=RoundStatus.BETWEEN_ROUNDS,
             round_number=1,
         )
         # An anchor participant so the leave does not abandon the encounter.
