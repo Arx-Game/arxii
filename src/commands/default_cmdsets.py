@@ -61,6 +61,7 @@ from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
+from commands.persona import CmdPersona
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
 from commands.social.blocking import (
@@ -184,6 +185,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdScene,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
+            # #1347 — list faces + wear-face active persona switch.
+            CmdPersona,
         )
         for command_cls in command_classes:
             self.add(command_cls())
