@@ -103,7 +103,7 @@ describe('RoundSettingsDialog', () => {
     });
   });
 
-  it('disables the mode select when the active round is a danger round', async () => {
+  it('disables the mode select and Save button when the active round is a danger round', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const dangerRound: SceneRoundState = {
       ...activeRound,
@@ -120,5 +120,7 @@ describe('RoundSettingsDialog', () => {
 
     const trigger = screen.getByLabelText(/mode/i);
     expect(trigger).toHaveAttribute('disabled');
+
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
   });
 });

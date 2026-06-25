@@ -107,7 +107,7 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
               </Select>
               {modeLocked && (
                 <p className="text-xs text-muted-foreground">
-                  Danger rounds stay in Open mode and cannot be changed.
+                  Danger rounds resolve on their own and can&apos;t be reconfigured.
                 </p>
               )}
             </div>
@@ -121,6 +121,7 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
                 max={100}
                 value={quorum}
                 onChange={(e) => setQuorum(Number(e.target.value))}
+                disabled={modeLocked}
               />
             </div>
 
@@ -132,18 +133,28 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
                 min={0}
                 value={maxActions}
                 onChange={(e) => setMaxActions(Number(e.target.value))}
+                disabled={modeLocked}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <Label htmlFor="round-repeat-lock">Lock repeat actions on the same target</Label>
-              <Switch id="round-repeat-lock" checked={repeatLock} onCheckedChange={setRepeatLock} />
+              <Switch
+                id="round-repeat-lock"
+                checked={repeatLock}
+                onCheckedChange={setRepeatLock}
+                disabled={modeLocked}
+              />
             </div>
           </div>
         )}
 
         <DialogFooter>
-          <Button type="button" onClick={handleSave} disabled={noRound || mutation.isPending}>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={noRound || modeLocked || mutation.isPending}
+          >
             Save
           </Button>
         </DialogFooter>
