@@ -37,7 +37,7 @@ class GemitCommandTests(TestCase):
         society = SocietyFactory(name="The Compact")
         self._run("The Compact = The Compact stirs.", switches=["society"])
         gemit = Gemit.objects.get()
-        assert gemit.reach == GemitReach.SOCIETY
+        assert gemit.reach == GemitReach.SPECIFIED
         assert list(gemit.reach_societies.all()) == [society]
         assert gemit.body == "The Compact stirs."
 
@@ -45,7 +45,7 @@ class GemitCommandTests(TestCase):
         org = OrganizationFactory(name="The Wardens")
         self._run("The Wardens = Muster at dawn.", switches=["org"])
         gemit = Gemit.objects.get()
-        assert gemit.reach == GemitReach.ORGANIZATION
+        assert gemit.reach == GemitReach.SPECIFIED
         assert list(gemit.reach_organizations.all()) == [org]
 
     def test_unknown_society_is_refused(self) -> None:

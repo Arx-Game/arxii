@@ -19,8 +19,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 choices=[
                     ("game_wide", "Game-wide"),
-                    ("society", "Society"),
-                    ("organization", "Organization"),
+                    ("specified", "Specified"),
                 ],
                 default="game_wide",
                 help_text="Audience scope: game-wide, or the members of the linked societies / orgs.",
@@ -32,7 +31,7 @@ class Migration(migrations.Migration):
             name="reach_organizations",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="When reach=ORGANIZATION, the organizations whose members receive this gemit.",
+                help_text="For SPECIFIED reach, organizations whose members receive this gemit (may mix).",
                 related_name="gemits",
                 to="societies.organization",
             ),
@@ -42,7 +41,7 @@ class Migration(migrations.Migration):
             name="reach_societies",
             field=models.ManyToManyField(
                 blank=True,
-                help_text="When reach=SOCIETY, the societies whose members receive this gemit.",
+                help_text="SPECIFIED-reach societies whose members get this gemit (mixable with orgs).",
                 related_name="gemits",
                 to="societies.society",
             ),

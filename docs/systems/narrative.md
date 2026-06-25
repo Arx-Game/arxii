@@ -27,8 +27,7 @@ from world.narrative.constants import GemitReach
 
 # TextChoices — how wide a gemit broadcasts (#1450):
 GemitReach.GAME_WIDE      # every online session (the classic gemit)
-GemitReach.SOCIETY        # members of the linked societies only
-GemitReach.ORGANIZATION   # members of the linked organizations only
+GemitReach.SPECIFIED      # members of any mix of the linked societies and/or organizations
 ```
 
 ---
@@ -69,8 +68,8 @@ A staff/GM real-time broadcast, persisted for retroactive (reach-scoped) viewing
 |-------|------|-------|
 | `body` | TextField | Verbatim broadcast text |
 | `reach` | CharField (`GemitReach`) | Audience scope; default `GAME_WIDE` |
-| `reach_societies` | M2M to `societies.Society` | Targets when `reach=SOCIETY` (multiple allowed) |
-| `reach_organizations` | M2M to `societies.Organization` | Targets when `reach=ORGANIZATION` (multiple allowed) |
+| `reach_societies` | M2M to `societies.Society` | Targets when `reach=SPECIFIED` (combinable with orgs) |
+| `reach_organizations` | M2M to `societies.Organization` | Targets when `reach=SPECIFIED` (combinable with societies) |
 | `sender_account` | FK to `accounts.AccountDB`, nullable | Null = system-generated |
 | `related_era` / `related_story` | FK, nullable | Optional context links |
 | `sent_at` | DateTimeField | `auto_now_add` |
@@ -122,7 +121,7 @@ def broadcast_gemit(
 ) -> Gemit
 ```
 
-Creates a `Gemit`, records its reach + targets, and pushes the green `|G[GEMIT]|n` broadcast. `GAME_WIDE` reaches every connected session; `SOCIETY` / `ORGANIZATION` reach only sessions whose **active persona** is a member of a target society/org (resolved once via `OrganizationMembership`, then matched per session — a TEMPORARY mask holds no membership, so the disguised fall out of scope by design). Push failures are swallowed so a broadcast error never rolls back the record. Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) and web `POST /api/narrative/gemits/`; the gemit history list (`GemitViewSet`) is reach-scoped so a scoped gemit never leaks to non-members (staff see all).
+Creates a `Gemit`, records its reach + targets, and pushes the green `|G[GEMIT]|n` broadcast. `GAME_WIDE` reaches every connected session; `SPECIFIED` reaches only sessions whose **active persona** is a member of any target society **or** organization (the two combine freely — one gemit can target a House and a Society together), resolved once via `OrganizationMembership`, then matched per session — a TEMPORARY mask holds no membership, so the disguised fall out of scope by design. Push failures are swallowed so a broadcast error never rolls back the record. Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) and web `POST /api/narrative/gemits/`; the gemit history list (`GemitViewSet`) is reach-scoped so a scoped gemit never leaks to non-members (staff see all).
 
 ---
 

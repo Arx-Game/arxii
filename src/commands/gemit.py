@@ -62,13 +62,13 @@ class CmdGemit(ArxCommand):
         if "society" in switches:  # noqa: STRING_LITERAL — Evennia switch name, not a discriminator
             names, body = self._parse_targets(raw)
             societies = self._lookup_society(names)
-            self._send(body, reach=GemitReach.SOCIETY, societies=societies)
+            self._send(body, reach=GemitReach.SPECIFIED, societies=societies)
             sent = ", ".join(s.name for s in societies)
             self.msg(f"Gemit sent to the members of: |c{sent}|n.")
         elif switches & {"org", "organization"}:  # noqa: STRING_LITERAL — Evennia switch names
             names, body = self._parse_targets(raw)
             organizations = self._lookup_org(names)
-            self._send(body, reach=GemitReach.ORGANIZATION, organizations=organizations)
+            self._send(body, reach=GemitReach.SPECIFIED, organizations=organizations)
             sent = ", ".join(o.name for o in organizations)
             self.msg(f"Gemit sent to the members of: |c{sent}|n.")
         else:

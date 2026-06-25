@@ -552,10 +552,11 @@ are a later slice of #1450.*
 - **Source:** `src/world/tidings/`
 - **Echo (push) vector — staff/GM gemits with reach (#1450), in `world.narrative`:**
   `broadcast_gemit` broadcasts a **hand-authored, verbatim** message (colour codes and all) to a
-  `reach` — `GemitReach` ∈ GAME_WIDE / SOCIETY / ORGANIZATION; the scoped forms carry one-or-more
-  `Gemit.reach_societies` / `reach_organizations`. Audience = sessions whose **active persona** is a
-  member of a target society/org (a TEMPORARY mask holds none, so the disguised fall out — by
-  design). History is reach-scoped so a society gemit never leaks to outsiders (staff see all).
+  `reach` — `GemitReach` ∈ GAME_WIDE / SPECIFIED; SPECIFIED carries any mix of
+  `Gemit.reach_societies` / `reach_organizations` (societies and orgs are not exclusive). Audience =
+  sessions whose **active persona** is a member of any target society/org (a TEMPORARY mask holds
+  none, so the disguised fall out — by design). History is reach-scoped so a specified gemit never
+  leaks to outsiders (staff see all).
   Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) + web `POST /api/narrative/gemits/`.
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled

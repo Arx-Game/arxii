@@ -44,33 +44,53 @@ class GemitReachServiceTests(TestCase):
         assert gemit.reach_societies.count() == 0
         assert gemit.reach_organizations.count() == 0
 
-    def test_society_gemit_records_reach_and_targets(self) -> None:
+    def test_specified_gemit_records_reach_and_society_targets(self) -> None:
         gemit = broadcast_gemit(
             body="Compact business.",
             sender_account=None,
-            reach=GemitReach.SOCIETY,
+            reach=GemitReach.SPECIFIED,
             societies=[self.society],
         )
-        assert gemit.reach == GemitReach.SOCIETY
+        assert gemit.reach == GemitReach.SPECIFIED
         assert list(gemit.reach_societies.all()) == [self.society]
 
-    def test_org_gemit_records_reach_and_targets(self) -> None:
+    def test_specified_gemit_records_org_targets(self) -> None:
         gemit = broadcast_gemit(
             body="Org business.",
             sender_account=None,
-            reach=GemitReach.ORGANIZATION,
+            reach=GemitReach.SPECIFIED,
             organizations=[self.org],
         )
-        assert gemit.reach == GemitReach.ORGANIZATION
+        assert gemit.reach == GemitReach.SPECIFIED
         assert list(gemit.reach_organizations.all()) == [self.org]
 
+    def test_specified_gemit_can_mix_society_and_org_targets(self) -> None:
+        other_org = OrganizationFactory()
+        gemit = broadcast_gemit(
+            body="A House and a Society together.",
+            sender_account=None,
+            reach=GemitReach.SPECIFIED,
+            societies=[self.society],
+            organizations=[other_org],
+        )
+        assert gemit.reach == GemitReach.SPECIFIED
+        assert list(gemit.reach_societies.all()) == [self.society]
+        assert list(gemit.reach_organizations.all()) == [other_org]
+
     def test_eligible_persona_ids_for_society_are_its_members(self) -> None:
-        eligible = _eligible_persona_ids(GemitReach.SOCIETY, [self.society], [])
+        eligible = _eligible_persona_ids(GemitReach.SPECIFIED, [self.society], [])
         assert eligible == {self.member_persona.id}
 
     def test_eligible_persona_ids_for_organization_are_its_members(self) -> None:
-        eligible = _eligible_persona_ids(GemitReach.ORGANIZATION, [], [self.org])
+        eligible = _eligible_persona_ids(GemitReach.SPECIFIED, [], [self.org])
         assert eligible == {self.member_persona.id}
+
+    def test_eligible_persona_ids_unions_societies_and_orgs(self) -> None:
+        other_org = OrganizationFactory()
+        other_sheet = CharacterSheetFactory()
+        OrganizationMembershipFactory(organization=other_org, persona=other_sheet.primary_persona)
+        eligible = _eligible_persona_ids(GemitReach.SPECIFIED, [self.society], [other_org])
+        assert eligible == {self.member_persona.id, other_sheet.primary_persona.id}
 
     def test_game_wide_has_no_eligibility_set(self) -> None:
         assert _eligible_persona_ids(GemitReach.GAME_WIDE, [], []) == set()
@@ -117,7 +137,7 @@ class GemitHistoryScopingTests(APITestCase):
         cls.society_gemit = broadcast_gemit(
             body="Only the Compact.",
             sender_account=None,
-            reach=GemitReach.SOCIETY,
+            reach=GemitReach.SPECIFIED,
             societies=[cls.society],
         )
 

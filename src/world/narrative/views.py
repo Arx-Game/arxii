@@ -97,8 +97,8 @@ class GemitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gene
     def get_queryset(self) -> "QuerySet[Gemit]":
         """Scope the history so a scoped gemit only shows to its audience (#1450).
 
-        Staff see everything. Everyone else sees game-wide gemits plus the society/org gemits whose
-        targets a character of theirs belongs to — never another society's internal broadcasts.
+        Staff see everything. Everyone else sees game-wide gemits plus the specified gemits whose
+        society/org targets a character of theirs belongs to — never another group's internal news.
         """
         qs = super().get_queryset()
         user = cast("AccountDB", self.request.user)
@@ -106,7 +106,6 @@ class GemitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gene
             return qs
         from django.db.models import Q  # noqa: PLC0415
 
-        from world.narrative.constants import GemitReach  # noqa: PLC0415
         from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
         memberships = OrganizationMembership.objects.filter(
@@ -116,8 +115,8 @@ class GemitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.Gene
         org_ids = memberships.values_list("organization_id", flat=True)
         return qs.filter(
             Q(reach=GemitReach.GAME_WIDE)
-            | Q(reach=GemitReach.SOCIETY, reach_societies__in=society_ids)
-            | Q(reach=GemitReach.ORGANIZATION, reach_organizations__in=org_ids)
+            | Q(reach=GemitReach.SPECIFIED, reach_societies__in=society_ids)
+            | Q(reach=GemitReach.SPECIFIED, reach_organizations__in=org_ids)
         ).distinct()
 
     def get_serializer_class(self) -> "type[BaseSerializer]":

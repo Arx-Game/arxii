@@ -179,8 +179,8 @@ class Gemit(SharedMemoryModel):
     Persistent record so the audience can browse retroactively. Does NOT
     fan out into NarrativeMessageDelivery rows — gemit is broadcast, not
     per-recipient. ``reach`` scopes the audience: GAME_WIDE reaches every
-    online session; SOCIETY / ORGANIZATION reach only the members of the
-    linked ``reach_societies`` / ``reach_organizations`` (multiple allowed).
+    online session; SPECIFIED reaches the members of any combination of the
+    linked ``reach_societies`` and/or ``reach_organizations`` (not exclusive).
     """
 
     body = models.TextField(
@@ -196,13 +196,13 @@ class Gemit(SharedMemoryModel):
         "societies.Society",
         blank=True,
         related_name="gemits",
-        help_text="When reach=SOCIETY, the societies whose members receive this gemit.",
+        help_text="SPECIFIED-reach societies whose members get this gemit (mixable with orgs).",
     )
     reach_organizations = models.ManyToManyField(
         "societies.Organization",
         blank=True,
         related_name="gemits",
-        help_text="When reach=ORGANIZATION, the organizations whose members receive this gemit.",
+        help_text="For SPECIFIED reach, organizations whose members receive this gemit (may mix).",
     )
     sender_account = models.ForeignKey(
         "accounts.AccountDB",
