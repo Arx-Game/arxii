@@ -11,8 +11,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
-from world.mechanics.challenge_resolution import resolve_challenge
-from world.mechanics.services import get_available_actions
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
@@ -393,6 +391,8 @@ def resolve_challenge_declarations(
 
     Returns the list of non-None outcomes in resolution order.
     """
+    from world.mechanics.challenge_resolution import resolve_challenge  # noqa: PLC0415
+    from world.mechanics.services import get_available_actions  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
         render_challenge_outcome_narration,
     )

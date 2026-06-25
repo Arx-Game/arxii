@@ -302,9 +302,11 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
         fake_action.approach_id = self.approach.pk
         fake_action.capability_source = None
         with (
-            mock.patch("world.scenes.round_services.resolve_challenge", return_value=fake_result),
             mock.patch(
-                "world.scenes.round_services.get_available_actions", return_value=[fake_action]
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
             ),
         ):
             resolve_scene_round(self.rnd)
@@ -318,9 +320,11 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
         fake_action.approach_id = self.approach.pk
         fake_action.capability_source = None
         with (
-            mock.patch("world.scenes.round_services.resolve_challenge", return_value=fake_result),
             mock.patch(
-                "world.scenes.round_services.get_available_actions", return_value=[fake_action]
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
             ),
         ):
             resolve_scene_round(self.rnd)
@@ -337,9 +341,11 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
         fake_action.approach_id = self.approach.pk
         fake_action.capability_source = None
         with (
-            mock.patch("world.scenes.round_services.resolve_challenge", return_value=fake_result),
             mock.patch(
-                "world.scenes.round_services.get_available_actions", return_value=[fake_action]
+                "world.mechanics.challenge_resolution.resolve_challenge", return_value=fake_result
+            ),
+            mock.patch(
+                "world.mechanics.services.get_available_actions", return_value=[fake_action]
             ),
         ):
             resolve_scene_round(self.rnd)

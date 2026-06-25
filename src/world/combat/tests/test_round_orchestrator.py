@@ -680,7 +680,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         )
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             return_value=[available],
         ):
             with patch(
@@ -732,7 +732,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         )
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             return_value=[available],
         ):
             with patch(
@@ -777,7 +777,7 @@ class ResolveDeclaredChallengesTests(TestCase):
         )
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             return_value=[available],
         ):
             with patch(
@@ -847,7 +847,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             return []
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             side_effect=patched_get_available_actions,
         ):
             with patch(
@@ -959,7 +959,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             return mock_check_result
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             return_value=[available],
         ):
             with patch(
@@ -1007,7 +1007,7 @@ class ResolveDeclaredChallengesTests(TestCase):
 
         # get_available_actions returns empty → ineligible
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             return_value=[],
         ):
             resolve_round(encounter)  # Must not raise
@@ -1083,7 +1083,7 @@ class ResolveDeclaredChallengesTests(TestCase):
             return []
 
         with patch(
-            "world.scenes.round_services.get_available_actions",
+            "world.mechanics.services.get_available_actions",
             side_effect=patched_get_available_actions,
         ):
             with patch(
