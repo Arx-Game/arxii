@@ -415,12 +415,158 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 ---
 
+## Scene Administration (#1445)
+
+**Source:** `src/world/scenes/scene_admin_services.py`, `src/actions/definitions/scenes.py`,
+`src/actions/definitions/rounds.py`, `src/commands/scene.py`
+
+### Co-ownership model
+
+All characters **present in the room at scene creation** become co-owners (`is_owner=True` on
+their `SceneParticipation`). Latecomers who join after the scene has started are non-owner
+participants — they cannot inadvertently acquire admin rights by entering a room mid-scene
+(anti-grab rule). A GM or staff character bypasses the ownership check entirely; they can
+administer any scene regardless of participation.
+
+### Permission helper
+
+```python
+from world.scenes.scene_admin_services import actor_can_administer_scene
+
+# True if actor may administer the scene (finish it, change round mode, etc.)
+actor_can_administer_scene(actor, scene) -> bool
+```
+
+Authorization tiers (first match wins):
+
+1. `actor.is_story_runner` — `GMCharacter` and `StaffCharacter` set this to `True`
+   (`src/typeclasses/gm_characters.py`); no account lookup is performed.
+2. The actor's controlling account is a staff user (`account.is_staff`).
+3. The actor's controlling account has `is_owner=True` on a `SceneParticipation` row for
+   this scene.
+
+```python
+from world.scenes.scene_admin_services import resolve_actor_account
+
+# Return the controlling AccountDB for actor (PC tenure path), or None for GM/Staff/NPC.
+resolve_actor_account(actor) -> AccountDB | None
+```
+
+### Service functions
+
+```python
+from world.scenes.scene_admin_services import add_present_as_co_owners
+
+# Mark every present character with a controlling account as a scene co-owner.
+# Walks room.contents; skips NPCs, props, and characters without a controlling account.
+# Called by StartSceneAction immediately after scene creation.
+add_present_as_co_owners(scene, room) -> None
+```
+
+```python
+from world.scenes.scene_admin_services import finish_scene_full
+
+# Full scene-finish orchestration. Idempotent — returns immediately if already finished.
+# Steps: scene.finish_scene() → on_scene_finished() → deferred fatigue resets →
+#        broadcast_scene_message(scene, SceneAction.END).
+# by_account is accepted for call-site symmetry but is not forwarded downstream.
+finish_scene_full(scene, by_account=None) -> None
+```
+
+### Lifecycle Actions
+
+**`StartSceneAction`** (`key="start_scene"`, `src/actions/definitions/scenes.py`)
+
+Creates a scene in the actor's current room via `ensure_scene_for_location`, then calls
+`add_present_as_co_owners` so every present PC is a co-owner. If an active scene already
+exists, the actor is recorded as a non-owner participant. Ungated — any character may invoke it.
+
+**`FinishSceneAction`** (`key="finish_scene"`, `src/actions/definitions/scenes.py`)
+
+Finishes the active scene in the actor's room. Gated by `actor_can_administer_scene` — only
+a GM character, staff account, or scene co-owner succeeds. Delegates to `finish_scene_full`
+for full orchestration.
+
+### Round-mode control
+
+```python
+from world.scenes.round_services import set_scene_round_mode, RoundModeError
+
+# Apply mode and/or knob changes to scene_round in-place.
+# Guards (both raise RoundModeError):
+#   1. DANGER rounds are autonomous — mode is fixed at OPEN, not user-settable.
+#   2. Leaving STRICT while pending non-immediate declarations exist is blocked;
+#      caller must force-resolve first.
+# Only supplied (non-None) fields are written (update_fields pattern).
+set_scene_round_mode(
+    scene_round,
+    *,
+    mode=None,                   # SceneRoundMode value (OPEN/POSE_ORDER/STRICT)
+    advance_quorum_pct=None,     # int — quorum % to advance the pose-order round
+    max_actions_per_round=None,  # int — per-participant action cap per round
+    per_target_repeat_lock=None, # bool — block repeat targeting of the same persona
+) -> SceneRound
+```
+
+**`SetRoundModeAction`** (`key="set_round_mode"`, `src/actions/definitions/rounds.py`)
+
+Changes the mode and/or knobs of the active scene round. Guard order in `execute()`:
+
+1. Actor must be in a room.
+2. The room must have an active scene (requires scene context — start one first).
+3. The actor must be a scene admin per `actor_can_administer_scene`.
+4. The room must have an active round to modify.
+5. `set_scene_round_mode` validates the mode transition (DANGER immutable; STRICT-exit blocked
+   by pending deferred declarations).
+
+`costs_turn = False` — mode changes do not consume a round action.
+
+**`StartRoundAction`** (`key="start_round"`, `src/actions/definitions/rounds.py`) — extended
+in this feature: if any knob override (`mode`, `advance_quorum_pct`, `max_actions_per_round`,
+`per_target_repeat_lock`) is supplied, the actor must be a scene admin before the round is
+created with those overrides applied at creation time.
+
+### Telnet command — `CmdScene`
+
+**Source:** `src/commands/scene.py`
+
+```
+scene                                     — show active scene + round status
+scene status                              — same
+scene start [name]                        — StartSceneAction (name optional)
+scene finish                              — FinishSceneAction
+scene round [open|pose_order|strict]      — SetRoundModeAction; any knobs optional
+         [quorum=<pct>] [cap=<n>] [lock=on/off]
+```
+
+Example: `scene round strict quorum=70 cap=2 lock=on`
+
+No business logic lives in `CmdScene` — all routing is delegated to the three Actions above.
+Mode tokens (`open` / `pose_order` / `strict`) are mapped to `SceneRoundMode` values by
+`_parse_round_args`. Lock values: `on` / `true` / `yes` / `1` → True; anything else → False.
+
+### Web endpoint
+
+`POST /api/scenes/{id}/set-round-mode/` — coarse-gated by `IsSceneGMOrOwnerOrStaff`; the
+authoritative permission check runs inside `SetRoundModeAction`. The viewset resolves the
+requesting account's active character as the action actor so that telnet and web converge on
+the same `action.run()` seam. Returns the updated scene detail on success.
+
+**Deferred follow-ups:**
+- DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
+  user-settable; a future slice will allow a scene admin to unify a live DANGER round
+  into the three-mode framework.
+- React control for frontend parity (linked to #1328): `scene round` is telnet-only;
+  a round-mode panel in the web scene view is a follow-up.
+
+---
+
 ## Permissions
 
 | Permission Class | Used For | Rule |
 |-----------------|----------|------|
 | `IsSceneOwnerOrStaff` | Scene edit/delete | Owner participation or staff |
-| `IsSceneGMOrOwnerOrStaff` | Scene finish | GM or owner participation, or staff |
+| `IsSceneGMOrOwnerOrStaff` | Scene finish + set-round-mode | GM or owner participation, or staff |
 | `IsMessageSenderOrStaff` | Message edit/delete | Persona's account matches user AND scene is active |
 | `CanCreatePersonaInScene` | Persona creation | User must own the participation referenced |
 | `CanCreateMessageInScene` | Message creation | User must own the persona AND be a scene participant |

@@ -675,6 +675,12 @@ action consent flow, and a three-mode non-combat round framework.
     - `scene_round_is_complete(scene_round) -> bool` — presence-gated: True when all present ACTIVE participants have a deferred declaration.
     - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
+  - **Scene administration (`scene_admin_services.py`, #1445):**
+    - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
+    - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
+    - `add_present_as_co_owners(scene, room)` — mark every present character with a controlling account as a co-owner at scene creation (anti-grab: latecomers are non-owners).
+    - `finish_scene_full(scene, by_account=None)` — full scene-finish orchestration: `finish_scene()` → `on_scene_finished()` → deferred fatigue resets → `broadcast_scene_message(END)`. Idempotent.
+    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` for DANGER rounds (immutable) or STRICT-exit with pending declarations.
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
     anonymous=public. Use in `get_queryset()` / filter chains.
@@ -700,6 +706,13 @@ action consent flow, and a three-mode non-combat round framework.
   `Scene.save()`/`clean()` enforce this via `_validate_privacy_against_room()`;
   `ensure_scene_for_location` derives the default. Shared helper: `room_is_publicly_listed(room)`
   in `evennia_extensions/models.py`. See [scenes.md](scenes.md) §"Scene Privacy ↔ Room-Publicness Invariant".
+- **Scene admin actions (#1445):**
+  - `StartSceneAction` (key `"start_scene"`, `actions/definitions/scenes.py`) — creates scene + grants co-ownership to all present PCs; records actor as non-owner participant if scene already exists.
+  - `FinishSceneAction` (key `"finish_scene"`, `actions/definitions/scenes.py`) — finishes active scene; gated by `actor_can_administer_scene`.
+  - `SetRoundModeAction` (key `"set_round_mode"`, `actions/definitions/rounds.py`) — changes mode/knobs of active round; gated by `actor_can_administer_scene`; `costs_turn=False`.
+- **`CmdScene`** (`commands/scene.py`) — telnet face for `scene start [name]` / `scene finish` / `scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `scene status`. Thin over the three Actions above; no business logic.
+- **`is_story_runner`** character property (`typeclasses/characters.py`) — `False` on base `Character`; `True` on `GMCharacter` and `StaffCharacter` (`typeclasses/gm_characters.py`); used by `actor_can_administer_scene` as the GM/Staff fast-path.
+- **New API endpoint:** `POST /api/scenes/{id}/set-round-mode/` — coarse-gated `IsSceneGMOrOwnerOrStaff`; dispatches `SetRoundModeAction`; returns updated scene detail.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),

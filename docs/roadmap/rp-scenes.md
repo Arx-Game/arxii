@@ -137,6 +137,45 @@ immediate execution with pose-order ledger side-effects.
 technique cast. The unified `cast` command (`CmdDeclareTechnique`, `commands/combat.py`) replaces
 the deleted `CmdAttempt`; parses `cast <technique> [at <target>] [effort=<level>]`.
 
+### Scene Administration Command + Per-Scene Round-Mode Control — DONE (#1445)
+
+GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered as the
+`scene` command (`CmdScene`, `commands/scene.py`) and three Actions.
+
+**What shipped:**
+
+- **Co-ownership model:** all characters present at scene creation become co-owners
+  (`is_owner=True` on `SceneParticipation`); latecomers are non-owner participants
+  (anti-grab).
+- **`is_story_runner` property** on `Character` (`typeclasses/characters.py`):
+  `False` on base characters; `True` on `GMCharacter` / `StaffCharacter`
+  (`typeclasses/gm_characters.py`).
+- **Permission helper** `actor_can_administer_scene(actor, scene)` (`scene_admin_services.py`):
+  grants GM/Staff characters unconditional access; staff accounts and co-owners follow.
+- **Service functions** (`scene_admin_services.py`): `resolve_actor_account`,
+  `add_present_as_co_owners`, `finish_scene_full` (extracted from the viewset).
+- **`set_scene_round_mode`** (`round_services.py`) + `RoundModeError`: applies mode/knob
+  changes in-place; guards against DANGER rounds (immutable) and STRICT-exit with pending
+  deferred declarations.
+- **Actions:** `StartSceneAction` (key `"start_scene"`), `FinishSceneAction`
+  (key `"finish_scene"`) in `actions/definitions/scenes.py`; `SetRoundModeAction`
+  (key `"set_round_mode"`) in `actions/definitions/rounds.py`.
+  `StartRoundAction` extended: knob overrides at round creation require scene admin.
+- **Telnet:** `CmdScene` (`scene`) with subcommands `start [name]` / `finish` /
+  `round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `status`.
+- **Web:** `POST /api/scenes/{id}/set-round-mode/` (gated `IsSceneGMOrOwnerOrStaff`,
+  dispatches `SetRoundModeAction`).
+
+**Deferred follow-ups (filed as issues):**
+
+- DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
+  user-settable; a future slice allows a scene admin to shift a live DANGER round into
+  the three-mode framework.
+- React round-mode control for frontend parity (linked to #1328): `scene round` is
+  telnet-only; a web panel is a follow-up.
+
+**Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
+
 ### Positioning in Scenes — DONE (#1017)
 - **Scene API extension:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`, `persona_positions` for the scene's room.
 - **Frontend:** `RoomPositionsPanel` component (`frontend/src/scenes/components/`) renders positions, persona placement, move action, and a staff "Set the stage" control. `MovementActions` extracted as a shared component (`frontend/src/combat/components/`).
