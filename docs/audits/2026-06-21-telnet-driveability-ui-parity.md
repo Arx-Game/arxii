@@ -1,3 +1,10 @@
+> ⚠️ **SUPERSEDED (2026-06-25)** by
+> [`2026-06-25-player-reachability-coverage.md`](2026-06-25-player-reachability-coverage.md). This doc
+> measured telnet-vs-web *parity* — the wrong axis — and excluded GMing as "out of scope, a player
+> never does them." The successor reframes around **player reachability** (GMing is a player activity;
+> scenes are the umbrella journey) and severity-tiers every capability (PLANNED-UNBUILT / NO-SURFACE /
+> WEB-ONLY / TELNET+WEB). Kept for history; do not act on it.
+
 # Telnet Backend-Journey Coverage
 
 **Date:** 2026-06-21 — **rewritten 2026-06-23** (post-#1351) around the backend-journey principle.

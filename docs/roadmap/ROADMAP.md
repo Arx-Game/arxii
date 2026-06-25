@@ -3,6 +3,12 @@
 > For AI agents and developers: this is the big-picture view of what needs to be built
 > for Arx II to reach MVP and start alpha playtesting. Each domain links to a stub file
 > with more detail. Check those stubs before starting work on any system.
+>
+> **Planned-but-unbuilt systems** (designed/intended, no code yet — battles, mounts, companions,
+> ships, the spell system, racial framework, dreamstates, …) are recorded in
+> [`planned-systems.md`](planned-systems.md) so design intent stops getting lost. **Current
+> player-reachability** of built capabilities is tracked in
+> [`../audits/2026-06-25-player-reachability-coverage.md`](../audits/2026-06-25-player-reachability-coverage.md).
 
 ---
 
