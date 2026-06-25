@@ -7,11 +7,12 @@ from world.areas.positioning.serializers import (
     PositionAdjacencyItemSerializer,
     PositionSummarySerializer,
 )
-from world.scenes.constants import ScenePrivacyMode, SceneRoundMode
+from world.scenes.constants import ScenePrivacyMode, SceneRoundMode, SceneRoundStartReason
 from world.scenes.models import (
     Persona,
     Scene,
     SceneParticipation,
+    SceneRound,
     SceneSummaryRevision,
 )
 
@@ -222,6 +223,27 @@ class SceneListSerializer(serializers.ModelSerializer):
         return bool(user.is_staff or obj.is_gm(user) or obj.is_owner(user))
 
 
+class SceneRoundSerializer(serializers.ModelSerializer):
+    """Read-only view of a scene's active round, for the round-settings control (#1467)."""
+
+    is_danger = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SceneRound
+        fields = [
+            "mode",
+            "advance_quorum_pct",
+            "max_actions_per_round",
+            "per_target_repeat_lock",
+            "status",
+            "round_number",
+            "is_danger",
+        ]
+
+    def get_is_danger(self, obj: SceneRound) -> bool:
+        return obj.start_reason == SceneRoundStartReason.DANGER
+
+
 class SceneDetailSerializer(SceneListSerializer):
     """Full scene representation with personas"""
 
@@ -229,6 +251,7 @@ class SceneDetailSerializer(SceneListSerializer):
     positions = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
     persona_positions = serializers.SerializerMethodField()
+    active_round = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -241,6 +264,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "positions",
             "position_adjacency",
             "persona_positions",
+            "active_round",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -301,6 +325,15 @@ class SceneDetailSerializer(SceneListSerializer):
                         position = PositionSummarySerializer(pos).data
             result.append({"persona_id": persona.pk, "position": position})
         return result
+
+    @extend_schema_field(SceneRoundSerializer)
+    def get_active_round(self, obj: Scene) -> dict | None:
+        if obj.location is None:
+            return None
+        from world.scenes.round_services import active_round_for_room  # noqa: PLC0415
+
+        rnd = active_round_for_room(obj.location)
+        return SceneRoundSerializer(rnd).data if rnd is not None else None
 
 
 class ScenesSpotlightSerializer(serializers.Serializer):
