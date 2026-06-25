@@ -326,7 +326,7 @@ class SceneDetailSerializer(SceneListSerializer):
             result.append({"persona_id": persona.pk, "position": position})
         return result
 
-    @extend_schema_field(SceneRoundSerializer)
+    @extend_schema_field(SceneRoundSerializer(allow_null=True))
     def get_active_round(self, obj: Scene) -> dict | None:
         if obj.location is None:
             return None

@@ -23200,7 +23200,7 @@ export interface components {
       readonly positions: components['schemas']['PositionSummary'][];
       readonly position_adjacency: components['schemas']['PositionAdjacencyItem'][];
       readonly persona_positions: components['schemas']['PersonaPosition'][];
-      readonly active_round: components['schemas']['SceneRound'];
+      readonly active_round: components['schemas']['SceneRound'] | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {

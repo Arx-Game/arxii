@@ -42028,6 +42028,7 @@ components:
         active_round:
           allOf:
           - $ref: '#/components/schemas/SceneRound'
+          nullable: true
           readOnly: true
       required:
       - active_round
