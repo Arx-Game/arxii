@@ -12,6 +12,7 @@ from django.utils import timezone
 from world.scenes.constants import (
     ACTIVE_SCENE_ROUND_STATUSES,
     RoundStatus,
+    SceneRoundMode,
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
@@ -24,6 +25,73 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
+
+
+class RoundModeError(ValueError):
+    """Raised when set_scene_round_mode cannot apply the requested change."""
+
+
+def set_scene_round_mode(
+    scene_round: SceneRound,
+    *,
+    mode: str | None = None,
+    advance_quorum_pct: int | None = None,
+    max_actions_per_round: int | None = None,
+    per_target_repeat_lock: bool | None = None,
+) -> SceneRound:
+    """Apply mode and/or knob changes to *scene_round* in-place.
+
+    Guard order (both raise :class:`RoundModeError`):
+
+    1. **DANGER block**: a DANGER round resolves on its own — its mode is not
+       user-settable.
+    2. **Out-of-STRICT guard**: switching *away* from STRICT while a pending
+       non-immediate declaration exists would orphan those declarations; the
+       caller must force-resolve first.
+
+    Only the supplied (non-None) fields are written; ``save(update_fields=...)``
+    touches nothing else.
+    """
+    from world.scenes.models import SceneActionDeclaration  # noqa: PLC0415
+
+    # Guard 1 — DANGER rounds resolve autonomously; mode is fixed at OPEN.
+    if scene_round.start_reason == SceneRoundStartReason.DANGER:
+        msg = "A danger round resolves on its own; its mode can't be changed."
+        raise RoundModeError(msg)
+
+    # Guard 2 — switching away from STRICT with pending deferred declarations.
+    leaving_strict = (
+        scene_round.mode == SceneRoundMode.STRICT
+        and mode is not None
+        and mode != SceneRoundMode.STRICT
+    )
+    if (
+        leaving_strict
+        and SceneActionDeclaration.objects.filter(
+            scene_round=scene_round, is_immediate=False
+        ).exists()
+    ):
+        msg = "Resolve the current declarations first (force-resolve), then change the mode."
+        raise RoundModeError(msg)
+
+    update_fields: list[str] = []
+    if mode is not None:
+        scene_round.mode = mode
+        update_fields.append("mode")
+    if advance_quorum_pct is not None:
+        scene_round.advance_quorum_pct = advance_quorum_pct
+        update_fields.append("advance_quorum_pct")
+    if max_actions_per_round is not None:
+        scene_round.max_actions_per_round = max_actions_per_round
+        update_fields.append("max_actions_per_round")
+    if per_target_repeat_lock is not None:
+        scene_round.per_target_repeat_lock = per_target_repeat_lock
+        update_fields.append("per_target_repeat_lock")
+
+    if update_fields:
+        scene_round.save(update_fields=update_fields)
+
+    return scene_round
 
 
 def actions_this_round(scene_round: SceneRound, participant: SceneRoundParticipant) -> int:
