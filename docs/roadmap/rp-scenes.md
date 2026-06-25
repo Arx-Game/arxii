@@ -166,13 +166,24 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 - **Web:** `POST /api/scenes/{id}/set-round-mode/` (gated `IsSceneGMOrOwnerOrStaff`,
   dispatches `SetRoundModeAction`).
 
-**Deferred follow-ups (filed as issues):**
+**Deferred follow-up:**
 
 - DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
   user-settable; a future slice allows a scene admin to shift a live DANGER round into
   the three-mode framework.
-- React round-mode control for frontend parity (linked to #1328): `scene round` is
-  telnet-only; a web panel is a follow-up.
+
+### Web Round-Mode Control — DONE (#1467, parity for #1445)
+
+Frontend parity for `scene round` (telnet):
+
+- **`active_round` read field** on `SceneDetailSerializer` — `SceneRoundSerializer` (read-only)
+  nested under the scene detail. Fields: `mode`, `advance_quorum_pct`, `max_actions_per_round`,
+  `per_target_repeat_lock`, `status`, `round_number`, `is_danger`. `null` when no active round.
+- **`active_round_for_room(room) -> SceneRound | None`** promoted to a public service in
+  `round_services.py` (was a private action helper); consumed by `SceneDetailSerializer.get_active_round`.
+- **`RoundSettingsDialog`** (`frontend/src/scenes/components/RoundSettingsDialog.tsx`) — GM/owner/
+  staff-gated React dialog; reads `active_round` from the scene detail and dispatches
+  `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 

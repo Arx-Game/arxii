@@ -487,6 +487,18 @@ Finishes the active scene in the actor's room. Gated by `actor_can_administer_sc
 a GM character, staff account, or scene co-owner succeeds. Delegates to `finish_scene_full`
 for full orchestration.
 
+### Round-mode service — active_round_for_room
+
+```python
+from world.scenes.round_services import active_round_for_room
+
+# Return the active (non-completed) SceneRound for a room, or None.
+# Relies on the one-active-scene-round-per-room DB constraint, so .first() is
+# unambiguous.  Public service — promoted from the private _active_round_for_room
+# helper that was previously inlined in SetRoundModeAction (#1467).
+active_round_for_room(room) -> SceneRound | None
+```
+
 ### Round-mode control
 
 ```python
@@ -552,12 +564,45 @@ authoritative permission check runs inside `SetRoundModeAction`. The viewset res
 requesting account's active character as the action actor so that telnet and web converge on
 the same `action.run()` seam. Returns the updated scene detail on success.
 
-**Deferred follow-ups:**
+**Deferred follow-up:**
 - DANGER → STRICT unification: DANGER rounds are currently forced to OPEN and not
   user-settable; a future slice will allow a scene admin to unify a live DANGER round
   into the three-mode framework.
-- React control for frontend parity (linked to #1328): `scene round` is telnet-only;
-  a round-mode panel in the web scene view is a follow-up.
+
+### Web round-mode control — RoundSettingsDialog (#1467)
+
+`RoundSettingsDialog` (`frontend/src/scenes/components/RoundSettingsDialog.tsx`) is the
+React-side parity for `scene round` (telnet, #1445).
+
+**Gate:** rendered only when `scene.viewer_can_gm && scene.is_active`; matches the backend
+`IsSceneGMOrOwnerOrStaff` coarse gate on `POST /api/scenes/{id}/set-round-mode/`.
+
+**Behaviour:**
+- When `scene.active_round` is `null` (no active round), the dialog body shows an
+  informational message; Save is disabled.
+- When a round exists, the dialog exposes mode (Select), advance quorum % (Input),
+  max actions per round (Input), and repeat-target lock (Switch). The mode selector is
+  disabled when `active_round.is_danger` is true (DANGER rounds stay in OPEN mode).
+- On Save, dispatches `useSetRoundMode` → `POST /api/scenes/{id}/set-round-mode/` with a
+  `SetRoundModePayload`; closes the dialog on success.
+
+**Wire-point:** `RoundSettingsDialog` is rendered by `SceneHeader.tsx` alongside the
+Edit and End Scene buttons.
+
+**Read-side serialization:** `SceneDetailSerializer` exposes `active_round` as a nullable
+nested field serialized by `SceneRoundSerializer` (read-only). Fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `mode` | string | `SceneRoundMode` value (`open` / `pose_order` / `strict`) |
+| `advance_quorum_pct` | int | % of distinct actors needed to advance a POSE_ORDER round |
+| `max_actions_per_round` | int | Per-participant action cap per round |
+| `per_target_repeat_lock` | bool | Block repeat targeting of the same persona |
+| `status` | string | `RoundStatus` value |
+| `round_number` | int | Current round counter |
+| `is_danger` | bool | Derived: `True` when `start_reason == DANGER` |
+
+`active_round` is `null` when the scene has no location or no active round exists.
 
 ---
 
