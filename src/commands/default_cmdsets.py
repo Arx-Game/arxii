@@ -61,6 +61,7 @@ from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.offer_response import CmdDecline
 from commands.ritual import CmdRitual
+from commands.scene import CmdScene
 from commands.social.blocking import (
     CmdBlock,
     CmdBlockList,
@@ -178,6 +179,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdClashCommit,
             # Shared combat verbs: combat <subverb> (#1453, #1452)
             CmdCombat,
+            # Scene lifecycle telnet command (#1445)
+            CmdScene,
         )
         for command_cls in command_classes:
             self.add(command_cls())
