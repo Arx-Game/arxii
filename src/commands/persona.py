@@ -89,7 +89,7 @@ class CmdPersona(DispatchCommand):
             ptype = persona.get_persona_type_display()
             ftier = persona.get_fame_tier_display()
             label = f"{persona.name} ({ptype}, {ftier})"
-            if persona.pk == active.pk:
+            if active is not None and persona.pk == active.pk:
                 label += " ◄ active"
             lines.append(label)
         self.msg("\n".join(lines))

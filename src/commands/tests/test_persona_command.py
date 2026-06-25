@@ -86,6 +86,29 @@ class CmdPersonaTests(TestCase):
         self.assertEqual(kwargs, {"persona_id": self.alt.pk})
 
 
+class CmdPersonaActiveNoneTests(TestCase):
+    """Listing must not crash when active_persona_for_sheet returns None."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.character.msg = MagicMock()
+        PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED, name="Alt Face"
+        )
+
+    def test_listing_does_not_crash_when_active_is_none(self) -> None:
+        """No AttributeError when active_persona_for_sheet returns None."""
+        with patch(
+            "world.scenes.services.active_persona_for_sheet",  # noqa: STRING_LITERAL
+            return_value=None,
+        ):
+            _cmd(self.character).func()
+        sent = "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
+        self.assertIn("Alt Face", sent)
+        self.assertNotIn("active", sent)
+
+
 class CmdPersonaCmdsetRegistrationTests(TestCase):
     def test_persona_command_registered(self) -> None:
         from commands.default_cmdsets import CharacterCmdSet
