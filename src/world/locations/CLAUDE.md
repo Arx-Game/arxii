@@ -421,3 +421,21 @@ stories.
 Same `_validate_location_kwargs` shape as the lifecycle helpers —
 exactly one of `area` or `room_profile`. Raises `ValueError` on
 violation.
+
+## Owner-facing room editing (#1470)
+
+`set_room_display_data(*, room, persona, name=None, description=None, is_public=None)`
+is the owner-gated MVP seam for a player editing a room they own — the first
+player-facing write over `RoomProfile` / `ObjectDisplayData`. It:
+
+- re-checks `is_owner(persona, room)` as a hard boundary (raises `RoomEditError`,
+  which carries a player-facing `user_message` — never surface `str(exc)`);
+- refuses to flip `is_public`→True while a non-public scene is live in the room
+  (`_has_active_non_public_scene`, the inverse of the #1287 scene-privacy invariant);
+- writes name → `ObjectDisplayData.longname`, description → `permanent_description`,
+  listing → `RoomProfile.is_public`; idempotent, only supplied fields change.
+
+Callers: `actions.definitions.locations.RoomEditAction` (key `edit_room`), gated by
+`actions.prerequisites.IsRoomOwnerPrerequisite`. Faces: telnet `CmdManageRoom`
+(`manageroom/name|desc|public`) and the web action-dispatch endpoint. The React
+room-editor panel is a follow-up (needs a room-management host page).

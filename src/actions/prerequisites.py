@@ -51,6 +51,34 @@ class StaffOnlyPrerequisite(Prerequisite):
 
 
 @dataclass
+class IsRoomOwnerPrerequisite(Prerequisite):
+    """The actor's active persona must own the room they're standing in (#1470)."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.locations.services import is_owner  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return False, "You're not in a room."
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "Only characters can edit rooms."
+        persona = active_persona_for_sheet(sheet)
+        if is_owner(persona, room):
+            return True, ""
+        return False, "You don't own this room."
+
+
+@dataclass
 class HoldsItemPrerequisite(Prerequisite):
     """The actor must be holding the item passed as ``kwargs['item']``."""
 

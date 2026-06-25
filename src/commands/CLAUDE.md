@@ -145,6 +145,11 @@ actions, backends, and service functions.
   to a *reach*: `gemit <msg>` (game-wide), `gemit/society <a>,<b> = <msg>`, or `gemit/org <a>,<b> =
   <msg>` (members of those societies/orgs, by active persona). No body is ever generated. Player/
   covenant-targeted story emits are a separate, non-public tool — not this command.
+- **`locations.py`**: `CmdManageRoom` (`manageroom`, #1470) — owner-gated room editor.
+  Thin over `RoomEditAction` (key `edit_room`): `manageroom/name <name>`,
+  `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
+  is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
+  `world.locations.services.set_room_display_data`. No business logic in the command.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

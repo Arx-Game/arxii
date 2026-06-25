@@ -981,3 +981,74 @@ def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
         if to_delete_ids:
             LocationValueModifier.objects.filter(pk__in=to_delete_ids).delete()
         return len(to_delete_ids)
+
+
+# ---------------------------------------------------------------------------
+# Owner-facing room editing (#1470) — the player room-editor MVP seam
+# ---------------------------------------------------------------------------
+
+
+class RoomEditError(Exception):
+    """A room edit was refused; carries a player-facing ``user_message``.
+
+    Never surface ``str(exc)`` to API responses — use ``exc.user_message``.
+    """
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+def _has_active_non_public_scene(room: DefaultObject) -> bool:
+    """Whether an active, non-PUBLIC scene is running in this room.
+
+    The inverse of the #1287 scene-privacy invariant: a publicly-listed room may
+    host only PUBLIC scenes, so a room cannot be *made* public while a
+    PRIVATE/EPHEMERAL scene is live in it.
+    """
+    from world.scenes.constants import ScenePrivacyMode  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    return (
+        Scene.objects.filter(location=room, is_active=True)
+        .exclude(privacy_mode=ScenePrivacyMode.PUBLIC)
+        .exists()
+    )
+
+
+def set_room_display_data(
+    *,
+    room: DefaultObject,
+    persona: Persona,
+    name: str | None = None,
+    description: str | None = None,
+    is_public: bool | None = None,
+) -> None:
+    """Owner-gated edit of a room's display name, description, and public listing.
+
+    Re-checks ownership as a hard boundary (the action prerequisite is the primary
+    UX gate). Refuses to make a room public while a non-public scene is active in
+    it. Writes name → ``ObjectDisplayData.longname``, description →
+    ``permanent_description``, listing → ``RoomProfile.is_public``. Idempotent;
+    only the provided fields are touched.
+    """
+    from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
+
+    if not is_owner(persona, room):
+        msg = "You don't own this room."
+        raise RoomEditError(msg)
+    if is_public is True and _has_active_non_public_scene(room):
+        msg = "A non-public scene is happening here; it must end before the room can be public."
+        raise RoomEditError(msg)
+
+    if name is not None or description is not None:
+        display, _ = ObjectDisplayData.objects.get_or_create(object=room)
+        if name is not None:
+            display.longname = name
+        if description is not None:
+            display.permanent_description = description
+        display.save()
+    if is_public is not None:
+        profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        profile.is_public = is_public
+        profile.save(update_fields=["is_public"])
