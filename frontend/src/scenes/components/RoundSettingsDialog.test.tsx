@@ -102,4 +102,23 @@ describe('RoundSettingsDialog', () => {
       expect(screen.getByLabelText(/mode/i)).toBeInTheDocument();
     });
   });
+
+  it('disables the mode select when the active round is a danger round', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const dangerRound: SceneRoundState = {
+      ...activeRound,
+      mode: 'open',
+      is_danger: true,
+    };
+    renderWith({ ...base, active_round: dangerRound });
+
+    await user.click(screen.getByRole('button', { name: /round settings/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/mode/i)).toBeInTheDocument();
+    });
+
+    const trigger = screen.getByLabelText(/mode/i);
+    expect(trigger).toHaveAttribute('disabled');
+  });
 });

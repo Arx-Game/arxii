@@ -45,6 +45,11 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
       setQuorum(round.advance_quorum_pct);
       setMaxActions(round.max_actions_per_round);
       setRepeatLock(round.per_target_repeat_lock);
+    } else {
+      setMode('pose_order');
+      setQuorum(60);
+      setMaxActions(1);
+      setRepeatLock(false);
     }
   }, [round, open]);
 
