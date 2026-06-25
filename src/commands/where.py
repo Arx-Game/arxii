@@ -29,7 +29,8 @@ class CmdWhere(ArxCommand):
     def func(self) -> None:
         from world.areas.services import where_listing  # noqa: PLC0415
 
-        entries = where_listing()
+        # Viewer's account drives quiet-mode exemptions: people on your allowlist still show.
+        entries = where_listing(self.caller.active_account)
         if not entries:
             self.msg("No one is out and about in public spaces right now.")
             return

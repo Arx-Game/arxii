@@ -84,9 +84,12 @@ class PresenceView(APIView):
         from world.areas.services import where_listing  # noqa: PLC0415
         from world.scenes.presence import who_listing  # noqa: PLC0415
 
+        # The requesting account drives quiet-mode exemptions (#1463): people who've gone
+        # hidden still show to themselves and to viewers on their allowlist.
+        viewer = request.user
         return Response(
             {
-                "who": WhoEntrySerializer(who_listing(), many=True).data,
-                "where": WhereEntrySerializer(where_listing(), many=True).data,
+                "who": WhoEntrySerializer(who_listing(viewer), many=True).data,
+                "where": WhereEntrySerializer(where_listing(viewer), many=True).data,
             }
         )

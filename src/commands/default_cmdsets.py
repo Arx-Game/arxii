@@ -61,6 +61,7 @@ from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
+from commands.presence import CmdAfk, CmdHide
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
 from commands.social.blocking import (
@@ -178,6 +179,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdWhere,
             # #1463 — online roster: who's online, by active persona, coarse idle.
             CmdWho,
+            # #1463 — self-presence toggles: transient away + persistent quiet/hidden mode.
+            CmdAfk,
+            CmdHide,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # Unified scene-adaptive cast (#1351)

@@ -86,19 +86,22 @@ def colored_area_path(room: ObjectDB) -> str:
     return " - ".join(segments)
 
 
-def where_listing() -> list[WhereEntry]:
+def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
     """Characters currently in PUBLIC rooms, with their coloured location paths (#1463).
 
     The pull/navigation surface of the public world — who's out and about to be RP'd with.
     Characters in non-public rooms (``RoomProfile.is_public=False``) or in no room are
     omitted, so private RP stays off ``where`` (the #1287 privacy invariant). One entry per
     character, keyed on its **active** persona (a TEMPORARY mask shows that face, by design),
-    sorted by name.
+    sorted by name. Quiet-mode characters (#1463) are omitted unless ``viewer_account`` is the
+    player themselves or on their allowlist — though they still appear to others in the room
+    itself; ``where`` is the at-a-distance surface quiet mode opts out of.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
     from evennia import SESSION_HANDLER  # noqa: PLC0415
 
     from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+    from world.scenes.presence import hidden_from_viewer  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     seen: set[int] = set()
@@ -108,6 +111,8 @@ def where_listing() -> list[WhereEntry]:
         if puppet is None or puppet.id in seen:
             continue
         seen.add(puppet.id)
+        if hidden_from_viewer(puppet, viewer_account):
+            continue
         room = puppet.location
         if room is None or not room_is_publicly_listed(room):
             continue

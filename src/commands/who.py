@@ -28,7 +28,8 @@ class CmdWho(ArxCommand):
     def func(self) -> None:
         from world.scenes.presence import who_listing  # noqa: PLC0415
 
-        entries = who_listing()
+        # Viewer's account drives quiet-mode exemptions: people on your allowlist still show.
+        entries = who_listing(self.caller.active_account)
         if not entries:
             self.msg("No one is online.")
             return

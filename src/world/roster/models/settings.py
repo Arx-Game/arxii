@@ -39,6 +39,14 @@ class TenureDisplaySettings(SharedMemoryModel):
         default=True,
         help_text="Allow other players to send tells to this character",
     )
+    appear_offline = models.BooleanField(
+        default=False,
+        help_text=(
+            "Quiet/hidden mode (#1463): hide from where/who and be unpageable, EXCEPT to people "
+            "on this player's allowlist. Async (mail/mission/channels) and same-room presence are "
+            "unaffected. Persists across logins."
+        ),
+    )
 
     # Roleplay preferences
     rp_preferences = models.CharField(
