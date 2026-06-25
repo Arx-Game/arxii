@@ -86,8 +86,8 @@ class GemitSerializer(serializers.ModelSerializer):
 class GemitCreateSerializer(serializers.ModelSerializer):
     """Input serializer for staff POST /api/narrative/gemits/ (#1450).
 
-    ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
-    ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+    ``reach`` defaults to game-wide. For SPECIFIED reach, name any combination of targets in
+    ``reach_societies`` and/or ``reach_organizations`` (at least one; the two are not exclusive).
     """
 
     body = serializers.CharField(
@@ -111,13 +111,9 @@ class GemitCreateSerializer(serializers.ModelSerializer):
         reach = attrs.get("reach", GemitReach.GAME_WIDE)
         societies = attrs.get("reach_societies") or []
         organizations = attrs.get("reach_organizations") or []
-        if reach == GemitReach.SOCIETY and not societies:
+        if reach == GemitReach.SPECIFIED and not (societies or organizations):
             raise serializers.ValidationError(
-                {"reach_societies": "Name at least one society for a society-reach gemit."}
-            )
-        if reach == GemitReach.ORGANIZATION and not organizations:
-            raise serializers.ValidationError(
-                {"reach_organizations": "Name at least one organization for an org-reach gemit."}
+                {"reach_societies": "Specify at least one society or organization."}
             )
         if reach == GemitReach.GAME_WIDE and (societies or organizations):
             msg = "A game-wide gemit takes no society or organization targets."

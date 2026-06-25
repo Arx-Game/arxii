@@ -16836,13 +16836,12 @@ export interface components {
        * @description Audience scope: game-wide, or the members of the linked societies / orgs.
        *
        *     * `game_wide` - Game-wide
-       *     * `society` - Society
-       *     * `organization` - Organization
+       *     * `specified` - Specified
        */
-      reach?: components['schemas']['ReachF5cEnum'];
-      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach?: components['schemas']['Reach83dEnum'];
+      /** @description SPECIFIED-reach societies whose members get this gemit (mixable with orgs). */
       reach_societies?: number[];
-      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      /** @description For SPECIFIED reach, organizations whose members receive this gemit (may mix). */
       reach_organizations?: number[];
       /** @description Null = system-generated. */
       readonly sender_account: number | null;
@@ -16856,8 +16855,8 @@ export interface components {
     /**
      * @description Input serializer for staff POST /api/narrative/gemits/ (#1450).
      *
-     *     ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
-     *     ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+     *     ``reach`` defaults to game-wide. For SPECIFIED reach, name any combination of targets in
+     *     ``reach_societies`` and/or ``reach_organizations`` (at least one; the two are not exclusive).
      */
     GemitCreate: {
       /** @description Broadcast text. Must be at least one non-whitespace character. */
@@ -16866,13 +16865,12 @@ export interface components {
        * @description Audience scope: game-wide, or the members of the linked societies / orgs.
        *
        *     * `game_wide` - Game-wide
-       *     * `society` - Society
-       *     * `organization` - Organization
+       *     * `specified` - Specified
        */
-      reach?: components['schemas']['ReachF5cEnum'];
-      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach?: components['schemas']['Reach83dEnum'];
+      /** @description SPECIFIED-reach societies whose members get this gemit (mixable with orgs). */
       reach_societies?: number[];
-      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      /** @description For SPECIFIED reach, organizations whose members receive this gemit (may mix). */
       reach_organizations?: number[];
       /** @description Optional: link to the era this gemit relates to. */
       related_era?: number | null;
@@ -16882,8 +16880,8 @@ export interface components {
     /**
      * @description Input serializer for staff POST /api/narrative/gemits/ (#1450).
      *
-     *     ``reach`` defaults to game-wide. For SOCIETY / ORGANIZATION reach, name the targets in
-     *     ``reach_societies`` / ``reach_organizations`` (validated to match the chosen reach).
+     *     ``reach`` defaults to game-wide. For SPECIFIED reach, name any combination of targets in
+     *     ``reach_societies`` and/or ``reach_organizations`` (at least one; the two are not exclusive).
      */
     GemitCreateRequest: {
       /** @description Broadcast text. Must be at least one non-whitespace character. */
@@ -16892,13 +16890,12 @@ export interface components {
        * @description Audience scope: game-wide, or the members of the linked societies / orgs.
        *
        *     * `game_wide` - Game-wide
-       *     * `society` - Society
-       *     * `organization` - Organization
+       *     * `specified` - Specified
        */
-      reach?: components['schemas']['ReachF5cEnum'];
-      /** @description When reach=SOCIETY, the societies whose members receive this gemit. */
+      reach?: components['schemas']['Reach83dEnum'];
+      /** @description SPECIFIED-reach societies whose members get this gemit (mixable with orgs). */
       reach_societies?: number[];
-      /** @description When reach=ORGANIZATION, the organizations whose members receive this gemit. */
+      /** @description For SPECIFIED reach, organizations whose members receive this gemit (may mix). */
       reach_organizations?: number[];
       /** @description Optional: link to the era this gemit relates to. */
       related_era?: number | null;
@@ -22508,11 +22505,10 @@ export interface components {
     RatingEnum: -2 | -1 | 0 | 1 | 2;
     /**
      * @description * `game_wide` - Game-wide
-     *     * `society` - Society
-     *     * `organization` - Organization
+     *     * `specified` - Specified
      * @enum {string}
      */
-    ReachF5cEnum: 'game_wide' | 'society' | 'organization';
+    Reach83dEnum: 'game_wide' | 'specified';
     /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed

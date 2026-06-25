@@ -137,34 +137,37 @@ def _eligible_persona_ids(
     societies: Iterable[Society],
     organizations: Iterable[Organization],
 ) -> set[int]:
-    """Persona ids whose membership puts them in a scoped gemit's audience (#1450).
+    """Persona ids whose membership puts them in a SPECIFIED gemit's audience (#1450).
 
-    SOCIETY: members of any organization belonging to a target society. ORGANIZATION: members of a
+    The union of: members of any organization belonging to a target society, plus members of a
     target organization. (Society *reputation* alone — an outsider the society merely knows of —
     does not count; internal news goes to members.) Empty for GAME_WIDE.
     """
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
-    if reach == GemitReach.SOCIETY:
-        return set(
+    if reach == GemitReach.GAME_WIDE:
+        return set()
+    eligible: set[int] = set()
+    if societies:
+        eligible.update(
             OrganizationMembership.objects.filter(organization__society__in=societies).values_list(
                 "persona_id", flat=True
             )
         )
-    if reach == GemitReach.ORGANIZATION:
-        return set(
+    if organizations:
+        eligible.update(
             OrganizationMembership.objects.filter(organization__in=organizations).values_list(
                 "persona_id", flat=True
             )
         )
-    return set()
+    return eligible
 
 
 def _session_in_audience(session: object, eligible_persona_ids: set[int]) -> bool:
     """Whether a connected session's active-persona character is in a scoped gemit's audience.
 
     Keyed on the *active* persona (the face the character is currently wearing) — a TEMPORARY mask
-    holds no memberships, so a disguised character falls out of society/org reach, by design.
+    holds no memberships, so a disguised character falls out of a SPECIFIED gemit's reach.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -192,11 +195,11 @@ def broadcast_gemit(  # noqa: PLR0913
 ) -> Gemit:
     """Create a Gemit and push it to its ``reach`` audience in green (#1450).
 
-    GAME_WIDE pushes to every connected session (the classic gemit). SOCIETY / ORGANIZATION push
-    only to sessions whose active-persona character is a member of a target society / organization;
-    the targets are also recorded on the row so retroactive viewing stays scoped. The Gemit row
-    persists either way; push failures are swallowed so a broadcast error never rolls back the
-    record.
+    GAME_WIDE pushes to every connected session (the classic gemit). SPECIFIED pushes only to
+    sessions whose active-persona character is a member of any target society or organization (the
+    two combine freely); the targets are also recorded on the row so retroactive viewing stays
+    scoped. The Gemit row persists either way; push failures are swallowed so a broadcast error
+    never rolls back the record.
     """
     societies = list(societies or [])
     organizations = list(organizations or [])
