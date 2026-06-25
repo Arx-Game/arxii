@@ -140,7 +140,9 @@ invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
 - **Spec destination:** write the spec into the **issue body**, between
   `<!-- spec:start -->` and `<!-- spec:end -->` markers, preserving the original
   problem statement above them (`gh issue edit <N> --body-file`). Don't create a
-  new committed `docs/superpowers/` spec file for this work.
+  new committed `docs/superpowers/` spec file for this work. Use the section layout
+  in `docs/spec-template.md`, and before drafting consult `docs/adr/` for decisions
+  that already constrain the work and `AGENT_GLOSSARY_MAP.md` for canonical terms.
 - **Spec-review dispatch:** when the brainstorming flow reaches "dispatch
   spec-document-reviewer," dispatch with the prompt at
   `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
