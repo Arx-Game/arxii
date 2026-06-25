@@ -62,8 +62,10 @@ from actions.definitions.rounds import (
     JoinRoundAction,
     LeaveRoundAction,
     PassRoundAction,
+    SetRoundModeAction,
     StartRoundAction,
 )
+from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
     deceive,
     entrance,
@@ -119,6 +121,7 @@ _ALL_ACTIONS: list[Action] = [
     DisarmTrapAction(),
     PassRoundAction(),
     ForceResolveRoundAction(),
+    SetRoundModeAction(),
     FleeAction(),
     CoverAction(),
     InterposeAction(),
@@ -134,6 +137,8 @@ _ALL_ACTIONS: list[Action] = [
     YieldAction(),
     AcknowledgeRiskAction(),
     CastTechniqueAction(),
+    StartSceneAction(),
+    FinishSceneAction(),
     intimidate,
     persuade,
     deceive,

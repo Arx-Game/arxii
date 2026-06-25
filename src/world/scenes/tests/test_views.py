@@ -4,17 +4,24 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import ScenePrivacyMode
+from world.scenes.constants import (
+    RoundStatus,
+    ScenePrivacyMode,
+    SceneRoundMode,
+    SceneRoundStartReason,
+)
 from world.scenes.factories import (
     InteractionFactory,
     PersonaFactory,
     SceneFactory,
+    SceneOwnerParticipationFactory,
     SceneParticipationFactory,
+    SceneRoundFactory,
 )
-from world.scenes.models import Persona, Scene
+from world.scenes.models import Persona, Scene, SceneRound
 
 
 def _create_owned_persona(account, **persona_kwargs):
@@ -236,6 +243,99 @@ class SceneViewSetTestCase(APITestCase):
         scene.refresh_from_db()
         assert not scene.is_active
         assert scene.date_finished is not None
+
+
+def _setup_owner_with_character(account):
+    """Create a Character in a Room associated with account via RosterTenure.
+
+    Returns (character, room).  The character's location is set to the room
+    so that action.run(actor=character) can find the room's active scene.
+    """
+    room = ObjectDBFactory(
+        db_key=f"Room_{account.username}",
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+    char = CharacterFactory(location=room)
+    sheet = CharacterSheetFactory(character=char)
+    player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
+    roster_entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    return char, room
+
+
+class SetRoundModeViewTestCase(APITestCase):
+    """Tests for POST /api/scenes/{id}/set-round-mode/ (#1445)."""
+
+    def setUp(self):
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+        self.char, self.room = _setup_owner_with_character(self.account)
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
+        self.round = SceneRoundFactory(
+            room=self.room,
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            mode=SceneRoundMode.POSE_ORDER,
+        )
+
+    def test_owner_set_mode_strict_returns_200(self):
+        """Owner POSTs mode:strict → 200 and the round mode is STRICT."""
+        url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
+        response = self.client.post(url, {"mode": "strict"}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        self.round.refresh_from_db()
+        assert self.round.mode == SceneRoundMode.STRICT
+
+    def test_owner_response_contains_scene_data(self):
+        """Owner success returns the serialized scene (SceneDetailSerializer shape)."""
+        url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
+        response = self.client.post(url, {"mode": "open"}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "id" in response.data
+        assert response.data["id"] == self.scene.pk
+
+    def test_non_owner_non_staff_gets_403(self):
+        """A different authenticated account that isn't a scene GM/owner gets 403."""
+        other_account = AccountFactory()
+        self.client.force_authenticate(user=other_account)
+        url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
+        response = self.client.post(url, {"mode": "strict"}, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_danger_round_returns_400_with_service_message(self):
+        """DANGER round → action refuses with a 400 carrying the service's message."""
+        # Replace the existing round with a DANGER round.
+        self.round.delete()
+        SceneRound.objects.create(
+            room=self.room,
+            scene=self.scene,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            start_reason=SceneRoundStartReason.DANGER,
+        )
+        url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
+        response = self.client.post(url, {"mode": "strict"}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "detail" in response.data
+
+    def test_no_active_character_returns_400(self):
+        """Account with no active roster tenure → 400 'No active character.'"""
+        bare_account = AccountFactory()
+        self.client.force_authenticate(user=bare_account)
+        # Make bare_account a scene owner at the DRF permission layer so we get
+        # through IsSceneGMOrOwnerOrStaff, then hit the actor-resolution branch.
+        SceneOwnerParticipationFactory(scene=self.scene, account=bare_account)
+        url = reverse("scene-set-round-mode", kwargs={"pk": self.scene.pk})
+        response = self.client.post(url, {"mode": "open"}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "No active character."
 
 
 class PersonaViewSetTestCase(APITestCase):

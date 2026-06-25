@@ -56,6 +56,9 @@ class Character(ObjectParent, DefaultCharacter):
     #: GMCharacter and StaffCharacter override this to True.
     is_mechanically_immune: bool = False
 
+    #: True only for GM/Staff "story-runner" characters; gates scene/round admin.
+    is_story_runner: bool = False
+
     state_class = CharacterState
 
     # Example typeclass defaults for item_data fallbacks

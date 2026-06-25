@@ -7,7 +7,7 @@ from world.areas.positioning.serializers import (
     PositionAdjacencyItemSerializer,
     PositionSummarySerializer,
 )
-from world.scenes.constants import ScenePrivacyMode
+from world.scenes.constants import ScenePrivacyMode, SceneRoundMode
 from world.scenes.models import (
     Persona,
     Scene,
@@ -417,3 +417,17 @@ class ActivePersonaResultSerializer(serializers.Serializer):
     """Result of the #981 set-active-persona endpoint — the now-worn face id."""
 
     active_persona_id = serializers.IntegerField(read_only=True)
+
+
+class SetRoundModeRequestSerializer(serializers.Serializer):
+    """POST body for the #1445 set-round-mode endpoint.
+
+    All fields are optional — callers may change the mode, one or more knobs, or any
+    combination. At least one field should be provided (the action will succeed with
+    a generic message if none are, because the service is a no-op update).
+    """
+
+    mode = serializers.ChoiceField(choices=SceneRoundMode.choices, required=False)
+    advance_quorum_pct = serializers.IntegerField(min_value=0, max_value=100, required=False)
+    max_actions_per_round = serializers.IntegerField(min_value=0, required=False)
+    per_target_repeat_lock = serializers.BooleanField(required=False)

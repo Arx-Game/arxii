@@ -55,3 +55,16 @@ class MechanicalImmunityTest(TestCase):
         staff_msg = StaffCharacter.TARGETING_REJECTION
         assert "story" in gm_msg.lower()
         assert "narrative" in staff_msg.lower()
+
+
+class IsStoryRunnerTest(TestCase):
+    """Verify the is_story_runner attribute for story administration."""
+
+    def test_base_character_is_not_story_runner(self) -> None:
+        assert Character.is_story_runner is False
+
+    def test_gm_character_is_story_runner(self) -> None:
+        assert GMCharacter.is_story_runner is True
+
+    def test_staff_character_is_story_runner(self) -> None:
+        assert StaffCharacter.is_story_runner is True

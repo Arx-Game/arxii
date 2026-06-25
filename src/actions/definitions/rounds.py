@@ -16,7 +16,13 @@ from world.scenes.constants import (
     SceneRoundStartReason,
 )
 from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
-from world.scenes.round_services import end_scene_round, resolve_scene_round, start_scene_round
+from world.scenes.round_services import (
+    RoundModeError,
+    end_scene_round,
+    resolve_scene_round,
+    set_scene_round_mode,
+    start_scene_round,
+)
 
 # Repeated ActionResult failure messages, extracted to satisfy S1192.
 NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
@@ -55,10 +61,15 @@ class StartRoundAction(Action):
     category: str = "scenes"
     target_type: TargetType = TargetType.AREA
 
-    def execute(
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
+        *,
+        mode: str | None = None,
+        advance_quorum_pct: int | None = None,
+        max_actions_per_round: int | None = None,
+        per_target_repeat_lock: bool | None = None,
         **kwargs: Any,
     ) -> ActionResult:
         sheet = _sheet(actor)
@@ -69,21 +80,67 @@ class StartRoundAction(Action):
         if sheet is None:
             return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
 
+        _has_override = any(
+            v is not None
+            for v in (mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock)
+        )
+
         rnd = _active_round_for_room(room)
         if rnd is None:
             from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
 
             cfg = get_scene_round_defaults_config()
-            rnd = SceneRound.objects.create(
-                room=room,
-                status=RoundStatus.DECLARING,
-                round_number=1,
-                start_reason=SceneRoundStartReason.OPT_IN,
-                mode=cfg.default_mode,
-                advance_quorum_pct=cfg.advance_quorum_pct,
-                max_actions_per_round=cfg.max_actions_per_round,
-                per_target_repeat_lock=cfg.per_target_repeat_lock,
-            )
+
+            if _has_override:
+                # Gate: overrides require an active scene + admin permission.
+                from world.scenes.models import Scene as _Scene  # noqa: PLC0415
+                from world.scenes.scene_admin_services import (  # noqa: PLC0415
+                    actor_can_administer_scene,
+                )
+
+                scene = _Scene.objects.filter(location=room, is_active=True).first()
+                if scene is None or not actor_can_administer_scene(actor, scene):
+                    return ActionResult(
+                        success=False,
+                        message=(
+                            "Only a scene GM/owner can choose the round mode at start"
+                            " (start a scene first)."
+                        ),
+                    )
+                rnd = SceneRound.objects.create(
+                    room=room,
+                    status=RoundStatus.DECLARING,
+                    round_number=1,
+                    start_reason=SceneRoundStartReason.OPT_IN,
+                    mode=mode if mode is not None else cfg.default_mode,
+                    advance_quorum_pct=(
+                        advance_quorum_pct
+                        if advance_quorum_pct is not None
+                        else cfg.advance_quorum_pct
+                    ),
+                    max_actions_per_round=(
+                        max_actions_per_round
+                        if max_actions_per_round is not None
+                        else cfg.max_actions_per_round
+                    ),
+                    per_target_repeat_lock=(
+                        per_target_repeat_lock
+                        if per_target_repeat_lock is not None
+                        else cfg.per_target_repeat_lock
+                    ),
+                    scene=scene,
+                )
+            else:
+                rnd = SceneRound.objects.create(
+                    room=room,
+                    status=RoundStatus.DECLARING,
+                    round_number=1,
+                    start_reason=SceneRoundStartReason.OPT_IN,
+                    mode=cfg.default_mode,
+                    advance_quorum_pct=cfg.advance_quorum_pct,
+                    max_actions_per_round=cfg.max_actions_per_round,
+                    per_target_repeat_lock=cfg.per_target_repeat_lock,
+                )
         elif rnd.status == RoundStatus.BETWEEN_ROUNDS:
             rnd = start_scene_round(rnd)
 
@@ -92,6 +149,82 @@ class StartRoundAction(Action):
             character_sheet=sheet,
         )
         return ActionResult(success=True, message="A round begins.")
+
+
+@dataclass
+class SetRoundModeAction(Action):
+    """Change the mode and/or knobs of the active scene round.
+
+    Only the scene's GM or a co-owner may invoke this. A guard order applies:
+    1. Actor must be in a room.
+    2. The room must have an active scene (mode control requires scene context).
+    3. The actor must be a scene admin (GM, staff, or co-owner).
+    4. The room must have an active round to modify.
+    5. The service validates the mode transition (DANGER immutable; STRICT-exit blocked by
+       pending declarations).
+    """
+
+    key: str = "set_round_mode"
+    name: str = "Set Round Mode"
+    icon: str = "sliders"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(  # noqa: PLR0911, PLR0913
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        mode: str | None = None,
+        advance_quorum_pct: int | None = None,
+        max_actions_per_round: int | None = None,
+        per_target_repeat_lock: bool | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.models import Scene as _Scene  # noqa: PLC0415
+        from world.scenes.scene_admin_services import actor_can_administer_scene  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+
+        scene = _Scene.objects.filter(location=room, is_active=True).first()
+        if scene is None:
+            return ActionResult(
+                success=False,
+                message="Mode ordering needs an active scene here — start one first.",
+            )
+
+        if not actor_can_administer_scene(actor, scene):
+            return ActionResult(
+                success=False,
+                message="Only the scene's GM or an owner can set the round mode.",
+            )
+
+        rnd = _active_round_for_room(room)
+        if rnd is None:
+            return ActionResult(success=False, message="There is no active round here.")
+
+        # Opportunistically link the round to the scene if not already linked.
+        if rnd.scene_id is None:
+            rnd.scene = scene
+            rnd.save(update_fields=["scene"])
+
+        try:
+            set_scene_round_mode(
+                rnd,
+                mode=mode,
+                advance_quorum_pct=advance_quorum_pct,
+                max_actions_per_round=max_actions_per_round,
+                per_target_repeat_lock=per_target_repeat_lock,
+            )
+        except RoundModeError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        if mode is not None:
+            return ActionResult(success=True, message=f"Round mode set to {mode}.")
+        return ActionResult(success=True, message="Round settings updated.")
 
 
 @dataclass

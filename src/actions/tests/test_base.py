@@ -172,6 +172,7 @@ class ActionRegistryTests(TestCase):
             "disarm_trap",
             "pass_round",
             "force_resolve_round",
+            "set_round_mode",
             "intimidate",
             "persuade",
             "deceive",
@@ -201,6 +202,8 @@ class ActionRegistryTests(TestCase):
             "combat_revert",
             "combat_join",
             "combat_leave",
+            "start_scene",
+            "finish_scene",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
