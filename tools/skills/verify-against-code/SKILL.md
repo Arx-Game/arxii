@@ -21,6 +21,8 @@ This is the code-verified half of the Anti-Reinvention Pass (CLAUDE.md). It exis
 
 ## The check (per proposed surface)
 
+Before proposing any new surface, also check `docs/adr/` for a recorded decision that already constrains it, and name it with the canonical vocabulary from `AGENT_GLOSSARY_MAP.md` (not an `_Avoid_` synonym).
+
 1. **Read the actual definition** (grep + open the file). Don't infer from a name or a doc.
 2. **Find a live caller.** Grep for real usages outside tests/migrations.
 3. **Label it** — exactly one:

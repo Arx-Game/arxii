@@ -1,0 +1,101 @@
+# Architecture Decision Records
+
+This log records the *why* behind the hard, surprising, traded-off decisions that shape Arx II —
+and the alternatives we rejected. An ADR captures a moment of reasoning so a future agent or human
+doesn't relitigate a settled question or "fix" something that was deliberate.
+
+`docs/roadmap/design-tenets.md` and the invariants in `CLAUDE.md` are the **forward-looking directives** —
+they tell you what to do. The ADRs are the **record of why** that directive exists and what was
+weighed against it. The two must stay in tandem: when a decision changes, update both the directive
+and add (or supersede) the ADR in the same PR.
+
+## When to offer an ADR
+
+Offer an ADR only when a decision clears all three bars:
+
+1. **Hard to reverse** — undoing it later means a migration, a data rewrite, or churning many call
+   sites, not flipping a flag.
+2. **Surprising** — a competent newcomer would reasonably expect the opposite, so the choice needs a
+   recorded rationale to survive.
+3. **A real trade-off** — we gave up something concrete (portability, flexibility, idiomatic
+   convention) to get something concrete; both sides are worth naming.
+
+If a decision is none of these, it's just code — don't write an ADR for it.
+
+## Format
+
+Each ADR is one tight file: a decision-shaped H1 title, one short paragraph (1–3 sentences) giving
+the context, what we decided, and why — including the rejected alternative — and a one-line footer.
+
+```md
+# {Short decision-shaped title}
+
+{1–3 sentences: the context, what we decided, and why — including the rejected alternative.}
+
+> Status: accepted · Source: {roadmap §X / issue #N / CLAUDE.md / memory}
+```
+
+No Status/Options/Consequences sections — keep it to the paragraph unless extra structure genuinely
+earns its place. Use repo vocabulary (Persona, Scene, Round, seam, Action); don't redefine terms.
+ADRs derived from the roadmap that name specific models/fields carry a "verify against code" note —
+treat those names as hints to confirm, not gospel.
+
+## Index
+
+### Architecture & seams
+- [0001 — Action-centric dispatch through the player-action seam](0001-action-centric-dispatch-through-the-player-action-seam.md)
+- [0002 — One round framework, three modes, as the shared RoundContext seam](0002-one-round-framework-three-modes.md)
+- [0003 — Combat action economy: one focused + up to two secondary actions](0003-combat-action-economy-one-focused-two-secondary.md)
+- [0004 — Tempo is action-driven, never wall-clock (AFK-safe)](0004-tempo-is-action-driven-never-wall-clock.md)
+- [0005 — Reactive behavior is a separate flows/triggers/events engine](0005-reactive-behavior-is-a-separate-flows-engine.md)
+- [0006 — Scenes are provisional by default; never auto-persist RP](0006-scenes-are-provisional-never-auto-persist-rp.md)
+
+### Database & modeling
+- [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
+- [0008 — All concrete models use SharedMemoryModel](0008-all-concrete-models-use-sharedmemorymodel.md)
+- [0009 — No Django signals; explicit service-function calls](0009-no-django-signals-explicit-service-functions.md)
+- [0010 — FK direction is specific→general; avoid FKs to ObjectDB](0010-fk-direction-specific-to-general.md)
+- [0011 — IC-meaningful state keys on CharacterSheet/Persona, never AccountDB](0011-ic-state-keys-on-charactersheet-not-account.md)
+- [0012 — PostgreSQL-only in production; use PG features directly](0012-postgresql-only-in-production.md)
+- [0013 — Schema-only migrations pre-production](0013-schema-only-migrations-pre-production.md)
+- [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
+- [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
+- [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
+- [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
+- [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
+
+### Resolution
+- [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
+
+### Process & workflow
+- [0020 — Feature specs live in the GitHub issue body, gated by labels](0020-feature-specs-live-in-the-issue-body.md)
+- [0021 — main uses a GitHub merge queue + single-leaf migration guard](0021-main-uses-a-merge-queue.md)
+- [0022 — Staff config & game-tuning tooling is admin-hosted, not React](0022-staff-tooling-is-admin-hosted.md)
+
+### Game-design tenets
+- [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
+- [0024 — Consent gates behavior-altering effects, not benefit](0024-consent-gates-behavior-altering-effects.md)
+- [0025 — Never parse pose text for mechanics](0025-never-parse-pose-text-for-mechanics.md)
+- [0026 — The watched player is always OOC-aware](0026-the-watched-player-is-always-ooc-aware.md)
+- [0027 — Visibility = eligibility: one predicate, no locked options](0027-visibility-equals-eligibility.md)
+- [0028 — Web-first: not wired into React = not implemented](0028-web-first-not-wired-into-react-is-not-implemented.md)
+- [0029 — Named/public faces are always shown by name](0029-named-public-faces-are-always-shown-by-name.md)
+- [0030 — GMs author story trees; outcomes resolve by player roll, not fiat](0030-gms-author-story-trees-outcomes-resolve-by-roll.md)
+- [0031 — Exact numbers in the ledger, descriptive labels in the fiction](0031-exact-numbers-in-the-ledger-labels-in-the-fiction.md)
+- [0032 — Constrained bystander reactions](0032-constrained-bystander-reactions.md)
+- [0033 — Privacy / RP-leak prevention is MVP-gating](0033-privacy-is-mvp-gating.md)
+- [0034 — Mechanics individualize characters](0034-mechanics-individualize-characters.md)
+- [0035 — Default to the high-drama / ceremony path](0035-default-to-the-high-drama-ceremony-path.md)
+- [0036 — Combat merits Legend, never XP](0036-combat-merits-legend-never-xp.md)
+- [0037 — Encounter difficulty scales on party size + average level only](0037-encounter-difficulty-scales-on-party-size-and-level.md)
+- [0038 — Asymmetrical PvE; NPCs have no character sheets](0038-asymmetrical-pve-npcs-have-no-sheets.md)
+- [0039 — Bulk resolution uses honest terminal states](0039-bulk-resolution-uses-honest-terminal-states.md)
+
+### Domain architecture
+- [0040 — Incapacitation & dying decoupled from a single vitals enum](0040-incapacitation-and-dying-decoupled-from-vitals.md)
+- [0041 — Resonance is earned from being perceived, not from casting](0041-resonance-is-earned-from-being-perceived.md)
+- [0042 — Covenants are group-only (min 2 members)](0042-covenants-are-group-only.md)
+- [0043 — CovenantRole and CovenantRank are orthogonal axes](0043-covenant-role-and-rank-are-orthogonal.md)
+- [0044 — Covenant sworn objective is recorded as free text](0044-covenant-sworn-objective-is-free-text.md)
+- [0045 — Multi-target casts validate a target list with per-target consent](0045-multi-target-casts-with-per-target-consent.md)
+- [0046 — Power-tier breakthroughs gate at fixed path thresholds](0046-power-tier-breakthroughs-gate-at-fixed-thresholds.md)

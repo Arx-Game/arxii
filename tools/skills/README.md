@@ -71,6 +71,28 @@ on it. Enforces un-bundling `AskUserQuestion`/result-claims from their tool
 calls and verifying issue number↔title before mutations. **Delete this skill
 when the harness is fixed** — removal manifest + test in GH #647.
 
+### design-vocabulary
+
+Shared vocabulary for judging interface design — depth, interface, seam,
+leverage, locality, the deletion test, "one adapter = a hypothetical seam,
+two = a real one." Concepts only: it does **not** rename "module" or ban
+"component/service/API". Anchored on the repo's action-dispatch seam; leads with
+the plain principle in user-facing prose.
+
+### architecture-cleanup
+
+Audits a subsystem for shallow modules and leaky seams via Explore subagents and
+the deletion test, then produces a **markdown** report (no HTML/Mermaid — this is
+a headless repo) of candidate refactors ranked Strong / Worth-exploring /
+Speculative. Flags conflicts with recorded ADRs.
+
+### domain-glossary-and-adr
+
+Keeps the `AGENT_GLOSSARY.md` files and `docs/adr/` log current and used: read
+glossary terms before designing, update them in the same PR, and offer an ADR only
+on the three-part bar (hard to reverse, surprising, a real trade-off). Enforces the
+spoiler wall — neutral phrasing in the repo, rationale in private memory.
+
 ## Updating skills
 
 In the devcontainer or Linux/macOS bare-metal: just edit the files
