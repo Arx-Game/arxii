@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubmitButton } from '@/components/SubmitButton';
+import { RoundSettingsDialog } from './RoundSettingsDialog';
 
 interface Props {
   scene?: SceneDetail;
@@ -95,6 +96,7 @@ export function SceneHeader({ scene, onRefresh }: Props) {
               Refresh
             </Button>
           )}
+          <RoundSettingsDialog scene={scene} />
         </div>
       )}
       {scene.is_active && (
