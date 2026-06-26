@@ -4243,6 +4243,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConditionTemplate'
           description: ''
+  /api/conditions/treatments/:
+    get:
+      operationId: conditions_treatments_retrieve
+      description: Return treatments the helper may attempt on the target persona.
+      tags:
+      - conditions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/consent/categories/:
     get:
       operationId: consent_categories_list
