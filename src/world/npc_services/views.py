@@ -220,14 +220,10 @@ class InteractionViewSet(viewsets.ViewSet):
 
         DRF's ``request.user`` is the AccountDB; the ``puppet`` property
         on the typeclass returns the live puppet (or None when no
-        Session has puppeted anything). We swallow any access-time
-        exception (test scaffolding can hit an AccountDB without typeclass
-        machinery loaded) and treat it as "no puppet" — surfaced as 400.
+        Session has puppeted anything). A missing attribute means
+        "no puppet" and is surfaced as 400.
         """
-        try:
-            puppet = request.user.puppet
-        except (AttributeError, Exception):  # noqa: BLE001
-            puppet = None
+        puppet = request.user.puppet if hasattr(request.user, "puppet") else None
         if puppet is None:
             msg = (
                 "No puppeted character — log in and assume a character before "
