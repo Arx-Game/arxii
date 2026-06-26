@@ -465,6 +465,7 @@
   - position -> areas.Position [FK]
 
 ### Service Functions
+- `colored_area_path(room: 'ObjectDB') -> 'str' — Render a room's full area-hierarchy path with per-area colours (#1463).`
 - `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
 - `get_ancestry(area: 'Area') -> 'list[Area]' — Return the full ancestor chain from root down to this area.`
 - `get_descendant_areas(area: 'Area') -> 'list[Area]' — Return all areas in the subtree below this area.`
@@ -473,6 +474,7 @@
 - `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
 - `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
 - `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies' fashion is perceived in a scene's location.`
+- `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
 ## world.buildings
@@ -494,6 +496,7 @@
   - area -> areas.Area [OneToOne]
   - owner_persona -> scenes.Persona [FK] (nullable)
   - kind -> buildings.BuildingKind [FK]
+  - architectural_style -> buildings.ArchitecturalStyle [FK] (nullable)
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
@@ -572,11 +575,24 @@
   - instance -> buildings.BuildingProjectInstance [FK]
   - category -> buildings.PolishCategory [FK]
 
+### ArchitecturalStyle
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - buildings <- buildings.Building
+  - affinities <- buildings.StyleAffinity
+
+### StyleAffinity
+**Foreign Keys:**
+  - style -> buildings.ArchitecturalStyle [FK]
+
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
+- `set_building_style(building: 'Building', style: 'ArchitecturalStyle | None') -> 'Building' — Assign (or clear) a building's architectural style and re-sync its climate modifiers.`
+- `sync_building_style_modifiers(building: 'Building') -> 'None' — Re-materialize a building's architectural-style affinities as cascade modifiers (#1514).`
 - `validate_permit_site(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int') -> 'ValidationResult' — Validate a permit can be used at this site for this size.`
 
 
@@ -1036,6 +1052,7 @@
 **Pointed to by:**
   - children <- codex.CodexSubject
   - entries <- codex.CodexEntry
+  - architectural_styles <- buildings.ArchitecturalStyle
 
 ### CodexSubjectBreadcrumb
 **Foreign Keys:**
@@ -1757,6 +1774,7 @@
 
 ### Service Functions
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
+- `comfort_score(room: 'DefaultObject') -> 'int' — A room's net comfort (#1514): the *inverse* of its residual discomfort.`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
@@ -1769,6 +1787,8 @@
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
+- `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514).`
+- `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 - `tenancies_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, list[LocationTenancy]]' — Bulk-resolve currently-active tenancies for many rooms.`
 - `tenancy_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationTenancy]' — Return ALL LocationTenancy rows (active and ended) for a`

@@ -86,10 +86,13 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   *is* the "counters never harm" guarantee. Climate/weather/style push axes up; counter-fixtures
   push them down; `comfort_score(room)` reads the inverse of the summed residuals.
 - **Slice 1 (done):** the COLD/HEAT axes + `room_discomfort` / `comfort_score` reads.
-- **Later slices:** enclosure (generalise `is_outdoor`), an `ArchitecturalStyle` model (climate
-  affinities, seeded from lore), stackable comfort **fixtures** (not `RoomFeatureInstance` —
-  that's OneToOne), the Season→climate hook, comfort→AP-regen and comfort→Conditions
-  (Tehom-coordinated) effects, and the inhabitant/owner surfacing.
+- **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
+  with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
+  cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`. Decorations,
+  weather (its own epic #1522), the comfort-level/effect engine, and surfacing are later slices.
+- **Later slices:** enclosure (generalise `is_outdoor`), stackable comfort **decorations** (not
+  `RoomFeatureInstance` — that's OneToOne), the weather source (#1522), comfort→AP-regen and
+  comfort→Conditions (Tehom-coordinated) effects, and the inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 
