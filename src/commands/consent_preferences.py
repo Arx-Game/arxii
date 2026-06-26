@@ -18,7 +18,7 @@ _MSG_USAGE = (
     "Usage:\n"
     "  consent                          - show your consent settings\n"
     "  consent on|off                   - allow or block all social actions\n"
-    "  consent category <key>=<mode>    - set a category to everyone|allowlist|default\n"
+    "  consent category <key>=<mode>    - set a category to everyone|allowlist|whitelist|default\n"
     "  consent whitelist add <name> to <category>\n"
     "  consent whitelist remove <name> from <category>\n"
     "  consent whitelist list [category]"
@@ -46,7 +46,7 @@ class CmdConsent(DispatchCommand):
     Usage:
         consent                          - show your consent settings
         consent on|off                   - allow or block all social actions
-        consent category <key>=<mode>    - set a category to everyone|allowlist|default
+        consent category <key>=<mode>    - set a category to everyone|allowlist|whitelist|default
         consent whitelist add <name> to <category>
         consent whitelist remove <name> from <category>
         consent whitelist list [category]

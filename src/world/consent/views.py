@@ -38,8 +38,9 @@ def _get_actor(request: Request) -> Any:
     """Return the currently played character from the authenticated account."""
     puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
     if puppet is None:
-        msg = "You must be playing a character to manage consent."
-        raise serializers.ValidationError(msg)
+        raise serializers.ValidationError(
+            {"detail": "You must be playing a character to manage consent."}
+        )
     return puppet
 
 
