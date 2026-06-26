@@ -58,7 +58,6 @@ from world.npc_services.services import (
     available_offers,
 )
 from world.scenes.models import Persona
-from world.scenes.services import MissingPrimaryPersonaError
 
 # Key under which the in-flight interaction state lives in request.session.
 # One active interaction per Django session; start while one exists raises
@@ -308,10 +307,6 @@ class InteractionViewSet(viewsets.ViewSet):
             npc_persona_id=body.validated_data.get("npc_persona_id"),
         )
         if not result.success:
-            # Preserve the invariant-breaking 500 for a missing sheet;
-            # all other failures are "not found" shapes.
-            if result.message == "No active character sheet.":
-                raise MissingPrimaryPersonaError(character)
             raise NotFound(result.message)
         session = result.data["session"]
         _stash(request, session)
