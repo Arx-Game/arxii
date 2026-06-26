@@ -10816,6 +10816,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/unlocks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a discriminated list of purchasable progression unlocks. */
+    get: operations['progression_unlocks_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/unlocks/purchase/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Purchase an unlock by dispatching PurchaseUnlockAction. */
+    post: operations['progression_unlocks_purchase_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/votes/': {
     parameters: {
       query?: never;
@@ -12066,6 +12100,42 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return all allocations for the active character plus remaining budget. */
+    get: operations['skills_training_allocations_retrieve'];
+    put?: never;
+    /** @description Create a new training allocation for the active character. */
+    post: operations['skills_training_allocations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Remove a training allocation owned by the active character. */
+    delete: operations['skills_training_allocations_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Update an existing training allocation owned by the active character. */
+    patch: operations['skills_training_allocations_partial_update'];
     trace?: never;
   };
   '/api/social-providers/': {
@@ -40883,6 +40953,42 @@ export interface operations {
       };
     };
   };
+  progression_unlocks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_unlocks_purchase_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   progression_votes_list: {
     parameters: {
       query?: never;
@@ -42669,6 +42775,82 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Specialization'];
         };
+      };
+    };
+  };
+  skills_training_allocations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

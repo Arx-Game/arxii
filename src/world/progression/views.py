@@ -14,7 +14,7 @@ from typing import Any, cast
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
@@ -22,10 +22,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from actions.constants import ActionBackend
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
 from world.game_clock.week_services import get_current_game_week
 from world.journals.models import JournalEntry
+from world.magic.services.threads import near_xp_lock_threads
 from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
@@ -50,11 +54,16 @@ from world.progression.serializers import (
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
 )
+from world.progression.serializers.unlocks import (
+    ProgressionUnlockItemSerializer,
+    PurchaseUnlockSerializer,
+)
 from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
 from world.progression.services.random_scene import (
     claim_random_scene,
     reroll_random_scene_target,
 )
+from world.progression.services.spends import get_available_unlocks_for_character
 from world.progression.services.voting import (
     cast_vote,
     get_or_create_vote_budget,
@@ -485,3 +494,110 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         PathIntent.objects.filter(character_sheet=sheet).delete()
         PathIntent.flush_instance_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# --- Unlock shop views ---
+
+
+def _resolve_puppet_sheet(request: Request) -> tuple[Any, CharacterSheet]:
+    """Return the played character and its sheet, or raise ValidationError."""
+    puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+    sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+    if puppet is None or sheet is None:
+        msg = "You must be playing a character to view or purchase unlocks."
+        raise serializers.ValidationError(msg)
+    return puppet, sheet
+
+
+class ProgressionUnlockViewSet(viewsets.ViewSet):
+    """Unlock shop: list available unlocks and purchase them with XP.
+
+    GET /api/progression/unlocks/ — list class-level and thread XP-lock items.
+    POST /api/progression/unlocks/purchase/ — buy an unlock via PurchaseUnlockAction.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        """Return a discriminated list of purchasable progression unlocks."""
+        puppet, sheet = _resolve_puppet_sheet(request)
+        character = puppet
+
+        available_unlocks = get_available_unlocks_for_character(character)
+        items: list[dict[str, Any]] = []
+
+        for entry in available_unlocks["available"] + available_unlocks["locked"]:
+            unlock = entry["unlock"]
+            failed = entry.get("failed_requirements", [])
+            items.append(
+                {
+                    "unlock_type": "class_level",
+                    "display_name": str(unlock),
+                    "xp_cost": entry["xp_cost"],
+                    "requirements_met": entry["requirements_met"],
+                    "locked_reason": "; ".join(failed) if failed else None,
+                    "class_level_unlock_id": unlock.pk,
+                    "class_name": unlock.character_class.name,
+                    "target_level": unlock.target_level,
+                    "thread_id": None,
+                    "boundary_level": None,
+                    "thread_name": None,
+                    "thread_level": None,
+                    "thread_resonance_id": None,
+                    "thread_resonance_name": None,
+                    "thread_target_kind": None,
+                    "dev_points_to_boundary": None,
+                },
+            )
+
+        for prospect in near_xp_lock_threads(sheet):
+            thread = prospect.thread
+            items.append(
+                {
+                    "unlock_type": "thread_xp_lock",
+                    "display_name": (
+                        f"{thread.name or 'Unnamed Thread'} Level {prospect.boundary_level}"
+                    ),
+                    "xp_cost": prospect.xp_cost,
+                    "requirements_met": True,
+                    "locked_reason": None,
+                    "class_level_unlock_id": None,
+                    "class_name": None,
+                    "target_level": None,
+                    "thread_id": thread.pk,
+                    "boundary_level": prospect.boundary_level,
+                    "thread_name": thread.name or None,
+                    "thread_level": thread.level,
+                    "thread_resonance_id": thread.resonance_id,
+                    "thread_resonance_name": thread.resonance.name,
+                    "thread_target_kind": thread.target_kind,
+                    "dev_points_to_boundary": prospect.dev_points_to_boundary,
+                },
+            )
+
+        serializer = ProgressionUnlockItemSerializer(items, many=True)
+        return Response({"unlocks": serializer.data})
+
+    @action(detail=False, methods=[HTTPMethod.POST])
+    def purchase(self, request: Request) -> Response:
+        """Purchase an unlock by dispatching PurchaseUnlockAction."""
+        puppet, _sheet = _resolve_puppet_sheet(request)
+
+        input_serializer = PurchaseUnlockSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        action_kwargs: dict[str, Any] = {"unlock_type": data["unlock_type"]}
+        if data["unlock_type"] == PurchaseUnlockSerializer.UNLOCK_TYPE_CLASS_LEVEL:
+            action_kwargs["class_level_unlock_id"] = data["class_level_unlock_id"]
+        else:
+            action_kwargs["thread_id"] = data["thread_id"]
+            action_kwargs["boundary_level"] = data["boundary_level"]
+
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="purchase_unlock")
+        result = dispatch_player_action(puppet, ref, action_kwargs)
+        detail = result.detail
+        if not detail.success:
+            raise serializers.ValidationError(detail.message)
+
+        return Response(detail.data)

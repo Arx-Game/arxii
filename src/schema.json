@@ -18320,6 +18320,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/RandomSceneTarget'
           description: ''
+  /api/progression/unlocks/:
+    get:
+      operationId: progression_unlocks_retrieve
+      description: Return a discriminated list of purchasable progression unlocks.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/progression/unlocks/purchase/:
+    post:
+      operationId: progression_unlocks_purchase_create
+      description: Purchase an unlock by dispatching PurchaseUnlockAction.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/progression/votes/:
     get:
       operationId: progression_votes_list
@@ -20291,6 +20313,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/Specialization'
           description: ''
+  /api/skills/training-allocations/:
+    get:
+      operationId: skills_training_allocations_retrieve
+      description: Return all allocations for the active character plus remaining
+        budget.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: skills_training_allocations_create
+      description: Create a new training allocation for the active character.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          description: No response body
+  /api/skills/training-allocations/{id}/:
+    patch:
+      operationId: skills_training_allocations_partial_update
+      description: Update an existing training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: skills_training_allocations_destroy
+      description: Remove a training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/social-providers/:
     get:
       operationId: social_providers_retrieve
