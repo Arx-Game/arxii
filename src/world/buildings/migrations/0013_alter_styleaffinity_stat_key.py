@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("buildings", "0012_decorationkind_roomdecoration_decorationaffinity"),
     ]

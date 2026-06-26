@@ -848,7 +848,6 @@ class BuildingProjectInstancePolish(SharedMemoryModel):
         return f"{self.instance}: {self.value} {self.category.name}"
 
 
-
 class ArchitecturalStyle(SharedMemoryModel):
     """An authorable architectural style for buildings (#1514).
 
