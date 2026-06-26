@@ -54,6 +54,32 @@ _REQUIREMENTS_MET_KEY = "requirements_met"
 _FAILED_REQUIREMENTS_KEY = "failed_requirements"
 
 
+# -- parsing helpers ------------------------------------------------------------
+
+
+def _parse_assignment_args(args: str) -> dict[str, str | None]:
+    """Parse ``key=value`` tokens into a dict.
+
+    Values may be empty (``mentor=``), in which case the value is ``None``.
+    """
+    result: dict[str, str | None] = {}
+    for token in args.split():
+        if "=" not in token:
+            msg = f"Expected key=value, got: {token}"
+            raise CommandError(msg)
+        key, value = token.split("=", 1)
+        result[key] = value if value else None
+    return result
+
+
+def _require_positive_int(value: str | None, name: str) -> int:
+    """Return *value* as a positive int, or raise CommandError."""
+    if value is None or not value.isdigit() or int(value) <= 0:
+        msg = f"{name} must be a positive integer."
+        raise CommandError(msg)
+    return int(value)
+
+
 class CmdTraining(DispatchCommand):
     """Manage your weekly skill-training allocations.
 
@@ -103,7 +129,7 @@ class CmdTraining(DispatchCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Translate parsed telnet tokens into ``ManageTrainingAction`` kwargs."""
-        parsed = self._parse_assignment_args(self._rest)
+        parsed = _parse_assignment_args(self._rest)
         if self._subverb == _SUBVERB_ADD:
             return self._resolve_add_args(parsed)
         if self._subverb == _SUBVERB_UPDATE:
@@ -131,12 +157,12 @@ class CmdTraining(DispatchCommand):
             raise CommandError(msg)
 
         if has_skill:
-            kwargs["skill_id"] = self._require_positive_int(skill_id, _KEY_SKILL)
+            kwargs["skill_id"] = _require_positive_int(skill_id, _KEY_SKILL)
         else:
-            kwargs["specialization_id"] = self._require_positive_int(spec_id, _KEY_SPEC)
+            kwargs["specialization_id"] = _require_positive_int(spec_id, _KEY_SPEC)
 
         ap_amount = parsed.get(_KEY_AP)
-        kwargs["ap_amount"] = self._require_positive_int(ap_amount, _KEY_AP)
+        kwargs["ap_amount"] = _require_positive_int(ap_amount, _KEY_AP)
 
         mentor = parsed.get(_KEY_MENTOR)
         if mentor is not None:
@@ -149,11 +175,11 @@ class CmdTraining(DispatchCommand):
         kwargs: dict[str, Any] = {"operation": _OPERATION_UPDATE}
 
         allocation_id = parsed.get(_KEY_ID)
-        kwargs["allocation_id"] = self._require_positive_int(allocation_id, _KEY_ID)
+        kwargs["allocation_id"] = _require_positive_int(allocation_id, _KEY_ID)
 
         ap_amount = parsed.get(_KEY_AP)
         if ap_amount is not None:
-            kwargs["ap_amount"] = self._require_positive_int(ap_amount, _KEY_AP)
+            kwargs["ap_amount"] = _require_positive_int(ap_amount, _KEY_AP)
 
         if _KEY_MENTOR in parsed:
             kwargs["mentor_persona_id"] = self._parse_optional_id(parsed[_KEY_MENTOR], _KEY_MENTOR)
@@ -165,33 +191,18 @@ class CmdTraining(DispatchCommand):
         allocation_id = parsed.get(_KEY_ID)
         return {
             "operation": _OPERATION_REMOVE,
-            "allocation_id": self._require_positive_int(allocation_id, _KEY_ID),
+            "allocation_id": _require_positive_int(allocation_id, _KEY_ID),
         }
 
     def _show_listing(self) -> None:
         """Render the caller's training allocations and weekly AP budget."""
-        from django.db.models import Prefetch  # noqa: PLC0415
-
         from world.action_points.models import ActionPointConfig  # noqa: PLC0415
-        from world.skills.models import (  # noqa: PLC0415
-            Specialization,
-            TrainingAllocation,
-        )
+        from world.skills.models import TrainingAllocation  # noqa: PLC0415
 
-        allocations = (
-            TrainingAllocation.objects.filter(character=self.caller)
-            .select_related(
-                "skill__trait",
-                "specialization__parent_skill__trait",
-                "mentor",
-            )
-            .prefetch_related(
-                Prefetch(
-                    "skill__specializations",
-                    queryset=Specialization.objects.all(),
-                    to_attr="cached_specializations",
-                ),
-            )
+        allocations = TrainingAllocation.objects.filter(character=self.caller).select_related(
+            "skill",
+            "specialization",
+            "mentor",
         )
 
         total_ap = sum(allocation.ap_amount for allocation in allocations)
@@ -211,28 +222,6 @@ class CmdTraining(DispatchCommand):
                 lines.append(f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}")
 
         self.msg("\n".join(lines))
-
-    @staticmethod
-    def _parse_assignment_args(args: str) -> dict[str, str | None]:
-        """Parse ``key=value`` tokens into a dict.
-
-        Values may be empty (``mentor=``), in which case the value is ``None``.
-        """
-        result: dict[str, str | None] = {}
-        for token in args.split():
-            if "=" not in token:
-                msg = f"Expected key=value, got: {token}"
-                raise CommandError(msg)
-            key, value = token.split("=", 1)
-            result[key] = value if value else None
-        return result
-
-    def _require_positive_int(self, value: str | None, name: str) -> int:
-        """Return *value* as a positive int, or raise CommandError."""
-        if value is None or not value.isdigit() or int(value) <= 0:
-            msg = f"{name} must be a positive integer."
-            raise CommandError(msg)
-        return int(value)
 
     def _parse_optional_id(self, value: str | None, name: str) -> int | None:
         """Return an int id, None for empty, or raise CommandError for bad input."""
@@ -288,7 +277,7 @@ class CmdProgressionUnlock(DispatchCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Translate parsed telnet tokens into ``PurchaseUnlockAction`` kwargs."""
-        parsed = self._parse_assignment_args(self._rest)
+        parsed = _parse_assignment_args(self._rest)
         class_id = parsed.get(_KEY_CLASS)
         thread_id = parsed.get(_KEY_THREAD)
         level = parsed.get(_KEY_LEVEL)
@@ -302,13 +291,13 @@ class CmdProgressionUnlock(DispatchCommand):
         if has_class:
             return {
                 "unlock_type": _UNLOCK_TYPE_CLASS_LEVEL,
-                "class_level_unlock_id": self._require_positive_int(class_id, _KEY_CLASS),
+                "class_level_unlock_id": _require_positive_int(class_id, _KEY_CLASS),
             }
         if has_thread:
             return {
                 "unlock_type": _UNLOCK_TYPE_THREAD_XP_LOCK,
-                "thread_id": self._require_positive_int(thread_id, _KEY_THREAD),
-                "boundary_level": self._require_positive_int(level, _KEY_LEVEL),
+                "thread_id": _require_positive_int(thread_id, _KEY_THREAD),
+                "boundary_level": _require_positive_int(level, _KEY_LEVEL),
             }
         msg = "Provide class=<id> or thread=<id> level=<n>."
         raise CommandError(msg)
@@ -361,22 +350,3 @@ class CmdProgressionUnlock(DispatchCommand):
                 lines.append("No thread XP-lock boundaries available.")
 
         self.msg("\n".join(lines))
-
-    @staticmethod
-    def _parse_assignment_args(args: str) -> dict[str, str | None]:
-        """Parse ``key=value`` tokens into a dict; empty values become ``None``."""
-        result: dict[str, str | None] = {}
-        for token in args.split():
-            if "=" not in token:
-                msg = f"Expected key=value, got: {token}"
-                raise CommandError(msg)
-            key, value = token.split("=", 1)
-            result[key] = value if value else None
-        return result
-
-    def _require_positive_int(self, value: str | None, name: str) -> int:
-        """Return *value* as a positive int, or raise CommandError."""
-        if value is None or not value.isdigit() or int(value) <= 0:
-            msg = f"{name} must be a positive integer."
-            raise CommandError(msg)
-        return int(value)
