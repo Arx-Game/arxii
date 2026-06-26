@@ -25,6 +25,7 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     TreatmentTemplateFactory,
 )
+from world.magic.factories import PendingAlterationFactory, ThreadFactory
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
@@ -169,18 +170,24 @@ class TreatConditionActionViewTests(TestCase):
         "world.mechanics.engagement.CharacterEngagement.objects.filter",
         return_value=MagicMock(exists=MagicMock(return_value=False)),
     )
-    def test_non_treat_action_with_treatment_id_rejected(
+    def test_non_treat_action_with_treatment_fields_rejected(
         self,
         mock_engagement_filter: MagicMock,
         mock_scene_participant: MagicMock,
     ) -> None:
-        """POST a non-treat action with treatment_id -> 400."""
+        """POST a non-treat action carrying ANY treatment field -> 400.
+
+        All four treatment fields (treatment_id, target_condition_instance_id,
+        target_pending_alteration_id, bond_thread_id) are only meaningful for
+        treat_condition. The base payload already carries treatment_id +
+        target_condition_instance_id, so this one POST exercises the folded guard.
+        """
         payload = self._treat_payload(action_key="intimidate")
         response = self.client.post(self.url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "treatment_id" in response.data
-        tid_msg = _field_messages(response.data["treatment_id"])
-        assert any("only valid for treat_condition" in m for m in tid_msg), tid_msg
+        assert "treatment_fields" in response.data
+        msgs = _field_messages(response.data["treatment_fields"])
+        assert any("only valid for treat_condition" in m for m in msgs), msgs
 
     @patch("world.conditions.services._scene_participant", return_value=True)
     @patch(
@@ -250,3 +257,89 @@ class TreatConditionActionViewTests(TestCase):
         response = self.client.post(self.url, payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "target_persona" in response.data
+
+    @patch("world.conditions.services._scene_participant", return_value=True)
+    @patch("world.conditions.services._thread_anchors_to_character", return_value=True)
+    @patch(
+        "world.mechanics.engagement.CharacterEngagement.objects.filter",
+        return_value=MagicMock(exists=MagicMock(return_value=False)),
+    )
+    def test_thread_used_from_matched_candidate_not_client_bond(
+        self,
+        mock_engagement_filter: MagicMock,
+        mock_thread_anchors: MagicMock,
+        mock_scene_participant: MagicMock,
+    ) -> None:
+        """requires_bond=True -> thread_used comes from the matched candidate.
+
+        Builds a treatment requiring a bond and a Thread owned by the helper.
+        get_treatment_candidates anchors the thread to the target via
+        _thread_anchors_to_character (patched True), so the candidate carries a
+        real bond_thread. The POST body sends a DIFFERENT bond_thread_id — the
+        client-supplied id MUST be ignored; the request uses the candidate's
+        thread, proving provenance cannot be forged.
+        """
+        bond_treatment = TreatmentTemplateFactory(
+            target_condition=self.condition,
+            target_kind=TreatmentTargetKind.PRIMARY,
+            requires_bond=True,
+            scene_required=True,
+        )
+        matched_thread = ThreadFactory(owner=self.helper_sheet)
+
+        # A different thread's id in the POST body; the view must ignore it.
+        decoy_thread = ThreadFactory(owner=self.helper_sheet)
+        payload = self._treat_payload(
+            treatment_id=bond_treatment.pk,
+            bond_thread_id=decoy_thread.pk,
+        )
+        response = self.client.post(self.url, payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+
+        request = SceneActionRequest.objects.get(pk=response.data["id"])
+        assert request.treatment_id == bond_treatment.pk
+        assert request.target_condition_instance_id == self.instance.pk
+        # The matched candidate's thread, NOT the client-supplied decoy.
+        assert request.thread_used_id == matched_thread.pk
+        assert request.thread_used_id != decoy_thread.pk
+
+    @patch("world.conditions.services._scene_participant", return_value=True)
+    @patch(
+        "world.mechanics.engagement.CharacterEngagement.objects.filter",
+        return_value=MagicMock(exists=MagicMock(return_value=False)),
+    )
+    def test_treat_targets_pending_alteration_branch(
+        self,
+        mock_engagement_filter: MagicMock,
+        mock_scene_participant: MagicMock,
+    ) -> None:
+        """target_kind=PENDING_ALTERATION -> target_pending_alteration FK set.
+
+        Builds a PendingAlteration (status OPEN) on the target's sheet and a
+        treatment whose target_kind is PENDING_ALTERATION, then POSTs
+        treatment_id + target_pending_alteration_id. The candidate query
+        returns this pair (alterations are matched on character + OPEN status,
+        not on target_condition); the created request carries the alteration FK
+        and leaves target_condition_instance None.
+        """
+        alteration = PendingAlterationFactory(character=self.target_sheet)
+        alteration_treatment = TreatmentTemplateFactory(
+            target_kind=TreatmentTargetKind.PENDING_ALTERATION,
+            requires_bond=False,
+            scene_required=True,
+        )
+        payload = self._treat_payload(
+            treatment_id=alteration_treatment.pk,
+            target_pending_alteration_id=alteration.pk,
+        )
+        # The base payload carries target_condition_instance_id; the alteration
+        # branch requires the alteration id alone, so drop the condition id.
+        del payload["target_condition_instance_id"]
+        response = self.client.post(self.url, payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+
+        request = SceneActionRequest.objects.get(pk=response.data["id"])
+        assert request.treatment_id == alteration_treatment.pk
+        assert request.target_pending_alteration_id == alteration.pk
+        assert request.target_condition_instance_id is None
+        assert request.thread_used_id is None

@@ -142,12 +142,22 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         self._validate_cardinality(action_key, target_ids)
 
         # Treatment fields are only meaningful for treat_condition (#1486).
-        # Reject them up front for any other action_key so the create path below
-        # can assume treatment_id implies treat_condition.
+        # Reject ALL four up front for any other action_key so the create path
+        # below can assume treatment_id implies treat_condition. A non-treat
+        # action has no business carrying any of them; previously only
+        # treatment_id was rejected and the other three were silently ignored.
         treatment_id = serializer.validated_data.get("treatment_id")
-        if treatment_id is not None and action_key != TREAT_CONDITION_KEY:
+        if action_key != TREAT_CONDITION_KEY and any(
+            v is not None
+            for v in (
+                treatment_id,
+                serializer.validated_data.get("target_condition_instance_id"),
+                serializer.validated_data.get("target_pending_alteration_id"),
+                serializer.validated_data.get("bond_thread_id"),
+            )
+        ):
             raise DRFValidationError(
-                {"treatment_id": "treatment_id is only valid for treat_condition."}
+                {"treatment_fields": "Treatment fields are only valid for treat_condition."}
             )
 
         try:
