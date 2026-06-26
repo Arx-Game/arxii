@@ -361,6 +361,14 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 **Crossing pre-selection wire:** `PendingAudereMajoraOfferSerializer.get_intended_path_id` (`src/world/magic/serializers.py:2353`) reads the character's `PathIntent` and returns `intended_path_id` only when it is among the offer's `eligible_paths` — ensuring the Audere Majora dialog pre-selects the declared path.
 
+### Unlock Shop
+
+- `GET /api/progression/unlocks/` — List purchasable unlocks for the played character; returns a paginated wrapper (`{ count, next, previous, page_size, num_pages, current_page, results: [...] }`)
+  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`) or `thread_xp_lock` (next `ThreadXPLockedLevel` boundary)
+  - Query parameter `unlock_type` filters the list to a single variant
+  - Requires a played character (set by the Evennia session / test client)
+- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }` or `{ unlock_type, thread_id, boundary_level }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
+
 ### Account Progression Dashboard
 - `GET /api/progression/account/` - Current user's XP balance, kudos balance, recent transactions, and claim options
 

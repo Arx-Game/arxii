@@ -10823,8 +10823,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Return a discriminated list of purchasable progression unlocks. */
-    get: operations['progression_unlocks_retrieve'];
+    /** @description Return a paginated list of purchasable progression unlocks. */
+    get: operations['progression_unlocks_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -20187,6 +20187,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PlayerTrust'][];
     };
+    PaginatedProgressionUnlockItemList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ProgressionUnlockItem'][];
+    };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
       count: number;
@@ -22496,6 +22511,32 @@ export interface components {
       has_undiscovered: boolean;
       milestones: components['schemas']['ProgressionMilestone'][];
     };
+    /**
+     * @description Discriminated list item for purchasable progression unlocks.
+     *
+     *     Two ``unlock_type`` variants are supported:
+     *
+     *     - ``class_level`` — purchase a class/level unlock with XP.
+     *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+     */
+    ProgressionUnlockItem: {
+      unlock_type: string;
+      display_name: string;
+      xp_cost: number;
+      requirements_met: boolean;
+      locked_reason: string | null;
+      class_level_unlock_id: number | null;
+      class_name: string | null;
+      target_level: number | null;
+      thread_id: number | null;
+      boundary_level: number | null;
+      thread_name: string | null;
+      thread_level: number | null;
+      thread_resonance_id: number | null;
+      thread_resonance_name: string | null;
+      thread_target_kind: string | null;
+      dev_points_to_boundary: number | null;
+    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -22536,6 +22577,21 @@ export interface components {
       action_kind?: string;
       anchors_in_play?: number[];
       combat_encounter_id?: number | null;
+    };
+    /** @description Input serializer for purchasing a progression unlock. */
+    PurchaseUnlockRequest: {
+      unlock_type: components['schemas']['UnlockTypeEnum'];
+      class_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
+    };
+    /** @description Response serializer for a completed unlock purchase. */
+    PurchaseUnlockResponse: {
+      unlock_type: string;
+      unlock_id: number | null;
+      thread_level_unlock_id: number | null;
+      thread_id: number | null;
+      boundary_level: number | null;
     };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
@@ -25114,6 +25170,12 @@ export interface components {
       /** @description Whether this category is currently in use */
       is_active?: boolean;
     };
+    /**
+     * @description * `class_level` - Class Level
+     *     * `thread_xp_lock` - Thread XP Lock
+     * @enum {string}
+     */
+    UnlockTypeEnum: 'class_level' | 'thread_xp_lock';
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
@@ -40953,21 +41015,27 @@ export interface operations {
       };
     };
   };
-  progression_unlocks_retrieve: {
+  progression_unlocks_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['PaginatedProgressionUnlockItemList'];
+        };
       };
     };
   };
@@ -40978,14 +41046,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PurchaseUnlockRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['PurchaseUnlockResponse'];
+        };
       };
     };
   };

@@ -1,12 +1,15 @@
 """Tests for the progression unlock shop API."""
 
 from types import SimpleNamespace
+from typing import cast
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.magic.factories import ThreadFactory, ThreadXPLockedLevelFactory
@@ -24,25 +27,25 @@ from world.progression.models import (
 class UnlockShopViewTests(TestCase):
     """Tests for GET /api/progression/unlocks/ and POST /api/progression/unlocks/purchase/."""
 
-    def setUp(self):
-        self.account = AccountDB.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.account: AccountDB = AccountFactory(
             username="unlocktester",
             email="unlock@example.com",
-            password="testpass123",
         )
-        self.sheet = CharacterSheetFactory()
-        self.character = self.sheet.character
-        self.character.db_account = self.account
-        self.character.save()
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cast(ObjectDB, cls.sheet.character)
+        cls.character.db_account = cls.account
+        cls.character.save()
 
-        self.client = APIClient()
-        self.client.force_authenticate(
-            user=SimpleNamespace(
-                is_authenticated=True,
-                is_staff=False,
-                puppet=self.character,
-            ),
+    def setUp(self):
+        fake_user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=False,
+            puppet=self.character,
         )
+        self.client = APIClient()
+        self.client.force_authenticate(user=fake_user)  # type: ignore[arg-type]
 
     def _create_class_level_unlock(self, *, xp_cost: int):
         """Create a class-level unlock with an XP cost chart."""
@@ -86,27 +89,51 @@ class UnlockShopViewTests(TestCase):
         response = self.client.get("/api/progression/unlocks/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        unlocks = response.data["unlocks"]
-        types = {item["unlock_type"] for item in unlocks}
+        results = response.data["results"]
+        types = {item["unlock_type"] for item in results}
         self.assertIn("class_level", types)
         self.assertIn("thread_xp_lock", types)
 
-        class_item = next(item for item in unlocks if item["unlock_type"] == "class_level")
+        class_item = next(item for item in results if item["unlock_type"] == "class_level")
         self.assertEqual(class_item["class_level_unlock_id"], class_unlock.pk)
         self.assertEqual(class_item["xp_cost"], 100)
         self.assertTrue(class_item["requirements_met"])
         self.assertIsNone(class_item["locked_reason"])
 
-        thread_item = next(item for item in unlocks if item["unlock_type"] == "thread_xp_lock")
+        thread_item = next(item for item in results if item["unlock_type"] == "thread_xp_lock")
         self.assertEqual(thread_item["thread_id"], thread.pk)
         self.assertEqual(thread_item["boundary_level"], 10)
         self.assertEqual(thread_item["xp_cost"], 100)
 
+    def test_list_is_paginated(self):
+        """GET returns a paginated wrapper by default."""
+        self._create_class_level_unlock(xp_cost=100)
+        self._create_class_level_unlock(xp_cost=200)
+
+        response = self.client.get("/api/progression/unlocks/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertIn("count", response.data)
+        self.assertEqual(response.data["count"], 2)
+
+    def test_list_filters_by_unlock_type(self):
+        """GET with unlock_type only returns matching items."""
+        class_unlock = self._create_class_level_unlock(xp_cost=100)
+        self._create_near_thread()
+
+        response = self.client.get("/api/progression/unlocks/?unlock_type=class_level")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["unlock_type"], "class_level")
+        self.assertEqual(results[0]["class_level_unlock_id"], class_unlock.pk)
+
     def test_list_requires_played_character(self):
         """Listing unlocks fails when the request has no played character."""
-        self.client.force_authenticate(
-            user=SimpleNamespace(is_authenticated=True, is_staff=False, puppet=None),
-        )
+        fake_user = SimpleNamespace(is_authenticated=True, is_staff=False, puppet=None)
+        self.client.force_authenticate(user=fake_user)
         response = self.client.get("/api/progression/unlocks/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

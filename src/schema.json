@@ -18322,26 +18322,53 @@ paths:
           description: ''
   /api/progression/unlocks/:
     get:
-      operationId: progression_unlocks_retrieve
-      description: Return a discriminated list of purchasable progression unlocks.
+      operationId: progression_unlocks_list
+      description: Return a paginated list of purchasable progression unlocks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - progression
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProgressionUnlockItemList'
+          description: ''
   /api/progression/unlocks/purchase/:
     post:
       operationId: progression_unlocks_purchase_create
       description: Purchase an unlock by dispatching PurchaseUnlockAction.
       tags:
       - progression
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseUnlockRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseUnlockResponse'
+          description: ''
   /api/progression/votes/:
     get:
       operationId: progression_votes_list
@@ -36296,6 +36323,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerTrust'
+    PaginatedProgressionUnlockItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressionUnlockItem'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -40360,6 +40410,77 @@ components:
       - milestones
       - stage
       - stage_label
+    ProgressionUnlockItem:
+      type: object
+      description: |-
+        Discriminated list item for purchasable progression unlocks.
+
+        Two ``unlock_type`` variants are supported:
+
+        - ``class_level`` — purchase a class/level unlock with XP.
+        - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+      properties:
+        unlock_type:
+          type: string
+        display_name:
+          type: string
+        xp_cost:
+          type: integer
+        requirements_met:
+          type: boolean
+        locked_reason:
+          type: string
+          nullable: true
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        class_name:
+          type: string
+          nullable: true
+        target_level:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+        thread_name:
+          type: string
+          nullable: true
+        thread_level:
+          type: integer
+          nullable: true
+        thread_resonance_id:
+          type: integer
+          nullable: true
+        thread_resonance_name:
+          type: string
+          nullable: true
+        thread_target_kind:
+          type: string
+          nullable: true
+        dev_points_to_boundary:
+          type: integer
+          nullable: true
+      required:
+      - boundary_level
+      - class_level_unlock_id
+      - class_name
+      - dev_points_to_boundary
+      - display_name
+      - locked_reason
+      - requirements_met
+      - target_level
+      - thread_id
+      - thread_level
+      - thread_name
+      - thread_resonance_id
+      - thread_resonance_name
+      - thread_target_kind
+      - unlock_type
+      - xp_cost
     Pronouns:
       type: object
       description: Serializer for pronoun sets.
@@ -40440,6 +40561,47 @@ components:
         combat_encounter_id:
           type: integer
           nullable: true
+    PurchaseUnlockRequest:
+      type: object
+      description: Input serializer for purchasing a progression unlock.
+      properties:
+        unlock_type:
+          $ref: '#/components/schemas/UnlockTypeEnum'
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - unlock_type
+    PurchaseUnlockResponse:
+      type: object
+      description: Response serializer for a completed unlock purchase.
+      properties:
+        unlock_type:
+          type: string
+        unlock_id:
+          type: integer
+          nullable: true
+        thread_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - boundary_level
+      - thread_id
+      - thread_level_unlock_id
+      - unlock_id
+      - unlock_type
     QualityTier:
       type: object
       description: Serializer for QualityTier lookup records.
@@ -45718,6 +45880,14 @@ components:
       - description
       - display_name
       - name
+    UnlockTypeEnum:
+      enum:
+      - class_level
+      - thread_xp_lock
+      type: string
+      description: |-
+        * `class_level` - Class Level
+        * `thread_xp_lock` - Thread XP Lock
     UpdateBulletinPostInput:
       type: object
       description: |-

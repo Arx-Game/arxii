@@ -16,6 +16,7 @@ from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import BaseFilterBackend
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -56,6 +57,7 @@ from world.progression.serializers import (
 )
 from world.progression.serializers.unlocks import (
     ProgressionUnlockItemSerializer,
+    PurchaseUnlockResponseSerializer,
     PurchaseUnlockSerializer,
 )
 from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
@@ -73,6 +75,7 @@ from world.progression.services.voting import (
 from world.progression.types import ProgressionError
 from world.roster.selectors import get_account_for_character
 from world.scenes.models import Interaction, SceneParticipation
+from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
 DEFAULT_TRANSACTION_LIMIT = 50
@@ -509,7 +512,22 @@ def _resolve_puppet_sheet(request: Request) -> tuple[Any, CharacterSheet]:
     return puppet, sheet
 
 
-class ProgressionUnlockViewSet(viewsets.ViewSet):
+class UnlockTypeFilterBackend(BaseFilterBackend):
+    """Filter ``ProgressionUnlockViewSet.list`` by ``unlock_type``.
+
+    The list is assembled in Python, so this backend performs plain list
+    filtering rather than queryset mutation.
+    """
+
+    def filter_queryset(self, request: Request, queryset: Any, view: Any) -> Any:
+        """Return items matching the requested ``unlock_type``, if any."""
+        unlock_type = request.query_params.get("unlock_type")
+        if unlock_type is None:
+            return queryset
+        return [item for item in queryset if item.get("unlock_type") == unlock_type]
+
+
+class ProgressionUnlockViewSet(viewsets.GenericViewSet):
     """Unlock shop: list available unlocks and purchase them with XP.
 
     GET /api/progression/unlocks/ — list class-level and thread XP-lock items.
@@ -517,9 +535,16 @@ class ProgressionUnlockViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [UnlockTypeFilterBackend]
+    serializer_class = ProgressionUnlockItemSerializer
+    queryset = []
 
+    @extend_schema(
+        responses={200: ProgressionUnlockItemSerializer(many=True)},
+    )
     def list(self, request: Request) -> Response:
-        """Return a discriminated list of purchasable progression unlocks."""
+        """Return a paginated list of purchasable progression unlocks."""
         puppet, sheet = _resolve_puppet_sheet(request)
         character = puppet
 
@@ -552,6 +577,7 @@ class ProgressionUnlockViewSet(viewsets.ViewSet):
 
         for prospect in near_xp_lock_threads(sheet):
             thread = prospect.thread
+            resonance = thread.resonance
             items.append(
                 {
                     "unlock_type": "thread_xp_lock",
@@ -568,16 +594,22 @@ class ProgressionUnlockViewSet(viewsets.ViewSet):
                     "boundary_level": prospect.boundary_level,
                     "thread_name": thread.name or None,
                     "thread_level": thread.level,
-                    "thread_resonance_id": thread.resonance_id,
-                    "thread_resonance_name": thread.resonance.name,
+                    "thread_resonance_id": resonance.pk if resonance is not None else None,
+                    "thread_resonance_name": resonance.name if resonance is not None else None,
                     "thread_target_kind": thread.target_kind,
                     "dev_points_to_boundary": prospect.dev_points_to_boundary,
                 },
             )
 
-        serializer = ProgressionUnlockItemSerializer(items, many=True)
-        return Response({"unlocks": serializer.data})
+        items = cast(list[dict[str, Any]], self.filter_queryset(cast(Any, items)))
+        page = self.paginate_queryset(items)
+        serializer = ProgressionUnlockItemSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        request=PurchaseUnlockSerializer,
+        responses={200: PurchaseUnlockResponseSerializer},
+    )
     @action(detail=False, methods=[HTTPMethod.POST])
     def purchase(self, request: Request) -> Response:
         """Purchase an unlock by dispatching PurchaseUnlockAction."""

@@ -1,5 +1,7 @@
 """Serializers for the progression unlock shop endpoint."""
 
+from typing import Any
+
 from rest_framework import serializers
 
 
@@ -53,25 +55,35 @@ class PurchaseUnlockSerializer(serializers.Serializer):
     thread_id = serializers.IntegerField(required=False, allow_null=True)
     boundary_level = serializers.IntegerField(required=False, allow_null=True)
 
-    def validate(self, data: dict) -> dict:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         """Ensure the right IDs are supplied for the chosen unlock type."""
-        unlock_type = data.get("unlock_type")
+        unlock_type = attrs.get("unlock_type")
 
         if unlock_type == self.UNLOCK_TYPE_CLASS_LEVEL:
-            if data.get("class_level_unlock_id") is None:
+            if attrs.get("class_level_unlock_id") is None:
                 msg = "class_level_unlock_id is required for class_level unlocks."
                 raise serializers.ValidationError(
                     {"class_level_unlock_id": msg},
                 )
-            return data
+            return attrs
 
         if unlock_type == self.UNLOCK_TYPE_THREAD_XP_LOCK:
-            if data.get("thread_id") is None or data.get("boundary_level") is None:
+            if attrs.get("thread_id") is None or attrs.get("boundary_level") is None:
                 msg = "thread_id and boundary_level are required for thread_xp_lock unlocks."
                 raise serializers.ValidationError(
                     {"thread_id": msg, "boundary_level": msg},
                 )
-            return data
+            return attrs
 
         msg = f"Invalid unlock_type: {unlock_type}."
         raise serializers.ValidationError({"unlock_type": msg})
+
+
+class PurchaseUnlockResponseSerializer(serializers.Serializer):
+    """Response serializer for a completed unlock purchase."""
+
+    unlock_type = serializers.CharField()
+    unlock_id = serializers.IntegerField(allow_null=True)
+    thread_level_unlock_id = serializers.IntegerField(allow_null=True)
+    thread_id = serializers.IntegerField(allow_null=True)
+    boundary_level = serializers.IntegerField(allow_null=True)
