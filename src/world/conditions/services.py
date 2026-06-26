@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -41,6 +41,8 @@ from world.conditions.constants import (
     POISON_DAMAGE_TYPE_NAME,
     POISONED_CONDITION_NAME,
     SLOW_POISON_CONDITION_NAME,
+    TARGET_EFFECT_ALTERATION,
+    TARGET_EFFECT_CONDITION,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -2415,6 +2417,106 @@ def _scene_participant(scene: "Scene", character_sheet: "CharacterSheet") -> boo
     return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
 
 
+def get_treatment_candidates(  # noqa: C901
+    helper_sheet: "CharacterSheet",
+    target_sheet: "CharacterSheet",
+    scene: "Scene",
+) -> list[dict[str, Any]]:
+    """Return valid (treatment, target_effect) pairs for helper to attempt on target.
+
+    Discovery query for the treat-condition consent flow: enumerates every
+    TreatmentTemplate against the target's open conditions and pending
+    alterations, applying the same scene / engagement / bond gates as
+    perform_treatment. Each returned dict carries: treatment, target_effect,
+    target_effect_type (TARGET_EFFECT_CONDITION | TARGET_EFFECT_ALTERATION),
+    and bond_thread (the helper's thread anchored to the target, or None when
+    the treatment does not require a bond).
+    """
+    from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
+    from world.magic.models import PendingAlteration, Thread  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    target_character = target_sheet.character
+    helper_character = helper_sheet.character
+
+    # Engagement gate: neither helper nor target may be engaged.
+    if CharacterEngagement.objects.filter(
+        character__in=[helper_character, target_character]
+    ).exists():
+        return []
+
+    def _scene_ok(treatment: TreatmentTemplate) -> bool:
+        if not treatment.scene_required:
+            return True
+        return (
+            scene.is_active
+            and _scene_participant(scene, helper_sheet)
+            and _scene_participant(scene, target_sheet)
+        )
+
+    candidate_threads = list(Thread.objects.filter(owner=helper_sheet, retired_at__isnull=True))
+
+    def _find_bond_thread() -> "Thread | None":
+        for thread in candidate_threads:
+            if _thread_anchors_to_character(thread, target_sheet):
+                return thread
+        return None
+
+    condition_qs = ConditionInstance.objects.filter(
+        target=target_character,
+        resolved_at__isnull=True,
+    ).select_related("condition")
+
+    alteration_qs = PendingAlteration.objects.filter(
+        character=target_sheet,
+        status=PendingAlterationStatus.OPEN,
+    )
+
+    candidates: list[dict[str, Any]] = []
+
+    for treatment in TreatmentTemplate.objects.all():
+        if not _scene_ok(treatment):
+            continue
+
+        if treatment.requires_bond:
+            bond_thread = _find_bond_thread()
+            if bond_thread is None:
+                continue
+        else:
+            bond_thread = None
+
+        if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+            candidates.extend(
+                {
+                    "treatment": treatment,
+                    "target_effect": alteration,
+                    "target_effect_type": TARGET_EFFECT_ALTERATION,
+                    "bond_thread": bond_thread,
+                }
+                for alteration in alteration_qs
+            )
+            continue
+
+        for instance in condition_qs:
+            if treatment.target_kind == TreatmentTargetKind.PRIMARY:
+                if instance.condition_id != treatment.target_condition_id:
+                    continue
+            elif treatment.target_kind == TreatmentTargetKind.AFTERMATH:
+                if instance.condition.parent_condition_id != treatment.target_condition_id:
+                    continue
+
+            candidates.append(
+                {
+                    "treatment": treatment,
+                    "target_effect": instance,
+                    "target_effect_type": TARGET_EFFECT_CONDITION,
+                    "bond_thread": bond_thread,
+                }
+            )
+
+    return candidates
+
+
 @transaction.atomic
 def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     helper_sheet: "CharacterSheet",
@@ -2436,9 +2538,9 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
       7. Resonance cost debit
       8. Anima cost debit
 
-    The PENDING_ALTERATION branch defers to Phase 7 (reduce_pending_alteration_tier
-    is not yet implemented). The import is lazy so an ImportError only fires at
-    runtime if this code path is actually invoked.
+    The PENDING_ALTERATION branch calls reduce_pending_alteration_tier (lazy
+    import) to reduce the alteration's tier. The import is lazy so an ImportError
+    only fires at runtime if this code path is actually invoked.
     """
     from django.db import IntegrityError  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415

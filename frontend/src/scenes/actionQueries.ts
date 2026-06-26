@@ -30,6 +30,9 @@ export async function fetchAvailableActions(characterId: number): Promise<Player
   return res.json() as Promise<PlayerActionsResponse>;
 }
 
+/** The treat-condition action key — a backend registry key, not a UI string. */
+export const TREAT_CONDITION_ACTION_KEY = 'treat_condition';
+
 export async function createActionRequest(
   sceneId: string,
   body: {
@@ -50,6 +53,15 @@ export async function createActionRequest(
      * Values: very_low | low | medium | high | extreme.
      */
     effort_level?: string;
+    /**
+     * Treat-condition flow (#1486): the candidate treatment to attempt on the
+     * target.  target_condition_instance_id and target_pending_alteration_id
+     * are mutually exclusive — set the one matching target_effect_type.
+     */
+    treatment_id?: number;
+    target_condition_instance_id?: number;
+    target_pending_alteration_id?: number;
+    bond_thread_id?: number;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -83,6 +95,18 @@ export async function createActionRequest(
   }
   if (body.effort_level !== undefined) {
     requestBody.effort_level = body.effort_level;
+  }
+  if (body.treatment_id !== undefined) {
+    requestBody.treatment_id = body.treatment_id;
+  }
+  if (body.target_condition_instance_id !== undefined) {
+    requestBody.target_condition_instance_id = body.target_condition_instance_id;
+  }
+  if (body.target_pending_alteration_id !== undefined) {
+    requestBody.target_pending_alteration_id = body.target_pending_alteration_id;
+  }
+  if (body.bond_thread_id !== undefined) {
+    requestBody.bond_thread_id = body.bond_thread_id;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',

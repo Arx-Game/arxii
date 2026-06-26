@@ -5,8 +5,13 @@ Provides read-only serialization of condition data for the character sheet
 conditions tab and other UI components.
 """
 
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
+from world.conditions.constants import (
+    TARGET_EFFECT_ALTERATION,
+    TARGET_EFFECT_CONDITION,
+)
 from world.conditions.models import (
     CapabilityType,
     ConditionCategory,
@@ -14,6 +19,7 @@ from world.conditions.models import (
     ConditionStage,
     ConditionTemplate,
     DamageType,
+    TreatmentTemplate,
 )
 
 # =============================================================================
@@ -45,6 +51,34 @@ class DamageTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = DamageType
         fields = ["id", "name", "description", "color_hex", "icon"]
+        read_only_fields = fields
+
+
+class TreatmentTemplateSerializer(serializers.ModelSerializer):
+    """Read-only serializer for treatment template definitions.
+
+    Surfaces the authored recipe for attempting to treat a condition or
+    pending alteration (costs, bond requirement, scene requirement) so the
+    web Treat panel can render the candidate list returned by
+    ``get_treatment_candidates``.
+    """
+
+    target_condition = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = TreatmentTemplate
+        fields = [
+            "id",
+            "key",
+            "name",
+            "description",
+            "target_kind",
+            "requires_bond",
+            "resonance_cost",
+            "anima_cost",
+            "scene_required",
+            "target_condition",
+        ]
         read_only_fields = fields
 
 
@@ -269,3 +303,50 @@ class ConditionSummarySerializer(serializers.Serializer):
     resistance_modifiers = serializers.DictField(child=serializers.IntegerField(), read_only=True)
     turn_order_modifier = serializers.IntegerField(read_only=True)
     aggro_priority = serializers.IntegerField(read_only=True)
+
+
+# =============================================================================
+# Treatment Candidate Discovery (schema-only envelope)
+# =============================================================================
+
+
+class TreatmentCandidateSerializer(serializers.Serializer):
+    """One candidate treatment a helper may offer a target persona (#1486).
+
+    Describes the shape returned by ``TreatmentCandidateViewSet.list`` so
+    drf-spectacular emits a real response body instead of ``content?: never``.
+    The view still returns the same hand-built dict; this serializer is
+    schema metadata only.
+
+    ``target_effect`` is a discriminated union: a ``ConditionInstance``
+    serialization when ``target_effect_type == 'condition'``, or a
+    ``PendingAlteration`` serialization when ``target_effect_type ==
+    'alteration'``. Modeled as a ``DictField`` because the two target
+    serializers live in different apps; ``target_effect_type`` is the
+    discriminator the client switches on.
+    """
+
+    treatment = TreatmentTemplateSerializer(read_only=True)
+    target_effect_type = serializers.ChoiceField(
+        choices=[
+            (TARGET_EFFECT_CONDITION, TARGET_EFFECT_CONDITION),
+            (TARGET_EFFECT_ALTERATION, TARGET_EFFECT_ALTERATION),
+        ]
+    )
+    target_effect = serializers.DictField(read_only=True)
+    bond_thread = serializers.IntegerField(allow_null=True)
+    scene_id = serializers.IntegerField()
+
+
+@extend_schema_serializer(many=False)
+class TreatmentCandidateResponseSerializer(serializers.Serializer):
+    """Envelope returned by the treatments discovery endpoint (#1486).
+
+    ``many=False`` overrides drf-spectacular's list-view heuristic: the
+    endpoint lives on a ``list`` action, so the generator would otherwise
+    wrap this single envelope object in an array. The runtime returns one
+    ``{"candidates": [...], "scene_id": int}`` object, not an array of them.
+    """
+
+    candidates = TreatmentCandidateSerializer(many=True)
+    scene_id = serializers.IntegerField()

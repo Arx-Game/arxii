@@ -9,6 +9,7 @@ Provides read-only endpoints for:
 """
 
 from django.db.models import Prefetch, Q, QuerySet
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -16,6 +17,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
+from world.conditions.constants import (
+    TARGET_EFFECT_ALTERATION,
+    TARGET_EFFECT_CONDITION,
+)
 from world.conditions.models import (
     CapabilityType,
     ConditionCapabilityEffect,
@@ -35,10 +40,13 @@ from world.conditions.serializers import (
     ConditionTemplateDetailSerializer,
     ConditionTemplateSerializer,
     DamageTypeSerializer,
+    TreatmentCandidateResponseSerializer,
+    TreatmentTemplateSerializer,
 )
 from world.conditions.services import (
     get_active_conditions,
     get_aggro_priority,
+    get_treatment_candidates,
     get_turn_order_modifier,
 )
 from world.conditions.types import CapabilitySummary, EffectLookups
@@ -407,3 +415,115 @@ class ConditionInstanceViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSe
             "condition__category",
             "current_stage",
         )
+
+
+# =============================================================================
+# Treatment Candidate Discovery ViewSet
+# =============================================================================
+
+
+class TreatmentCandidateViewSet(CharacterContextMixin, viewsets.ViewSet):
+    """Read-only discovery endpoint: treatments a character may offer a target.
+
+    Mirrors the telnet ``treat`` command's listing path: resolves the helper
+    via the ``X-Character-ID`` header, resolves the active scene at the
+    helper's location, and delegates the candidate enumeration to
+    ``get_treatment_candidates`` (the same service function the command uses).
+    The consent gate handles authorization; anyone present in a scene may
+    attempt to treat anyone else.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "target_persona_id",
+                int,
+                OpenApiParameter.QUERY,
+                required=True,
+                description="Persona id of the character the helper wants to treat.",
+            ),
+        ],
+        responses={200: TreatmentCandidateResponseSerializer},
+    )
+    def list(self, request: Request) -> Response:
+        """Return treatments the helper may attempt on the target persona."""
+        # Request-scoped ID validation (required param + existence), not
+        # model-field filtering — a FilterSet is the wrong tool here.
+        target_persona_id = request.query_params.get("target_persona_id")  # noqa: USE_FILTERSET
+        if not target_persona_id:
+            return Response(
+                {"detail": "target_persona_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        try:
+            target_persona = Persona.objects.get(pk=target_persona_id)
+        except (ValueError, Persona.DoesNotExist):
+            return Response(
+                {"detail": "Target persona not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        character = self._get_character(request)
+        if not character:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        helper_sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if helper_sheet is None:
+            return Response(
+                {"detail": "No character sheet found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+
+        scene = _get_active_scene(character.location)
+        if scene is None:
+            return Response(
+                {"detail": "You are not in an active scene."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        candidates = get_treatment_candidates(
+            helper_sheet,
+            target_persona.character_sheet,
+            scene,
+        )
+
+        from world.magic.serializers import (  # noqa: PLC0415
+            PendingAlterationSerializer,
+        )
+
+        serialized: list[dict[str, object]] = []
+        for candidate in candidates:
+            target_effect_type = candidate["target_effect_type"]
+            if target_effect_type == TARGET_EFFECT_CONDITION:
+                target_effect = ConditionInstanceSerializer(
+                    candidate["target_effect"], many=False
+                ).data
+            elif target_effect_type == TARGET_EFFECT_ALTERATION:
+                target_effect = PendingAlterationSerializer(
+                    candidate["target_effect"], many=False
+                ).data
+            else:  # pragma: no cover - defensive; service only emits the two
+                target_effect = None
+
+            bond_thread = candidate["bond_thread"]
+            serialized.append(
+                {
+                    "treatment": TreatmentTemplateSerializer(candidate["treatment"]).data,
+                    "target_effect_type": target_effect_type,
+                    "target_effect": target_effect,
+                    "bond_thread": bond_thread.id if bond_thread else None,
+                    "scene_id": scene.id,
+                }
+            )
+
+        return Response({"candidates": serialized, "scene_id": scene.id})

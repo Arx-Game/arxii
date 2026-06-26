@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -28,13 +29,108 @@ from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
 
+CustomActionResolver = Callable[["SceneActionRequest"], "EnhancedSceneActionResult | None"]
+CUSTOM_ACTION_RESOLVERS: dict[str, CustomActionResolver] = {}
+
+
+def register_custom_action_resolver(action_key: str, resolver: CustomActionResolver) -> None:
+    """Register a function that resolves a consent request bypassing the ActionTemplate path."""
+    CUSTOM_ACTION_RESOLVERS[action_key] = resolver
+
+
+def _describe_treatment_outcome(
+    helper_persona: Persona,
+    target_persona: Persona,
+    treatment: TreatmentTemplate,
+    target_effect: ConditionInstance | PendingAlteration,
+    outcome: TreatmentOutcome,
+) -> str:
+    """Render a short IC description of what treatment produced."""
+    # Names are sourced from the participating personas; target_effect is kept
+    # in the signature for caller symmetry with perform_treatment.
+    _ = target_effect
+    helper_name = helper_persona.name
+    target_name = target_persona.name
+    lines = [f"{helper_name} applies {treatment.name} to {target_name}."]
+    if outcome.target_resolved:
+        lines.append("The condition is lifted.")
+    elif outcome.effect_applied:
+        lines.append("The treatment takes hold.")
+    elif outcome.helper_backlash_applied:
+        lines.append("The treatment backfires.")
+    else:
+        lines.append("The treatment has no effect.")
+    return " ".join(lines)
+
+
+def _resolve_treatment_request(
+    action_request: SceneActionRequest,
+) -> EnhancedSceneActionResult | None:
+    """Resolve a treat_condition request by calling perform_treatment.
+
+    Treatment carries its own check/cost/reduction logic, so it bypasses the
+    ActionTemplate resolution chain entirely. The result is recorded as a regular
+    scene interaction on the request and the function returns None because there
+    is no PendingActionResolution to hand back to the SCENE_ADAPTIVE pipeline.
+    """
+    from world.conditions.services import perform_treatment  # noqa: PLC0415
+
+    treatment = action_request.treatment
+    target_effect = action_request.target_condition_instance
+    if target_effect is None:
+        target_effect = action_request.target_pending_alteration
+        if target_effect is None:
+            msg = "Treatment request has no target effect."
+            raise ValueError(msg)
+
+    outcome = perform_treatment(
+        helper_sheet=action_request.initiator_persona.character_sheet,
+        target_sheet=action_request.target_persona.character_sheet,
+        scene=action_request.scene,
+        treatment=treatment,
+        target_effect=target_effect,
+        bond_thread=action_request.thread_used,
+    )
+
+    content = _describe_treatment_outcome(
+        action_request.initiator_persona,
+        action_request.target_persona,
+        treatment,
+        target_effect,
+        outcome,
+    )
+    interaction = create_interaction(
+        persona=action_request.initiator_persona,
+        content=content,
+        mode=InteractionMode.POSE,
+        scene=action_request.scene,
+        target_personas=[action_request.target_persona],
+    )
+
+    action_request.status = ActionRequestStatus.RESOLVED
+    action_request.resolved_at = timezone.now()
+    action_request.resolved_difficulty = 0
+    action_request.result_interaction = interaction
+    action_request.save(
+        update_fields=[
+            "status",
+            "resolved_at",
+            "resolved_difficulty",
+            "result_interaction",
+        ]
+    )
+    return None
+
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import FuryTier, Technique
+    from world.conditions.models import ConditionInstance, TreatmentTemplate
+    from world.conditions.types import TreatmentOutcome
+    from world.magic.models import FuryTier, PendingAlteration, Technique
     from world.magic.types.pull import CastPullDeclaration
     from world.scenes.place_models import Place
 
@@ -374,20 +470,15 @@ def respond_to_action_request(
 
     if decision == ConsentDecision.ACCEPT:
         with transaction.atomic():
-            # Persist the defender's plausibility band before resolving so that
-            # _resolve_standard_action picks it up via action_request.difficulty_choice.
             if difficulty is not None:
                 action_request.difficulty_choice = difficulty
             action_request.resist_effort_level = resist_effort
             action_request.save(update_fields=["difficulty_choice", "resist_effort_level"])
 
-            # Standalone cast (no action_template, no action_key) — resolve via the cast
-            # pipeline; enhanced/plain actions go through the standard resolution path.
-            # The inner transaction.atomic() blocks in resolve_accepted_cast and
-            # _resolve_standard_action become savepoints inside this outer atomic — harmless
-            # and idiomatic Django. This outer block restores the pre-refactor guarantee:
-            # if the resolver or kudos award raises, the whole resolution rolls back.
-            if action_request.is_standalone_cast:
+            custom_resolver = CUSTOM_ACTION_RESOLVERS.get(action_request.action_key)
+            if custom_resolver is not None:
+                result = custom_resolver(action_request)
+            elif action_request.is_standalone_cast:
                 from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
 
                 result = resolve_accepted_cast(action_request)
@@ -400,12 +491,10 @@ def respond_to_action_request(
                 )
 
             _accrue_engagement_for_primary(action_request)
-
-            # result is None only for hostile consent-accepts (#777), which have
-            # an empty action_key and therefore never a resolver.
-            resolver = get_resolver(action_request.action_key)
-            if resolver is not None and result is not None:
-                resolver(action_request, result)
+            if result is not None:
+                resolver = get_resolver(action_request.action_key)
+                if resolver is not None:
+                    resolver(action_request, result)
 
         return result
 
@@ -1018,3 +1107,6 @@ def create_and_resolve_area_action(  # noqa: PLR0913
             resolver(request, result)
 
     return result
+
+
+register_custom_action_resolver("treat_condition", _resolve_treatment_request)

@@ -23,6 +23,7 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
     AddSocialConsentWhitelistAction,
     RemoveSocialConsentWhitelistAction,
@@ -235,6 +236,7 @@ _ALL_ACTIONS: list[Action] = [
     entrance,
     restore_sense,
     resolve_entry_flourish,
+    treat_condition,
 ]
 
 # Lookup by key

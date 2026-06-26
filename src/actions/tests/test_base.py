@@ -239,6 +239,7 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "treat_condition",
             "create_first_impression",
             "create_development",
             "create_capstone",

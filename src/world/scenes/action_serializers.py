@@ -361,6 +361,13 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     delivery_receiver_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, allow_empty=True, default=list
     )
+    # Treatment consent flow (#1486): only meaningful when action_key ==
+    # "treat_condition". Cardinality/relationship validation lives in the view
+    # (it needs DB lookups + the candidate query); do NOT add these to validate().
+    treatment_id = serializers.IntegerField(required=False, allow_null=True)
+    target_condition_instance_id = serializers.IntegerField(required=False, allow_null=True)
+    target_pending_alteration_id = serializers.IntegerField(required=False, allow_null=True)
+    bond_thread_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
         """Normalize target fields into ``target_ids``; cap strain and fury.
