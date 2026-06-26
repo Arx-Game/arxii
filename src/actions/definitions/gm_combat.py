@@ -60,6 +60,21 @@ def _active_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
     )
 
 
+def _latest_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
+    """Return the newest combat encounter in *actor*'s room, regardless of status."""
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+
+    room = actor.location
+    if room is None:
+        return None
+    return (
+        CombatEncounter.objects.filter(room=room)
+        .select_related("scene")
+        .order_by("-created_at")
+        .first()
+    )
+
+
 def _resolve_account(actor: ObjectDB) -> AccountDB | None:
     """Return the actor's controlling account, or None if there isn't one."""
     try:
@@ -391,7 +406,7 @@ class EndEncounterAction(Action):
     ) -> ActionResult:
         from world.combat.services import end_encounter  # noqa: PLC0415
 
-        encounter = _active_encounter_in_room(actor)
+        encounter = _latest_encounter_in_room(actor)
         if encounter is None:
             return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
         if not _actor_may_gm_encounter(actor, encounter):

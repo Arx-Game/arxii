@@ -158,10 +158,11 @@ class ResolveEncounterRoundActionTests(GMCombatActionTestBase):
         self.encounter.save(update_fields=["status", "round_number"])
 
     def test_gm_can_resolve_round(self) -> None:
+        self._add_participant()
         result = ResolveEncounterRoundAction().run(self.gm_actor)
         self.assertTrue(result.success, result.message)
         self.encounter.refresh_from_db()
-        self.assertIn(self.encounter.status, {RoundStatus.BETWEEN_ROUNDS, RoundStatus.COMPLETED})
+        self.assertEqual(self.encounter.status, RoundStatus.BETWEEN_ROUNDS)
 
     def test_non_gm_denied(self) -> None:
         result = ResolveEncounterRoundAction().run(self.player_actor)
@@ -363,6 +364,7 @@ class EndEncounterActionTests(GMCombatActionTestBase):
         self.encounter.save(update_fields=["status"])
         result = EndEncounterAction().run(self.gm_actor)
         self.assertFalse(result.success)
+        self.assertEqual(result.message, "Encounter already completed.")
 
 
 class PreviewOpponentDefaultsActionTests(GMCombatActionTestBase):
