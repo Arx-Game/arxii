@@ -26,10 +26,16 @@ def _cmd(caller) -> CmdRest:
 
 class CmdRestTests(TestCase):
     def setUp(self) -> None:
+        from evennia import create_object
+
         FatiguePool.flush_instance_cache()
         ActionPointPool.flush_instance_cache()
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        self.room = create_object("typeclasses.rooms.Room", key="CmdRestHomeRoom", nohome=True)
+        self.character.location = self.room
+        self.character.home = self.room
+        self.character.save()
         self.character.msg = MagicMock()
 
     def _create_ap_pool(self, current: int) -> ActionPointPool:
