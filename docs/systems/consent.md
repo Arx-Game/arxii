@@ -127,6 +127,39 @@ UX hint, not the authority.
 
 ---
 
+## Action-based write seam
+
+All consent mutations route through the shared `dispatch_player_action()` seam, so the web, telnet,
+and any future caller execute the same validation and service logic.
+
+### Consent Actions (`src/actions/definitions/consent_preferences.py`)
+
+| Action key | Wrapped service function | Purpose |
+|------------|--------------------------|---------|
+| `set_social_consent_preference` | `set_social_consent_preference()` | Toggle the master `allow_social_actions` switch for a tenure. |
+| `set_social_consent_category_rule` | `set_social_consent_category_rule()` / `remove_social_consent_category_rule()` | Set a category to `EVERYONE` or `ALLOWLIST`; `default` clears the rule. |
+| `add_social_consent_whitelist` | `add_social_consent_whitelist()` | Allow a specific tenure to target the owner in a restricted category. |
+| `remove_social_consent_whitelist` | `remove_social_consent_whitelist()` | Remove a tenure from a category whitelist. |
+
+### Service functions (`src/world/consent/services.py`)
+
+```python
+from world.consent.services import (
+    set_social_consent_preference,
+    set_social_consent_category_rule,
+    remove_social_consent_category_rule,
+    add_social_consent_whitelist,
+    remove_social_consent_whitelist,
+    get_social_consent_summary,
+)
+```
+
+`get_social_consent_summary()` is read-only; it supports the bare `consent` and
+`consent whitelist list` summaries by returning the preference, category rules, and whitelist
+entries for a tenure.
+
+---
+
 ## API Endpoints (`/api/consent/`)
 
 | Endpoint | ViewSet | Auth | Notes |
@@ -145,7 +178,9 @@ UX hint, not the authority.
 | `DELETE /api/consent/whitelist/<id>/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Remove whitelist entry |
 
 Permission class `IsTenureOwner` (`world/consent/permissions.py`) ensures a player can
-only read/write consent rows for tenures they own.
+only read/write consent rows for tenures they own. Write endpoints (POST/PATCH/DELETE) route
+through the consent REGISTRY actions above via `dispatch_player_action()`; the ViewSet serializes
+the resulting state.
 
 ---
 
@@ -159,6 +194,24 @@ with three sections:
    (EVERYONE / ALLOWLIST); collapses when the global switch is off.
 3. **Whitelist** — add/remove allowed tenures per category; visible only when at
    least one category is in ALLOWLIST mode.
+
+---
+
+## Telnet (`consent`)
+
+`CmdConsent` (`src/commands/consent_preferences.py`) provides a namespaced telnet interface for
+managing consent preferences. The command parses the leading subverb and dispatches the matching
+REGISTRY action through `dispatch_player_action()` — the same seam the web uses.
+
+| Command | Action | Notes |
+|---------|--------|-------|
+| `consent` | — | Show the caller's social-consent summary. |
+| `consent on` | `set_social_consent_preference` | Allow all social actions. |
+| `consent off` | `set_social_consent_preference` | Block all social actions. |
+| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `allowlist`, or `default` (clear the rule). |
+| `consent whitelist add <name> to <category>` | `add_social_consent_whitelist` | `<name>` is resolved in the caller's location. |
+| `consent whitelist remove <name> from <category>` | `remove_social_consent_whitelist` | `<name>` is resolved in the caller's location. |
+| `consent whitelist list [category]` | — | List whitelist entries, optionally filtered to one category. |
 
 ---
 
