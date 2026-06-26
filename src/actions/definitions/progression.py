@@ -111,32 +111,36 @@ class ManageTrainingAction(Action):
         """Create a new training allocation for skill or specialization."""
         skill_id = kwargs.get(_KWARG_SKILL_ID)
         specialization_id = kwargs.get(_KWARG_SPECIALIZATION_ID)
-        if not ((skill_id is not None) ^ (specialization_id is not None)):
+
+        has_skill = skill_id is not None
+        has_specialization = specialization_id is not None
+        if has_skill == has_specialization:
             return ActionResult(
                 success=False,
                 message="Provide exactly one of skill_id or specialization_id.",
             )
 
-        skill = skill_cls.objects.get(pk=skill_id) if skill_id is not None else None
-        specialization = (
-            specialization_cls.objects.get(pk=specialization_id)
-            if specialization_id is not None
-            else None
-        )
-
         ap_amount = kwargs.get(_KWARG_AP_AMOUNT)
         if ap_amount is None:
             return ActionResult(success=False, message="ap_amount is required.")
 
+        if has_skill:
+            skill = skill_cls.objects.get(pk=skill_id)
+            specialization: Any = None
+            target_name = skill.name
+        else:
+            skill = None
+            specialization = specialization_cls.objects.get(pk=specialization_id)
+            target_name = specialization.name
+
         mentor = self._resolve_mentor(kwargs.get(_KWARG_MENTOR_PERSONA_ID))
         allocation = create_training_allocation(
             character=actor,
-            ap_amount=kwargs.get(_KWARG_AP_AMOUNT),
+            ap_amount=ap_amount,
             skill=skill,
             specialization=specialization,
             mentor=mentor,
         )
-        target_name = skill.name if skill else specialization.name
         return ActionResult(
             success=True,
             message=f"Training allocation set for {target_name}.",
