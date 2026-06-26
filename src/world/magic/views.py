@@ -58,7 +58,6 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
-    MagicalAlterationTemplate,
     PendingAlteration,
     PoseEndorsement,
     Resonance,
@@ -138,7 +137,6 @@ from world.magic.serializers import (
 from world.magic.services import (
     get_library_entries,
     preview_resonance_pull,
-    resolve_pending_alteration,
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet
@@ -617,6 +615,10 @@ class PendingAlterationViewSet(
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
         """Resolve a pending alteration via author-from-scratch or library path."""
+        from actions.definitions.alterations import (  # noqa: PLC0415
+            ResolveAlterationAction,
+        )
+
         pending = self.get_object()
         serializer = AlterationResolutionSerializer(
             data=request.data,
@@ -629,46 +631,41 @@ class PendingAlterationViewSet(
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        library_template = data.get("library_template_id")  # PrimaryKeyRelatedField → instance
-        if library_template is not None:
-            # Re-fetch with select_related to ensure condition_template is loaded.
-            library_template = MagicalAlterationTemplate.objects.select_related(
-                "condition_template"
-            ).get(pk=library_template.pk)
-            result = resolve_pending_alteration(
-                pending=pending,
-                name=library_template.condition_template.name,
-                player_description=library_template.condition_template.player_description,
-                observer_description=library_template.condition_template.observer_description,
-                weakness_magnitude=library_template.weakness_magnitude,
-                resonance_bonus_magnitude=library_template.resonance_bonus_magnitude,
-                social_reactivity_magnitude=library_template.social_reactivity_magnitude,
-                is_visible_at_rest=library_template.is_visible_at_rest,
-                resolved_by=request.user,
-                library_template=library_template,
-            )
-        else:
-            # weakness_damage_type_id and parent_template_id are PrimaryKeyRelatedField →
-            # validated_data holds instances (or None), no extra .objects.get() needed.
-            weakness_dt = data.get("weakness_damage_type_id")
-            parent = data.get("parent_template_id")
+        kwargs = {"pending_id": pending.pk}
 
-            result = resolve_pending_alteration(
-                pending=pending,
-                name=data["name"],
-                player_description=data["player_description"],
-                observer_description=data["observer_description"],
-                weakness_damage_type=weakness_dt,
-                weakness_magnitude=data.get("weakness_magnitude", 0),
-                resonance_bonus_magnitude=data.get("resonance_bonus_magnitude", 0),
-                social_reactivity_magnitude=data.get("social_reactivity_magnitude", 0),
-                is_visible_at_rest=data.get("is_visible_at_rest", False),
-                resolved_by=request.user,
-                parent_template=parent,
+        library_template = data.get("library_template_id")
+        if library_template is not None:
+            kwargs["library_template_id"] = library_template.pk
+        else:
+            kwargs.update(
+                {
+                    "name": data.get("name", ""),
+                    "player_description": data.get("player_description", ""),
+                    "observer_description": data.get("observer_description", ""),
+                    "weakness_damage_type": data.get("weakness_damage_type_id"),
+                    "weakness_magnitude": data.get("weakness_magnitude", 0),
+                    "resonance_bonus_magnitude": data.get("resonance_bonus_magnitude", 0),
+                    "social_reactivity_magnitude": data.get("social_reactivity_magnitude", 0),
+                    "is_visible_at_rest": data.get("is_visible_at_rest", False),
+                    "parent_template": data.get("parent_template_id"),
+                }
+            )
+
+        action_result = ResolveAlterationAction().run(
+            actor=pending.character.character,
+            **kwargs,
+        )
+        if not action_result.success:
+            return Response(
+                {"detail": action_result.message},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response(
-            {"status": "resolved", "event_id": result.event.pk},
+            {
+                "status": "resolved",
+                "event_id": action_result.data["event_id"],
+            },
             status=status.HTTP_200_OK,
         )
 
