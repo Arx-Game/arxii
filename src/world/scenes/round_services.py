@@ -291,12 +291,19 @@ def ensure_round_for_acute_condition(character_sheet: CharacterSheet) -> SceneRo
 
 
 def scene_round_is_complete(scene_round: SceneRound) -> bool:
-    """Presence-gated completion: True when every ACTIVE participant present in the room
-    who *can act* has a declaration/pass row for the current round. Absent participants
-    are implicit passes (never block); present-but-``not can_act`` participants (e.g. an
-    unconscious bleeding victim) are also implicit passes, so they cannot deadlock the
-    round — a conscious bystander's declaration alone drives resolution. No timer —
-    presence is the idle signal (AFK-safety)."""
+    """Quorum-gated completion: True when enough ACTIVE participants present in the room
+    who *can act* have declared for the current round. The threshold is
+    ``ceil(advance_quorum_pct / 100 × present_active_count)`` — the same field POSE_ORDER
+    uses (``advance_pose_order_round_if_quorum``); at 100 it reduces to unanimity, so a
+    GM/staff can still require everyone. Absent participants and present-but-``not
+    can_act`` participants (e.g. an unconscious bleeding victim) are implicit passes
+    (never block); an undeclared present ``can_act`` participant counts toward the
+    denominator but not the declared count, so a quorum below 100 lets the round resolve
+    without them — ending the AFK-stall deadlock (#1480). No timer — presence is the idle
+    signal (AFK-safety); the AFK participant's own peril is skipped separately at
+    resolution (see ``resolve_scene_round``)."""
+    import math  # noqa: PLC0415
+
     from world.vitals.services import can_act  # noqa: PLC0415
 
     present_ids = {s.character_id for s in _present_character_sheets(scene_round.room)}
@@ -315,7 +322,9 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
     ]
     if not present_active:
         return False  # nobody present and able to drive resolution
-    return all(p.pk in declared_ids for p in present_active)
+    needed = math.ceil(scene_round.advance_quorum_pct / 100 * len(present_active))
+    declared_present_active = sum(1 for p in present_active if p.pk in declared_ids)
+    return declared_present_active >= needed
 
 
 @transaction.atomic

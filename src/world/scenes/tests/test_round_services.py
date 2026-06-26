@@ -245,6 +245,39 @@ class SceneRoundResolutionTests(TestCase):
         assert self.rnd.round_number == 2
         assert SceneActionDeclaration.objects.filter(scene_round=self.rnd).count() == 0
 
+    def test_complete_on_quorum_not_unanimity(self):
+        # 3 present, 2 declare, advance_quorum_pct=60 -> ceil(0.6*3)=2 met -> complete.
+        # (Under the old unanimity rule this was False — the AFK stall fixed in #1480.)
+        self.rnd.advance_quorum_pct = 60
+        self.rnd.save(update_fields=["advance_quorum_pct"])
+        p1 = self._participant(present=True, initiative_order=0)
+        p2 = self._participant(present=True, initiative_order=1)
+        self._participant(present=True, initiative_order=2)  # undeclared (AFK)
+        self._declare_pass(p1)
+        self._declare_pass(p2)
+        assert scene_round_is_complete(self.rnd) is True
+
+    def test_not_complete_below_quorum(self):
+        # 3 present, 1 declares, quorum 60 -> ceil(0.6*3)=2 not met -> incomplete.
+        self.rnd.advance_quorum_pct = 60
+        self.rnd.save(update_fields=["advance_quorum_pct"])
+        p1 = self._participant(present=True, initiative_order=0)
+        self._participant(present=True, initiative_order=1)
+        self._participant(present=True, initiative_order=2)
+        self._declare_pass(p1)
+        assert scene_round_is_complete(self.rnd) is False
+
+    def test_quorum_100_reproduces_unanimity(self):
+        # quorum 100 -> ceil(1.0*3)=3 -> every present can_act participant must declare.
+        self.rnd.advance_quorum_pct = 100
+        self.rnd.save(update_fields=["advance_quorum_pct"])
+        p1 = self._participant(present=True, initiative_order=0)
+        p2 = self._participant(present=True, initiative_order=1)
+        self._participant(present=True, initiative_order=2)  # undeclared
+        self._declare_pass(p1)
+        self._declare_pass(p2)
+        assert scene_round_is_complete(self.rnd) is False
+
 
 class SceneRoundOutcomeBroadcastTests(TestCase):
     """_resolve_scene_declarations broadcasts an OUTCOME narration for each resolved challenge."""
