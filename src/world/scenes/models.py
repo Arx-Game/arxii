@@ -125,9 +125,9 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
 
-    @cached_property
+    @property
     def persona_handler(self) -> ScenePersonaHandler:
-        """Return the cached persona handler for this scene."""
+        """Return a lightweight persona handler for this scene."""
         from world.scenes.persona_handlers import ScenePersonaHandler  # noqa: PLC0415
 
         return ScenePersonaHandler(self)

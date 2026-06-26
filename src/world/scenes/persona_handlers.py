@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.utils.functional import cached_property
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
@@ -25,12 +24,11 @@ class ScenePersonaHandler:
     def __init__(self, scene: Scene) -> None:
         self.scene = scene
 
-    @cached_property
     def active_participant_personas(self) -> list[Persona]:
         """Return the active persona for each account participating in this scene.
 
-        Walks the scene's cached participations, resolves each participant's
-        active persona from cached player/tenure data, and returns the list.
+        Walks the scene's cached participations and resolves each participant's
+        active persona from already-loaded player/tenure data. No new queries.
         """
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 

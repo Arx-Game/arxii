@@ -557,7 +557,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             msg = "There is no active scene here."
             raise CommandError(msg)
 
-        for persona in scene.persona_handler.active_participant_personas:
+        for persona in scene.persona_handler.active_participant_personas():
             if persona.name.lower() == name:
                 return persona.pk
 
