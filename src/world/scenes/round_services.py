@@ -86,6 +86,15 @@ def set_scene_round_mode(
     if update_fields:
         scene_round.save(update_fields=update_fields)
 
+    # A knob change can make an in-flight DECLARING STRICT round newly complete (e.g. a GM
+    # lowering advance_quorum_pct below the count of current declarers). Re-check
+    # completion so the change takes effect immediately rather than waiting for the next
+    # declaration (#1480). Safe no-op otherwise: maybe_resolve_scene_round guards on
+    # status==DECLARING and scene_round_is_complete. OPEN/POSE_ORDER rounds are unaffected
+    # (they tick immediately via _tick_scene_round_if_active, not via completion).
+    if scene_round.mode == SceneRoundMode.STRICT and scene_round.status == RoundStatus.DECLARING:
+        maybe_resolve_scene_round(scene_round)
+
     return scene_round
 
 

@@ -129,6 +129,48 @@ class SetSceneRoundModeTests(TestCase):
         self.assertEqual(rnd.mode, SceneRoundMode.POSE_ORDER)
         self.assertIs(result, rnd)
 
+    def test_lowering_quorum_resolves_in_flight_strict_round(self):
+        """#1480: a GM lowering advance_quorum_pct re-checks completion immediately, so an
+        in-flight DECLARING STRICT round that was below quorum resolves as soon as the new
+        (lower) quorum is met — no need to wait for the next declaration."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        rnd = SceneRoundFactory(
+            room=room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            mode=SceneRoundMode.STRICT,
+            advance_quorum_pct=100,  # ceil(1.0*3)=3 -> incomplete with one declarer
+        )
+        sheets = []
+        for _ in range(3):
+            sheet = CharacterSheetFactory()
+            sheet.character.db_location = room
+            sheet.character.save(update_fields=["db_location"])
+            sheets.append(sheet)
+        participants = [
+            SceneRoundParticipantFactory(scene_round=rnd, character_sheet=s) for s in sheets
+        ]
+        SceneActionDeclaration.objects.create(  # only one declares
+            scene_round=rnd,
+            round_number=rnd.round_number,
+            participant=participants[0],
+            is_immediate=False,
+            is_pass=True,
+        )
+        # Incomplete at quorum 100 (1 of 3 declared).
+        self.assertFalse(rnd.status == RoundStatus.BETWEEN_ROUNDS)
+
+        set_scene_round_mode(rnd, advance_quorum_pct=1)  # ceil(0.01*3)=1 -> quorum met
+
+        rnd.refresh_from_db()
+        # Resolved immediately: round advanced (DECLARING, round_number 2) and the
+        # declaration row was swept.
+        self.assertEqual(rnd.status, RoundStatus.DECLARING)
+        self.assertEqual(rnd.round_number, 2)
+        self.assertEqual(SceneActionDeclaration.objects.filter(scene_round=rnd).count(), 0)
+
 
 class ActiveRoundForRoomTests(TestCase):
     @classmethod
