@@ -35,6 +35,7 @@ _POLISH_CATEGORY_FK = "buildings.PolishCategory"
 _PERSONA_FK = "scenes.Persona"
 _CODEX_SUBJECT_FK = "codex.CodexSubject"
 _ARCHITECTURAL_STYLE_FK = "buildings.ArchitecturalStyle"
+_ROOM_PROFILE_FK = "evennia_extensions.RoomProfile"
 
 
 class BuildingKind(SharedMemoryModel):
@@ -847,6 +848,7 @@ class BuildingProjectInstancePolish(SharedMemoryModel):
         return f"{self.instance}: {self.value} {self.category.name}"
 
 
+
 class ArchitecturalStyle(SharedMemoryModel):
     """An authorable architectural style for buildings (#1514).
 
@@ -912,3 +914,91 @@ class StyleAffinity(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.style.name}: {self.stat_key} {self.value:+d}"
+
+
+class DecorationKind(SharedMemoryModel):
+    """A catalog decoration/furnishing that passively mods a room's comfort by presence (#1514).
+
+    Lightweight + **stackable** — distinct from `RoomFeatureKind` (an *exclusive* capability you
+    install as a Project). A decoration confers stats simply by being in the room. The fire/cold
+    philosophy: a decoration mostly **cancels** discomfort on a specific axis (a hearth → −COLD,
+    via `DecorationAffinity`) and adds only a **small** `amenity`; luxury pieces are mostly
+    amenity. Placement is cosmetic/instant (owner-gated, money/material cost). Magnitudes are a
+    PLACEHOLDER author pass.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(
+        blank=True,
+        help_text="Admin-editable flavour describing the decoration. PLACEHOLDER.",
+    )
+    amenity = models.IntegerField(
+        default=0,
+        help_text=(
+            "Positive comfort points (the AMENITY pool) added by presence. Small for utility "
+            "pieces (a hearth is mostly mitigation); large for luxury/magical comfort."
+        ),
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class DecorationAffinity(SharedMemoryModel):
+    """One discomfort-mitigation a decoration kind imparts (#1514): ``(kind, stat_key, value)``.
+
+    Usually negative — it *cancels* that discomfort axis (hearth → COLD −N), floored at 0 by the
+    axis clamp so it can never overcorrect into the opposite. Materialized as a room-scoped
+    `LocationValueModifier` when the decoration is placed.
+    """
+
+    kind = models.ForeignKey(
+        DecorationKind,
+        on_delete=models.CASCADE,
+        related_name="affinities",
+    )
+    stat_key = models.CharField(max_length=20, choices=StatKey.choices)
+    value = models.IntegerField(
+        help_text="Usually negative: mitigates that discomfort axis. + would add exposure.",
+    )
+
+    class Meta:
+        ordering = ["kind", "stat_key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "stat_key"], name="unique_decoration_affinity_per_axis"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind.name}: {self.stat_key} {self.value:+d}"
+
+
+class RoomDecoration(SharedMemoryModel):
+    """An instance of a decoration placed in a room (#1514). Stackable — many per room.
+
+    Placing it materializes the kind's amenity + affinities as room-scoped
+    `LocationValueModifier`s (source-tagged for clean removal); see
+    `buildings.services.place_decoration` / `remove_decoration`.
+    """
+
+    room_profile = models.ForeignKey(
+        _ROOM_PROFILE_FK,
+        on_delete=models.CASCADE,
+        related_name="decorations",
+    )
+    kind = models.ForeignKey(
+        DecorationKind,
+        on_delete=models.PROTECT,
+        related_name="placements",
+    )
+    placed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["room_profile", "placed_at"]
+
+    def __str__(self) -> str:
+        return f"{self.kind.name} in room {self.room_profile_id}"
