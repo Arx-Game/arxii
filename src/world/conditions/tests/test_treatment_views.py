@@ -161,10 +161,11 @@ class TreatmentCandidateViewTests(TestCase):
 
     def test_viewset_class_shape(self) -> None:
         """The ViewSet matches the established read-only discovery pattern."""
+        from rest_framework import viewsets
         from rest_framework.permissions import IsAuthenticated
 
         from web.api.mixins import CharacterContextMixin
 
         assert issubclass(TreatmentCandidateViewSet, CharacterContextMixin)
-        assert issubclass(TreatmentCandidateViewSet, object)
+        assert issubclass(TreatmentCandidateViewSet, viewsets.ViewSet)
         assert IsAuthenticated in TreatmentCandidateViewSet.permission_classes
