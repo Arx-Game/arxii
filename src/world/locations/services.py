@@ -301,6 +301,33 @@ def ap_regen_multiplier_pct(level: int) -> int:
     return AP_REGEN_MULTIPLIER_PCT.get(level, 0)
 
 
+class ComfortSummary(NamedTuple):
+    """A room's comfort readout for the in-room mechanical surface (#1514).
+
+    The desc stays the player's trusted flavour; this is the separate *mechanical* readout that
+    is the actual arbiter (a player can't write away the cold). ``felt_exposures`` holds only the
+    non-zero discomfort axes (after enclosure + mitigation), so the surface lists what's actually
+    biting.
+    """
+
+    level: int
+    points: int
+    felt_exposures: dict[StatKey, int]
+    amenity: int
+
+
+def comfort_summary(room: DefaultObject) -> ComfortSummary:
+    """Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity."""
+    felt = {key: felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS}
+    points = comfort_points(room)
+    return ComfortSummary(
+        level=comfort_level_for_points(points),
+        points=points,
+        felt_exposures={key: value for key, value in felt.items() if value},
+        amenity=effective_value(room, stat_key=StatKey.AMENITY),
+    )
+
+
 class _StatCascadeIndex(NamedTuple):
     """Pre-built lookup indexes for bulk stat resolution.
 

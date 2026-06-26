@@ -19,6 +19,7 @@ from world.locations.services import (
     comfort_level,
     comfort_level_for_points,
     comfort_points,
+    comfort_summary,
     effective_value,
     felt_exposure,
     room_discomfort,
@@ -182,3 +183,13 @@ class ComfortLevelTests(TestCase):
         assert ap_regen_multiplier_pct(1) == -50
         assert ap_regen_multiplier_pct(8) == 25
         assert ap_regen_multiplier_pct(10) == 100
+
+    def test_comfort_summary_reports_level_points_and_only_biting_axes(self) -> None:
+        ward, room = self._room()
+        self._modifier(ward, StatKey.COLD, 500)
+        self._modifier(ward, StatKey.AMENITY, 50)
+        summary = comfort_summary(room)
+        assert summary.points == -450  # 50 amenity − 500 felt cold
+        assert summary.level == comfort_level_for_points(-450)
+        assert summary.amenity == 50
+        assert summary.felt_exposures == {StatKey.COLD: 500}  # HEAT/WET/WIND omitted (0)

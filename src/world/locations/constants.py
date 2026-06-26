@@ -193,6 +193,21 @@ AP_REGEN_MULTIPLIER_PCT: dict[int, int] = {
     10: 100,
 }
 
+# Player-facing word per comfort level for the in-room readout (#1514). PLACEHOLDER — these
+# are flavour the author pass will revise; the level numbers + multiplier are the real spec.
+COMFORT_LEVEL_LABELS: dict[int, str] = {
+    1: "Miserable",  # PLACEHOLDER
+    2: "Wretched",  # PLACEHOLDER
+    3: "Harsh",  # PLACEHOLDER
+    4: "Uncomfortable",  # PLACEHOLDER
+    5: "Fine",  # PLACEHOLDER
+    6: "Pleasant",  # PLACEHOLDER
+    7: "Comfortable",  # PLACEHOLDER
+    8: "Snug",  # PLACEHOLDER
+    9: "Luxurious",  # PLACEHOLDER
+    10: "Sublime",  # PLACEHOLDER
+}
+
 
 class HolderType(models.TextChoices):
     """Discriminator for owner/tenant rows: which holder FK is active."""

@@ -23,6 +23,7 @@ from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
+from commands.comfort import CmdComfort
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -217,6 +218,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
+            # #1514 — in-room comfort/weather readout (the mechanical surface).
+            CmdComfort,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
             # Training allocation and unlock purchase telnet surfaces.
