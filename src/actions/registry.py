@@ -49,6 +49,12 @@ from actions.definitions.gm_combat import (
     RemoveEncounterParticipantAction,
     ResolveEncounterRoundAction,
 )
+from actions.definitions.gm_stories import (
+    CompleteStoryAction,
+    MarkBeatAction,
+    PromoteEpisodeAction,
+    ResolveEpisodeAction,
+)
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -168,6 +174,10 @@ _ALL_ACTIONS: list[Action] = [
     PauseEncounterAction(),
     EndEncounterAction(),
     PreviewOpponentDefaultsAction(),
+    CompleteStoryAction(),
+    ResolveEpisodeAction(),
+    PromoteEpisodeAction(),
+    MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
     intimidate,

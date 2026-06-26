@@ -219,6 +219,10 @@ class ActionRegistryTests(TestCase):
             "rest",
             "spread_tale",
             "save_deed_story",
+            "complete_story",
+            "resolve_episode",
+            "promote_episode",
+            "mark_beat",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
