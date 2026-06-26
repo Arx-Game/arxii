@@ -573,7 +573,8 @@ are a later slice of #1450.*
   Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) + web `POST /api/narrative/gemits/`.
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
-content sharing and social action targeting (#1141).
+content sharing and social action targeting (#1141). Consent mutations are shared REGISTRY actions
+so web and telnet converge on the same write path.
 
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
   `SocialConsentCategory` (NaturalKey on `key`), `SocialConsentPreference` (OneToOne on tenure),
@@ -583,7 +584,17 @@ content sharing and social action targeting (#1141).
   `_social_consent_exclusions()` (both in `actions/player_interface.py`)
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
-- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist
+- **Key Services:** `set_social_consent_preference()`,
+  `set_social_consent_category_rule()`, `remove_social_consent_category_rule()`,
+  `add_social_consent_whitelist()`, `remove_social_consent_whitelist()`,
+  `get_social_consent_summary()` (`world/consent/services.py`)
+- **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
+  `add_social_consent_whitelist`, `remove_social_consent_whitelist`
+  (`actions/definitions/consent_preferences.py`)
+- **Telnet:** `consent` namespace (`commands/consent_preferences.py`) — `consent on|off`,
+  `consent category <key>=<mode>`, `consent whitelist add|remove|list`
+- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist;
+  writes dispatch through the consent Actions via `dispatch_player_action()`
 - **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row = allow-all
 - **Integrates with:** actions (`ActionTemplate.consent_category` FK), roster (RosterTenure),
   codex (visibility), seed loader (`arx seed dev`)

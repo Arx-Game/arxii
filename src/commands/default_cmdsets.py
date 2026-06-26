@@ -35,6 +35,7 @@ from commands.consent import (
     CmdPersuade,
     CmdRestoreSense,
 )
+from commands.consent_preferences import CmdConsent
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -171,6 +172,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,
+            # #1487 - telnet consent preference management namespace.
+            CmdConsent,
             CmdDig,
             CmdOpen,
             CmdLink,
