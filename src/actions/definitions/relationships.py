@@ -78,6 +78,12 @@ class BaseRelationshipAction(Action):
         )
         return relationship
 
+    def _target_name(self, target_sheet: Any) -> str | None:
+        try:
+            return target_sheet.character.db_key
+        except (AttributeError, ObjectDoesNotExist):
+            return None
+
 
 @dataclass
 class CreateFirstImpressionAction(BaseRelationshipAction):
@@ -134,9 +140,14 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
+        target_name = self._target_name(target_sheet)
         return ActionResult(
             success=True,
-            message=f"You record a first impression of {target_sheet.character.db_key}.",
+            message=(
+                f"You record a first impression of {target_name}."
+                if target_name
+                else "You record a first impression."
+            ),
             data={"relationship_id": relationship.pk},
         )
 
@@ -202,10 +213,14 @@ class CreateDevelopmentAction(BaseRelationshipAction):
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
+        target_name = self._target_name(target_sheet)
         return ActionResult(
             success=True,
             message=(
-                f"You develop your regard for {target_sheet.character.db_key} "
+                f"You develop your regard for {target_name} "
+                f"({development.points_earned} points on {track.name})."
+                if target_name
+                else f"You develop your regard "
                 f"({development.points_earned} points on {track.name})."
             ),
             data={"development_id": development.pk},
@@ -267,11 +282,13 @@ class CreateCapstoneAction(BaseRelationshipAction):
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
+        target_name = self._target_name(target_sheet)
         return ActionResult(
             success=True,
             message=(
-                f"You mark a capstone in your regard for "
-                f"{target_sheet.character.db_key} ({track.name})."
+                f"You mark a capstone in your regard for {target_name} ({track.name})."
+                if target_name
+                else f"You mark a capstone in your regard ({track.name})."
             ),
             data={"capstone_id": capstone.pk},
         )
@@ -335,12 +352,16 @@ class RedistributePointsAction(BaseRelationshipAction):
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
+        target_name = self._target_name(target_sheet)
         return ActionResult(
             success=True,
             message=(
                 f"You shift {change.points_moved} points from "
                 f"{change.source_track.name} to {change.target_track.name} "
-                f"regarding {target_sheet.character.db_key}."
+                f"regarding {target_name}."
+                if target_name
+                else f"You shift {change.points_moved} points from "
+                f"{change.source_track.name} to {change.target_track.name}."
             ),
             data={"change_id": change.pk},
         )

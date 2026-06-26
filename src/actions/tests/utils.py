@@ -16,9 +16,9 @@ class ActionTestCase(TestCase):
     target: ObjectDB
     target_sheet: CharacterSheet
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.actor = CharacterFactory()
-        self.actor_sheet = CharacterSheetFactory(character=self.actor)
-        self.target = CharacterFactory()
-        self.target_sheet = CharacterSheetFactory(character=self.target)
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.actor = CharacterFactory()
+        cls.actor_sheet = CharacterSheetFactory(character=cls.actor)
+        cls.target = CharacterFactory()
+        cls.target_sheet = CharacterSheetFactory(character=cls.target)
