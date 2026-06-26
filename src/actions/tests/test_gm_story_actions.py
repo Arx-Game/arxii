@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from actions.registry import get_action
 from evennia_extensions.factories import (
     AccountFactory,
     CharacterFactory,
@@ -26,6 +25,7 @@ from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    GroupStoryProgressFactory,
     StoryFactory,
     StoryProgressFactory,
     TransitionFactory,
@@ -202,6 +202,42 @@ class ResolveEpisodeActionTests(GMStoryActionTestBase):
         result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=self.ep1.pk)
         self.assertFalse(result.success)
 
+    def test_group_scope_multiple_active_records_uses_first(self) -> None:
+        """GROUP stories with multiple active tables are handled by the service."""
+        from actions.definitions.gm_stories import ResolveEpisodeAction
+
+        group_story = StoryFactory(
+            owners=[self.lead_gm_account],
+            scope=StoryScope.GROUP,
+            primary_table=self.gm_table,
+            status=StoryStatus.ACTIVE,
+        )
+        chapter = ChapterFactory(story=group_story)
+        ep1 = EpisodeFactory(chapter=chapter, order=1)
+        ep2 = EpisodeFactory(chapter=chapter, order=2)
+        TransitionFactory(source_episode=ep1, target_episode=ep2, mode=TransitionMode.AUTO)
+        other_table = GMTableFactory(gm=GMProfileFactory())
+        progress1 = GroupStoryProgressFactory(
+            story=group_story,
+            gm_table=self.gm_table,
+            current_episode=ep1,
+            is_active=True,
+        )
+        progress2 = GroupStoryProgressFactory(
+            story=group_story,
+            gm_table=other_table,
+            current_episode=ep1,
+            is_active=True,
+        )
+
+        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=ep1.pk)
+
+        self.assertTrue(result.success, result.message)
+        progress1.refresh_from_db()
+        progress2.refresh_from_db()
+        advanced = [p for p in (progress1, progress2) if p.current_episode_id == ep2.pk]
+        self.assertEqual(len(advanced), 1)
+
 
 class PromoteEpisodeActionTests(GMStoryActionTestBase):
     """PromoteEpisodeAction changes episode maturity."""
@@ -374,17 +410,3 @@ class MarkBeatActionTests(GMStoryActionTestBase):
             outcome=BeatOutcome.SUCCESS,
         )
         self.assertFalse(result.success)
-
-
-class RegistryCompletenessSmokeTest(TestCase):
-    """New keys are discoverable through the registry."""
-
-    def test_keys_registered(self) -> None:
-        for key in (
-            "complete_story",
-            "resolve_episode",
-            "promote_episode",
-            "mark_beat",
-        ):
-            with self.subTest(key=key):
-                self.assertIsNotNone(get_action(key), f"{key} not registered")

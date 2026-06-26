@@ -16,28 +16,25 @@ from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import resolve_actor_or_error
+from world.gm.models import GMProfile
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     StoryMaturity,
-    StoryScope,
 )
 from world.stories.exceptions import StoryError
 from world.stories.models import (
     AssistantGMClaim,
     Beat,
     Episode,
-    GlobalStoryProgress,
-    GroupStoryProgress,
     Story,
-    StoryProgress,
     Transition,
 )
 from world.stories.services.beats import record_gm_marked_outcome
 from world.stories.services.completion import complete_story
 from world.stories.services.episodes import resolve_episode
 from world.stories.services.maturity import promote_episode_maturity
-from world.stories.types import AnyStoryProgress
+from world.stories.services.progress import get_active_progress_for_story
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -60,7 +57,7 @@ def _resolve_account(actor: ObjectDB) -> AccountDB | None:
 
 
 def _story_for_object(instance: Story | Episode | Beat) -> Story:
-    """Return the ``Story`` owning a Story, Episode, Chapter, or Beat."""
+    """Return the ``Story`` owning a Story, Episode, or Beat."""
     if isinstance(instance, Story):
         return instance
     if isinstance(instance, Episode):
@@ -76,7 +73,7 @@ def _actor_is_lead_gm(account: AccountDB | None, story: Story) -> bool:
         return True
     try:
         gm_profile = account.gm_profile
-    except Exception:  # noqa: BLE001
+    except (GMProfile.DoesNotExist, AttributeError):
         return False
     if story.primary_table_id is None:
         return False
@@ -92,7 +89,7 @@ def _actor_may_mark_beat(account: AccountDB | None, beat: Beat) -> bool:
         return False
     try:
         gm_profile = account.gm_profile
-    except Exception:  # noqa: BLE001
+    except (GMProfile.DoesNotExist, AttributeError):
         return False
     return AssistantGMClaim.objects.filter(
         beat=beat,
@@ -136,53 +133,6 @@ def _beat_or_error(beat_id: Any) -> tuple[Beat | None, ActionResult | None]:
         return Beat.objects.get(pk=beat_id), None
     except Beat.DoesNotExist:
         return None, ActionResult(success=False, message="No beat with that ID exists.")
-
-
-def _resolve_single_progress(story: Story) -> tuple[AnyStoryProgress | None, str | None]:
-    """Return the active story progress record, or an error message.
-
-    CHARACTER and GLOBAL scope resolve to at most one record. GROUP scope may
-    legitimately have multiple active tables; callers should surface that as a
-    disambiguation error rather than silently picking the first.
-    """
-    progress: AnyStoryProgress | None = None
-    error: str | None = None
-
-    if story.scope == StoryScope.CHARACTER:
-        progress = StoryProgress.objects.filter(story=story, is_active=True).first()
-
-    elif story.scope == StoryScope.GROUP:
-        qs = GroupStoryProgress.objects.filter(story=story, is_active=True)
-        count = qs.count()
-        if count == 0:
-            progress = None
-        elif count > 1:
-            error = (
-                "Multiple active progress records exist for this story; "
-                "disambiguate before resolving."
-            )
-        else:
-            progress = qs.first()
-
-    elif story.scope == StoryScope.GLOBAL:
-        try:
-            progress = story.global_progress
-        except GlobalStoryProgress.DoesNotExist:
-            progress = None
-        else:
-            progress = progress if progress.is_active else None
-
-    return progress, error
-
-
-def _resolve_progress_or_error(story: Story) -> tuple[AnyStoryProgress | None, ActionResult | None]:
-    """Return active progress, or a failure result when missing or ambiguous."""
-    progress, error = _resolve_single_progress(story)
-    if error:
-        return None, ActionResult(success=False, message=error)
-    if progress is None:
-        return None, ActionResult(success=False, message=_NO_PROGRESS)
-    return progress, None
 
 
 def _chosen_transition_or_error(
@@ -278,9 +228,9 @@ class ResolveEpisodeAction(Action):
         if denial:
             return denial
 
-        progress, error = _resolve_progress_or_error(story)
-        if error:
-            return error
+        progress = get_active_progress_for_story(story)
+        if progress is None:
+            return ActionResult(success=False, message=_NO_PROGRESS)
 
         chosen_transition, error = _chosen_transition_or_error(kwargs.get("chosen_transition_id"))
         if error:
@@ -288,7 +238,7 @@ class ResolveEpisodeAction(Action):
 
         try:
             gm_profile = account.gm_profile
-        except Exception:  # noqa: BLE001
+        except (GMProfile.DoesNotExist, AttributeError):
             gm_profile = None
 
         try:
@@ -376,9 +326,9 @@ class MarkBeatAction(Action):
             return error
 
         story = _story_for_object(beat)
-        progress, error = _resolve_progress_or_error(story)
-        if error:
-            return error
+        progress = get_active_progress_for_story(story)
+        if progress is None:
+            return ActionResult(success=False, message=_NO_PROGRESS)
 
         try:
             record_gm_marked_outcome(
