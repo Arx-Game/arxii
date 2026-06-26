@@ -540,18 +540,35 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """Return the pk of the Persona named by ``self._target_name``, or None.
 
         Used on the non-combat path when ``at <name>`` names a scene participant.
+        The lookup is scoped to personas owned by accounts participating in the
+        active scene at the caller's location.
 
         Raises:
-            CommandError: If a target name was given but no matching Persona exists.
+            CommandError: If a target name was given but no matching Persona exists
+                in the active scene.
         """
         if not self._target_name:
             return None
+        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
 
         name = self._target_name
-        persona = Persona.objects.filter(name__iexact=name).first()
+        scene = _get_active_scene(self.caller.location)
+        if scene is None:
+            msg = "There is no active scene here."
+            raise CommandError(msg)
+
+        persona = (
+            Persona.objects.filter(
+                name__iexact=name,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account__in=scene.participants.all(),
+            )
+            .distinct()
+            .first()
+        )
         if persona is None:
-            msg = f"No persona named '{name}' found."
+            msg = f"No persona named '{name}' is participating in this scene."
             raise CommandError(msg)
         return persona.pk
 
