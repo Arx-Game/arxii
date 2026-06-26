@@ -304,9 +304,9 @@ class CmdConsentTests(TestCase):
         )
         self.assertEqual(rule.mode, ConsentMode.ALLOWLIST)
 
-    def test_whitelist_add_parses_by_partial_name(self) -> None:
-        """Name resolution uses Evennia's search, so partial matches work."""
-        cmd = self._run("whitelist add Bo to romantic")
+    def test_whitelist_add_resolves_target_by_name(self) -> None:
+        """The add path resolves the target character by name via Evennia search."""
+        cmd = self._run("whitelist add Bob to romantic")
 
         self.assertTrue(
             SocialConsentWhitelist.objects.filter(
