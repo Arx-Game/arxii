@@ -232,6 +232,7 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "treat_condition",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

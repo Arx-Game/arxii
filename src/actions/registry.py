@@ -23,6 +23,7 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.conditions import treat_condition
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -207,6 +208,7 @@ _ALL_ACTIONS: list[Action] = [
     entrance,
     restore_sense,
     resolve_entry_flourish,
+    treat_condition,
 ]
 
 # Lookup by key
