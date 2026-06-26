@@ -63,6 +63,20 @@ def _resolve_soul_tether_role(token: str) -> str:
     raise CommandError(msg)
 
 
+def _parse_trailing_kwarg(rest: str, key: str) -> str | None:
+    """Return the value of a ``key=value`` token in *rest*, or None if absent.
+
+    Scans whitespace-delimited tokens for one starting with ``key=`` and
+    returns its value. Used by session subcommands that take a single optional
+    kwarg (e.g. ``join <id> role=sinner``) alongside a positional session id.
+    """
+    prefix = f"{key}="
+    for token in rest.split():
+        if token.startswith(prefix):
+            return token[len(prefix) :]
+    return None
+
+
 class CmdRitual(ArxCommand):
     """Perform a magical ritual or manage a multi-participant ritual session.
 
@@ -259,12 +273,19 @@ class CmdRitual(ArxCommand):
         )
 
     def _handle_join(self, rest: str) -> None:
-        """Accept a session invitation: ``join <id>``."""
+        """Accept a session invitation: ``join <id> [role=sinner|sineater]``."""
         from world.magic.exceptions import SessionNotInPendingError  # noqa: PLC0415
         from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
         from world.magic.services.sessions import accept_session  # noqa: PLC0415
 
-        session_id = self._parse_session_id(rest, "Usage: ritual join <session_id>")
+        session_id = self._parse_session_id(
+            rest, "Usage: ritual join <session_id> [role=sinner|sineater]"
+        )
+        participant_kwargs: dict[str, Any] = {}
+        role_token = _parse_trailing_kwarg(rest, _ROLE_KWARG)
+        if role_token is not None:
+            participant_kwargs[_PARTICIPANT_ROLE_KEY] = _resolve_soul_tether_role(role_token)
+
         sheet = self.caller.sheet_data
         participant = RitualSessionParticipant.objects.filter(
             session_id=session_id,
@@ -274,7 +295,11 @@ class CmdRitual(ArxCommand):
             msg = f"You are not an invited participant of session #{session_id}."
             raise CommandError(msg)
         try:
-            accept_session(participant=participant, participant_kwargs={}, references=[])
+            accept_session(
+                participant=participant,
+                participant_kwargs=participant_kwargs,
+                references=[],
+            )
         except SessionNotInPendingError:
             msg = f"You have already responded to session #{session_id}."
             raise CommandError(msg) from None
