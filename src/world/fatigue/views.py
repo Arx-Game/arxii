@@ -10,17 +10,16 @@ from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
 from world.fatigue.services import rest
-from world.roster.models import RosterEntry
 
 
 def _get_character_sheet(request: Request) -> CharacterSheet | None:
     """Resolve the active character sheet for the authenticated user."""
-    entry = RosterEntry.objects.for_account(request.user).first()
-    if not entry:
+    if not hasattr(request.user, "player_data"):
         return None
-    if entry.character_sheet_id is None:
+    current_character = request.user.player_data.get_current_character()
+    if not current_character:
         return None
-    return entry.character_sheet
+    return CharacterSheet.objects.filter(character=current_character).first()
 
 
 class RestView(APIView):
