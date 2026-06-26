@@ -1,10 +1,22 @@
-"""Tests for progression actions (training allocation CRUD)."""
+"""Tests for progression actions (training allocation CRUD + unlock purchase)."""
 
 from django.test import TestCase
+from evennia.accounts.models import AccountDB
 
-from actions.definitions.progression import ManageTrainingAction
+from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from world.action_points.factories import ActionPointConfigFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import CharacterClassLevelFactory
+from world.magic.factories import ThreadFactory, ThreadXPLockedLevelFactory
+from world.magic.models import ThreadLevelUnlock
+from world.progression.factories import ExperiencePointsDataFactory
+from world.progression.models import (
+    CharacterUnlock,
+    ClassLevelUnlock,
+    ClassXPCost,
+    XPCostChart,
+    XPCostEntry,
+)
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
     SkillFactory,
@@ -229,3 +241,124 @@ class ManageTrainingActionTests(TestCase):
             operation="foo",
         )
         self.assertFalse(result.success)
+
+
+class PurchaseUnlockActionTests(TestCase):
+    """Tests for PurchaseUnlockAction."""
+
+    def _create_character_with_account(self):
+        """Create a character, their sheet, and an attached account."""
+        account = AccountDB.objects.create(
+            username="testplayer",
+            email="test@test.com",
+        )
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        character.db_account = account
+        character.save()
+        return character, sheet, account
+
+    def _create_class_level_unlock(self, character, *, xp_cost: int):
+        """Create a ClassLevelUnlock for ``character`` with an XP cost."""
+        class_level = CharacterClassLevelFactory(character=character, level=3)
+        class_unlock = ClassLevelUnlock.objects.create(
+            character_class=class_level.character_class,
+            target_level=4,
+        )
+        chart = XPCostChart.objects.create(name=f"Test Chart {class_unlock.pk}")
+        XPCostEntry.objects.create(chart=chart, level=4, xp_cost=xp_cost)
+        ClassXPCost.objects.create(
+            character_class=class_level.character_class,
+            cost_chart=chart,
+        )
+        return class_unlock
+
+    def _set_xp(self, account, *, total_earned: int, total_spent: int = 0):
+        """Create or replace the account's XP tracker with the given totals."""
+        return ExperiencePointsDataFactory(
+            account=account,
+            total_earned=total_earned,
+            total_spent=total_spent,
+        )
+
+    def test_purchase_class_level_unlock_success(self):
+        """Can purchase a class-level unlock when the actor has enough XP."""
+        character, _sheet, account = self._create_character_with_account()
+        class_unlock = self._create_class_level_unlock(character, xp_cost=100)
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="class_level",
+            class_level_unlock_id=class_unlock.pk,
+        )
+
+        self.assertTrue(result.success)
+        self.assertIn("successfully unlocked", result.message.lower())
+        self.assertEqual(result.data["unlock_type"], "class_level")
+        self.assertEqual(result.data["unlock_id"], CharacterUnlock.objects.get().pk)
+
+    def test_purchase_class_level_insufficient_xp(self):
+        """Purchasing a class-level unlock fails without enough XP."""
+        character, _sheet, account = self._create_character_with_account()
+        class_unlock = self._create_class_level_unlock(character, xp_cost=100)
+        self._set_xp(account, total_earned=50)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="class_level",
+            class_level_unlock_id=class_unlock.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("insufficient xp", result.message.lower())
+
+    def test_purchase_thread_xp_lock_success(self):
+        """Can purchase a thread XP-lock boundary the actor owns."""
+        character, sheet, account = self._create_character_with_account()
+        # Path stage 2 -> path cap 20; trait value 30 -> anchor cap 30.
+        # Effective cap is 20, so boundary level 20 is purchasable.
+        thread = ThreadFactory(
+            owner=sheet,
+            _trait_value=30,
+            _path_stage=2,
+        )
+        ThreadXPLockedLevelFactory(level=20, xp_cost=100)
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="thread_xp_lock",
+            thread_id=thread.pk,
+            boundary_level=20,
+        )
+
+        self.assertTrue(result.success)
+        self.assertIn("unlocked", result.message.lower())
+        self.assertEqual(result.data["unlock_type"], "thread_xp_lock")
+        self.assertEqual(result.data["thread_id"], thread.pk)
+        self.assertEqual(result.data["boundary_level"], 20)
+        self.assertEqual(
+            result.data["thread_level_unlock_id"],
+            ThreadLevelUnlock.objects.get(thread=thread, unlocked_level=20).pk,
+        )
+
+    def test_purchase_thread_not_owned(self):
+        """Cannot purchase a thread XP-lock boundary for someone else's thread."""
+        character, _sheet, account = self._create_character_with_account()
+        other_sheet = CharacterSheetFactory()
+        thread = ThreadFactory(owner=other_sheet)
+        ThreadXPLockedLevelFactory(level=20, xp_cost=100)
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="thread_xp_lock",
+            thread_id=thread.pk,
+            boundary_level=20,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIsNone(
+            ThreadLevelUnlock.objects.filter(thread=thread, unlocked_level=20).first()
+        )

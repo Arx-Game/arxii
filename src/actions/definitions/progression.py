@@ -87,7 +87,7 @@ class ManageTrainingAction(Action):
             Persona.DoesNotExist,
         ) as exc:
             if hasattr(exc, "user_message"):
-                msg = exc.user_message
+                msg: str = str(exc.user_message)
             else:
                 msg = str(exc)
             return ActionResult(success=False, message=msg)
@@ -208,3 +208,117 @@ class ManageTrainingAction(Action):
         if isinstance(mentor_persona_id, Persona):
             return mentor_persona_id
         return Persona.objects.get(pk=mentor_persona_id)
+
+
+@dataclass
+class PurchaseUnlockAction(Action):
+    """Purchase a class-level or thread XP-lock unlock with XP.
+
+    Both unlock types spend account XP through their respective service
+    functions; this action is a thin action.run() wrapper around them.
+    """
+
+    key: str = "purchase_unlock"
+    name: str = "Purchase Unlock"
+    icon: str = "lock-open"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+    ap_cost: int = 0
+
+    _UNLOCK_TYPE_CLASS_LEVEL = "class_level"
+    _UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.magic.exceptions import (  # noqa: PLC0415
+            AnchorCapExceeded,
+            InvalidImbueAmount,
+            XPInsufficient,
+        )
+        from world.magic.models import Thread  # noqa: PLC0415
+        from world.magic.types.alterations import AlterationGateError  # noqa: PLC0415
+        from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
+
+        unlock_type = kwargs.get("unlock_type")
+
+        try:
+            if unlock_type == self._UNLOCK_TYPE_CLASS_LEVEL:
+                return self._purchase_class_level(actor, kwargs)
+            if unlock_type == self._UNLOCK_TYPE_THREAD_XP_LOCK:
+                return self._purchase_thread_xp_lock(actor, kwargs)
+        except (
+            ClassLevelUnlock.DoesNotExist,
+            Thread.DoesNotExist,
+            CharacterSheet.DoesNotExist,
+            AlterationGateError,
+            InvalidImbueAmount,
+            AnchorCapExceeded,
+            XPInsufficient,
+            ValueError,
+            TypeError,
+        ) as exc:
+            if hasattr(exc, "user_message"):
+                msg: str = str(exc.user_message)
+            else:
+                msg = str(exc)
+            return ActionResult(success=False, message=msg)
+
+        return ActionResult(
+            success=False,
+            message=(
+                "Invalid or missing unlock_type. "
+                f"Expected '{self._UNLOCK_TYPE_CLASS_LEVEL}' or "
+                f"'{self._UNLOCK_TYPE_THREAD_XP_LOCK}'."
+            ),
+        )
+
+    def _purchase_class_level(
+        self,
+        actor: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Purchase a class-level unlock for the actor."""
+        from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
+        from world.progression.services.spends import spend_xp_on_unlock  # noqa: PLC0415
+
+        unlock_target = ClassLevelUnlock.objects.get(pk=kwargs.get("class_level_unlock_id"))
+        success, message, unlock = spend_xp_on_unlock(actor, unlock_target)
+        if not success:
+            return ActionResult(success=False, message=message)
+        return ActionResult(
+            success=True,
+            message=message,
+            data={
+                "unlock_type": self._UNLOCK_TYPE_CLASS_LEVEL,
+                "unlock_id": unlock.pk,
+            },
+        )
+
+    def _purchase_thread_xp_lock(
+        self,
+        actor: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Purchase an XP-locked level boundary on a thread owned by the actor."""
+        from world.magic.models import Thread  # noqa: PLC0415
+        from world.magic.services.threads import cross_thread_xp_lock  # noqa: PLC0415
+
+        thread = Thread.objects.get(pk=kwargs.get("thread_id"))
+        character_sheet = actor.sheet_data
+        boundary_level = int(kwargs["boundary_level"])
+        thread_level_unlock = cross_thread_xp_lock(character_sheet, thread, boundary_level)
+        return ActionResult(
+            success=True,
+            message=f"Thread boundary {boundary_level} unlocked.",
+            data={
+                "unlock_type": self._UNLOCK_TYPE_THREAD_XP_LOCK,
+                "thread_level_unlock_id": thread_level_unlock.pk,
+                "thread_id": thread.pk,
+                "boundary_level": boundary_level,
+            },
+        )
