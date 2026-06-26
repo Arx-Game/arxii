@@ -92,6 +92,12 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.relationships import (
+    CreateCapstoneAction,
+    CreateDevelopmentAction,
+    CreateFirstImpressionAction,
+    RedistributePointsAction,
+)
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
@@ -195,6 +201,10 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    CreateFirstImpressionAction(),
+    CreateDevelopmentAction(),
+    CreateCapstoneAction(),
+    RedistributePointsAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     start_npc_interaction,
