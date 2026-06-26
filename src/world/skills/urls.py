@@ -9,6 +9,7 @@ from world.skills.views import (
     SkillPointBudgetViewSet,
     SkillViewSet,
     SpecializationViewSet,
+    TrainingAllocationViewSet,
 )
 
 router = DefaultRouter()
@@ -20,5 +21,6 @@ router.register(
     basename="path-skill-suggestion",
 )
 router.register("skill-budget", SkillPointBudgetViewSet, basename="skill-budget")
+router.register("training-allocations", TrainingAllocationViewSet, basename="training-allocation")
 
 urlpatterns = router.urls
