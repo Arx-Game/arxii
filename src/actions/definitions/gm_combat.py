@@ -7,6 +7,7 @@ preview opponent defaults). They are gated to the encounter's scene GM or staff.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,7 @@ from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import (
-    resolve_actor_or_error,
+    resolve_account_or_none,
     resolve_character_sheet_in_room,
     resolve_model_by_pk_or_name,
 )
@@ -22,7 +23,6 @@ from world.combat.constants import OpponentTier
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import CombatEncounter, CombatParticipant
@@ -42,50 +42,36 @@ _NO_ACTIVE_ENCOUNTER = "There is no active encounter here."
 _NO_GM_PERMISSION = "Only the scene's GM or staff can do that."
 
 
-def _active_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
-    """Return the newest non-completed combat encounter in *actor*'s room."""
+def _encounter_in_room(
+    actor: ObjectDB,
+    *,
+    statuses: frozenset[str] | None = None,
+) -> CombatEncounter | None:
+    """Return the newest combat encounter in *actor*'s room, optionally filtered by status."""
     from world.combat.models import CombatEncounter  # noqa: PLC0415
 
     room = actor.location
     if room is None:
         return None
-    return (
-        CombatEncounter.objects.filter(
-            room=room,
-            status__in=_ACTIVE_ENCOUNTER_STATUSES,
-        )
-        .select_related("scene")
-        .order_by("-created_at")
-        .first()
-    )
+    queryset = CombatEncounter.objects.filter(room=room)
+    if statuses is not None:
+        queryset = queryset.filter(status__in=statuses)
+    return queryset.select_related("scene").order_by("-created_at").first()
+
+
+def _active_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
+    """Return the newest non-completed combat encounter in *actor*'s room."""
+    return _encounter_in_room(actor, statuses=_ACTIVE_ENCOUNTER_STATUSES)
 
 
 def _latest_encounter_in_room(actor: ObjectDB) -> CombatEncounter | None:
     """Return the newest combat encounter in *actor*'s room, regardless of status."""
-    from world.combat.models import CombatEncounter  # noqa: PLC0415
-
-    room = actor.location
-    if room is None:
-        return None
-    return (
-        CombatEncounter.objects.filter(room=room)
-        .select_related("scene")
-        .order_by("-created_at")
-        .first()
-    )
-
-
-def _resolve_account(actor: ObjectDB) -> AccountDB | None:
-    """Return the actor's controlling account, or None if there isn't one."""
-    try:
-        return resolve_actor_or_error(actor)
-    except CommandError:
-        return None
+    return _encounter_in_room(actor)
 
 
 def _actor_may_gm_encounter(actor: ObjectDB, encounter: CombatEncounter) -> bool:
     """True when *actor* is staff or the GM of *encounter*'s scene."""
-    account = _resolve_account(actor)
+    account = resolve_account_or_none(actor)
     if account is None:
         return False
     if account.is_staff:
@@ -123,6 +109,26 @@ def _permission_failure_result(encounter: CombatEncounter | None) -> ActionResul
     return ActionResult(success=False, message=_NO_GM_PERMISSION)
 
 
+def _fetch_encounter_and_permission(
+    actor: ObjectDB,
+    fetch: Callable[[ObjectDB], CombatEncounter | None],
+) -> tuple[CombatEncounter | None, ActionResult | None]:
+    """Return the encounter plus an error result if *actor* may not GM it."""
+    encounter = fetch(actor)
+    if encounter is None:
+        return None, ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
+    if not _actor_may_gm_encounter(actor, encounter):
+        return encounter, _permission_failure_result(encounter)
+    return encounter, None
+
+
+def _active_encounter_for_gm(
+    actor: ObjectDB,
+) -> tuple[CombatEncounter | None, ActionResult | None]:
+    """Return the active encounter in *actor*'s room with GM permission checked."""
+    return _fetch_encounter_and_permission(actor, _active_encounter_in_room)
+
+
 @dataclass
 class BeginEncounterRoundAction(Action):
     """Advance the active encounter from BETWEEN_ROUNDS to DECLARING."""
@@ -142,11 +148,9 @@ class BeginEncounterRoundAction(Action):
     ) -> ActionResult:
         from world.combat.services import begin_declaration_phase  # noqa: PLC0415
 
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _fetch_encounter_and_permission(actor, _active_encounter_in_room)
+        if error:
+            return error
 
         try:
             begin_declaration_phase(encounter)
@@ -175,11 +179,9 @@ class ResolveEncounterRoundAction(Action):
         from actions.errors import ActionDispatchError  # noqa: PLC0415
         from world.combat.services import resolve_round  # noqa: PLC0415
 
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
         if encounter.status != RoundStatus.DECLARING:
             return ActionResult(
                 success=False,
@@ -213,54 +215,47 @@ class AddOpponentAction(Action):
         from world.combat.models import ThreatPool  # noqa: PLC0415
         from world.combat.services import add_opponent  # noqa: PLC0415
 
-        result: ActionResult | None = None
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            result = ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        elif not _actor_may_gm_encounter(actor, encounter):
-            result = _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
 
         name = kwargs.get("name")
         tier = kwargs.get("tier")
         threat_pool_id = kwargs.get("threat_pool_id")
         description = kwargs.get("description", "")
 
-        if result is None and (not name or not tier or threat_pool_id is None):
-            result = ActionResult(
+        if not name or not tier or threat_pool_id is None:
+            return ActionResult(
                 success=False,
                 message="Name, tier, and threat pool are required.",
             )
-        if result is None and tier not in OpponentTier.values:
-            result = ActionResult(success=False, message="Invalid opponent tier.")
+        if tier not in OpponentTier.values:
+            return ActionResult(success=False, message="Invalid opponent tier.")
 
-        if result is None:
-            try:
-                pool = resolve_model_by_pk_or_name(
-                    ThreatPool,
-                    str(threat_pool_id),
-                    not_found_msg=f"No threat pool named {threat_pool_id!r} found.",
-                )
-            except CommandError as err:
-                result = ActionResult(success=False, message=str(err))
+        try:
+            pool = resolve_model_by_pk_or_name(
+                ThreatPool,
+                str(threat_pool_id),
+                not_found_msg=f"No threat pool named {threat_pool_id!r} found.",
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
 
-        if result is None:
-            try:
-                opponent = add_opponent(
-                    encounter,
-                    name=name,
-                    tier=tier,
-                    threat_pool=pool,
-                    description=description,
-                )
-            except ValueError as err:
-                result = ActionResult(success=False, message=str(err))
-            else:
-                result = ActionResult(
-                    success=True,
-                    message=f"Opponent '{opponent.name}' added to the encounter.",
-                )
+        try:
+            opponent = add_opponent(
+                encounter,
+                name=name,
+                tier=tier,
+                threat_pool=pool,
+                description=description,
+            )
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
 
-        return result
+        return ActionResult(
+            success=True,
+            message=f"Opponent '{opponent.name}' added to the encounter.",
+        )
 
 
 @dataclass
@@ -284,11 +279,9 @@ class AddEncounterParticipantAction(Action):
     ) -> ActionResult:
         from world.combat.services import add_participant  # noqa: PLC0415
 
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
         if character_sheet_id is None:
             return ActionResult(success=False, message="A character is required.")
 
@@ -333,11 +326,9 @@ class RemoveEncounterParticipantAction(Action):
     ) -> ActionResult:
         from world.combat.services import remove_participant  # noqa: PLC0415
 
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
         if participant_id is None:
             return ActionResult(success=False, message="A participant is required.")
 
@@ -374,11 +365,9 @@ class PauseEncounterAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
 
         encounter.is_paused = not encounter.is_paused
         encounter.save(update_fields=["is_paused"])
@@ -406,11 +395,9 @@ class EndEncounterAction(Action):
     ) -> ActionResult:
         from world.combat.services import end_encounter  # noqa: PLC0415
 
-        encounter = _latest_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _fetch_encounter_and_permission(actor, _latest_encounter_in_room)
+        if error:
+            return error
         if encounter.status == RoundStatus.COMPLETED:
             return ActionResult(success=False, message="Encounter already completed.")
 
@@ -480,11 +467,9 @@ class PreviewOpponentDefaultsAction(Action):
             validate_stakes_requirement,
         )
 
-        encounter = _active_encounter_in_room(actor)
-        if encounter is None:
-            return ActionResult(success=False, message=_NO_ACTIVE_ENCOUNTER)
-        if not _actor_may_gm_encounter(actor, encounter):
-            return _permission_failure_result(encounter)
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
         if tier is None or tier not in OpponentTier.values:
             return ActionResult(success=False, message="Invalid opponent tier.")
 
@@ -496,7 +481,7 @@ class PreviewOpponentDefaultsAction(Action):
                 message="Scaling template for that tier is not configured.",
             )
 
-        account = _resolve_account(actor)
+        account = resolve_account_or_none(actor)
         stakes_ok = True
         stakes_message = ""
         if account is not None:

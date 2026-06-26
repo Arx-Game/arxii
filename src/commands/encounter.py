@@ -7,10 +7,8 @@ A thin command face for the eight encounter actions in
 
 from __future__ import annotations
 
-from typing import Any
-
-from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.namespace import ArxNamespaceCommand
 
 _USAGE = (
     "Usage: encounter <subcommand>\n"
@@ -45,7 +43,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
 }
 
 
-class CmdEncounter(ArxCommand):
+class CmdEncounter(ArxNamespaceCommand):
     """Manage an active combat encounter in your current room.
 
     All subcommands are gated by the encounter's scene GM or staff status in the
@@ -55,42 +53,8 @@ class CmdEncounter(ArxCommand):
     key = "encounter"
     aliases = ()
     locks = "cmd:all()"
-    action = None  # Routed manually by subverb.
-
-    def func(self) -> None:
-        """Route the leading subverb to the appropriate action."""
-        raw = (self.args or "").strip()
-        if not raw:
-            self.msg(_USAGE)
-            return
-
-        parts = raw.split(maxsplit=1)
-        subverb = parts[0].lower()
-        rest = parts[1].strip() if len(parts) > 1 else ""
-
-        handler_name = _SUBVERB_HANDLERS.get(subverb)
-        if handler_name is None:
-            self.msg(_USAGE)
-            return
-
-        try:
-            getattr(self, handler_name)(rest)
-        except CommandError as err:
-            self.msg(str(err))
-
-    def _run_action(self, action_cls: type[Any], **kwargs: Any) -> None:
-        """Instantiate *action_cls* and forward the result message."""
-        result = action_cls().run(actor=self.caller, **kwargs)
-        if result.message:
-            self.msg(result.message)
-
-    def _require_arg(self, value: str, usage: str) -> str:
-        """Return a stripped token or raise CommandError with *usage*."""
-        token = value.strip()
-        if not token:
-            msg = usage
-            raise CommandError(msg)
-        return token
+    _USAGE = _USAGE
+    _SUBVERB_HANDLERS = _SUBVERB_HANDLERS
 
     def _handle_begin(self, _rest: str) -> None:
         """Dispatch BeginEncounterRoundAction."""

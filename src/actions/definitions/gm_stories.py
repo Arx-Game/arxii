@@ -12,10 +12,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import Model
+
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
-from commands.exceptions import CommandError
-from commands.utils.gm_resolution import resolve_actor_or_error
+from commands.utils.gm_resolution import resolve_account_or_none
 from world.gm.models import GMProfile
 from world.stories.constants import (
     AssistantClaimStatus,
@@ -46,14 +47,6 @@ _NO_MARK_PERMISSION = (
     "Only the story's Lead GM, staff, or an approved Assistant GM may mark a beat."
 )
 _NO_PROGRESS = "No active progress record found for this story."
-
-
-def _resolve_account(actor: ObjectDB) -> AccountDB | None:
-    """Return the actor's controlling account, or ``None`` if there isn't one."""
-    try:
-        return resolve_actor_or_error(actor)
-    except CommandError:
-        return None
 
 
 def _story_for_object(instance: Story | Episode | Beat) -> Story:
@@ -105,34 +98,66 @@ def _lead_gm_deny_result(account: AccountDB | None, story: Story) -> ActionResul
     return None
 
 
+def _load_or_error[TModel: Model](
+    model: type[TModel],
+    pk: Any,
+    *,
+    missing_msg: str,
+    not_found_msg: str,
+) -> tuple[TModel | None, ActionResult | None]:
+    """Fetch a model instance by pk, returning ``(instance, error_result)``."""
+    if pk is None:
+        return None, ActionResult(success=False, message=missing_msg)
+    try:
+        return model.objects.get(pk=pk), None
+    except (model.DoesNotExist, ValueError):
+        return None, ActionResult(success=False, message=not_found_msg)
+
+
+def _enum_or_error(
+    enum_cls: type[Any],
+    value: Any,
+    *,
+    missing_msg: str,
+    invalid_msg: str,
+) -> tuple[Any | None, ActionResult | None]:
+    """Parse a ``TextChoices``/``IntegerChoices`` value, returning ``(value, error_result)``."""
+    if value is None:
+        return None, ActionResult(success=False, message=missing_msg)
+    try:
+        return enum_cls(value), None
+    except ValueError:
+        return None, ActionResult(success=False, message=invalid_msg)
+
+
 def _story_or_error(story_id: Any) -> tuple[Story | None, ActionResult | None]:
     """Fetch a ``Story`` by id, returning ``(story, error_result)``."""
-    if story_id is None:
-        return None, ActionResult(success=False, message="A story is required.")
-    try:
-        return Story.objects.get(pk=story_id), None
-    except (Story.DoesNotExist, ValueError):
-        return None, ActionResult(success=False, message="No story with that ID exists.")
+    return _load_or_error(
+        Story,
+        story_id,
+        missing_msg="A story is required.",
+        not_found_msg="No story with that ID exists.",
+    )
 
 
 def _episode_or_error(episode_id: Any) -> tuple[Episode | None, ActionResult | None]:
     """Fetch an ``Episode`` by id, returning ``(episode, error_result)``."""
-    if episode_id is None:
-        return None, ActionResult(success=False, message="An episode is required.")
-    try:
-        return Episode.objects.get(pk=episode_id), None
-    except (Episode.DoesNotExist, ValueError):
-        return None, ActionResult(success=False, message="No episode with that ID exists.")
+    return _load_or_error(
+        Episode,
+        episode_id,
+        missing_msg="An episode is required.",
+        not_found_msg="No episode with that ID exists.",
+    )
 
 
 def _beat_or_error(beat_id: Any) -> tuple[Beat | None, ActionResult | None]:
     """Fetch a ``Beat`` by id, returning ``(beat, error_result)``."""
-    if beat_id is None:
-        return None, ActionResult(success=False, message="A beat is required.")
-    try:
-        return Beat.objects.get(pk=beat_id), None
-    except (Beat.DoesNotExist, ValueError):
-        return None, ActionResult(success=False, message="No beat with that ID exists.")
+    return _load_or_error(
+        Beat,
+        beat_id,
+        missing_msg="A beat is required.",
+        not_found_msg="No beat with that ID exists.",
+    )
 
 
 def _chosen_transition_or_error(
@@ -149,22 +174,22 @@ def _chosen_transition_or_error(
 
 def _target_maturity_or_error(target: Any) -> tuple[StoryMaturity | None, ActionResult | None]:
     """Parse a target maturity value, returning ``(maturity, error_result)``."""
-    if target is None:
-        return None, ActionResult(success=False, message="A target maturity is required.")
-    try:
-        return StoryMaturity(target), None
-    except ValueError:
-        return None, ActionResult(success=False, message="Invalid target maturity.")
+    return _enum_or_error(
+        StoryMaturity,
+        target,
+        missing_msg="A target maturity is required.",
+        invalid_msg="Invalid target maturity.",
+    )
 
 
 def _beat_outcome_or_error(outcome: Any) -> tuple[BeatOutcome | None, ActionResult | None]:
     """Parse a beat outcome value, returning ``(outcome, error_result)``."""
-    if outcome is None:
-        return None, ActionResult(success=False, message="An outcome is required.")
-    try:
-        return BeatOutcome(outcome), None
-    except ValueError:
-        return None, ActionResult(success=False, message="Invalid beat outcome.")
+    return _enum_or_error(
+        BeatOutcome,
+        outcome,
+        missing_msg="An outcome is required.",
+        invalid_msg="Invalid beat outcome.",
+    )
 
 
 @dataclass
@@ -184,7 +209,7 @@ class CompleteStoryAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        account = _resolve_account(actor)
+        account = resolve_account_or_none(actor)
         story, error = _story_or_error(kwargs.get("story_id"))
         if error:
             return error
@@ -218,7 +243,7 @@ class ResolveEpisodeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        account = _resolve_account(actor)
+        account = resolve_account_or_none(actor)
         episode, error = _episode_or_error(kwargs.get("episode_id"))
         if error:
             return error
@@ -271,7 +296,7 @@ class PromoteEpisodeAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        account = _resolve_account(actor)
+        account = resolve_account_or_none(actor)
         episode, error = _episode_or_error(kwargs.get("episode_id"))
         if error:
             return error
@@ -313,7 +338,7 @@ class MarkBeatAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        account = _resolve_account(actor)
+        account = resolve_account_or_none(actor)
         beat, error = _beat_or_error(kwargs.get("beat_id"))
         if error:
             return error

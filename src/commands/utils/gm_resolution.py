@@ -43,6 +43,18 @@ def resolve_actor_or_error(caller: object) -> AccountDB:
     return account
 
 
+def resolve_account_or_none(caller: object) -> AccountDB | None:
+    """Return the ``AccountDB`` controlling *caller*, or ``None``.
+
+    Thin wrapper around ``resolve_actor_or_error`` for code paths that treat a
+    missing account as a permission failure rather than a command error.
+    """
+    try:
+        return resolve_actor_or_error(caller)
+    except CommandError:
+        return None
+
+
 def resolve_model_by_pk_or_name(
     model: type[_T],
     value: str,
