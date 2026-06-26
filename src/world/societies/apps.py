@@ -20,3 +20,9 @@ class SocietiesConfig(AppConfig):
         from world.societies.reaction_kinds import SPREAD_ASSIST_KIND  # noqa: PLC0415
 
         register_reaction_kind(ReactionWindowKind.SPREAD_ASSIST, SPREAD_ASSIST_KIND)
+
+        # #1511 — register the org invitation offer handler.
+        from commands.offer_registry import register_offer_handler  # noqa: PLC0415
+        from world.societies.offer_handlers import OrgInviteHandler  # noqa: PLC0415
+
+        register_offer_handler(OrgInviteHandler())

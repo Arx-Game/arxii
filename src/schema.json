@@ -20444,6 +20444,195 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/societies/memberships/:
+    get:
+      operationId: societies_memberships_list
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationMembershipList'
+          description: ''
+  /api/societies/memberships/{id}/:
+    get:
+      operationId: societies_memberships_retrieve
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Organization Membership.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMembership'
+          description: ''
+  /api/societies/offers/:
+    get:
+      operationId: societies_offers_list
+      description: |-
+        List/retrieve membership offers visible to the requester.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: query
+        name: from_persona
+        schema:
+          type: number
+      - in: query
+        name: kind
+        schema:
+          type: string
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: to_persona
+        schema:
+          type: number
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationMembershipOfferList'
+          description: ''
+  /api/societies/offers/{id}/:
+    get:
+      operationId: societies_offers_retrieve
+      description: |-
+        List/retrieve membership offers visible to the requester.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization membership
+          offer.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMembershipOffer'
+          description: ''
+  /api/societies/organizations/:
+    get:
+      operationId: societies_organizations_list
+      description: |-
+        List/retrieve organizations the requester is an active member of.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant organizations.
+      parameters:
+      - in: query
+        name: org_type
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: society
+        schema:
+          type: string
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationList'
+          description: ''
+  /api/societies/organizations/{id}/:
+    get:
+      operationId: societies_organizations_retrieve
+      description: |-
+        List/retrieve organizations the requester is an active member of.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant organizations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
   /api/societies/rankings/{id}/:
     get:
       operationId: societies_rankings_retrieve
@@ -20472,6 +20661,62 @@ paths:
           description: ''
         '404':
           description: No ranking display on that object.
+  /api/societies/ranks/:
+    get:
+      operationId: societies_ranks_list
+      description: |-
+        List/retrieve rank ladders for organizations the requester belongs to.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant rank ladders.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationRankList'
+          description: ''
+  /api/societies/ranks/{id}/:
+    get:
+      operationId: societies_ranks_retrieve
+      description: |-
+        List/retrieve rank ladders for organizations the requester belongs to.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant rank ladders.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization rank.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationRank'
+          description: ''
   /api/staff-inbox/:
     get:
       operationId: staff_inbox_retrieve
@@ -34399,6 +34644,182 @@ components:
       - organization_id
       - organization_name
       - spend_rank_max
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: The organization's name
+          maxLength: 100
+        description:
+          type: string
+          description: A description of the organization's purpose and history
+        society_name:
+          type: string
+          readOnly: true
+        org_type_name:
+          type: string
+          readOnly: true
+        ranks:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRank'
+          readOnly: true
+      required:
+      - id
+      - name
+      - org_type_name
+      - ranks
+      - society_name
+    OrganizationMembership:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+          description: The organization this membership belongs to
+        organization_name:
+          type: string
+          readOnly: true
+        persona:
+          type: integer
+          description: The persona (character identity) that holds this membership
+        persona_name:
+          type: string
+          readOnly: true
+        rank:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationRank'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        joined_date:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the persona joined this organization
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the persona voluntarily left the organization
+        exiled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the persona was forcibly removed from the organization
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+      - joined_date
+      - organization
+      - organization_name
+      - persona
+      - persona_name
+      - rank
+      - title
+    OrganizationMembershipOffer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+        organization_name:
+          type: string
+          readOnly: true
+        from_persona:
+          type: integer
+        from_persona_name:
+          type: string
+          readOnly: true
+        to_persona:
+          type: integer
+          nullable: true
+        to_persona_name:
+          type: string
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/OrganizationMembershipOfferKindEnum'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationMembershipOfferStatusEnum'
+          default: pending
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - from_persona
+      - from_persona_name
+      - id
+      - kind
+      - organization
+      - organization_name
+      - to_persona_name
+    OrganizationMembershipOfferKindEnum:
+      enum:
+      - invite
+      - application
+      type: string
+      description: |-
+        * `invite` - Invite
+        * `application` - Application
+    OrganizationMembershipOfferStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `cancelled` - Cancelled
+    OrganizationRank:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Diegetic name for this rung (e.g., Guildmaster, Captain)
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Authority tier (1 highest, 5 lowest)
+        can_invite:
+          type: boolean
+          description: Members at this rank can invite others to the organization
+        can_kick:
+          type: boolean
+          description: Members at this rank can expel lower-ranked members
+        can_manage_ranks:
+          type: boolean
+          description: Members at this rank can promote/demote others
+      required:
+      - id
+      - name
+      - tier
     OrganizationSearch:
       type: object
       properties:
@@ -36026,6 +36447,98 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferCooldown'
+    PaginatedOrganizationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    PaginatedOrganizationMembershipList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMembership'
+    PaginatedOrganizationMembershipOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMembershipOffer'
+    PaginatedOrganizationRankList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRank'
     PaginatedOrganizationSearchList:
       type: object
       required:

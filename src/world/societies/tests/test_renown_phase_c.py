@@ -57,6 +57,14 @@ def _make_temporary_persona(character_sheet):
     )
 
 
+def _make_rank(organization, tier):
+    """Get or create an OrganizationRank for tests that pin a tier."""
+    return organization.ranks.get_or_create(
+        tier=tier,
+        defaults={"name": organization.get_rank_title(tier)},
+    )[0]
+
+
 class OrgInflowTests(TestCase):
     """A persona's deed flows flat 10% into each membership's org accumulated."""
 
@@ -70,7 +78,7 @@ class OrgInflowTests(TestCase):
     def test_single_membership_flat_inflow(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory()
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=3)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 3))
         touched = apply_org_inflow_for_persona_deed(
             persona, prestige_delta=300, fame_delta=1500, legend_delta=200
         )
@@ -87,8 +95,12 @@ class OrgInflowTests(TestCase):
         persona_low = _make_primary_persona()
         org_high = OrganizationFactory()
         org_low = OrganizationFactory()
-        OrganizationMembershipFactory(persona=persona_high, organization=org_high, rank=1)
-        OrganizationMembershipFactory(persona=persona_low, organization=org_low, rank=5)
+        OrganizationMembershipFactory(
+            persona=persona_high, organization=org_high, rank=_make_rank(org_high, 1)
+        )
+        OrganizationMembershipFactory(
+            persona=persona_low, organization=org_low, rank=_make_rank(org_low, 5)
+        )
         apply_org_inflow_for_persona_deed(
             persona_high, prestige_delta=1000, fame_delta=0, legend_delta=0
         )
@@ -103,8 +115,12 @@ class OrgInflowTests(TestCase):
         persona = _make_primary_persona()
         org_a = OrganizationFactory(name="Org A")
         org_b = OrganizationFactory(name="Org B")
-        OrganizationMembershipFactory(persona=persona, organization=org_a, rank=2)
-        OrganizationMembershipFactory(persona=persona, organization=org_b, rank=4)
+        OrganizationMembershipFactory(
+            persona=persona, organization=org_a, rank=_make_rank(org_a, 2)
+        )
+        OrganizationMembershipFactory(
+            persona=persona, organization=org_b, rank=_make_rank(org_b, 4)
+        )
         touched = apply_org_inflow_for_persona_deed(
             persona, prestige_delta=500, fame_delta=0, legend_delta=0
         )
@@ -117,7 +133,11 @@ class OrgInflowTests(TestCase):
     def test_covenant_membership_receives_legend(self) -> None:
         persona = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=persona, organization=covenant.organization, rank=2)
+        OrganizationMembershipFactory(
+            persona=persona,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 2),
+        )
         apply_org_inflow_for_persona_deed(
             persona, prestige_delta=100, fame_delta=200, legend_delta=1000
         )
@@ -130,7 +150,7 @@ class OrgInflowTests(TestCase):
     def test_non_covenant_org_ignores_legend_delta(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory()
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=3)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 3))
         apply_org_inflow_for_persona_deed(
             persona, prestige_delta=0, fame_delta=0, legend_delta=10000
         )
@@ -141,7 +161,7 @@ class OrgInflowTests(TestCase):
         primary = _make_primary_persona()
         temp = _make_temporary_persona(primary.character_sheet)
         org = OrganizationFactory()
-        OrganizationMembershipFactory(persona=primary, organization=org, rank=2)
+        OrganizationMembershipFactory(persona=primary, organization=org, rank=_make_rank(org, 2))
         touched = apply_org_inflow_for_persona_deed(
             temp, prestige_delta=1000, fame_delta=1000, legend_delta=0
         )
@@ -166,8 +186,8 @@ class PersonaOutflowTests(TestCase):
         leader = _make_primary_persona()
         aspirant = _make_primary_persona()
         org = OrganizationFactory(base_prestige=1000)
-        OrganizationMembershipFactory(persona=leader, organization=org, rank=1)
-        OrganizationMembershipFactory(persona=aspirant, organization=org, rank=5)
+        OrganizationMembershipFactory(persona=leader, organization=org, rank=_make_rank(org, 1))
+        OrganizationMembershipFactory(persona=aspirant, organization=org, rank=_make_rank(org, 5))
 
         recompute_persona_prestige_from_orgs(leader)
         recompute_persona_prestige_from_orgs(aspirant)
@@ -181,7 +201,7 @@ class PersonaOutflowTests(TestCase):
     def test_outflow_sums_base_and_accumulated(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory(base_prestige=100, accumulated_prestige=50, accumulated_fame=200)
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=2)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 2))
         recompute_persona_prestige_from_orgs(persona)
         persona.refresh_from_db()
         # rank 2 multiplier × (100 + 50 + 200)
@@ -191,8 +211,12 @@ class PersonaOutflowTests(TestCase):
         persona = _make_primary_persona()
         org_a = OrganizationFactory(name="A", base_prestige=200)
         org_b = OrganizationFactory(name="B", base_prestige=500)
-        OrganizationMembershipFactory(persona=persona, organization=org_a, rank=1)
-        OrganizationMembershipFactory(persona=persona, organization=org_b, rank=3)
+        OrganizationMembershipFactory(
+            persona=persona, organization=org_a, rank=_make_rank(org_a, 1)
+        )
+        OrganizationMembershipFactory(
+            persona=persona, organization=org_b, rank=_make_rank(org_b, 3)
+        )
         recompute_persona_prestige_from_orgs(persona)
         persona.refresh_from_db()
         expected = int(200 * RANK_OUTFLOW_MULTIPLIERS[1]) + int(500 * RANK_OUTFLOW_MULTIPLIERS[3])
@@ -204,7 +228,7 @@ class PersonaOutflowTests(TestCase):
         persona.prestige_from_dwellings = 25
         persona.save(update_fields=["prestige_from_deeds", "prestige_from_dwellings"])
         org = OrganizationFactory(base_prestige=1000)
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=2)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 2))
         recompute_persona_prestige_from_orgs(persona)
         persona.refresh_from_db()
         self.assertEqual(
@@ -239,7 +263,7 @@ class BodyCovenantLegendInflowTests(TestCase):
     def test_no_covenant_memberships_no_inflow(self) -> None:
         primary = _make_primary_persona()
         org = OrganizationFactory()  # not a covenant
-        OrganizationMembershipFactory(persona=primary, organization=org, rank=2)
+        OrganizationMembershipFactory(persona=primary, organization=org, rank=_make_rank(org, 2))
         temp = _make_temporary_persona(primary.character_sheet)
         touched = apply_body_covenant_legend_inflow(temp, legend_delta=500)
         self.assertEqual(touched, ())
@@ -249,7 +273,11 @@ class BodyCovenantLegendInflowTests(TestCase):
     def test_covenant_membership_receives_rank_weighted_legend(self) -> None:
         primary = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=primary, organization=covenant.organization, rank=1)
+        OrganizationMembershipFactory(
+            persona=primary,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 1),
+        )
         temp = _make_temporary_persona(primary.character_sheet)
 
         touched = apply_body_covenant_legend_inflow(temp, legend_delta=1000)
@@ -262,7 +290,11 @@ class BodyCovenantLegendInflowTests(TestCase):
     def test_low_rank_primary_yields_smaller_inflow(self) -> None:
         primary = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=primary, organization=covenant.organization, rank=5)
+        OrganizationMembershipFactory(
+            persona=primary,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 5),
+        )
         temp = _make_temporary_persona(primary.character_sheet)
         apply_body_covenant_legend_inflow(temp, legend_delta=10000)
         covenant.organization.refresh_from_db()
@@ -276,7 +308,7 @@ class FireRenownAwardOrgWiringTests(TestCase):
     def test_primary_deed_inflows_and_recomputes_outflow(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory(base_prestige=0)
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=2)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 2))
         result = fire_renown_award(
             persona=persona,
             magnitude=RenownMagnitude.HIGH,
@@ -303,7 +335,11 @@ class FireRenownAwardOrgWiringTests(TestCase):
     def test_covenant_membership_gets_legend_inflow(self) -> None:
         persona = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=persona, organization=covenant.organization, rank=1)
+        OrganizationMembershipFactory(
+            persona=persona,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 1),
+        )
         fire_renown_award(
             persona=persona,
             magnitude=RenownMagnitude.HIGH,
@@ -318,7 +354,11 @@ class FireRenownAwardOrgWiringTests(TestCase):
     def test_temporary_persona_routes_legend_to_body_covenant(self) -> None:
         primary = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=primary, organization=covenant.organization, rank=1)
+        OrganizationMembershipFactory(
+            persona=primary,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 1),
+        )
         temp = _make_temporary_persona(primary.character_sheet)
         result = fire_renown_award(
             persona=temp,
@@ -338,7 +378,11 @@ class FireRenownAwardOrgWiringTests(TestCase):
         """Body-flow is legend-only — temp's prestige/fame stays on the temp persona."""
         primary = _make_primary_persona()
         covenant = CovenantFactory()
-        OrganizationMembershipFactory(persona=primary, organization=covenant.organization, rank=1)
+        OrganizationMembershipFactory(
+            persona=primary,
+            organization=covenant.organization,
+            rank=_make_rank(covenant.organization, 1),
+        )
         temp = _make_temporary_persona(primary.character_sheet)
         fire_renown_award(
             persona=temp,
@@ -356,8 +400,8 @@ class FireRenownAwardOrgWiringTests(TestCase):
         actor = _make_primary_persona()
         bystander = _make_primary_persona()
         org = OrganizationFactory(base_prestige=0)
-        OrganizationMembershipFactory(persona=actor, organization=org, rank=2)
-        OrganizationMembershipFactory(persona=bystander, organization=org, rank=4)
+        OrganizationMembershipFactory(persona=actor, organization=org, rank=_make_rank(org, 2))
+        OrganizationMembershipFactory(persona=bystander, organization=org, rank=_make_rank(org, 4))
 
         fire_renown_award(persona=actor, magnitude=RenownMagnitude.HIGH)
 
@@ -375,7 +419,7 @@ class LoopSafetyTests(TestCase):
     def test_outflow_recompute_does_not_change_org(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory(base_prestige=500, accumulated_prestige=100, accumulated_fame=200)
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=1)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 1))
         before_prestige = org.accumulated_prestige
         before_fame = org.accumulated_fame
         before_legend = org.accumulated_legend
@@ -392,7 +436,7 @@ class CronDecayRecomputesOutflowTests(TestCase):
     def test_decay_drops_outflow(self) -> None:
         persona = _make_primary_persona()
         org = OrganizationFactory(base_prestige=0, accumulated_prestige=10_000, accumulated_fame=0)
-        OrganizationMembershipFactory(persona=persona, organization=org, rank=1)
+        OrganizationMembershipFactory(persona=persona, organization=org, rank=_make_rank(org, 1))
         # Seed the outflow before decay.
         recompute_persona_prestige_from_orgs(persona)
         persona.refresh_from_db()

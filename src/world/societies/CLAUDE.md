@@ -10,7 +10,9 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`Society`**: Social groupings within a Realm with 6 principle axes - uses SharedMemoryModel
 - **`OrganizationType`**: Templates defining rank titles for organization categories - uses SharedMemoryModel
 - **`Organization`**: Specific groups within societies (families, guilds, gangs) - uses SharedMemoryModel
-- **`OrganizationMembership`**: Links Persona to Organization with rank (1-5)
+- **`OrganizationRank`**: A single rung on an organization's five-tier rank ladder - uses SharedMemoryModel
+- **`OrganizationMembershipOffer`**: Pending or resolved invitation/application to join an organization - uses SharedMemoryModel
+- **`OrganizationMembership`**: Links Persona to Organization with an `OrganizationRank` rung; active rows have `left_at` and `exiled_at` null
 - **`SocietyReputation`**: Reputation standing with a society per-persona
 - **`OrganizationReputation`**: Reputation standing with an organization per-persona
 - **`LegendSourceType`**: Categories of legend-generating events (combat, story, discovery, etc.) - uses SharedMemoryModel
@@ -29,6 +31,9 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`spread_event()`**: Spread all active deeds in an event
 - **`get_character_legend_total()`**: Fast lookup via materialized view
 - **`get_persona_legend_total()`**: Fast lookup via materialized view
+
+### `membership_services.py`
+- **`ensure_default_rank_ladder()`**: Create the default five-tier `OrganizationRank` ladder for a generic organization (covenants are skipped)
 
 ### `types.py`
 - **`ReputationTier`**: Enum mapping hidden reputation values to named tiers

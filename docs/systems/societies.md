@@ -44,11 +44,13 @@ tier.range_description                       # "+250 to +499"
 | `OrganizationType` | Template with default rank titles for org categories | `name`, `rank_1_title` through `rank_5_title` |
 | `Organization` | Specific group within a Society | `name`, `society`, `org_type`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields |
 
-### Membership and Reputation (models.Model - per-persona instances)
+### Membership and Reputation (SharedMemoryModel - per-persona instances)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OrganizationMembership` | Links a Persona to an Organization with rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (1-5), `joined_date` |
+| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks` |
+| `OrganizationMembership` | Links a Persona to an Organization at a rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
+| `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
 
@@ -130,6 +132,75 @@ from world.societies.models import LegendEntry
 # Total legend = base + all spreads
 entry.get_total_value()  # base_value + sum(spreads.value_added)
 ```
+
+---
+
+## Membership Lifecycle
+
+Generic (non-covenant) organizations use a rank-based lifecycle defined in
+`world.societies.membership_services`. Covenants have their own lifecycle and are
+rejected by these services/actions.
+
+### Service functions
+
+```python
+from world.societies.membership_services import (
+    ensure_default_rank_ladder,
+    base_rank_for_organization,
+    active_membership_for_persona,
+    join_organization,
+    leave_organization,
+    invite_to_organization,
+    apply_to_organization,
+    accept_invitation,
+    decline_invitation,
+    accept_application,
+    decline_application,
+    promote_member,
+    demote_member,
+    expel_member,
+)
+```
+
+- `ensure_default_rank_ladder(organization)` creates tiers 1–5 if absent; top tier gets all capability flags.
+- `join_organization(organization, persona)` admits at the lowest tier (5) after checking blocks and persona validity.
+- `invite_to_organization(...)` / `apply_to_organization(...)` create pending offers.
+- `accept_invitation(offer, persona)` / `accept_application(offer, actor_persona)` promote the offer to a membership.
+- `leave_organization(membership)` records a voluntary departure (`left_at`).
+- `expel_member(target, actor)` records an expulsion (`left_at` and `exiled_at`).
+- `promote_member(target, actor)` / `demote_member(target, actor)` move a member one tier, gated by `can_manage_ranks`.
+
+### Player actions and telnet command
+
+All major transitions are actions on the shared `action.run()` / `dispatch_player_action()` seam:
+
+| Action key | Telnet usage | Purpose |
+|------------|--------------|---------|
+| `org_invite` | `org invite <name> in <organization>` | Invite a persona to join |
+| `org_apply` | `org apply <organization>` | Apply to join an organization |
+| `org_join` | `org join <organization>` | Accept a pending invitation |
+| `org_leave` | `org leave <organization>` | Voluntarily leave the organization |
+| `org_promote` | `org promote <name> in <organization>` | Move a member up one tier |
+| `org_demote` | `org demote <name> in <organization>` | Move a member down one tier |
+| `org_expel` | `org expel <name> from <organization>` | Remove a member from the organization |
+
+`CmdOrg` routes `org <subverb>` through the same dispatcher the web UI uses.
+Invitation accept/decline also flows through the existing `accept org` / `decline org`
+offer registry (`commands/offer_registry`) with `OrgInviteHandler` registered under
+keyword `org`.
+
+### DRF endpoints
+
+Read-only endpoints under `/api/societies/`:
+
+| Endpoint | Viewset | Purpose |
+|----------|---------|---------|
+| `/organizations/` | `OrganizationViewSet` | Organizations the requester belongs to (staff see all) |
+| `/memberships/` | `OrganizationMembershipViewSet` | Current memberships, excluding covenants |
+| `/ranks/` | `OrganizationRankViewSet` | Rank ladders for visible organizations |
+| `/offers/` | `OrganizationMembershipOfferViewSet` | Offers owned/received/org-visible to the requester |
+
+All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 
 ---
 

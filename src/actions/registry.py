@@ -39,6 +39,22 @@ from actions.definitions.endorsements import (
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
+from actions.definitions.gm_combat import (
+    AddEncounterParticipantAction,
+    AddOpponentAction,
+    BeginEncounterRoundAction,
+    EndEncounterAction,
+    PauseEncounterAction,
+    PreviewOpponentDefaultsAction,
+    RemoveEncounterParticipantAction,
+    ResolveEncounterRoundAction,
+)
+from actions.definitions.gm_stories import (
+    CompleteStoryAction,
+    MarkBeatAction,
+    PromoteEpisodeAction,
+    ResolveEpisodeAction,
+)
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -61,6 +77,15 @@ from actions.definitions.npc_services import (
     end_npc_interaction,
     resolve_npc_offer,
     start_npc_interaction,
+)
+from actions.definitions.organizations import (
+    org_apply_action,
+    org_demote_action,
+    org_expel_action,
+    org_invite_action,
+    org_join_action,
+    org_leave_action,
+    org_promote_action,
 )
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
@@ -156,6 +181,18 @@ _ALL_ACTIONS: list[Action] = [
     CastTechniqueAction(),
     StartSceneAction(),
     FinishSceneAction(),
+    BeginEncounterRoundAction(),
+    ResolveEncounterRoundAction(),
+    AddOpponentAction(),
+    AddEncounterParticipantAction(),
+    RemoveEncounterParticipantAction(),
+    PauseEncounterAction(),
+    EndEncounterAction(),
+    PreviewOpponentDefaultsAction(),
+    CompleteStoryAction(),
+    ResolveEpisodeAction(),
+    PromoteEpisodeAction(),
+    MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
     ManageTrainingAction(),
@@ -163,6 +200,13 @@ _ALL_ACTIONS: list[Action] = [
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,
+    org_invite_action,
+    org_apply_action,
+    org_join_action,
+    org_leave_action,
+    org_promote_action,
+    org_demote_action,
+    org_expel_action,
     intimidate,
     persuade,
     deceive,

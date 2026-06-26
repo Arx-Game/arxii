@@ -714,7 +714,7 @@ def apply_body_covenant_legend_inflow(
     if body_persona is None:
         return ()
 
-    memberships = list(body_persona.organization_memberships.select_related("organization"))
+    memberships = list(body_persona.organization_memberships.select_related("organization", "rank"))
     if not memberships:
         return ()
 
@@ -726,7 +726,9 @@ def apply_body_covenant_legend_inflow(
     for membership in memberships:
         if membership.organization_id not in covenant_org_ids:
             continue
-        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank, 0.0)
+        if membership.rank is None:
+            continue
+        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank.tier, 0.0)
         inflow = int(legend_delta * ORG_INFLOW_FRACTION * rank_mult)
         if inflow <= 0:
             continue
@@ -753,10 +755,12 @@ def recompute_persona_prestige_from_orgs(persona: Persona) -> int:
         return persona.prestige_from_orgs
 
     total = 0
-    for membership in persona.organization_memberships.select_related("organization"):
+    for membership in persona.organization_memberships.select_related("organization", "rank"):
         org = membership.organization
         org_standing = org.base_prestige + org.accumulated_prestige + org.accumulated_fame
-        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank, 0.0)
+        if membership.rank is None:
+            continue
+        rank_mult = RANK_OUTFLOW_MULTIPLIERS.get(membership.rank.tier, 0.0)
         total += int(org_standing * rank_mult)
 
     if total == persona.prestige_from_orgs:

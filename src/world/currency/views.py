@@ -125,14 +125,14 @@ class OrgBooksViewSet(viewsets.ViewSet):
         if persona is None:
             return Response([])
         memberships = persona.organization_memberships.select_related(
-            "organization", "organization__org_type"
-        ).order_by("rank", "organization__name")
+            "organization", "organization__org_type", "rank"
+        ).order_by("rank__tier", "organization__name")
         rows = [
             {
                 "organization_id": m.organization.pk,
                 "organization_name": m.organization.name,
-                "rank": m.rank,
-                "rank_title": m.organization.get_rank_title(m.rank),
+                "rank": m.rank.tier,
+                "rank_title": m.organization.get_rank_title(m.rank.tier),
             }
             for m in memberships
         ]

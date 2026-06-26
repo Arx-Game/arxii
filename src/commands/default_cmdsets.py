@@ -37,6 +37,7 @@ from commands.consent import (
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
+from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
@@ -66,6 +67,7 @@ from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
+from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
@@ -83,6 +85,7 @@ from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
+from commands.story import CmdStory
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
 from commands.who import CmdWho
@@ -209,6 +212,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDeed,
             # #1493 — NPC-service hire/commission interaction loop.
             CmdHire,
+            # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
+            CmdEncounter,
+            CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1347 — list faces + wear-face active persona switch.
@@ -216,6 +222,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1511 — organization membership lifecycle.
+            CmdOrg,
         )
         for command_cls in command_classes:
             self.add(command_cls())
