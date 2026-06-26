@@ -10,7 +10,7 @@ Single-actor path (SERVICE/CEREMONY kind):
 
 Multi-participant session path:
     ``ritual sessions``                              — list pending sessions
-    ``ritual draft <name> invite=<char>[,<char>]`` — draft a session
+    ``ritual draft <name> invite=<char>[,<char>]``  — draft a session
         (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for rituals
         that carry setup info, e.g. the soul-tether BILATERAL)
     ``ritual join <id> [role=sinner|sineater]``      — accept your invitation
@@ -196,7 +196,10 @@ class CmdRitual(ArxCommand):
                 name_parts.append(token)
             index += 1
 
-        usage = "Usage: ritual draft <ritual_name> invite=<character>[,<character>]"
+        usage = (
+            "Usage: ritual draft <ritual_name> invite=<character>[,<character>\n"
+            "       [role=sinner|sineater resonance=<name> [writeup=<narrative>]]"
+        )
         name = " ".join(name_parts).strip()
         if not name:
             raise CommandError(usage)
