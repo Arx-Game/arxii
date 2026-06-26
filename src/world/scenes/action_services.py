@@ -39,20 +39,18 @@ def register_custom_action_resolver(action_key: str, resolver: CustomActionResol
 
 
 def _describe_treatment_outcome(
+    helper_persona: Persona,
+    target_persona: Persona,
     treatment: TreatmentTemplate,
     target_effect: ConditionInstance | PendingAlteration,
     outcome: TreatmentOutcome,
 ) -> str:
     """Render a short IC description of what treatment produced."""
-    target_name = (
-        target_effect.character_sheet.name
-        if hasattr(target_effect, "character_sheet")
-        else "the target"
-    )
-    if hasattr(treatment, "character_sheet"):
-        helper_name = treatment.character_sheet.name
-    else:
-        helper_name = "someone"
+    # Names are sourced from the participating personas; target_effect is kept
+    # in the signature for caller symmetry with perform_treatment.
+    _ = target_effect
+    helper_name = helper_persona.name
+    target_name = target_persona.name
     lines = [f"{helper_name} applies {treatment.name} to {target_name}."]
     if outcome.target_resolved:
         lines.append("The condition is lifted.")
@@ -94,7 +92,13 @@ def _resolve_treatment_request(
         bond_thread=action_request.thread_used,
     )
 
-    content = _describe_treatment_outcome(treatment, target_effect, outcome)
+    content = _describe_treatment_outcome(
+        action_request.initiator_persona,
+        action_request.target_persona,
+        treatment,
+        target_effect,
+        outcome,
+    )
     interaction = create_interaction(
         persona=action_request.initiator_persona,
         content=content,

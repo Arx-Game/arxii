@@ -226,6 +226,12 @@ class TreatConditionWebConsentE2ETests(TestCase):
         assert interaction.scene_id == self.scene.pk
         assert interaction.persona_id == self.helper_sheet.primary_persona.pk
 
+        # The recorded pose names the helper and target, not generic placeholders.
+        assert self.helper_sheet.primary_persona.name in interaction.content
+        assert self.target_sheet.primary_persona.name in interaction.content
+        assert "someone" not in interaction.content
+        assert "the target" not in interaction.content
+
         # Sanity: no stray second instance was created on the target.
         assert (
             ConditionInstance.objects.filter(

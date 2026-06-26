@@ -2538,9 +2538,9 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
       7. Resonance cost debit
       8. Anima cost debit
 
-    The PENDING_ALTERATION branch defers to Phase 7 (reduce_pending_alteration_tier
-    is not yet implemented). The import is lazy so an ImportError only fires at
-    runtime if this code path is actually invoked.
+    The PENDING_ALTERATION branch calls reduce_pending_alteration_tier (lazy
+    import) to reduce the alteration's tier. The import is lazy so an ImportError
+    only fires at runtime if this code path is actually invoked.
     """
     from django.db import IntegrityError  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
