@@ -74,9 +74,9 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Combat & duels
 - TELNET+WEB: declare technique w/ effort/target/secondary (#1330); clash-commit (#1451); flee / cover
-  / interpose / join / leave / ready / combo up-down / yield (#1453).
-- WEB-ONLY: PvP **duel** lifecycle — challenge / accept / decline / withdraw / acknowledge-risk
-  (registered Actions, web-dispatchable, **no telnet command, untracked**; only `yield` reached telnet).
+  / interpose / join / leave / ready / combo up-down / yield (#1453); PvP **duel** lifecycle —
+  challenge / accept / decline / withdraw / acknowledge-risk (`duel <subverb>`, `CmdDuel`, #1492; was
+  WEB-ONLY — telnet command added, only `yield` had reached telnet before via `combat yield`).
 - **PLANNED-UNBUILT (→ registry):** soulfray-risk accept + fury commit (#1454); knockback + trap-in-combat
   (#1317); reactive interpose / DANGER-arming (#1316); shapeshift + combat profiles (#1111); ranged /
   reach / archery; mounts; verticality / flying.
@@ -232,7 +232,7 @@ shows which ledger capabilities each variety exercises and where its gaps are. N
 - **Scene — general RP:** say/pose/consent/endorse (✔ reachable) · reactions/favorites, mark-private,
   Places, keep-vs-discard summary (web-only / blind spots) · implicit start, provisional keep/discard
   (planned).
-- **Scene — combat:** declare/clash/maneuvers (✔) · duel lifecycle (web-only, untracked) · ranged,
+- **Scene — combat:** declare/clash/maneuvers (✔) · duel lifecycle (✔ telnet+web, #1492) · ranged,
   shapeshift, knockback (planned).
 - **Scene — GM-run table:** scene-round set-mode (✔) · combat-round lifecycle, beat-marking, table
   seating (web-only) · umpire tooling, session resolvers (planned). *The whole GM table-running journey
