@@ -108,6 +108,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
+  - Thread XP-lock crossing: `cross_thread_xp_lock(character_sheet, thread, level)` —
+    reachable via the legacy `POST /api/magic/threads/{id}/cross-xp-lock/` web action
+    and via the shared Unlock Shop (`/api/progression/unlocks/purchase/` + telnet
+    `progression unlock thread=<id> level=<n>`)
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
@@ -263,10 +267,17 @@ Character statistics and dice rolling mechanics.
 - **Source:** `src/world/traits/`
 - **Details:** [traits.md](traits.md)
 ### Skills
-Character abilities with parent skills and specializations.
+Character abilities with parent skills and specializations, plus weekly training
+allocations that convert AP to development points.
 
-- **Models:** `Skill`, `Specialization`, `CharacterSkillValue`, `CharacterSpecializationValue`
-- **Integrates with:** traits (skill checks), character_creation (skill selection)
+- **Models:** `Skill`, `Specialization`, `CharacterSkillValue`,
+  `CharacterSpecializationValue`, `TrainingAllocation`
+- **Actions:** `ManageTrainingAction` (`registry_key="manage_training"`) — shared by
+  web `TrainingAllocationViewSet` and telnet `training` command
+- **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in
+  `world/game_clock/tasks.py`
+- **Integrates with:** traits (skill checks), character_creation (skill selection),
+  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows)
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
@@ -601,6 +612,11 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
   - `PUT /api/progression/path-intent/` — declare a path intent; body `{ path_id }` (character via `X-Character-ID` header)
   - `DELETE /api/progression/path-intent/` — clear declared intent (character via `X-Character-ID` header)
+  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type`
+  - `POST /api/progression/unlocks/purchase/` — buy a `class_level` or `thread_xp_lock` unlock with XP; dispatches `PurchaseUnlockAction`
+- **Actions:**
+  - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
+- **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
