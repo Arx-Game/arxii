@@ -69,6 +69,10 @@ class StatKey(models.TextChoices):
     # (a roof stops WET; walls stop WIND). The weather layer (later slice) populates them.
     WET = "wet", "Wet exposure"
     WIND = "wind", "Wind exposure"
+    # Positive comfort axis (#1514): luxury decorations + magical comfort that push the comfort
+    # POOL above neutral toward 6–10. Distinct from mitigation (which only cancels discomfort,
+    # floored): amenities are how you ADD comfort, and the high end is deliberately expensive.
+    AMENITY = "amenity", "Amenity (positive comfort)"
 
 
 # Per-stat default value when no row exists in the cascade chain.
@@ -84,6 +88,7 @@ STAT_DEFAULTS: dict[StatKey, int] = {
     StatKey.HEAT: 0,
     StatKey.WET: 0,
     StatKey.WIND: 0,
+    StatKey.AMENITY: 0,
 }
 
 # Inclusive (min, max) bounds applied to the final cascade-resolved value.
@@ -98,10 +103,13 @@ STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     StatKey.NOISE: (0, 100),
     StatKey.TRAFFIC: (0, 100),
     # The (0, …) floor is load-bearing: it is the "counters never harm" guarantee (#1514).
-    StatKey.COLD: (0, 100),
-    StatKey.HEAT: (0, 100),
-    StatKey.WET: (0, 100),
-    StatKey.WIND: (0, 100),
+    # Wide ceilings: comfort points run to ±tens-of-thousands (weather + wounds + magic all
+    # pour into one pool), so each axis needs headroom. Magnitudes are a PLACEHOLDER author pass.
+    StatKey.COLD: (0, 100_000),
+    StatKey.HEAT: (0, 100_000),
+    StatKey.WET: (0, 100_000),
+    StatKey.WIND: (0, 100_000),
+    StatKey.AMENITY: (0, 1_000_000),
 }
 
 # Suggested ``change_per_day`` value for new modifiers if the calling
@@ -120,6 +128,7 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.HEAT: 0,
     StatKey.WET: 0,
     StatKey.WIND: 0,
+    StatKey.AMENITY: 0,
 }
 
 # Environmental discomfort axes that sum into the comfort score (#1514).
@@ -138,6 +147,50 @@ ENCLOSURE_SHELTERED_AXES: dict[RoomEnclosure, frozenset[StatKey]] = {
     RoomEnclosure.ROOFED: frozenset({StatKey.WET}),
     RoomEnclosure.WALLED: frozenset({StatKey.WET, StatKey.WIND}),
     RoomEnclosure.SEALED: frozenset({StatKey.WET, StatKey.WIND}),
+}
+
+# ---------------------------------------------------------------------------
+# Comfort level (#1514): a 1–10 scale derived from a wide points pool.
+# ---------------------------------------------------------------------------
+#
+# comfort_points = amenities − felt discomfort − condition penalties (+ buffs). The pool is
+# wide and sharply-growing because everything (weather, wounds, fatigue, luxury, magic) pours
+# in. It maps to a 1–10 LEVEL, with 5 = neutral ("Fine", roughly 0–100 points), 10 ≈ unreachable
+# without heavy magic + absurd money, 1 ≈ miserable. The level drives an AP-regen multiplier.
+#
+# COMFORT_LEVEL_FLOORS: the minimum points for each level, ascending. A points value resolves to
+# the highest level whose floor it meets. PLACEHOLDER, anchored to Apostate's numbers (0–100=L5,
+# ±10k ends, exponential between) — the band cuts are a tunable author pass; the *shape* is fixed.
+COMFORT_LEVEL_FLOORS: tuple[tuple[int, int], ...] = (
+    (10_000, 10),  # ≥10k — nearly impossible (heavy magic + absurd money)
+    (6_000, 9),
+    (2_500, 8),  # difficult but realistic
+    (600, 7),
+    (100, 6),
+    (0, 5),  # 0–100 = "Fine" baseline
+    (-800, 4),
+    (-3_000, 3),
+    (-10_000, 2),
+    # anything below the last floor is level 1 (handled in the resolver)
+)
+
+COMFORT_LEVEL_MIN = 1
+COMFORT_LEVEL_MAX = 10
+COMFORT_LEVEL_NEUTRAL = 5
+
+# AP-regen multiplier (percent adjustment) per comfort level (#1514) — Apostate's exact table.
+# Level 5 (neutral) = 0; comfortable homes regen faster, miserable ones slower.
+AP_REGEN_MULTIPLIER_PCT: dict[int, int] = {
+    1: -50,
+    2: -25,
+    3: -10,
+    4: -5,
+    5: 0,
+    6: 5,
+    7: 10,
+    8: 25,
+    9: 50,
+    10: 100,
 }
 
 
