@@ -62,6 +62,14 @@ class TreatmentTargetKind(models.TextChoices):
     PENDING_ALTERATION = "pending_alteration", "Pending alteration tier"
 
 
+# Discriminator recorded on each candidate dict's ``target_effect_type`` key by
+# get_treatment_candidates, distinguishing a ConditionInstance target from a
+# PendingAlteration target. Plain strings (not TextChoices) — an internal
+# discriminator, not a model field or enumerated selection set.
+TARGET_EFFECT_CONDITION: str = "condition"
+TARGET_EFFECT_ALTERATION: str = "alteration"
+
+
 # Foundational capability name constants.
 # These are plain string constants (not Django choices) because they are
 # capability identifiers, not an enumerated selection set.

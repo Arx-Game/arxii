@@ -6,11 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
-from world.scenes.action_services import (
-    TARGET_EFFECT_CONDITION,
-    create_action_request,
-    get_treatment_candidates,
-)
+from world.conditions.constants import TARGET_EFFECT_CONDITION
+from world.conditions.services import get_treatment_candidates
+from world.scenes.action_services import create_action_request
 from world.scenes.interaction_services import _get_active_scene
 from world.scenes.services import active_persona_for_sheet
 
