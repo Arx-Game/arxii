@@ -4245,15 +4245,26 @@ paths:
           description: ''
   /api/conditions/treatments/:
     get:
-      operationId: conditions_treatments_retrieve
+      operationId: conditions_treatments_list
       description: Return treatments the helper may attempt on the target persona.
+      parameters:
+      - in: query
+        name: target_persona_id
+        schema:
+          type: integer
+        description: Persona id of the character the helper wants to treat.
+        required: true
       tags:
       - conditions
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreatmentCandidateResponse'
+          description: ''
   /api/consent/categories/:
     get:
       operationId: consent_categories_list
@@ -39390,7 +39401,7 @@ components:
           description: Resonance this thread channels.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKindEnum'
+          - $ref: '#/components/schemas/ThreadTargetKindEnum'
           description: |-
             Discriminator selecting which target_* FK is populated.
 
@@ -45197,6 +45208,14 @@ components:
       - created_at
       - id
       - post
+    TargetEffectTypeEnum:
+      enum:
+      - condition
+      - alteration
+      type: string
+      description: |-
+        * `condition` - condition
+        * `alteration` - alteration
     TargetFilters:
       type: object
       description: Read-only serializer for TargetFilters — boolean filter flags.
@@ -45214,26 +45233,6 @@ components:
       - exclude_self
       - in_same_scene
       - must_be_conscious
-    TargetKindEnum:
-      enum:
-      - TRAIT
-      - TECHNIQUE
-      - FACET
-      - RELATIONSHIP_TRACK
-      - RELATIONSHIP_CAPSTONE
-      - COVENANT_ROLE
-      - MANTLE
-      - SANCTUM
-      type: string
-      description: |-
-        * `TRAIT` - Trait
-        * `TECHNIQUE` - Technique
-        * `FACET` - Facet
-        * `RELATIONSHIP_TRACK` - Relationship Track
-        * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
-        * `COVENANT_ROLE` - Covenant Role
-        * `MANTLE` - Mantle
-        * `SANCTUM` - Sanctum
     TargetSpec:
       type: object
       description: Read-only serializer for TargetSpec — entity kind + cardinality
@@ -45705,7 +45704,7 @@ components:
           readOnly: true
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKindEnum'
+          - $ref: '#/components/schemas/ThreadTargetKindEnum'
           description: |-
             Discriminator selecting which target_* FK is populated.
 
@@ -45906,7 +45905,7 @@ components:
           description: Resonance this thread channels.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKindEnum'
+          - $ref: '#/components/schemas/ThreadTargetKindEnum'
           description: |-
             Discriminator selecting which target_* FK is populated.
 
@@ -45935,6 +45934,26 @@ components:
       - resonance
       - target_id
       - target_kind
+    ThreadTargetKindEnum:
+      enum:
+      - TRAIT
+      - TECHNIQUE
+      - FACET
+      - RELATIONSHIP_TRACK
+      - RELATIONSHIP_CAPSTONE
+      - COVENANT_ROLE
+      - MANTLE
+      - SANCTUM
+      type: string
+      description: |-
+        * `TRAIT` - Trait
+        * `TECHNIQUE` - Technique
+        * `FACET` - Facet
+        * `RELATIONSHIP_TRACK` - Relationship Track
+        * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+        * `COVENANT_ROLE` - Covenant Role
+        * `MANTLE` - Mantle
+        * `SANCTUM` - Sanctum
     ThreadWeavingTeachingOffer:
       type: object
       description: Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5).
@@ -46367,6 +46386,126 @@ components:
       - beat
       - required_outcome
       - transition
+    TreatmentCandidate:
+      type: object
+      description: |-
+        One candidate treatment a helper may offer a target persona (#1486).
+
+        Describes the shape returned by ``TreatmentCandidateViewSet.list`` so
+        drf-spectacular emits a real response body instead of ``content?: never``.
+        The view still returns the same hand-built dict; this serializer is
+        schema metadata only.
+
+        ``target_effect`` is a discriminated union: a ``ConditionInstance``
+        serialization when ``target_effect_type == 'condition'``, or a
+        ``PendingAlteration`` serialization when ``target_effect_type ==
+        'alteration'``. Modeled as a ``DictField`` because the two target
+        serializers live in different apps; ``target_effect_type`` is the
+        discriminator the client switches on.
+      properties:
+        treatment:
+          allOf:
+          - $ref: '#/components/schemas/TreatmentTemplate'
+          readOnly: true
+        target_effect_type:
+          $ref: '#/components/schemas/TargetEffectTypeEnum'
+        target_effect:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        bond_thread:
+          type: integer
+          nullable: true
+        scene_id:
+          type: integer
+      required:
+      - bond_thread
+      - scene_id
+      - target_effect
+      - target_effect_type
+      - treatment
+    TreatmentCandidateResponse:
+      type: object
+      description: |-
+        Envelope returned by the treatments discovery endpoint (#1486).
+
+        ``many=False`` overrides drf-spectacular's list-view heuristic: the
+        endpoint lives on a ``list`` action, so the generator would otherwise
+        wrap this single envelope object in an array. The runtime returns one
+        ``{"candidates": [...], "scene_id": int}`` object, not an array of them.
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreatmentCandidate'
+        scene_id:
+          type: integer
+      required:
+      - candidates
+      - scene_id
+    TreatmentTemplate:
+      type: object
+      description: |-
+        Read-only serializer for treatment template definitions.
+
+        Surfaces the authored recipe for attempting to treat a condition or
+        pending alteration (costs, bond requirement, scene requirement) so the
+        web Treat panel can render the candidate list returned by
+        ``get_treatment_candidates``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        target_kind:
+          allOf:
+          - $ref: '#/components/schemas/TreatmentTemplateTargetKindEnum'
+          readOnly: true
+        requires_bond:
+          type: boolean
+          readOnly: true
+        resonance_cost:
+          type: integer
+          readOnly: true
+        anima_cost:
+          type: integer
+          readOnly: true
+        scene_required:
+          type: boolean
+          readOnly: true
+        target_condition:
+          type: integer
+          readOnly: true
+      required:
+      - anima_cost
+      - description
+      - id
+      - key
+      - name
+      - requires_bond
+      - resonance_cost
+      - scene_required
+      - target_condition
+      - target_kind
+    TreatmentTemplateTargetKindEnum:
+      enum:
+      - primary
+      - aftermath
+      - pending_alteration
+      type: string
+      description: |-
+        * `primary` - Primary condition severity
+        * `aftermath` - Aftermath child condition severity
+        * `pending_alteration` - Pending alteration tier
     TrustCategory:
       type: object
       description: Serializer for trust categories

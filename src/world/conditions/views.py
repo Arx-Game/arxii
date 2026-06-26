@@ -9,6 +9,7 @@ Provides read-only endpoints for:
 """
 
 from django.db.models import Prefetch, Q, QuerySet
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -39,6 +40,7 @@ from world.conditions.serializers import (
     ConditionTemplateDetailSerializer,
     ConditionTemplateSerializer,
     DamageTypeSerializer,
+    TreatmentCandidateResponseSerializer,
     TreatmentTemplateSerializer,
 )
 from world.conditions.services import (
@@ -433,6 +435,18 @@ class TreatmentCandidateViewSet(CharacterContextMixin, viewsets.ViewSet):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "target_persona_id",
+                int,
+                OpenApiParameter.QUERY,
+                required=True,
+                description="Persona id of the character the helper wants to treat.",
+            ),
+        ],
+        responses={200: TreatmentCandidateResponseSerializer},
+    )
     def list(self, request: Request) -> Response:
         """Return treatments the helper may attempt on the target persona."""
         # Request-scoped ID validation (required param + existence), not

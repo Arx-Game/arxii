@@ -39,35 +39,20 @@ export async function fetchDamageTypes(): Promise<DamageType[]> {
  * action-request body: condition → target_condition_instance_id,
  * alteration → target_pending_alteration_id.
  */
-export type TargetEffectType = 'condition' | 'alteration';
+export type TargetEffectType = components['schemas']['TargetEffectTypeEnum'];
 
 /**
- * A treatment template row surfaced by the treatments discovery endpoint.
- * Mirrors TreatmentTemplateSerializer (src/world/conditions/serializers.py).
- */
-export interface TreatmentTemplate {
-  id: number;
-  key: string;
-  name: string;
-  description: string;
-  target_kind: string;
-  requires_bond: boolean;
-  resonance_cost: number;
-  anima_cost: number;
-  scene_required: boolean;
-  target_condition: number | null;
-}
-
-/**
- * A treatable target effect.  ConditionInstanceSerializer exposes a `name`
- * (the condition name); PendingAlterationSerializer exposes `character_name` +
- * `status`.  Both carry `id`, which is the value sent on the request body.
+ * A treatable target effect. The backend models this as a discriminated union
+ * (ConditionInstance serialization OR PendingAlteration serialization), surfaced
+ * by drf-spectacular as a loose `{ [key: string]: unknown }` DictField. Both
+ * shapes carry `id` (the value sent on the request body); ConditionInstance also
+ * exposes `name`, PendingAlteration also exposes `character_name`.
  */
 export interface TreatmentTargetEffect {
   id: number;
-  /** ConditionInstance.name (condition name).  Absent for alterations. */
+  /** ConditionInstance.name (the condition name). Absent for alterations. */
   name?: string;
-  /** PendingAlteration.character_name.  Absent for conditions. */
+  /** PendingAlteration.character_name. Absent for conditions. */
   character_name?: string;
   [key: string]: unknown;
 }
@@ -79,25 +64,25 @@ export interface TreatmentTargetEffect {
  * or null), NOT an object — so `bond_thread` is sent directly as
  * `bond_thread_id` on the action-request body.
  *
- * The generated schema marks this endpoint's response as `content?: never`
- * (drf-spectacular emits no component for the ViewSet's hand-built Response),
- * so this interface is the canonical client-side shape.  Source of truth:
+ * `target_effect` is narrowed from the generated `{ [key: string]: unknown }`
+ * DictField to {@link TreatmentTargetEffect} so callers can read `id`/`name`/
+ * `character_name` without unsafe casts. Source of truth:
  * TreatmentCandidateViewSet.list (src/world/conditions/views.py).
  */
-export interface TreatmentCandidate {
-  treatment: TreatmentTemplate;
-  target_effect_type: TargetEffectType;
+export type TreatmentCandidate = Omit<
+  components['schemas']['TreatmentCandidate'],
+  'target_effect'
+> & {
   target_effect: TreatmentTargetEffect;
-  /** The helper's bond thread id anchored to the target, or null. */
-  bond_thread: number | null;
-  scene_id: number;
-}
+};
 
 /** Response body for GET /api/conditions/treatments/?target_persona_id=<id>. */
-export interface TreatmentCandidatesResponse {
+export type TreatmentCandidatesResponse = Omit<
+  components['schemas']['TreatmentCandidateResponse'],
+  'candidates'
+> & {
   candidates: TreatmentCandidate[];
-  scene_id: number;
-}
+};
 
 /**
  * Fetch treatments the helper may offer a target persona.

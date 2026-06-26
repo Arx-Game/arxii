@@ -161,7 +161,11 @@ describe('TreatActionPanel', () => {
             resonance_cost: 1,
             anima_cost: 3,
             scene_required: false,
-            target_condition: null,
+            // target_condition is a non-null FK on TreatmentTemplate (the model
+            // requires one even for alteration-targeting treatments); the
+            // generated schema types it as `number`, so the fixture uses a real
+            // id rather than null.
+            target_condition: 5,
           },
         }),
       ],

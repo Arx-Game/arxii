@@ -3037,7 +3037,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description Return treatments the helper may attempt on the target persona. */
-    get: operations['conditions_treatments_retrieve'];
+    get: operations['conditions_treatments_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -22064,7 +22064,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
-      target_kind?: components['schemas']['TargetKindEnum'];
+      target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
       character_sheet_id?: number;
       /** @default  */
@@ -24816,32 +24816,18 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    /**
+     * @description * `condition` - condition
+     *     * `alteration` - alteration
+     * @enum {string}
+     */
+    TargetEffectTypeEnum: 'condition' | 'alteration';
     /** @description Read-only serializer for TargetFilters — boolean filter flags. */
     TargetFilters: {
       readonly in_same_scene: boolean;
       readonly exclude_self: boolean;
       readonly must_be_conscious: boolean;
     };
-    /**
-     * @description * `TRAIT` - Trait
-     *     * `TECHNIQUE` - Technique
-     *     * `FACET` - Facet
-     *     * `RELATIONSHIP_TRACK` - Relationship Track
-     *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
-     *     * `COVENANT_ROLE` - Covenant Role
-     *     * `MANTLE` - Mantle
-     *     * `SANCTUM` - Sanctum
-     * @enum {string}
-     */
-    TargetKindEnum:
-      | 'TRAIT'
-      | 'TECHNIQUE'
-      | 'FACET'
-      | 'RELATIONSHIP_TRACK'
-      | 'RELATIONSHIP_CAPSTONE'
-      | 'COVENANT_ROLE'
-      | 'MANTLE'
-      | 'SANCTUM';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -25083,7 +25069,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
-      target_kind: components['schemas']['TargetKindEnum'];
+      target_kind: components['schemas']['ThreadTargetKindEnum'];
       /** @default  */
       name: string;
       /** @default  */
@@ -25183,7 +25169,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        */
-      target_kind: components['schemas']['TargetKindEnum'];
+      target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
       character_sheet_id: number;
       /** @default  */
@@ -25191,6 +25177,26 @@ export interface components {
       /** @default  */
       description: string;
     };
+    /**
+     * @description * `TRAIT` - Trait
+     *     * `TECHNIQUE` - Technique
+     *     * `FACET` - Facet
+     *     * `RELATIONSHIP_TRACK` - Relationship Track
+     *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+     *     * `COVENANT_ROLE` - Covenant Role
+     *     * `MANTLE` - Mantle
+     *     * `SANCTUM` - Sanctum
+     * @enum {string}
+     */
+    ThreadTargetKindEnum:
+      | 'TRAIT'
+      | 'TECHNIQUE'
+      | 'FACET'
+      | 'RELATIONSHIP_TRACK'
+      | 'RELATIONSHIP_CAPSTONE'
+      | 'COVENANT_ROLE'
+      | 'MANTLE'
+      | 'SANCTUM';
     /** @description Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5). */
     ThreadWeavingTeachingOffer: {
       readonly id: number;
@@ -25448,6 +25454,69 @@ export interface components {
       beat: number;
       required_outcome: components['schemas']['RequiredOutcomeEnum'];
     };
+    /**
+     * @description One candidate treatment a helper may offer a target persona (#1486).
+     *
+     *     Describes the shape returned by ``TreatmentCandidateViewSet.list`` so
+     *     drf-spectacular emits a real response body instead of ``content?: never``.
+     *     The view still returns the same hand-built dict; this serializer is
+     *     schema metadata only.
+     *
+     *     ``target_effect`` is a discriminated union: a ``ConditionInstance``
+     *     serialization when ``target_effect_type == 'condition'``, or a
+     *     ``PendingAlteration`` serialization when ``target_effect_type ==
+     *     'alteration'``. Modeled as a ``DictField`` because the two target
+     *     serializers live in different apps; ``target_effect_type`` is the
+     *     discriminator the client switches on.
+     */
+    TreatmentCandidate: {
+      readonly treatment: components['schemas']['TreatmentTemplate'];
+      target_effect_type: components['schemas']['TargetEffectTypeEnum'];
+      readonly target_effect: {
+        [key: string]: unknown;
+      };
+      bond_thread: number | null;
+      scene_id: number;
+    };
+    /**
+     * @description Envelope returned by the treatments discovery endpoint (#1486).
+     *
+     *     ``many=False`` overrides drf-spectacular's list-view heuristic: the
+     *     endpoint lives on a ``list`` action, so the generator would otherwise
+     *     wrap this single envelope object in an array. The runtime returns one
+     *     ``{"candidates": [...], "scene_id": int}`` object, not an array of them.
+     */
+    TreatmentCandidateResponse: {
+      candidates: components['schemas']['TreatmentCandidate'][];
+      scene_id: number;
+    };
+    /**
+     * @description Read-only serializer for treatment template definitions.
+     *
+     *     Surfaces the authored recipe for attempting to treat a condition or
+     *     pending alteration (costs, bond requirement, scene requirement) so the
+     *     web Treat panel can render the candidate list returned by
+     *     ``get_treatment_candidates``.
+     */
+    TreatmentTemplate: {
+      readonly id: number;
+      readonly key: string;
+      readonly name: string;
+      readonly description: string;
+      readonly target_kind: components['schemas']['TreatmentTemplateTargetKindEnum'];
+      readonly requires_bond: boolean;
+      readonly resonance_cost: number;
+      readonly anima_cost: number;
+      readonly scene_required: boolean;
+      readonly target_condition: number;
+    };
+    /**
+     * @description * `primary` - Primary condition severity
+     *     * `aftermath` - Aftermath child condition severity
+     *     * `pending_alteration` - Pending alteration tier
+     * @enum {string}
+     */
+    TreatmentTemplateTargetKindEnum: 'primary' | 'aftermath' | 'pending_alteration';
     /** @description Serializer for trust categories */
     TrustCategory: {
       readonly id: number;
@@ -29507,21 +29576,25 @@ export interface operations {
       };
     };
   };
-  conditions_treatments_retrieve: {
+  conditions_treatments_list: {
     parameters: {
-      query?: never;
+      query: {
+        /** @description Persona id of the character the helper wants to treat. */
+        target_persona_id: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['TreatmentCandidateResponse'];
+        };
       };
     };
   };
