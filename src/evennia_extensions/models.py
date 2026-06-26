@@ -13,6 +13,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
@@ -384,6 +385,16 @@ class RoomProfile(SharedMemoryModel):
         help_text=(
             "Whether this room is exposed to outdoor environment "
             "(weather, sky, etc.). Most rooms are indoor."
+        ),
+    )
+    enclosure = models.CharField(
+        max_length=20,
+        choices=RoomEnclosure.choices,
+        default=RoomEnclosure.WALLED,
+        help_text=(
+            "How enclosed the room is (#1514). Gates which outdoor weather (rain/snow, wind) "
+            "reaches inhabitants for comfort; temperature seeps regardless. Default WALLED = a "
+            "normal indoor room; set OPEN_AIR/ROOFED for verandas and open courts."
         ),
     )
     # #676 Phase D: tenant_persona credits room polish into

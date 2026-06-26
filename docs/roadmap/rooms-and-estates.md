@@ -81,15 +81,18 @@ against it by building — never a GM veto, just more work. Full design + anti-r
 ledger in issue **#1514**; security/access half (windows-as-egress, guards/defenses) split to
 **#1515**.
 
-- **Model:** typed **exposure axes** (`StatKey.COLD`/`HEAT`, extensible to WET/WIND via
+- **Model:** typed **exposure axes** (`StatKey.COLD`/`HEAT`/`WET`/`WIND` in
   `EXPOSURE_STAT_KEYS`), each floored at 0 on the existing location-stats cascade — the floor
   *is* the "counters never harm" guarantee. Climate/weather/style push axes up; counter-fixtures
-  push them down; `comfort_score(room)` reads the inverse of the summed residuals.
+  push them down; `comfort_score(room)` reads the inverse of the summed *felt* residuals.
 - **Slice 1 (done):** the COLD/HEAT axes + `room_discomfort` / `comfort_score` reads.
-- **Later slices:** enclosure (generalise `is_outdoor`), an `ArchitecturalStyle` model (climate
-  affinities, seeded from lore), stackable comfort **fixtures** (not `RoomFeatureInstance` —
-  that's OneToOne), the Season→climate hook, comfort→AP-regen and comfort→Conditions
-  (Tehom-coordinated) effects, and the inhabitant/owner surfacing.
+- **Slice 2 (done):** WET/WIND axes + **enclosure** (`RoomProfile.enclosure`,
+  `RoomEnclosure` OPEN_AIR/ROOFED/WALLED/SEALED) gating the weather axes via `felt_exposure`
+  (a roof stops rain, walls stop wind; temperature always seeps).
+- **Later slices:** an `ArchitecturalStyle` model (climate affinities, seeded from lore),
+  stackable comfort **fixtures** (not `RoomFeatureInstance` — that's OneToOne), the
+  Season→climate weather source, comfort→AP-regen and comfort→Conditions (Tehom-coordinated)
+  effects, and the inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 

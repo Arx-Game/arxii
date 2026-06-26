@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from django.db import models
 
+from evennia_extensions.constants import RoomEnclosure
+
 
 class LocationParentType(models.TextChoices):
     """Discriminator for Location*Stat rows: which FK is active."""
@@ -63,6 +65,10 @@ class StatKey(models.TextChoices):
     # "too hot". See EXPOSURE_STAT_KEYS + services.comfort_score.
     COLD = "cold", "Cold exposure"
     HEAT = "heat", "Heat exposure"
+    # Weather exposure axes — only *felt* when the room's enclosure doesn't shelter them
+    # (a roof stops WET; walls stop WIND). The weather layer (later slice) populates them.
+    WET = "wet", "Wet exposure"
+    WIND = "wind", "Wind exposure"
 
 
 # Per-stat default value when no row exists in the cascade chain.
@@ -76,6 +82,8 @@ STAT_DEFAULTS: dict[StatKey, int] = {
     # Exposure axes default to 0 — a room with no climate/weather/style input is neutral.
     StatKey.COLD: 0,
     StatKey.HEAT: 0,
+    StatKey.WET: 0,
+    StatKey.WIND: 0,
 }
 
 # Inclusive (min, max) bounds applied to the final cascade-resolved value.
@@ -92,6 +100,8 @@ STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     # The (0, …) floor is load-bearing: it is the "counters never harm" guarantee (#1514).
     StatKey.COLD: (0, 100),
     StatKey.HEAT: (0, 100),
+    StatKey.WET: (0, 100),
+    StatKey.WIND: (0, 100),
 }
 
 # Suggested ``change_per_day`` value for new modifiers if the calling
@@ -108,11 +118,27 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     # weather callers (a cold snap) supply their own negative decay per-row.
     StatKey.COLD: 0,
     StatKey.HEAT: 0,
+    StatKey.WET: 0,
+    StatKey.WIND: 0,
 }
 
-# Environmental discomfort axes that sum into the comfort score (#1514). Listed here so
-# adding WET/WIND later is a one-line change that every comfort read picks up automatically.
-EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (StatKey.COLD, StatKey.HEAT)
+# Environmental discomfort axes that sum into the comfort score (#1514).
+EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (StatKey.COLD, StatKey.HEAT, StatKey.WET, StatKey.WIND)
+
+# The subset of exposure axes that are *weather* reaching you physically — enclosure can
+# shelter these (a roof, walls). Temperature (COLD/HEAT) is NOT here: it seeps regardless and
+# is countered by fixtures/style, never by enclosure alone.
+WEATHER_EXPOSURE_AXES: frozenset[StatKey] = frozenset({StatKey.WET, StatKey.WIND})
+
+# Which weather axes each enclosure level fully shelters (#1514). The 0-floor model means
+# "sheltered" = felt as 0. A roof stops rain/snow; walls also stop wind. SEALED matches WALLED
+# for weather — its extra value (temperature insulation) is a later fixtures/style slice.
+ENCLOSURE_SHELTERED_AXES: dict[RoomEnclosure, frozenset[StatKey]] = {
+    RoomEnclosure.OPEN_AIR: frozenset(),
+    RoomEnclosure.ROOFED: frozenset({StatKey.WET}),
+    RoomEnclosure.WALLED: frozenset({StatKey.WET, StatKey.WIND}),
+    RoomEnclosure.SEALED: frozenset({StatKey.WET, StatKey.WIND}),
+}
 
 
 class HolderType(models.TextChoices):
