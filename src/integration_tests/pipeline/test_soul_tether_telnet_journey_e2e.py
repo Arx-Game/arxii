@@ -149,12 +149,23 @@ class SoulTetherTelnetJourneyTests(TestCase):
         self.assertEqual(rel_out.soul_tether_role, SoulTetherRole.SINNER)
         self.assertEqual(rel_in.soul_tether_role, SoulTetherRole.SINEATER)
 
-        # Sinner's RELATIONSHIP_CAPSTONE Thread exists.
+        # Sinner's RELATIONSHIP_CAPSTONE Thread exists, anchored to this bond + resonance.
+        capstone = rel_out.capstones.filter(is_ritual_capstone=True).first()
+        self.assertIsNotNone(capstone)
         self.assertTrue(
             Thread.objects.filter(
                 owner=self.sinner_sheet,
                 target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+                target_capstone=capstone,
+                resonance=self.resonance,
                 retired_at__isnull=True,
+            ).exists()
+        )
+
+        # The bond's ritual capstone record formed.
+        self.assertTrue(
+            rel_out.capstones.filter(
+                is_ritual_capstone=True, ritual__name="accept_soul_tether"
             ).exists()
         )
 
