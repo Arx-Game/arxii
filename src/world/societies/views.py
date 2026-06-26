@@ -35,10 +35,11 @@ class SocietiesPagination(PageNumberPagination):
 class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     """List/retrieve organizations the requester is an active member of.
 
-    Staff see all organizations.
+    Covenants (organizations with a related ``covenant`` row) are excluded.
+    Staff see all non-covenant organizations.
     """
 
-    queryset = Organization.objects.prefetch_related("ranks")  # noqa: PREFETCH_STRING
+    queryset = Organization.objects.prefetch_related("ranks").order_by("id")  # noqa: PREFETCH_STRING
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = SocietiesPagination
@@ -46,7 +47,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = OrganizationFilter
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().filter(covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
         return qs.filter(
@@ -80,7 +81,11 @@ class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class OrganizationRankViewSet(viewsets.ReadOnlyModelViewSet):
-    """List/retrieve rank ladders for organizations the requester belongs to."""
+    """List/retrieve rank ladders for organizations the requester belongs to.
+
+    Covenants (organizations with a related ``covenant`` row) are excluded.
+    Staff see all non-covenant rank ladders.
+    """
 
     queryset = OrganizationRank.objects.select_related("organization").order_by("tier")
     serializer_class = OrganizationRankSerializer
@@ -90,7 +95,7 @@ class OrganizationRankViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = OrganizationRankFilter
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
         return qs.filter(
@@ -102,7 +107,10 @@ class OrganizationRankViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class OrganizationMembershipOfferViewSet(viewsets.ReadOnlyModelViewSet):
-    """List/retrieve membership offers visible to the requester."""
+    """List/retrieve membership offers visible to the requester.
+
+    Covenants (organizations with a related ``covenant`` row) are excluded.
+    """
 
     queryset = OrganizationMembershipOffer.objects.select_related(
         "organization", "from_persona", "to_persona"
@@ -114,7 +122,7 @@ class OrganizationMembershipOfferViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = OrganizationMembershipOfferFilter
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
         owned = qs.filter(
