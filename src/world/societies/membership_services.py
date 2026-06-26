@@ -18,7 +18,6 @@ from world.societies.exceptions import (
     CannotPromoteError,
     CrossOrganizationRankError,
     InvalidOrganizationPersonaError,
-    NoPendingInvitationError,  # noqa: F401
     NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,

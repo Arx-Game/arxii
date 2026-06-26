@@ -19,7 +19,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
 )
-from world.societies.permissions import IsOwnMembership
+from world.societies.permissions import IsOwnMembership, active_persona_q
 from world.societies.serializers import (
     OrganizationMembershipOfferSerializer,
     OrganizationMembershipSerializer,
@@ -51,8 +51,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
         if self.request.user.is_staff:
             return qs
         return qs.filter(
-            memberships__persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            memberships__persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+            active_persona_q(self.request.user, path="memberships__persona"),
             memberships__left_at__isnull=True,
             memberships__exiled_at__isnull=True,
         ).distinct()
@@ -79,10 +78,7 @@ class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
-        return qs.filter(
-            persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
-        )
+        return qs.filter(active_persona_q(self.request.user, path="persona"))
 
 
 class OrganizationRankViewSet(viewsets.ReadOnlyModelViewSet):
@@ -104,8 +100,7 @@ class OrganizationRankViewSet(viewsets.ReadOnlyModelViewSet):
         if self.request.user.is_staff:
             return qs
         return qs.filter(
-            organization__memberships__persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            organization__memberships__persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+            active_persona_q(self.request.user, path="organization__memberships__persona"),
             organization__memberships__left_at__isnull=True,
             organization__memberships__exiled_at__isnull=True,
         ).distinct()
@@ -130,17 +125,11 @@ class OrganizationMembershipOfferViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
-        owned = qs.filter(
-            from_persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            from_persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
-        )
-        received = qs.filter(
-            to_persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            to_persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
-        )
+        user = self.request.user
+        owned = qs.filter(active_persona_q(user, path="from_persona"))
+        received = qs.filter(active_persona_q(user, path="to_persona"))
         org_visible = qs.filter(
-            organization__memberships__persona__character_sheet__roster_entry__tenures__end_date__isnull=True,
-            organization__memberships__persona__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+            active_persona_q(user, path="organization__memberships__persona"),
             organization__memberships__left_at__isnull=True,
             organization__memberships__exiled_at__isnull=True,
         )
