@@ -76,7 +76,10 @@ class SetSocialConsentPreferenceAction(Action):
             return ActionResult(success=False, message=err)
         allow = kwargs.get("allow_social_actions")
         if not isinstance(allow, bool):
-            return ActionResult(success=False, message="Use 'on' or 'off'.")
+            return ActionResult(
+                success=False,
+                message="allow_social_actions must be a boolean.",
+            )
         set_social_consent_preference(tenure, allow)
         state = "allowed" if allow else "blocked"
         return ActionResult(success=True, message=f"Social actions are now {state}.")
@@ -168,6 +171,11 @@ class AddSocialConsentWhitelistAction(Action):
                 success=False,
                 message="That character cannot be whitelisted.",
             )
+        if allowed_tenure.end_date is not None:
+            return ActionResult(
+                success=False,
+                message="That character is not currently active.",
+            )
         preference = getattr(tenure, "social_consent_preference", None)  # noqa: GETATTR_LITERAL
         if preference is None:
             set_social_consent_preference(tenure, True)
@@ -180,7 +188,7 @@ class AddSocialConsentWhitelistAction(Action):
 
 @dataclass
 class RemoveSocialConsentWhitelistAction(Action):
-    """Remove a character from a category allowlist."""
+    """Remove a character from a category whitelist."""
 
     key: str = "remove_social_consent_whitelist"
     name: str = "Remove Consent Whitelist Entry"
@@ -219,5 +227,5 @@ class RemoveSocialConsentWhitelistAction(Action):
             )
         return ActionResult(
             success=True,
-            message=f"{allowed_tenure} removed from {category.name} allowlist.",
+            message=f"{allowed_tenure} removed from {category.name} whitelist.",
         )

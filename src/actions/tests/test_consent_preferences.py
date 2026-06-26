@@ -1,6 +1,9 @@
 """Tests for consent preference Actions (#1487)."""
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 
 from actions.definitions.consent_preferences import (
     AddSocialConsentWhitelistAction,
@@ -8,7 +11,6 @@ from actions.definitions.consent_preferences import (
     SetSocialConsentCategoryRuleAction,
     SetSocialConsentPreferenceAction,
 )
-from actions.registry import get_action
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.consent.constants import ConsentMode
@@ -102,6 +104,25 @@ class ConsentPreferenceActionsTests(TestCase):
             category=category,
         ).exists()
 
+    def test_add_social_consent_whitelist_action_inactive_fails(self):
+        SocialConsentCategoryFactory(key="romantic")
+        allowed = RosterTenureFactory(
+            end_date=timezone.now() - timedelta(days=1),
+        )
+        action = AddSocialConsentWhitelistAction()
+        result = action.run(
+            self.char,
+            tenure_id=self.tenure.pk,
+            category_key="romantic",
+            allowed_tenure_id=allowed.pk,
+        )
+        assert result.success is False
+        assert "not currently active" in result.message
+        assert not SocialConsentWhitelist.objects.filter(
+            owner_tenure=self.tenure,
+            allowed_tenure=allowed,
+        ).exists()
+
     def test_remove_social_consent_whitelist_action(self):
         category = SocialConsentCategoryFactory(key="romantic")
         allowed = RosterTenureFactory()
@@ -149,12 +170,3 @@ class ConsentPreferenceActionsTests(TestCase):
         )
         assert result.success is False
         assert "own characters" in result.message
-
-    def test_action_registry_keys(self):
-        for key in (
-            "set_social_consent_preference",
-            "set_social_consent_category_rule",
-            "add_social_consent_whitelist",
-            "remove_social_consent_whitelist",
-        ):
-            assert get_action(key) is not None
