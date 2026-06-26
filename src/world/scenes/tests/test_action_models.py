@@ -5,8 +5,13 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    TreatmentTemplateFactory,
+)
 from world.magic.constants import RitualExecutionKind, TargetKind
 from world.magic.factories import (
+    PendingAlterationFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
@@ -275,3 +280,72 @@ class DefenderConsentFieldsTest(TestCase):
         t = SceneActionTargetFactory()
         self.assertEqual(t.difficulty_choice, DifficultyChoice.NORMAL)
         self.assertEqual(t.resist_effort_level, "")
+
+
+class SceneActionRequestTreatmentFieldsTests(TestCase):
+    """Model-level validation for treatment-specific SceneActionRequest fields."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.treatment = TreatmentTemplateFactory()
+        cls.condition_instance = ConditionInstanceFactory()
+        cls.pending_alteration = PendingAlterationFactory()
+
+    def test_treatment_requires_target_effect(self) -> None:
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="treat_condition",
+            treatment=self.treatment,
+        )
+        with self.assertRaises(ValidationError):
+            request.clean()
+
+    def test_treatment_rejects_both_target_types(self) -> None:
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="treat_condition",
+            treatment=self.treatment,
+            target_condition_instance=self.condition_instance,
+            target_pending_alteration=self.pending_alteration,
+        )
+        with self.assertRaises(ValidationError):
+            request.clean()
+
+    def test_treatment_with_condition_instance_is_valid(self) -> None:
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="treat_condition",
+            treatment=self.treatment,
+            target_condition_instance=self.condition_instance,
+        )
+        request.clean()  # Should not raise
+
+    def test_treatment_with_pending_alteration_is_valid(self) -> None:
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="treat_condition",
+            treatment=self.treatment,
+            target_pending_alteration=self.pending_alteration,
+        )
+        request.clean()  # Should not raise
+
+    def test_empty_treatment_allows_no_target(self) -> None:
+        """A non-treatment action does not require treatment targets."""
+        request = SceneActionRequest(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+        request.clean()  # Should not raise

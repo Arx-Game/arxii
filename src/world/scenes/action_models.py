@@ -131,6 +131,30 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         related_name="scene_action_requests",
         help_text="Data-driven action template if applicable",
     )
+    treatment = models.ForeignKey(
+        "conditions.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="action_requests",
+        help_text="Treatment being attempted, when the action_key is treat_condition.",
+    )
+    target_condition_instance = models.ForeignKey(
+        "conditions.ConditionInstance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="treatment_action_requests",
+        help_text="Condition instance being treated, when applicable.",
+    )
+    target_pending_alteration = models.ForeignKey(
+        "magic.PendingAlteration",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="treatment_action_requests",
+        help_text="Pending alteration being treated, when applicable.",
+    )
     action_key = models.CharField(
         max_length=100,
         blank=True,
@@ -245,6 +269,31 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         if not self.action_key and not self.action_template_id and not self.technique_id:
             msg = "A request needs one of: action_key, action_template, or technique."
             raise ValidationError(msg)
+        if self.treatment_id is not None:
+            if (
+                self.target_condition_instance_id is None
+                and self.target_pending_alteration_id is None
+            ):
+                raise ValidationError(
+                    {
+                        "treatment": (
+                            "A treatment request must target a condition "
+                            "instance or pending alteration."
+                        ),
+                    }
+                )
+            if (
+                self.target_condition_instance_id is not None
+                and self.target_pending_alteration_id is not None
+            ):
+                raise ValidationError(
+                    {
+                        "treatment": (
+                            "A treatment request may target only one of "
+                            "condition instance or pending alteration."
+                        ),
+                    }
+                )
 
     @property
     def is_standalone_cast(self) -> bool:
