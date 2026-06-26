@@ -18660,6 +18660,90 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCapstone'
           description: ''
+  /api/relationships/relationship-updates/capstone/:
+    post:
+      operationId: relationships_relationship_updates_capstone_create
+      description: Record a monumental relationship capstone.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapstoneWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapstoneWrite'
+          description: ''
+  /api/relationships/relationship-updates/develop/:
+    post:
+      operationId: relationships_relationship_updates_develop_create
+      description: Solidify temporary points into permanent developed points.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevelopmentWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevelopmentWrite'
+          description: ''
+  /api/relationships/relationship-updates/first_impression/:
+    post:
+      operationId: relationships_relationship_updates_first_impression_create
+      description: Record a first impression toward another character.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirstImpressionWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirstImpressionWrite'
+          description: ''
+  /api/relationships/relationship-updates/redistribute/:
+    post:
+      operationId: relationships_relationship_updates_redistribute_create
+      description: Move developed points between tracks in an existing relationship.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedistributeWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedistributeWrite'
+          description: ''
   /api/relationships/relationships/:
     get:
       operationId: relationships_relationships_list
@@ -24563,6 +24647,58 @@ components:
       - description
       - id
       - name
+    CapstoneWrite:
+      type: object
+      description: Serializer for creating a relationship capstone event.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+        writeup:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: shared
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
+    CapstoneWriteRequest:
+      type: object
+      description: Serializer for creating a relationship capstone event.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+          minLength: 1
+        writeup:
+          type: string
+          minLength: 1
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: shared
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
     CastPullRequestRequest:
       type: object
       description: Nested pull declaration on the cast endpoint (#854).
@@ -26276,6 +26412,16 @@ components:
       - name
       - parent_name
       - path
+    ColoringEnum:
+      enum:
+      - positive
+      - neutral
+      - negative
+      type: string
+      description: |-
+        * `positive` - Positive
+        * `neutral` - Neutral
+        * `negative` - Negative
     CommentTypeEnum:
       enum:
       - message
@@ -27550,6 +27696,64 @@ components:
       - captive_name
       - captivity_id
       - captor
+    DevelopmentWrite:
+      type: object
+      description: Serializer for creating a relationship development update.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+        writeup:
+          type: string
+        xp_awarded:
+          type: integer
+          default: 0
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
+    DevelopmentWriteRequest:
+      type: object
+      description: Serializer for creating a relationship development update.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+          minLength: 1
+        writeup:
+          type: string
+          minLength: 1
+        xp_awarded:
+          type: integer
+          default: 0
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
     DifficultyChoiceEnum:
       enum:
       - trivial
@@ -29982,6 +30186,66 @@ components:
       - current
       - percentage
       - zone
+    FirstImpressionWrite:
+      type: object
+      description: Serializer for creating a first impression.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+        writeup:
+          type: string
+        coloring:
+          allOf:
+          - $ref: '#/components/schemas/ColoringEnum'
+          default: neutral
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
+    FirstImpressionWriteRequest:
+      type: object
+      description: Serializer for creating a first impression.
+      properties:
+        target_persona_id:
+          type: integer
+        track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+          minLength: 1
+        writeup:
+          type: string
+          minLength: 1
+        coloring:
+          allOf:
+          - $ref: '#/components/schemas/ColoringEnum'
+          default: neutral
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - target_persona_id
+      - title
+      - track_id
+      - writeup
     FormTrait:
       type: object
       properties:
@@ -41346,6 +41610,64 @@ components:
       description: |-
         * `game_wide` - Game-wide
         * `specified` - Specified
+    RedistributeWrite:
+      type: object
+      description: Serializer for redistributing relationship points between tracks.
+      properties:
+        target_persona_id:
+          type: integer
+        source_track_id:
+          type: integer
+        target_track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+        writeup:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - source_track_id
+      - target_persona_id
+      - target_track_id
+      - title
+      - writeup
+    RedistributeWriteRequest:
+      type: object
+      description: Serializer for redistributing relationship points between tracks.
+      properties:
+        target_persona_id:
+          type: integer
+        source_track_id:
+          type: integer
+        target_track_id:
+          type: integer
+        points:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+          minLength: 1
+        writeup:
+          type: string
+          minLength: 1
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          default: private
+      required:
+      - points
+      - source_track_id
+      - target_persona_id
+      - target_track_id
+      - title
+      - writeup
     ReferencedMilestoneTypeEnum:
       enum:
       - story_resolved
@@ -41391,7 +41713,7 @@ components:
           description: Points added to both capacity and developed_points
         visibility:
           allOf:
-          - $ref: '#/components/schemas/RelationshipCapstoneVisibilityEnum'
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
           readOnly: true
           description: |-
             Who can see this capstone
@@ -41422,18 +41744,6 @@ components:
       - track_name
       - visibility
       - writeup
-    RelationshipCapstoneVisibilityEnum:
-      enum:
-      - private
-      - shared
-      - gossip
-      - public
-      type: string
-      description: |-
-        * `private` - Private
-        * `shared` - Shared
-        * `gossip` - Gossip
-        * `public` - Public
     RelationshipCondition:
       type: object
       description: Serializer for RelationshipCondition lookup table.
@@ -46652,6 +46962,18 @@ components:
       description: |-
         * `default` - Default
         * `very_private` - Very Private
+    VisibilityFdaEnum:
+      enum:
+      - private
+      - shared
+      - gossip
+      - public
+      type: string
+      description: |-
+        * `private` - Private
+        * `shared` - Shared
+        * `gossip` - Gossip
+        * `public` - Public
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

@@ -72,6 +72,26 @@ Three ways to add points:
   custom points+track) and applies it as a `create_capstone` on the (source→target) relationship.
   Unilateral — never needs the target's consent; the relationship stays `is_pending` until/unless
   reciprocated. Track must be NEGATIVE-sign. The secret-victim prompt is the caller (web slice).
+- **`create_first_impression` / `create_development` / `create_capstone` / `redistribute_points`**
+  (`services.py`) — the four positive relationship-building verbs. Each is wrapped by a
+  corresponding Action in `actions/definitions/relationships.py` and reachable from both surfaces
+  below.
+
+## Player Surface (#1485)
+
+The positive relationship-building loop is reachable from both web and telnet:
+
+- **Web** — `RelationshipUpdateViewSet` exposes four POST endpoints (`first_impression` /
+  `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`. List/
+  detail reads live on `CharacterRelationshipViewSet` (read-only).
+- **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
+  telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
+  these implicitly).
+
+`linked_scene` defaults to the caller's active scene in the current room when the target is
+co-located. **No consent gate** — these describe the caller's regard for another character; they do
+not compel or provoke the target's behavior (ADR-0024). The Golden Rule covers bad-faith writeups;
+a positive kudos / complaint feedback layer for shared/public writeups is a follow-up (#1328).
 
 ## Integration
 - Achievement stats fired via `world.achievements.services.increment_stat()`

@@ -235,6 +235,10 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "create_first_impression",
+            "create_development",
+            "create_capstone",
+            "redistribute_points",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
 from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
@@ -262,3 +263,70 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class FirstImpressionWriteSerializer(serializers.Serializer):
+    """Serializer for creating a first impression."""
+
+    target_persona_id = serializers.IntegerField()
+    track_id = serializers.IntegerField()
+    points = serializers.IntegerField(min_value=0)
+    title = serializers.CharField()
+    writeup = serializers.CharField()
+    coloring = serializers.ChoiceField(
+        choices=FirstImpressionColoring.choices,
+        required=False,
+        default=FirstImpressionColoring.NEUTRAL,
+    )
+    visibility = serializers.ChoiceField(
+        choices=UpdateVisibility.choices,
+        required=False,
+        default=UpdateVisibility.PRIVATE,
+    )
+
+
+class DevelopmentWriteSerializer(serializers.Serializer):
+    """Serializer for creating a relationship development update."""
+
+    target_persona_id = serializers.IntegerField()
+    track_id = serializers.IntegerField()
+    points = serializers.IntegerField(min_value=0)
+    title = serializers.CharField()
+    writeup = serializers.CharField()
+    xp_awarded = serializers.IntegerField(required=False, default=0)
+    visibility = serializers.ChoiceField(
+        choices=UpdateVisibility.choices,
+        required=False,
+        default=UpdateVisibility.PRIVATE,
+    )
+
+
+class CapstoneWriteSerializer(serializers.Serializer):
+    """Serializer for creating a relationship capstone event."""
+
+    target_persona_id = serializers.IntegerField()
+    track_id = serializers.IntegerField()
+    points = serializers.IntegerField(min_value=0)
+    title = serializers.CharField()
+    writeup = serializers.CharField()
+    visibility = serializers.ChoiceField(
+        choices=UpdateVisibility.choices,
+        required=False,
+        default=UpdateVisibility.SHARED,
+    )
+
+
+class RedistributeWriteSerializer(serializers.Serializer):
+    """Serializer for redistributing relationship points between tracks."""
+
+    target_persona_id = serializers.IntegerField()
+    source_track_id = serializers.IntegerField()
+    target_track_id = serializers.IntegerField()
+    points = serializers.IntegerField(min_value=0)
+    title = serializers.CharField()
+    writeup = serializers.CharField()
+    visibility = serializers.ChoiceField(
+        choices=UpdateVisibility.choices,
+        required=False,
+        default=UpdateVisibility.PRIVATE,
+    )

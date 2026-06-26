@@ -198,6 +198,17 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
+  namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
+  `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
+  relationship Action via `action.run()` directly — the same seam the web
+  `RelationshipUpdateViewSet` uses (not the dispatcher; these are plain REGISTRY actions). Bare
+  `relationship` / `relationship list` renders the caller's relationships; `relationship show
+  <name|#>` renders one in detail (telnet-only — the web gets list/detail implicitly from
+  `CharacterRelationshipViewSet`). Tracks resolve by name (iexact) or id; `title=`/`writeup=` are
+  free text (values run to the next `key=`); an active scene in the caller's current room is
+  linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
+  regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
