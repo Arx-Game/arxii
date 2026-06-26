@@ -157,15 +157,15 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
 
 
 def _character_has_death_deferred(character: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
-    """Return True if the character has any active condition granting death_deferred."""
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    """Return True if the character has any active condition granting death_deferred.
 
-    return ConditionInstance.objects.filter(
-        target=character,
-        is_suppressed=False,
-        resolved_at__isnull=True,
-        condition__properties__name="death_deferred",
-    ).exists()
+    Delegates to the canonical shared helper in world.conditions.services so
+    there is one query definition. Kept as a thin wrapper for call-site
+    compatibility within this module.
+    """
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+
+    return has_death_deferred(character)
 
 
 def _emit_death_gate(character: Character, room: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
