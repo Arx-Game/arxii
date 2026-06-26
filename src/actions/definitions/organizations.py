@@ -6,6 +6,7 @@ used by the web (`dispatch_player_action`) and telnet (`CmdOrg`).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,7 @@ from world.societies.exceptions import (
     NotAuthorizedToManageRanksError,
     NotOrganizationMemberError,
     OrganizationMemberBlockError,
+    OrganizationMembershipError,
     OrganizationOfferNotForYouError,
     OrganizationOfferPendingError,
     OrganizationOfferResolvedError,
@@ -46,7 +48,7 @@ from world.societies.membership_services import (
     leave_organization,
     promote_member,
 )
-from world.societies.models import OrganizationMembershipOffer
+from world.societies.models import OrganizationMembership, OrganizationMembershipOffer
 
 _TARGET_FILTERS = TargetFilters(in_same_scene=True, exclude_self=True)
 
@@ -325,6 +327,51 @@ class OrgLeaveAction(Action):
         )
 
 
+def _run_membership_management(  # noqa: PLR0911, PLR0913
+    actor: ObjectDB,
+    verb: str,
+    preposition: str,
+    service_fn: Callable[[OrganizationMembership, OrganizationMembership], Any],
+    errors: tuple[type[OrganizationMembershipError], ...],
+    kwargs: dict[str, Any],
+) -> ActionResult:
+    """Execute a promote/demote/expel action after shared validation."""
+    actor_persona = _actor_persona(actor)
+    if actor_persona is None:
+        return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
+
+    target_persona = _resolve_target_persona(kwargs)
+    if target_persona is None:
+        return ActionResult(success=False, message=f"{verb.capitalize()} whom?")
+
+    organization = _resolve_organization(kwargs.get("organization_id"))
+    if organization is None:
+        return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
+
+    if not _same_room(actor, target_persona):
+        return ActionResult(
+            success=False,
+            message=f"You must be in the same room to {verb} someone.",
+        )
+
+    actor_membership = active_membership_for_persona(organization, actor_persona)
+    target_membership = active_membership_for_persona(organization, target_persona)
+    if target_membership is None:
+        return ActionResult(success=False, message=_MSG_TARGET_NOT_A_MEMBER)
+    if actor_membership is None:
+        return ActionResult(success=False, message=_MSG_NOT_A_MEMBER)
+
+    try:
+        service_fn(target_membership, actor_membership)
+    except errors as exc:
+        return ActionResult(success=False, message=exc.user_message)
+
+    return ActionResult(
+        success=True,
+        message=f"You {verb} {target_persona.name} {preposition} {organization.name}.",
+    )
+
+
 @dataclass
 class OrgPromoteAction(Action):
     key: str = "org_promote"
@@ -337,55 +384,23 @@ class OrgPromoteAction(Action):
     target_filters: TargetFilters = field(default=_TARGET_FILTERS)
     costs_turn: bool = True
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        actor_persona = _actor_persona(actor)
-        if actor_persona is None:
-            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
-
-        target_persona = _resolve_target_persona(kwargs)
-        if target_persona is None:
-            return ActionResult(success=False, message="Promote whom?")
-
-        organization = _resolve_organization(kwargs.get("organization_id"))
-        if organization is None:
-            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
-
-        if not _same_room(actor, target_persona):
-            return ActionResult(
-                success=False,
-                message="You must be in the same room to promote someone.",
-            )
-
-        actor_membership = active_membership_for_persona(organization, actor_persona)
-        target_membership = active_membership_for_persona(organization, target_persona)
-        if target_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_TARGET_NOT_A_MEMBER,
-            )
-        if actor_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_NOT_A_MEMBER,
-            )
-
-        try:
-            promote_member(target_membership, actor_membership)
-        except (
-            NotOrganizationMemberError,
-            NotAuthorizedToManageRanksError,
-            CannotPromoteError,
-        ) as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        return ActionResult(
-            success=True,
-            message=f"You promote {target_persona.name} in {organization.name}.",
+        return _run_membership_management(
+            actor,
+            verb="promote",
+            preposition="in",
+            service_fn=promote_member,
+            errors=(
+                NotOrganizationMemberError,
+                NotAuthorizedToManageRanksError,
+                CannotPromoteError,
+            ),
+            kwargs=kwargs,
         )
 
 
@@ -401,55 +416,23 @@ class OrgDemoteAction(Action):
     target_filters: TargetFilters = field(default=_TARGET_FILTERS)
     costs_turn: bool = True
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        actor_persona = _actor_persona(actor)
-        if actor_persona is None:
-            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
-
-        target_persona = _resolve_target_persona(kwargs)
-        if target_persona is None:
-            return ActionResult(success=False, message="Demote whom?")
-
-        organization = _resolve_organization(kwargs.get("organization_id"))
-        if organization is None:
-            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
-
-        if not _same_room(actor, target_persona):
-            return ActionResult(
-                success=False,
-                message="You must be in the same room to demote someone.",
-            )
-
-        actor_membership = active_membership_for_persona(organization, actor_persona)
-        target_membership = active_membership_for_persona(organization, target_persona)
-        if target_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_TARGET_NOT_A_MEMBER,
-            )
-        if actor_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_NOT_A_MEMBER,
-            )
-
-        try:
-            demote_member(target_membership, actor_membership)
-        except (
-            NotOrganizationMemberError,
-            NotAuthorizedToManageRanksError,
-            CannotDemoteError,
-        ) as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        return ActionResult(
-            success=True,
-            message=f"You demote {target_persona.name} in {organization.name}.",
+        return _run_membership_management(
+            actor,
+            verb="demote",
+            preposition="in",
+            service_fn=demote_member,
+            errors=(
+                NotOrganizationMemberError,
+                NotAuthorizedToManageRanksError,
+                CannotDemoteError,
+            ),
+            kwargs=kwargs,
         )
 
 
@@ -465,54 +448,22 @@ class OrgExpelAction(Action):
     target_filters: TargetFilters = field(default=_TARGET_FILTERS)
     costs_turn: bool = True
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        actor_persona = _actor_persona(actor)
-        if actor_persona is None:
-            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
-
-        target_persona = _resolve_target_persona(kwargs)
-        if target_persona is None:
-            return ActionResult(success=False, message="Expel whom?")
-
-        organization = _resolve_organization(kwargs.get("organization_id"))
-        if organization is None:
-            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
-
-        if not _same_room(actor, target_persona):
-            return ActionResult(
-                success=False,
-                message="You must be in the same room to expel someone.",
-            )
-
-        actor_membership = active_membership_for_persona(organization, actor_persona)
-        target_membership = active_membership_for_persona(organization, target_persona)
-        if target_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_TARGET_NOT_A_MEMBER,
-            )
-        if actor_membership is None:
-            return ActionResult(
-                success=False,
-                message=_MSG_NOT_A_MEMBER,
-            )
-
-        try:
-            expel_member(target_membership, actor_membership)
-        except (
-            NotOrganizationMemberError,
-            NotAuthorizedToKickError,
-        ) as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        return ActionResult(
-            success=True,
-            message=f"You expel {target_persona.name} from {organization.name}.",
+        return _run_membership_management(
+            actor,
+            verb="expel",
+            preposition="from",
+            service_fn=expel_member,
+            errors=(
+                NotOrganizationMemberError,
+                NotAuthorizedToKickError,
+            ),
+            kwargs=kwargs,
         )
 
 
