@@ -227,7 +227,7 @@ class CmdConsent(DispatchCommand):
                 display_mode = "whitelist" if rule.mode == "allowlist" else rule.mode  # noqa: STRING_LITERAL
                 lines.append(f"    {rule.category.name}: {display_mode}")
         else:
-            lines.append("  No per-category rules set (all categories default to everyone).")
+            lines.append("  No per-category rules set (all categories use the global preference).")
 
         whitelist = summary["whitelist"]
         if category_key:

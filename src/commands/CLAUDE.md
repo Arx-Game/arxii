@@ -142,6 +142,15 @@ actions, backends, and service functions.
   subverb routing. `yield` (concede an active duel) stays on `combat yield` (#1453); the hub points to
   it. The optional `[id]` selects a specific pending challenge (the #1180 threaded-inbox path); without
   it the action falls back to the actor's single pending challenge. No business logic in the command.
+- **`consent_preferences.py`**: `CmdConsent` (`consent`, #1487) — the social-consent preference
+  namespace. Routes a leading subverb (`consent on|off`, `consent category <key>=<mode>`,
+  `consent whitelist add <name> to <category>`, `consent whitelist remove <name> from <category>`,
+  `consent whitelist list [category]`) to REGISTRY `ActionRef`s and dispatches through
+  `dispatch_player_action` — the same seam the web uses — reaching the already-built consent
+  Actions in `actions/definitions/consent_preferences.py`
+  (`set_social_consent_preference` / `set_social_consent_category_rule` /
+  `add_social_consent_whitelist` / `remove_social_consent_whitelist`). Bare `consent` and
+  `consent whitelist list [category]` render the caller's social-consent summary.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.
