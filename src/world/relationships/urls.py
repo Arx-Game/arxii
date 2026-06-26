@@ -8,6 +8,7 @@ from world.relationships.views import (
     RelationshipCapstoneViewSet,
     RelationshipConditionViewSet,
     RelationshipTrackViewSet,
+    RelationshipUpdateViewSet,
 )
 
 app_name = "relationships"
@@ -20,5 +21,6 @@ router.register("relationships", CharacterRelationshipViewSet, basename="relatio
 router.register(
     "relationship-capstones", RelationshipCapstoneViewSet, basename="relationship-capstone"
 )
+router.register("relationship-updates", RelationshipUpdateViewSet, basename="relationship-update")
 
 urlpatterns = router.urls

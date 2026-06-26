@@ -253,7 +253,7 @@ The web execution path re-validates the chosen candidate pair server-side via
 `get_treatment_candidates`, so a client cannot fabricate a treatment/effect
 pair that evades scene, engagement, or bond gating.
 
-See ADR-0047 for the rationale behind the custom-action-resolver registry.
+See ADR-0048 for the rationale behind the custom-action-resolver registry.
 
 ---
 

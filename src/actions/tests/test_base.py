@@ -215,6 +215,10 @@ class ActionRegistryTests(TestCase):
             "remove_encounter_participant",
             "resolve_encounter_round",
             "set_active_persona",
+            "set_social_consent_preference",
+            "set_social_consent_category_rule",
+            "add_social_consent_whitelist",
+            "remove_social_consent_whitelist",
             "resolve_alteration",
             "rest",
             "spread_tale",
@@ -236,6 +240,10 @@ class ActionRegistryTests(TestCase):
             "org_demote",
             "org_expel",
             "treat_condition",
+            "create_first_impression",
+            "create_development",
+            "create_capstone",
+            "redistribute_points",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

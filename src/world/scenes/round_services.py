@@ -86,6 +86,15 @@ def set_scene_round_mode(
     if update_fields:
         scene_round.save(update_fields=update_fields)
 
+    # A knob change can make an in-flight DECLARING STRICT round newly complete (e.g. a GM
+    # lowering advance_quorum_pct below the count of current declarers). Re-check
+    # completion so the change takes effect immediately rather than waiting for the next
+    # declaration (#1480). Safe no-op otherwise: maybe_resolve_scene_round guards on
+    # status==DECLARING and scene_round_is_complete. OPEN/POSE_ORDER rounds are unaffected
+    # (they tick immediately via _tick_scene_round_if_active, not via completion).
+    if scene_round.mode == SceneRoundMode.STRICT and scene_round.status == RoundStatus.DECLARING:
+        maybe_resolve_scene_round(scene_round)
+
     return scene_round
 
 
@@ -291,12 +300,19 @@ def ensure_round_for_acute_condition(character_sheet: CharacterSheet) -> SceneRo
 
 
 def scene_round_is_complete(scene_round: SceneRound) -> bool:
-    """Presence-gated completion: True when every ACTIVE participant present in the room
-    who *can act* has a declaration/pass row for the current round. Absent participants
-    are implicit passes (never block); present-but-``not can_act`` participants (e.g. an
-    unconscious bleeding victim) are also implicit passes, so they cannot deadlock the
-    round — a conscious bystander's declaration alone drives resolution. No timer —
-    presence is the idle signal (AFK-safety)."""
+    """Quorum-gated completion: True when enough ACTIVE participants present in the room
+    who *can act* have declared for the current round. The threshold is
+    ``ceil(advance_quorum_pct / 100 × present_active_count)`` — the same field POSE_ORDER
+    uses (``advance_pose_order_round_if_quorum``); at 100 it reduces to unanimity, so a
+    GM/staff can still require everyone. Absent participants and present-but-``not
+    can_act`` participants (e.g. an unconscious bleeding victim) are implicit passes
+    (never block); an undeclared present ``can_act`` participant counts toward the
+    denominator but not the declared count, so a quorum below 100 lets the round resolve
+    without them — ending the AFK-stall deadlock (#1480). No timer — presence is the idle
+    signal (AFK-safety); the AFK participant's own peril is skipped separately at
+    resolution (see ``resolve_scene_round``)."""
+    import math  # noqa: PLC0415
+
     from world.vitals.services import can_act  # noqa: PLC0415
 
     present_ids = {s.character_id for s in _present_character_sheets(scene_round.room)}
@@ -315,7 +331,9 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
     ]
     if not present_active:
         return False  # nobody present and able to drive resolution
-    return all(p.pk in declared_ids for p in present_active)
+    needed = math.ceil(scene_round.advance_quorum_pct / 100 * len(present_active))
+    declared_present_active = sum(1 for p in present_active if p.pk in declared_ids)
+    return declared_present_active >= needed
 
 
 @transaction.atomic
@@ -339,12 +357,33 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     rnd.status = RoundStatus.RESOLVING
     rnd.save(update_fields=["status"])
 
+    # Snapshot who declared this round BEFORE _resolve_scene_declarations deletes the
+    # declaration rows. A present ``can_act`` participant who did NOT declare (swept as an
+    # implicit pass by quorum completion) is excluded from the END-tick target set below:
+    # their OWN acute conditions must not advance from a round they didn't engage in
+    # (ADR-0004 — an AFK character is not harmed while away). Declared participants, absent
+    # participants, and present-``not can_act`` participants (e.g. an unconscious victim)
+    # tick as before.
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    declared_ids = set(
+        rnd.action_declarations.filter(
+            round_number=rnd.round_number, is_immediate=False
+        ).values_list("participant_id", flat=True)
+    )
+    present_ids = {s.character_id for s in _present_character_sheets(rnd.room)}
+
     _resolve_scene_declarations(rnd)
 
     targets = [
         p.character_sheet.character
         for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
             "character_sheet__character"
+        )
+        if not (
+            p.character_sheet.character_id in present_ids
+            and can_act(p.character_sheet)
+            and p.pk not in declared_ids
         )
     ]
     tick_round_for_targets(targets, timing="end")

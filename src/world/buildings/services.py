@@ -37,8 +37,10 @@ from world.buildings.models import (
     Building,
     BuildingMaterial,
     BuildingPermitDetails,
+    DecorationKind,
+    RoomDecoration,
 )
-from world.locations.constants import KeyType, LocationParentType
+from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
 
 if TYPE_CHECKING:
@@ -608,3 +610,63 @@ def set_building_style(building: Building, style: ArchitecturalStyle | None) -> 
     building.save(update_fields=["architectural_style"])
     sync_building_style_modifiers(building)
     return building
+
+
+def _decoration_modifier_source(decoration: RoomDecoration) -> str:
+    """The ``source`` tag for one placed decoration's modifiers (clean removal)."""
+    return f"decor:{decoration.pk}"
+
+
+def _materialize_decoration(decoration: RoomDecoration) -> None:
+    """Create the room-scoped comfort modifiers for one placed decoration (#1514).
+
+    The kind's ``amenity`` becomes an AMENITY modifier; each ``DecorationAffinity`` becomes a
+    mitigation modifier on its discomfort axis. All room-scoped, permanent (``change_per_day=0``),
+    and source-tagged so removal is a single filtered delete. Decorations stack — each one's
+    modifiers sum in the cascade.
+    """
+    source = _decoration_modifier_source(decoration)
+    room_profile = decoration.room_profile
+    kind = decoration.kind
+    if kind.amenity:
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            key_type=KeyType.STAT,
+            stat_key=StatKey.AMENITY,
+            value=kind.amenity,
+            change_per_day=0,
+            source=source,
+        )
+    for affinity in kind.affinities.all():
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room_profile,
+            key_type=KeyType.STAT,
+            stat_key=affinity.stat_key,
+            value=affinity.value,
+            change_per_day=0,
+            source=source,
+        )
+
+
+@transaction.atomic
+def place_decoration(room_profile, kind: DecorationKind) -> RoomDecoration:
+    """Place a decoration in a room and materialize its comfort modifiers (#1514).
+
+    Cosmetic/instant. Permission gating (owner/tenant standing, the money/material cost) is the
+    caller's concern; this owns only the place + modifier materialization.
+    """
+    decoration = RoomDecoration.objects.create(room_profile=room_profile, kind=kind)
+    _materialize_decoration(decoration)
+    return decoration
+
+
+@transaction.atomic
+def remove_decoration(decoration: RoomDecoration) -> None:
+    """Remove a placed decoration and delete its comfort modifiers (#1514)."""
+    LocationValueModifier.objects.filter(
+        source=_decoration_modifier_source(decoration),
+        room_profile=decoration.room_profile,
+    ).delete()
+    decoration.delete()

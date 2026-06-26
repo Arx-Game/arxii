@@ -342,6 +342,7 @@
   - placed_items <- items.RoomItem
   - events <- events.Event
   - polish_by_category <- buildings.RoomPolish
+  - decorations <- buildings.RoomDecoration
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
 
@@ -588,11 +589,27 @@
 **Foreign Keys:**
   - style -> buildings.ArchitecturalStyle [FK]
 
+### DecorationKind
+**Pointed to by:**
+  - affinities <- buildings.DecorationAffinity
+  - placements <- buildings.RoomDecoration
+
+### DecorationAffinity
+**Foreign Keys:**
+  - kind -> buildings.DecorationKind [FK]
+
+### RoomDecoration
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - kind -> buildings.DecorationKind [FK]
+
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
+- `place_decoration(room_profile, kind: 'DecorationKind') -> 'RoomDecoration' — Place a decoration in a room and materialize its comfort modifiers (#1514).`
+- `remove_decoration(decoration: 'RoomDecoration') -> 'None' — Remove a placed decoration and delete its comfort modifiers (#1514).`
 - `set_building_style(building: 'Building', style: 'ArchitecturalStyle | None') -> 'Building' — Assign (or clear) a building's architectural style and re-sync its climate modifiers.`
 - `sync_building_style_modifiers(building: 'Building') -> 'None' — Re-materialize a building's architectural-style affinities as cascade modifiers (#1514).`
 - `validate_permit_site(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int') -> 'ValidationResult' — Validate a permit can be used at this site for this size.`
@@ -1363,6 +1380,14 @@
   - allowed_tenure -> roster.RosterTenure [FK]
   - category -> consent.SocialConsentCategory [FK]
 
+### Service Functions
+- `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
+- `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
+- `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
+- `set_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory', mode: 'str') -> 'SocialConsentCategoryRule'`
+- `set_social_consent_preference(tenure: 'RosterTenure', allow_social_actions: 'bool') -> 'SocialConsentPreference'`
+
 
 ## world.covenants
 
@@ -1778,8 +1803,12 @@
   - tenant_organization -> societies.Organization [FK] (nullable)
 
 ### Service Functions
+- `ap_regen_multiplier_pct(level: 'int') -> 'int' — The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
-- `comfort_score(room: 'DefaultObject') -> 'int' — A room's net comfort (#1514): the *inverse* of its residual discomfort.`
+- `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' — A room's comfort level (1–10) for an occupant (#1514).`
+- `comfort_level_for_points(points: 'int') -> 'int' — Map raw comfort points to a 1–10 comfort level (#1514).`
+- `comfort_points(room: 'DefaultObject') -> 'int' — A room's raw comfort points (#1514): ``amenities − felt discomfort``.`
+- `comfort_summary(room: 'DefaultObject') -> 'ComfortSummary' — Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity.`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
@@ -3209,7 +3238,6 @@
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
-- `register_stat_definitions() -> 'None' — Create the StatDefinition rows for project-related achievement stats.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 

@@ -1,5 +1,7 @@
 """API tests for the /api/consent/ endpoints."""
 
+from types import SimpleNamespace
+
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -19,6 +21,23 @@ from world.consent.models import (
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 
 
+def _force_api_user(client: APIClient, player_data, character) -> None:
+    """Authenticate the client with a user that has a player_data and a puppet character.
+
+    The viewset dispatches consent actions through the shared player-action seam, which
+    needs an ObjectDB character whose account matches the owning player. Tests wire the
+    character.account to the player account and expose the character as request.user.puppet.
+    """
+    character.account = player_data.account
+    user = SimpleNamespace(
+        is_authenticated=True,
+        is_staff=False,
+        player_data=player_data,
+        puppet=character,
+    )
+    client.force_authenticate(user=user)
+
+
 class SocialConsentCategoryViewSetTests(TestCase):
     """Tests for /api/consent/categories/."""
 
@@ -34,7 +53,13 @@ class SocialConsentCategoryViewSetTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.client.force_authenticate(user=self.player.account)
+        _force_api_user(self.client, self.player, self._character_for(self.player))
+
+    def _character_for(self, player_data):
+        tenure = RosterTenureFactory(player_data=player_data)
+        character = tenure.roster_entry.character_sheet.character
+        character.account = player_data.account
+        return character
 
     def test_unauthenticated_returns_401_or_403(self):
         """Unauthenticated requests are rejected."""
@@ -78,10 +103,12 @@ class SocialConsentPreferenceViewSetTests(TestCase):
         cls.tenure_b = RosterTenureFactory(player_data=cls.player_b)
         cls.pref_a = SocialConsentPreferenceFactory(tenure=cls.tenure_a, allow_social_actions=True)
         cls.pref_b = SocialConsentPreferenceFactory(tenure=cls.tenure_b, allow_social_actions=False)
+        cls.character_a = cls.tenure_a.roster_entry.character_sheet.character
+        cls.character_a.account = cls.player_a.account
 
     def setUp(self):
         self.client = APIClient()
-        self.client.force_authenticate(user=self.player_a.account)
+        _force_api_user(self.client, self.player_a, self.character_a)
 
     def test_unauthenticated_returns_401_or_403(self):
         """Unauthenticated requests are rejected."""
@@ -122,6 +149,19 @@ class SocialConsentPreferenceViewSetTests(TestCase):
         self.pref_a.refresh_from_db()
         assert self.pref_a.allow_social_actions is False
 
+    def test_patch_own_preference_response_shape(self):
+        """PATCH response preserves the original serializer contract."""
+        response = self.client.patch(
+            f"/api/consent/preferences/{self.pref_a.id}/",
+            {"allow_social_actions": False},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.data.keys()) == {"id", "tenure", "allow_social_actions"}
+        assert response.data["id"] == self.pref_a.id
+        assert response.data["tenure"] == self.tenure_a.id
+        assert response.data["allow_social_actions"] is False
+
     def test_for_tenure_returns_existing_preference(self):
         """for-tenure action returns existing preference row."""
         response = self.client.get(f"/api/consent/preferences/for-tenure/{self.tenure_a.id}/")
@@ -148,6 +188,7 @@ class SocialConsentPreferenceViewSetTests(TestCase):
     def test_post_creates_preference_for_own_tenure(self):
         """Player can POST to create a preference for a tenure they own."""
         tenure_new = RosterTenureFactory(player_data=self.player_a)
+        tenure_new.roster_entry.character_sheet.character.account = self.player_a.account
         response = self.client.post(
             "/api/consent/preferences/",
             {"tenure": tenure_new.id, "allow_social_actions": False},
@@ -155,6 +196,22 @@ class SocialConsentPreferenceViewSetTests(TestCase):
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert SocialConsentPreference.objects.filter(tenure=tenure_new).exists()
+
+    def test_post_preference_response_shape(self):
+        """POST response preserves the original serializer contract."""
+        tenure_new = RosterTenureFactory(player_data=self.player_a)
+        tenure_new.roster_entry.character_sheet.character.account = self.player_a.account
+        response = self.client.post(
+            "/api/consent/preferences/",
+            {"tenure": tenure_new.id, "allow_social_actions": False},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert set(response.data.keys()) == {"id", "tenure", "allow_social_actions"}
+        assert response.data["tenure"] == tenure_new.id
+        assert response.data["allow_social_actions"] is False
+        preference = SocialConsentPreference.objects.get(tenure=tenure_new)
+        assert response.data["id"] == preference.id
 
     def test_post_with_other_players_tenure_rejected(self):
         """POST with another player's tenure id is rejected and no row is created."""
@@ -203,10 +260,12 @@ class SocialConsentCategoryRuleViewSetTests(TestCase):
             category=cls.category,
             mode=ConsentMode.EVERYONE,
         )
+        cls.character_a = cls.tenure_a.roster_entry.character_sheet.character
+        cls.character_a.account = cls.player_a.account
 
     def setUp(self):
         self.client = APIClient()
-        self.client.force_authenticate(user=self.player_a.account)
+        _force_api_user(self.client, self.player_a, self.character_a)
 
     def test_unauthenticated_returns_401_or_403(self):
         """Unauthenticated requests are rejected."""
@@ -253,6 +312,26 @@ class SocialConsentCategoryRuleViewSetTests(TestCase):
             preference=self.pref_a, category=new_category
         ).exists()
 
+    def test_create_rule_response_shape(self):
+        """POST response preserves the original serializer contract."""
+        new_category = SocialConsentCategoryFactory(key="romantic-shape-test")
+        response = self.client.post(
+            "/api/consent/category-rules/",
+            {
+                "preference": self.pref_a.id,
+                "category": new_category.id,
+                "mode": ConsentMode.ALLOWLIST,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert set(response.data.keys()) == {"id", "preference", "category", "mode"}
+        assert response.data["preference"] == self.pref_a.id
+        assert response.data["category"] == new_category.id
+        assert response.data["mode"] == ConsentMode.ALLOWLIST
+        rule = SocialConsentCategoryRule.objects.get(preference=self.pref_a, category=new_category)
+        assert response.data["id"] == rule.id
+
     def test_patch_own_rule_mode(self):
         """Player can patch their own rule's mode."""
         response = self.client.patch(
@@ -263,6 +342,20 @@ class SocialConsentCategoryRuleViewSetTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         self.rule_a.refresh_from_db()
         assert self.rule_a.mode == ConsentMode.EVERYONE
+
+    def test_patch_own_rule_mode_response_shape(self):
+        """PATCH response preserves the original serializer contract."""
+        response = self.client.patch(
+            f"/api/consent/category-rules/{self.rule_a.id}/",
+            {"mode": ConsentMode.EVERYONE},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.data.keys()) == {"id", "preference", "category", "mode"}
+        assert response.data["id"] == self.rule_a.id
+        assert response.data["preference"] == self.pref_a.id
+        assert response.data["category"] == self.category.id
+        assert response.data["mode"] == ConsentMode.EVERYONE
 
     def test_filter_by_preference(self):
         """Can filter rules by preference id."""
@@ -307,10 +400,12 @@ class SocialConsentWhitelistViewSetTests(TestCase):
             allowed_tenure=cls.tenure_other,
             category=cls.category,
         )
+        cls.character_a = cls.tenure_a.roster_entry.character_sheet.character
+        cls.character_a.account = cls.player_a.account
 
     def setUp(self):
         self.client = APIClient()
-        self.client.force_authenticate(user=self.player_a.account)
+        _force_api_user(self.client, self.player_a, self.character_a)
 
     def test_unauthenticated_returns_401_or_403(self):
         """Unauthenticated requests are rejected."""
@@ -354,6 +449,37 @@ class SocialConsentWhitelistViewSetTests(TestCase):
             owner_tenure=self.tenure_a, allowed_tenure=another_tenure, category=new_category
         ).exists()
 
+    def test_add_whitelist_entry_response_shape(self):
+        """POST response preserves the original serializer contract."""
+        new_category = SocialConsentCategoryFactory(key="wl-add-shape-test")
+        another_tenure = RosterTenureFactory(player_data=PlayerDataFactory())
+        response = self.client.post(
+            "/api/consent/whitelist/",
+            {
+                "owner_tenure": self.tenure_a.id,
+                "allowed_tenure": another_tenure.id,
+                "category": new_category.id,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert set(response.data.keys()) == {
+            "id",
+            "owner_tenure",
+            "allowed_tenure",
+            "allowed_tenure_name",
+            "category",
+            "added_at",
+        }
+        assert response.data["owner_tenure"] == self.tenure_a.id
+        assert response.data["allowed_tenure"] == another_tenure.id
+        assert response.data["category"] == new_category.id
+        entry = SocialConsentWhitelist.objects.get(
+            owner_tenure=self.tenure_a, allowed_tenure=another_tenure, category=new_category
+        )
+        assert response.data["id"] == entry.id
+        assert response.data["allowed_tenure_name"] == another_tenure.display_name
+
     def test_delete_own_whitelist_entry(self):
         """Player can delete their own whitelist entry."""
         entry_to_delete = SocialConsentWhitelistFactory(
@@ -364,6 +490,17 @@ class SocialConsentWhitelistViewSetTests(TestCase):
         response = self.client.delete(f"/api/consent/whitelist/{entry_to_delete.id}/")
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not SocialConsentWhitelist.objects.filter(id=entry_to_delete.id).exists()
+
+    def test_delete_own_whitelist_entry_returns_204(self):
+        """DELETE response preserves the original contract (no body, 204)."""
+        entry_to_delete = SocialConsentWhitelistFactory(
+            owner_tenure=self.tenure_a,
+            allowed_tenure=self.tenure_other,
+            category=SocialConsentCategoryFactory(key="wl-delete-shape-test"),
+        )
+        response = self.client.delete(f"/api/consent/whitelist/{entry_to_delete.id}/")
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.data is None or response.data == ""
 
     def test_filter_by_owner_tenure(self):
         """Can filter whitelist entries by owner_tenure id."""

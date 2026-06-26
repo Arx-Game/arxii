@@ -23,6 +23,7 @@ from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
+from commands.comfort import CmdComfort
 from commands.conditions import CmdTreatCondition
 from commands.consent import (
     CmdAccept,
@@ -35,6 +36,7 @@ from commands.consent import (
     CmdPersuade,
     CmdRestoreSense,
 )
+from commands.consent_preferences import CmdConsent
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -72,6 +74,7 @@ from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
+from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
 from commands.social.blocking import (
@@ -171,6 +174,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdEntrance,
             CmdRestoreSense,
             CmdTreatCondition,
+            # #1487 - telnet consent preference management namespace.
+            CmdConsent,
             CmdDig,
             CmdOpen,
             CmdLink,
@@ -219,11 +224,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
+            # #1514 — in-room comfort/weather readout (the mechanical surface).
+            CmdComfort,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1485 — relationship-building namespace: impression/develop/capstone/
+            # redistribute write verbs + list/show read surfaces.
+            CmdRelationship,
             # #1511 — organization membership lifecycle.
             CmdOrg,
         )

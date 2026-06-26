@@ -24,6 +24,12 @@ from actions.definitions.communication import (
     WhisperAction,
 )
 from actions.definitions.conditions import treat_condition
+from actions.definitions.consent_preferences import (
+    AddSocialConsentWhitelistAction,
+    RemoveSocialConsentWhitelistAction,
+    SetSocialConsentCategoryRuleAction,
+    SetSocialConsentPreferenceAction,
+)
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -93,6 +99,12 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.relationships import (
+    CreateCapstoneAction,
+    CreateDevelopmentAction,
+    CreateFirstImpressionAction,
+    RedistributePointsAction,
+)
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
@@ -137,6 +149,10 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     SetActivePersonaAction(),
+    SetSocialConsentPreferenceAction(),
+    SetSocialConsentCategoryRuleAction(),
+    AddSocialConsentWhitelistAction(),
+    RemoveSocialConsentWhitelistAction(),
     SpreadTaleAction(),
     SaveDeedStoryAction(),
     PutInAction(),
@@ -196,6 +212,10 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    CreateFirstImpressionAction(),
+    CreateDevelopmentAction(),
+    CreateCapstoneAction(),
+    RedistributePointsAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     start_npc_interaction,

@@ -142,6 +142,15 @@ actions, backends, and service functions.
   subverb routing. `yield` (concede an active duel) stays on `combat yield` (#1453); the hub points to
   it. The optional `[id]` selects a specific pending challenge (the #1180 threaded-inbox path); without
   it the action falls back to the actor's single pending challenge. No business logic in the command.
+- **`consent_preferences.py`**: `CmdConsent` (`consent`, #1487) — the social-consent preference
+  namespace. Routes a leading subverb (`consent on|off`, `consent category <key>=<mode>`,
+  `consent whitelist add <name> to <category>`, `consent whitelist remove <name> from <category>`,
+  `consent whitelist list [category]`) to REGISTRY `ActionRef`s and dispatches through
+  `dispatch_player_action` — the same seam the web uses — reaching the already-built consent
+  Actions in `actions/definitions/consent_preferences.py`
+  (`set_social_consent_preference` / `set_social_consent_category_rule` /
+  `add_social_consent_whitelist` / `remove_social_consent_whitelist`). Bare `consent` and
+  `consent whitelist list [category]` render the caller's social-consent summary.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.
@@ -198,6 +207,17 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
+  namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
+  `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
+  relationship Action via `action.run()` directly — the same seam the web
+  `RelationshipUpdateViewSet` uses (not the dispatcher; these are plain REGISTRY actions). Bare
+  `relationship` / `relationship list` renders the caller's relationships; `relationship show
+  <name|#>` renders one in detail (telnet-only — the web gets list/detail implicitly from
+  `CharacterRelationshipViewSet`). Tracks resolve by name (iexact) or id; `title=`/`writeup=` are
+  free text (values run to the next `key=`); an active scene in the caller's current room is
+  linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
+  regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

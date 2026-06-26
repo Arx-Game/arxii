@@ -577,7 +577,8 @@ are a later slice of #1450.*
   Faces: telnet `gemit` (`CmdGemit`, staff `perm(Admin)`) + web `POST /api/narrative/gemits/`.
 ### Consent
 OOC visibility groups and per-category social consent preferences for player-controlled
-content sharing and social action targeting (#1141).
+content sharing and social action targeting (#1141). Consent mutations are shared REGISTRY actions
+so web and telnet converge on the same write path.
 
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
   `SocialConsentCategory` (NaturalKey on `key`), `SocialConsentPreference` (OneToOne on tenure),
@@ -587,7 +588,17 @@ content sharing and social action targeting (#1141).
   `_social_consent_exclusions()` (both in `actions/player_interface.py`)
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
-- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist
+- **Key Services:** `set_social_consent_preference()`,
+  `set_social_consent_category_rule()`, `remove_social_consent_category_rule()`,
+  `add_social_consent_whitelist()`, `remove_social_consent_whitelist()`,
+  `get_social_consent_summary()` (`world/consent/services.py`)
+- **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
+  `add_social_consent_whitelist`, `remove_social_consent_whitelist`
+  (`actions/definitions/consent_preferences.py`)
+- **Telnet:** `consent` namespace (`commands/consent_preferences.py`) — `consent on|off`,
+  `consent category <key>=<mode>`, `consent whitelist add|remove|list`
+- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist;
+  writes dispatch through the consent Actions via `dispatch_player_action()`
 - **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row = allow-all
 - **Integrates with:** actions (`ActionTemplate.consent_category` FK), roster (RosterTenure),
   codex (visibility), seed loader (`arx seed dev`)
@@ -699,15 +710,15 @@ action consent flow, and a three-mode non-combat round framework.
     - `distinct_actors_this_round(scene_round) -> int` — distinct participants with declarations this round.
     - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
     - `advance_pose_order_round_if_quorum(scene_round) -> SceneRound` — advance `round_number` when quorum met (round stays DECLARING).
-    - `scene_round_is_complete(scene_round) -> bool` — presence-gated: True when all present ACTIVE participants have a deferred declaration.
-    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round.
+    - `scene_round_is_complete(scene_round) -> bool` — quorum-gated (#1480): True when ≥ `ceil(advance_quorum_pct / 100 × present_active_count)` present ACTIVE `can_act` participants have a deferred (`is_immediate=False`) declaration; at 100 reduces to unanimity. Absent and present-`not can_act` participants are implicit passes.
+    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared present `can_act` participant is excluded from the END-tick target set so their own acute conditions don't advance (ADR-0004); declared/absent/unconscious participants tick as before.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
     - `add_present_as_co_owners(scene, room)` — mark every present character with a controlling account as a co-owner at scene creation (anti-grab: latecomers are non-owners).
     - `finish_scene_full(scene, by_account=None)` — full scene-finish orchestration: `finish_scene()` → `on_scene_finished()` → deferred fatigue resets → `broadcast_scene_message(END)`. Idempotent.
-    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` on STRICT-exit with pending declarations (#1466 removed the DANGER-immutable block — danger rounds are ordinary STRICT rounds).
+    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` on STRICT-exit with pending declarations (#1466 removed the DANGER-immutable block — danger rounds are ordinary STRICT rounds). #1480: after applying, re-checks completion on a DECLARING STRICT round so a quorum change takes effect immediately.
     - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None` (`round_services.py`) — ensure an active scene round for the room (enrolling everyone present); creates a STRICT `SceneRound(start_reason=DANGER)` when none active, else the peril rides the existing round (#1466; renamed from `auto_start_or_extend_danger_round`).
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,
@@ -841,8 +852,8 @@ ROOM_FEATURE_PROGRESSION).
   (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
 - **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
   `ContributionPrivacy`
-- **Stat definitions:** Project achievement stats are seeded in `AppConfig.ready()` via
-  `register_stat_definitions()`
+- **Stat definitions:** Project achievement stats are created lazily on first
+  contribution (same pattern as combat achievement counters)
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
 
@@ -1357,13 +1368,30 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/combat-conditions.md`
 
 ### Relationships
-Character-to-character opinions, conditions, and situational modifier gating.
+Track-based character-to-character regard, conditions, and situational modifier gating.
 
-- **Models:** `RelationshipCondition` (SharedMemoryModel), `CharacterRelationship`
-- **Key Fields:** `CharacterRelationship.reputation` (-1000 to 1000), `conditions` (M2M to RelationshipCondition)
+- **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
+  `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
+  `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
+  (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
+  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429)
+- **Key Fields:** `CharacterRelationship.affection` (signed sum), track
+  `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
-- **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK)
+- **Services:** `create_first_impression`, `create_development`, `create_capstone`,
+  `redistribute_points` (`services.py`) — the four positive relationship-building verbs
+- **Player surface (#1485):** all four verbs are reachable from both web and
+  telnet — the web `RelationshipUpdateViewSet` POST endpoints (`first_impression` /
+  `develop` / `capstone` / `redistribute`) and the telnet `relationship <subverb>`
+  namespace both dispatch the Actions in `actions/definitions/relationships.py` via
+  `action.run()` (the shared seam). Telnet adds `relationship list` / `relationship
+  show <name|#>` read surfaces (the web provides these implicitly via
+  `CharacterRelationshipViewSet`). No consent gate — these describe the caller's
+  regard, they do not compel the target's behavior (ADR-0024); kudos/complaint
+  feedback for shared/public writeups is a follow-up (#1328).
+- **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
+  scenes (optional `linked_scene` defaults to the caller's active scene), progression (XP)
 - **Source:** `src/world/relationships/`
 
 ---
@@ -1376,7 +1404,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)

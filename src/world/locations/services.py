@@ -11,6 +11,9 @@ from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
 from world.locations.constants import (
+    AP_REGEN_MULTIPLIER_PCT,
+    COMFORT_LEVEL_FLOORS,
+    COMFORT_LEVEL_MIN,
     ENCLOSURE_SHELTERED_AXES,
     EXPOSURE_STAT_KEYS,
     STAT_CLAMPS,
@@ -258,15 +261,71 @@ def room_discomfort(room: DefaultObject) -> int:
     return sum(felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS)
 
 
-def comfort_score(room: DefaultObject) -> int:
-    """A room's net comfort (#1514): the *inverse* of its residual discomfort.
+def comfort_points(room: DefaultObject) -> int:
+    """A room's raw comfort points (#1514): ``amenities − felt discomfort``.
 
-    ``0`` is fully comfortable; more negative is more miserable. This is the consumer-facing
-    handle (e.g. an AP-regen modifier reads it). PLACEHOLDER combination — a flat inverse of
-    the summed exposures until the magnitude/weighting pass on #1514; the shape (higher is
-    better, 0 = comfortable) is stable, the scale is not.
+    The wide pool that maps to a 1–10 level. Amenities (luxury decorations + magical comfort,
+    the ``AMENITY`` axis) push it up; felt environmental discomfort pushes it down. Per-character
+    inputs (condition penalties/buffs from wounds, fatigue, chilled, protection magic) are NOT
+    here — they're passed as ``comfort_offset`` to ``comfort_level`` by the consumer, since the
+    room sets the environmental base and the character's conditions adjust it.
     """
-    return -room_discomfort(room)
+    return effective_value(room, stat_key=StatKey.AMENITY) - room_discomfort(room)
+
+
+def comfort_level_for_points(points: int) -> int:
+    """Map raw comfort points to a 1–10 comfort level (#1514).
+
+    Returns the highest level whose points-floor is met (``COMFORT_LEVEL_FLOORS``); below the
+    lowest floor is level 1. 5 is neutral. Bands are a PLACEHOLDER author pass — the shape
+    (wide, sharp, 5 = "Fine") is fixed, the exact cuts are tunable.
+    """
+    for floor, level in COMFORT_LEVEL_FLOORS:
+        if points >= floor:
+            return level
+    return COMFORT_LEVEL_MIN
+
+
+def comfort_level(room: DefaultObject, *, comfort_offset: int = 0) -> int:
+    """A room's comfort level (1–10) for an occupant (#1514).
+
+    ``comfort_offset`` is the occupant's net per-character comfort contribution (condition
+    penalties − / buffs +), supplied by the caller (e.g. the AP-regen hook reads the character's
+    active conditions). Defaults to 0 for a bare environmental read.
+    """
+    return comfort_level_for_points(comfort_points(room) + comfort_offset)
+
+
+def ap_regen_multiplier_pct(level: int) -> int:
+    """The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5)."""
+    return AP_REGEN_MULTIPLIER_PCT.get(level, 0)
+
+
+class ComfortSummary(NamedTuple):
+    """A room's comfort readout for the in-room mechanical surface (#1514).
+
+    The desc stays the player's trusted flavour; this is the separate *mechanical* readout that
+    is the actual arbiter (a player can't write away the cold). ``felt_exposures`` holds only the
+    non-zero discomfort axes (after enclosure + mitigation), so the surface lists what's actually
+    biting.
+    """
+
+    level: int
+    points: int
+    felt_exposures: dict[StatKey, int]
+    amenity: int
+
+
+def comfort_summary(room: DefaultObject) -> ComfortSummary:
+    """Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity."""
+    felt = {key: felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS}
+    points = comfort_points(room)
+    return ComfortSummary(
+        level=comfort_level_for_points(points),
+        points=points,
+        felt_exposures={key: value for key, value in felt.items() if value},
+        amenity=effective_value(room, stat_key=StatKey.AMENITY),
+    )
 
 
 class _StatCascadeIndex(NamedTuple):
