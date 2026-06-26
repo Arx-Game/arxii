@@ -71,6 +71,7 @@ from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
+from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
 from commands.social.blocking import (
@@ -222,6 +223,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1485 — relationship-building namespace: impression/develop/capstone/
+            # redistribute write verbs + list/show read surfaces.
+            CmdRelationship,
             # #1511 — organization membership lifecycle.
             CmdOrg,
         )

@@ -60,7 +60,15 @@ They do not use the command system, dispatchers, or handlers.
   `EndNPCInteractionAction`, keys `"npc_start"`, `"npc_resolve"`, `"npc_end"` (#1493), REGISTRY
   backend, `target_type=SELF`; thin wrappers around `world.npc_services.services.start_interaction`,
   `resolve_offer`, and `end_interaction`. Shared by telnet `CmdHire` and the web
-  `InteractionViewSet`.)
+  `InteractionViewSet`;
+  `relationships.py` (#1485) — the four positive relationship-building verbs, all REGISTRY backend:
+  `CreateFirstImpressionAction` (key `"create_first_impression"`), `CreateDevelopmentAction`
+  (`"create_development"`), `CreateCapstoneAction` (`"create_capstone"`, visibility defaults
+  SHARED), `RedistributePointsAction` (`"redistribute_points"`). Each wraps its
+  `world.relationships.services` counterpart; `linked_scene` defaults to the caller's active scene
+  when the target is co-located. Shared `BaseRelationshipAction` + `HasCharacterSheetPrerequisite`.
+  Shared by telnet `CmdRelationship` (`relationship <subverb>`) and the web
+  `RelationshipUpdateViewSet`; no consent gate (ADR-0024).)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
