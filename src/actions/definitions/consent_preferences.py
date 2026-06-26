@@ -170,6 +170,11 @@ class AddSocialConsentWhitelistAction(Action):
         tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
         if tenure is None:
             return ActionResult(success=False, message=err)
+        if tenure.end_date is not None:
+            return ActionResult(
+                success=False,
+                message="Your character is not currently active.",
+            )
         category, err = _resolve_category(kwargs.get("category_key"))
         if category is None:
             return ActionResult(success=False, message=err)
@@ -218,6 +223,11 @@ class RemoveSocialConsentWhitelistAction(Action):
         tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
         if tenure is None:
             return ActionResult(success=False, message=err)
+        if tenure.end_date is not None:
+            return ActionResult(
+                success=False,
+                message="Your character is not currently active.",
+            )
         category, err = _resolve_category(kwargs.get("category_key"))
         if category is None:
             return ActionResult(success=False, message=err)

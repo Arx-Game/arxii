@@ -124,6 +124,26 @@ class ConsentPreferenceActionsTests(TestCase):
             allowed_tenure=allowed,
         ).exists()
 
+    def test_add_social_consent_whitelist_action_owner_inactive_fails(self):
+        """A caller whose own tenure has ended cannot add whitelist entries."""
+        SocialConsentCategoryFactory(key="romantic")
+        allowed = RosterTenureFactory()
+        self.tenure.end_date = timezone.now() - timedelta(days=1)
+        self.tenure.save(update_fields=["end_date"])
+        action = AddSocialConsentWhitelistAction()
+        result = action.run(
+            self.char,
+            tenure_id=self.tenure.pk,
+            category_key="romantic",
+            allowed_tenure_id=allowed.pk,
+        )
+        assert result.success is False
+        assert "not currently active" in result.message
+        assert not SocialConsentWhitelist.objects.filter(
+            owner_tenure=self.tenure,
+            allowed_tenure=allowed,
+        ).exists()
+
     def test_remove_social_consent_whitelist_action(self):
         category = SocialConsentCategoryFactory(key="romantic")
         allowed = RosterTenureFactory()
