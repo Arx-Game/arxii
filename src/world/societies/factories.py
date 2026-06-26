@@ -124,7 +124,7 @@ class OrganizationMembershipFactory(factory_django.DjangoModelFactory):
 
     organization = factory.SubFactory(OrganizationFactory)
     persona = factory.SubFactory(PersonaFactory)
-    rank = 5  # Default to lowest rank
+    rank = factory.LazyAttribute(lambda obj: obj.organization.ranks.filter(tier=5).first())
 
 
 class SocietyReputationFactory(factory_django.DjangoModelFactory):

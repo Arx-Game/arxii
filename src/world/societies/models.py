@@ -413,20 +413,149 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         default_field = f"rank_{rank}_title"
         return getattr(self.org_type, default_field)
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Create a default five-rank ladder on first save for generic orgs."""
+        super().save(*args, **kwargs)
+        if self.org_type and self.org_type.name == "covenant":  # noqa: STRING_LITERAL
+            return
+        if not self.ranks.exists():
+            from world.societies.membership_services import (  # noqa: PLC0415
+                ensure_default_rank_ladder,
+            )
+
+            ensure_default_rank_ladder(self)
+
+
+class OrganizationRank(SharedMemoryModel):
+    """A single rung on an organization's five-tier rank ladder.
+
+    Tier 1 is the highest authority; tier 5 is the lowest. Capability flags
+    decide which members can invite, kick, or manage ranks.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="ranks",
+        help_text="The organization this rank belongs to",
+    )
+    name = models.CharField(
+        max_length=60,
+        help_text="Diegetic name for this rung (e.g., Guildmaster, Captain)",
+    )
+    tier = models.PositiveIntegerField(
+        help_text="Authority tier (1 highest, 5 lowest)",
+    )
+    can_invite = models.BooleanField(
+        default=False,
+        help_text="Members at this rank can invite others to the organization",
+    )
+    can_kick = models.BooleanField(
+        default=False,
+        help_text="Members at this rank can expel lower-ranked members",
+    )
+    can_manage_ranks = models.BooleanField(
+        default=False,
+        help_text="Members at this rank can promote/demote others",
+    )
+
+    class Meta:
+        ordering = ["tier"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "tier"],
+                name="unique_org_rank_tier",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="unique_org_rank_name",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} (Tier {self.tier})"
+
+
+class OrganizationMembershipOffer(SharedMemoryModel):
+    """A pending or resolved invitation or application to join an organization.
+
+    INVITE offers are directed at a specific persona (``to_persona``).
+    APPLICATION offers are directed at the organization by an applicant
+    (``from_persona``) and have no ``to_persona``.
+    """
+
+    class Kind(models.TextChoices):
+        INVITE = "invite", "Invite"
+        APPLICATION = "application", "Application"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+        CANCELLED = "cancelled", "Cancelled"
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="membership_offers",
+    )
+    from_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="sent_org_membership_offers",
+    )
+    to_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="received_org_membership_offers",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=Kind.choices,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    message = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "to_persona"],
+                condition=models.Q(
+                    status="pending",
+                    kind="invite",
+                    to_persona__isnull=False,
+                ),
+                name="unique_pending_org_invite_per_target",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "from_persona"],
+                condition=models.Q(
+                    status="pending",
+                    kind="application",
+                ),
+                name="unique_pending_org_application_per_applicant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        target = self.to_persona or self.from_persona
+        return f"{self.kind} to {self.organization.name} for {target}"
+
 
 class OrganizationMembership(SharedMemoryModel):
-    """
-    Links a Persona (character identity) to an Organization with a rank.
+    """Links a Persona to an Organization with a rank rung.
 
-    Memberships represent a character's involvement in an organization through
-    their persona. Each persona can only have one membership per organization.
-
-    Rank values:
-    - 1: Leader/highest rank
-    - 5: Lowest rank/contact
-
-    Only primary or established personas can hold organization memberships.
-    Temporary disguises cannot join organizations.
+    Active memberships have ``left_at IS NULL`` and ``exiled_at IS NULL``.
+    A voluntary departure sets ``left_at``; a forced removal sets both
+    ``left_at`` and ``exiled_at``.
     """
 
     organization = models.ForeignKey(
@@ -441,36 +570,54 @@ class OrganizationMembership(SharedMemoryModel):
         related_name="organization_memberships",
         help_text="The persona (character identity) that holds this membership",
     )
-    rank = models.IntegerField(
-        default=RANK_MAX,
-        validators=[MinValueValidator(RANK_MIN), MaxValueValidator(RANK_MAX)],
-        help_text=f"Rank within the organization ({RANK_MIN}=leader, {RANK_MAX}=lowest)",
+    rank = models.ForeignKey(
+        OrganizationRank,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="memberships",
+        help_text="Rank rung held within this organization",
     )
     joined_date = models.DateTimeField(
         auto_now_add=True,
         help_text="When the persona joined this organization",
     )
+    left_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the persona voluntarily left the organization",
+    )
+    exiled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the persona was forcibly removed from the organization",
+    )
 
     class Meta:
         verbose_name = "Organization Membership"
         verbose_name_plural = "Organization Memberships"
+        ordering = ["organization", "rank__tier", "persona__name"]
         constraints = [
             models.UniqueConstraint(
                 fields=["organization", "persona"],
-                name="unique_organization_persona_membership",
+                condition=models.Q(
+                    left_at__isnull=True,
+                    exiled_at__isnull=True,
+                ),
+                name="unique_active_org_membership",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.persona.name} - {self.organization.name} (Rank {self.rank})"
+        if self.rank_id:
+            return (
+                f"{self.persona.name} - {self.organization.name} "
+                f"(Rank {self.rank.tier} - {self.rank.name})"
+            )
+        return f"{self.persona.name} - {self.organization.name} (No rank)"
 
     def clean(self) -> None:
-        """
-        Validate the membership.
-
-        Ensures that only primary or established personas can hold organization
-        memberships. Temporary disguises cannot join organizations.
-        """
+        """Validate the membership."""
         super().clean()
 
         if self.persona_id:
@@ -484,19 +631,20 @@ class OrganizationMembership(SharedMemoryModel):
                     }
                 )
 
+        if self.rank_id:
+            if self.rank.organization_id != self.organization_id:
+                raise ValidationError({"rank": "Rank does not belong to this organization."})
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
         self.full_clean()
         super().save(*args, **kwargs)
 
     def get_title(self) -> str:
-        """
-        Get the title for this membership's rank from the organization.
-
-        Returns:
-            The title string for this member's rank within the organization.
-        """
-        return self.organization.get_rank_title(self.rank)
+        """Return the effective title for this membership's rank rung."""
+        if self.rank is None:
+            return ""
+        return self.organization.get_rank_title(self.rank.tier)
 
 
 class SocietyReputation(SharedMemoryModel):
