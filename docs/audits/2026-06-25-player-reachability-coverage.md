@@ -96,12 +96,11 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Progression, skills & classes
 - TELNET+WEB: leveling via "Ritual of the Durance" (CmdRitual draft/join/fire); Audere & Audere Majora
-  intensity/tier crossing (#1344); imbue a thread (raises thread level).
+  intensity/tier crossing (#1344); imbue a thread (raises thread level); **deliberate skill-raising**
+  (create/update/remove `TrainingAllocation` via `ManageTrainingAction` + `training` telnet command + `GET/PATCH/POST/DELETE /api/skills/training-allocations/`, and weekly `process_weekly_training` / `apply_weekly_rust` cron — #1488); **spend XP on a class-level or thread XP-lock unlock** (`PurchaseUnlockAction` + `progression unlock` telnet command + `POST /api/progression/unlocks/purchase/` — #1489).
 - WEB-ONLY: progression rewards — claim kudos / cast-remove vote / random-scene / path-intent (#1348,
   also ADR-0001 bypass).
-- **NO-SURFACE:** **deliberate skill-raising** (create/update/remove training allocation,
-  process_weekly_training — built, zero player wiring; skills also rise automatically via the check
-  pipeline); **spend XP/Legend on an unlock** (spend_xp_on_unlock).
+- **NO-SURFACE:** (none remaining in this category for progression/skills).
 - **PLANNED-UNBUILT (→ registry):** **spell system** (learnable, path-independent); **post-CG Gift
   acquisition** (magic currently freezes at CG); trainer system; path discovery/research/switching;
   technique-designer consequence-pool catalog (#1320).
@@ -267,8 +266,9 @@ These are mis-wirings, not coverage gaps — worth fixing directly:
   `emit_event`/`TriggerDefinition` are wired in combat, conditions, positioning, magic (Milestone #4 closed).
 - `ROADMAP.md:92` lists covenant entity/lifecycle as "post-MVP" — **built** (models + services + rise/
   stand-down rituals); the real gap is telnet/UI.
-- `character-progression.md:51,146` "training system + skill rust not built" — **built**
-  (`TrainingAllocation`, `process_weekly_training`, `apply_weekly_rust`).
+- `character-progression.md:51,146` "training system + skill rust not built" — **built and wired**
+  (`TrainingAllocation`, `ManageTrainingAction`, `training` command, `/api/skills/training-allocations/`,
+  `process_weekly_training`, `apply_weekly_rust`).
 - `codex.md` "research project system needed" — partly **built** (`ResearchProject`, `CodexTeachingOffer`).
 - **#1246 is stale-open** — `CmdFlourish` is built; its deferral premise is gone.
 - **#537 closed** but the `TODO(research-gate)` in `technique_builder.py:168` is still a live permissive stub.

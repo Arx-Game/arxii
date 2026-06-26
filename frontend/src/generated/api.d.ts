@@ -10819,6 +10819,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/unlocks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a paginated list of purchasable progression unlocks. */
+    get: operations['progression_unlocks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/unlocks/purchase/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Purchase an unlock by dispatching PurchaseUnlockAction. */
+    post: operations['progression_unlocks_purchase_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/votes/': {
     parameters: {
       query?: never;
@@ -12069,6 +12103,42 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return all allocations for the active character plus remaining budget. */
+    get: operations['skills_training_allocations_list'];
+    put?: never;
+    /** @description Create a new training allocation for the active character. */
+    post: operations['skills_training_allocations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Remove a training allocation owned by the active character. */
+    delete: operations['skills_training_allocations_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Update an existing training allocation owned by the active character. */
+    patch: operations['skills_training_allocations_partial_update'];
     trace?: never;
   };
   '/api/social-providers/': {
@@ -17769,6 +17839,13 @@ export interface components {
       /** @description Shows through normal clothing? Required True at tier 4+. */
       is_visible_at_rest?: boolean;
     };
+    /** @description Validate input for creating a training allocation. */
+    ManageTrainingAddRequest: {
+      skill_id?: number | null;
+      specialization_id?: number | null;
+      ap_amount: number;
+      mentor_persona_id?: number | null;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -17790,6 +17867,12 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /** @description Minimal read-only representation of a mentor persona. */
+    MentorPersona: {
+      readonly id: number;
+      /** @description Display name for this persona */
+      name: string;
+    };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -20120,6 +20203,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PlayerTrust'][];
     };
+    PaginatedProgressionUnlockItemList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ProgressionUnlockItem'][];
+    };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
       count: number;
@@ -21078,6 +21176,11 @@ export interface components {
       /** @description Null while the story is at the frontier (unauthored) or before start. */
       current_episode?: number | null;
       is_active?: boolean;
+    };
+    /** @description Validate input for updating a training allocation. */
+    PatchedManageTrainingUpdateRequest: {
+      ap_amount?: number;
+      mentor_persona_id?: number | null;
     };
     /**
      * @description Staff CRUD for trigger-based MissionGiver rows (#729).
@@ -22429,6 +22532,32 @@ export interface components {
       has_undiscovered: boolean;
       milestones: components['schemas']['ProgressionMilestone'][];
     };
+    /**
+     * @description Discriminated list item for purchasable progression unlocks.
+     *
+     *     Two ``unlock_type`` variants are supported:
+     *
+     *     - ``class_level`` — purchase a class/level unlock with XP.
+     *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+     */
+    ProgressionUnlockItem: {
+      unlock_type: string;
+      display_name: string;
+      xp_cost: number;
+      requirements_met: boolean;
+      locked_reason: string | null;
+      class_level_unlock_id: number | null;
+      class_name: string | null;
+      target_level: number | null;
+      thread_id: number | null;
+      boundary_level: number | null;
+      thread_name: string | null;
+      thread_level: number | null;
+      thread_resonance_id: number | null;
+      thread_resonance_name: string | null;
+      thread_target_kind: string | null;
+      dev_points_to_boundary: number | null;
+    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -22469,6 +22598,21 @@ export interface components {
       action_kind?: string;
       anchors_in_play?: number[];
       combat_encounter_id?: number | null;
+    };
+    /** @description Input serializer for purchasing a progression unlock. */
+    PurchaseUnlockRequest: {
+      unlock_type: components['schemas']['UnlockTypeEnum'];
+      class_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
+    };
+    /** @description Response serializer for a completed unlock purchase. */
+    PurchaseUnlockResponse: {
+      unlock_type: string;
+      unlock_id: number | null;
+      thread_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
     };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
@@ -24792,6 +24936,22 @@ export interface components {
        */
       readonly required_distinction_id: number | null;
     };
+    /** @description Read-only serializer for a character's training allocation. */
+    TrainingAllocation: {
+      readonly id: number;
+      readonly skill: components['schemas']['SkillList'];
+      readonly specialization: components['schemas']['Specialization'];
+      readonly mentor: components['schemas']['MentorPersona'];
+      /** @description Action points allocated per week (minimum 1) */
+      ap_amount: number;
+      /** @description Return AP left in the character's weekly training budget. */
+      readonly remaining_weekly_budget: number;
+    };
+    /** @description Schema wrapper for the training allocation list response. */
+    TrainingAllocationList: {
+      allocations: components['schemas']['TrainingAllocation'][];
+      remaining_weekly_budget: number;
+    };
     /** @description Serializer for trait definitions. */
     Trait: {
       readonly id: number;
@@ -25047,6 +25207,12 @@ export interface components {
       /** @description Whether this category is currently in use */
       is_active?: boolean;
     };
+    /**
+     * @description * `class_level` - Class Level
+     *     * `thread_xp_lock` - Thread XP Lock
+     * @enum {string}
+     */
+    UnlockTypeEnum: 'class_level' | 'thread_xp_lock';
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
@@ -40914,6 +41080,53 @@ export interface operations {
       };
     };
   };
+  progression_unlocks_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedProgressionUnlockItemList'];
+        };
+      };
+    };
+  };
+  progression_unlocks_purchase_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PurchaseUnlockRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PurchaseUnlockResponse'];
+        };
+      };
+    };
+  };
   progression_votes_list: {
     parameters: {
       query?: never;
@@ -42699,6 +42912,93 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Specialization'];
+        };
+      };
+    };
+  };
+  skills_training_allocations_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocationList'][];
+        };
+      };
+    };
+  };
+  skills_training_allocations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ManageTrainingAddRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
+        };
+      };
+    };
+  };
+  skills_training_allocations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedManageTrainingUpdateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
         };
       };
     };

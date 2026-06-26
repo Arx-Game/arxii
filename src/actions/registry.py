@@ -23,6 +23,7 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -65,6 +66,7 @@ from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
+from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
@@ -109,6 +111,8 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     SetActivePersonaAction(),
+    SpreadTaleAction(),
+    SaveDeedStoryAction(),
     PutInAction(),
     TakeOutAction(),
     ActivatePermitAction(),
@@ -154,6 +158,8 @@ _ALL_ACTIONS: list[Action] = [
     FinishSceneAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ManageTrainingAction(),
+    PurchaseUnlockAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

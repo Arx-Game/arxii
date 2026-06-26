@@ -361,6 +361,14 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 **Crossing pre-selection wire:** `PendingAudereMajoraOfferSerializer.get_intended_path_id` (`src/world/magic/serializers.py:2353`) reads the character's `PathIntent` and returns `intended_path_id` only when it is among the offer's `eligible_paths` — ensuring the Audere Majora dialog pre-selects the declared path.
 
+### Unlock Shop
+
+- `GET /api/progression/unlocks/` — List purchasable unlocks for the played character; returns a paginated wrapper (`{ count, next, previous, page_size, num_pages, current_page, results: [...] }`)
+  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`) or `thread_xp_lock` (next `ThreadXPLockedLevel` boundary)
+  - Query parameter `unlock_type` filters the list to a single variant
+  - Requires a played character (set by the Evennia session / test client)
+- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }` or `{ unlock_type, thread_id, boundary_level }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
+
 ### Account Progression Dashboard
 - `GET /api/progression/account/` - Current user's XP balance, kudos balance, recent transactions, and claim options
 
@@ -381,6 +389,39 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 ---
 
+## Telnet Commands
+
+Defined in `commands/progression.py`; both are namespaced subverb commands to avoid
+one-word key collisions.
+
+### `training` — Manage weekly skill-training allocations
+
+```
+training                           — list allocations and weekly AP budget
+training add skill=<id> ap=<n> [mentor=<id>]
+training add spec=<id> ap=<n> [mentor=<id>]
+training update id=<id> [ap=<n>] [mentor=<id>]
+training remove id=<id>
+```
+
+Dispatches `ManageTrainingAction` (`registry_key="manage_training"`) through the same
+`dispatch_player_action` seam the web API uses.
+
+### `progression` — Browse/purchase XP unlocks
+
+```
+progression unlocks              — list class-level and thread XP-lock unlocks
+progression unlock class=<id>    — purchase a class-level unlock
+progression unlock thread=<id> level=<n>
+                                 — purchase a thread XP-lock boundary
+```
+
+`progression unlocks` reads the same service functions as `GET /api/progression/unlocks/`.
+`progression unlock` dispatches `PurchaseUnlockAction`
+(`registry_key="purchase_unlock"`).
+
+---
+
 ## Integration Points
 
 - **Mechanics**: Development rate modifiers from distinctions (e.g., Spoiled reduces physical skill development by 20%) are applied via `get_modifier_total(sheet, modifier_target)` with string-based ModifierTarget lookup (pending target FK).
@@ -394,9 +435,9 @@ transactions = award_scene_development_points(scene, participants, awards)
   `Ritual`, the scene, and the officiant. `AudereMajoraCrossing` (magic app) and
   `ClassLevelAdvancement` both inherit `AbstractClassLevelAdvancement` and share the
   `apply_class_level_advance` spine.
-- **Magic (Spec A)**: Two XP sinks live in `world.magic.services`:
+- **Magic (Spec A)**: XP sinks for thread progression live in `world.magic.services`:
   - `accept_thread_weaving_unlock(character, unlock)` / `compute_thread_weaving_xp_cost(character, unlock)` — Path-multiplied XP spend that opens a new thread anchor kind via `ThreadWeavingUnlock` → `CharacterThreadWeavingUnlock`
-  - `cross_thread_xp_lock(character, thread, target_level)` — XP charged when a thread crosses a `ThreadXPLockedLevel` boundary
+  - `cross_thread_xp_lock(character, thread, target_level)` — XP charged when a thread crosses a `ThreadXPLockedLevel` boundary. This is reachable on the web via the legacy `POST /api/magic/threads/{id}/cross-xp-lock/` action and on both web and telnet through the shared `PurchaseUnlockAction` seam in the Unlock Shop (`/api/progression/unlocks/purchase/` and `progression unlock thread=<id> level=<n>`).
   See `docs/systems/magic.md` for the full thread model lineup.
 
 ---

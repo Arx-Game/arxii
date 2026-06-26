@@ -728,6 +728,23 @@ class RustPayoffTests(TestCase):
         self.assertEqual(self.skill_value.development_points, 50)
 
 
+class SkillCronRegistrationTests(TestCase):
+    """Registration test for the weekly skill-training cron task."""
+
+    def test_run_weekly_skill_cron_is_registered(self) -> None:
+        """run_weekly_skill_cron is registered with the game-clock scheduler."""
+        from world.game_clock.task_registry import clear_registry, get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        clear_registry()
+        register_all_tasks()
+        tasks = get_registered_tasks()
+        task_map = {task.task_key: task for task in tasks}
+
+        self.assertIn("skills.weekly_training", task_map)
+        self.assertIs(task_map["skills.weekly_training"].callable, run_weekly_skill_cron)
+
+
 class RunWeeklySkillCronTests(TestCase):
     """Integration test for the full weekly cron cycle."""
 

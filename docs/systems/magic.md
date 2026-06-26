@@ -259,6 +259,23 @@ thread anchors — they appear here only as unlock dimensions.
 | `CharacterThreadWeavingUnlock` | Per-character purchase record | `character` FK CharacterSheet, `unlock` FK, `acquired_at`, `xp_spent` (actual — in-Path=xp_cost, out-of-Path=xp_cost × multiplier), optional `teacher` FK RosterTenure. Unique per (character, unlock) |
 | `ThreadWeavingTeachingOffer` | Teacher-side offer | `teacher` FK RosterTenure, `unlock` FK, `pitch`, `gold_cost`, `banked_ap`, `created_at`. Mirrors `CodexTeachingOffer` |
 
+### Thread XP-Locked Boundaries
+
+Thread levels hit authored `ThreadXPLockedLevel` boundaries (20/30/40 on the internal
+scale) that must be purchased with XP before further development. The underlying spend is
+`cross_thread_xp_lock(character_sheet, thread, target_level)`.
+
+**Surfaces:**
+- `POST /api/magic/threads/{id}/cross-xp-lock/` — legacy web-only action on the
+  `ThreadViewSet`.
+- `GET /api/progression/unlocks/` + `POST /api/progression/unlocks/purchase/` — shared
+  Unlock Shop (web) that dispatches `PurchaseUnlockAction`
+  (`registry_key="purchase_unlock"`).
+- `progression unlock thread=<id> level=<n>` — telnet face of the shared Unlock Shop.
+
+The shared seam is the TELNET+WEB path; the legacy thread endpoint remains usable from
+web clients but does not run through `PurchaseUnlockAction`.
+
 ### Thread Pull — Declaration Modifier (#1455) [BUILT & WIRED]
 
 A thread pull is a **modifier carried by a `cast` or `clash` declaration**, not a

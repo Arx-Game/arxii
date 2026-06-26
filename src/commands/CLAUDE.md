@@ -184,6 +184,15 @@ actions, backends, and service functions.
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
+- **`progression.py`**: `CmdTraining` (`training`) + `CmdProgressionUnlock` (`progression`) —
+  telnet faces of `ManageTrainingAction` and `PurchaseUnlockAction`. `training [list]` shows
+  weekly AP budget and allocations; `training add skill=<id>|spec=<id> ap=<n> [mentor=<id>]`,
+  `training update id=<id> [ap=<n>] [mentor=<id>]`, and `training remove id=<id>` dispatch through
+  `dispatch_player_action` to the REGISTRY `manage_training` action. `progression unlocks` lists
+  class-level and thread XP-lock unlocks from the same read services the web unlock shop uses;
+  `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
+  REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
+  one-word key collisions.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
