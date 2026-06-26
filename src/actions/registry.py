@@ -39,6 +39,16 @@ from actions.definitions.endorsements import (
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
+from actions.definitions.gm_combat import (
+    AddEncounterParticipantAction,
+    AddOpponentAction,
+    BeginEncounterRoundAction,
+    EndEncounterAction,
+    PauseEncounterAction,
+    PreviewOpponentDefaultsAction,
+    RemoveEncounterParticipantAction,
+    ResolveEncounterRoundAction,
+)
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -150,6 +160,14 @@ _ALL_ACTIONS: list[Action] = [
     CastTechniqueAction(),
     StartSceneAction(),
     FinishSceneAction(),
+    BeginEncounterRoundAction(),
+    ResolveEncounterRoundAction(),
+    AddOpponentAction(),
+    AddEncounterParticipantAction(),
+    RemoveEncounterParticipantAction(),
+    PauseEncounterAction(),
+    EndEncounterAction(),
+    PreviewOpponentDefaultsAction(),
     ResolveAlterationAction(),
     RestAction(),
     intimidate,
