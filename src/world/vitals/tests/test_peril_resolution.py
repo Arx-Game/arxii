@@ -69,9 +69,8 @@ class IsPcSourceTests(TestCase):
 class DeathIsPermittedTests(TestCase):
     """Unit tests for death_is_permitted()."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.victim_sheet = CharacterSheetFactory()
+    def setUp(self) -> None:
+        self.victim_sheet = CharacterSheetFactory()
 
     def test_pc_source_returns_false(self) -> None:
         """ADR-0023: PvP is structurally non-lethal — death never permitted from a PC."""
