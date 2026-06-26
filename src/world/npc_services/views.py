@@ -40,9 +40,7 @@ from world.npc_services.models import (
     OfferCooldown,
     PermitOfferDetails,
 )
-from world.npc_services.offer_policy import mission_pool_count
 from world.npc_services.serializers import (
-    InteractionOfferSerializer,
     InteractionResolveRequestSerializer,
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
@@ -55,10 +53,9 @@ from world.npc_services.serializers import (
 )
 from world.npc_services.services import (
     InteractionSession,
-    available_offers,
+    serialize_npc_session_state,
 )
 from world.scenes.models import Persona
-from world.scenes.services import MissingPrimaryPersonaError
 
 # Key under which the in-flight interaction state lives in request.session.
 # One active interaction per Django session; start while one exists raises
@@ -159,51 +156,6 @@ class MissionOfferDetailsViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-def _serialize_state(
-    session: InteractionSession,
-    *,
-    last_result_message: str = "",
-) -> dict:
-    """Compose the response payload from a (live or freshly-closed) session."""
-    # #726: surface a standing-driven number of POOL offers (strangers see one
-    # trial job, trusted contacts a full slate). MENU offers are unaffected —
-    # ``available_offers`` always returns every eligible MENU option in full.
-    offers = (
-        available_offers(
-            session,
-            pool_count=mission_pool_count(
-                role=session.role,
-                persona=session.persona,
-                npc_persona=session.npc_persona,
-            ),
-        )
-        if not session.closed
-        else []
-    )
-    serialized_offers = InteractionOfferSerializer(
-        [
-            {
-                "id": o.pk,
-                "label": o.label,
-                "kind": o.kind,
-                "is_final": o.is_final,
-                "rapport_requirement": o.rapport_requirement,
-            }
-            for o in offers
-        ],
-        many=True,
-    ).data
-    return InteractionStateSerializer(
-        {
-            "role_id": session.role.pk,
-            "current_rapport": session.current_rapport,
-            "closed": session.closed,
-            "available_offers": serialized_offers,
-            "last_result_message": last_result_message,
-        }
-    ).data
-
-
 def _stash(request: Request, session: InteractionSession) -> None:
     """Persist the small state slice we need to rehydrate this session."""
     request.session[_SESSION_KEY] = {
@@ -288,7 +240,12 @@ class InteractionViewSet(viewsets.ViewSet):
         request=InteractionStartRequestSerializer,
         responses={
             201: InteractionStateSerializer,
+            400: OpenApiResponse(description="No puppeted character or no role was provided."),
+            404: OpenApiResponse(description="NPC role or persona was not found."),
             409: OpenApiResponse(description="An interaction is already in flight."),
+            500: OpenApiResponse(
+                description="Character sheet invariant breach (missing primary persona)."
+            ),
         },
     )
     @action(detail=False, methods=["post"])
@@ -309,18 +266,26 @@ class InteractionViewSet(viewsets.ViewSet):
         )
         if not result.success:
             if result.data.get("invariant_breach"):
-                raise MissingPrimaryPersonaError(character)
+                return Response(
+                    {"detail": result.message or "Character sheet invariant breach."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
             raise NotFound(result.message)
         session = result.data["session"]
         _stash(request, session)
-        return Response(_serialize_state(session), status=status.HTTP_201_CREATED)
+        return Response(serialize_npc_session_state(session), status=status.HTTP_201_CREATED)
 
     @extend_schema(
         request=InteractionResolveRequestSerializer,
         responses={
             200: InteractionStateSerializer,
-            404: OpenApiResponse(description="No interaction in progress / offer not found."),
-            400: OpenApiResponse(description="Offer not eligible / session closed."),
+            400: OpenApiResponse(
+                description=(
+                    "No puppeted character, no offer, interaction closed, or offer not eligible."
+                )
+            ),
+            404: OpenApiResponse(description="No interaction in progress or offer not found."),
+            409: OpenApiResponse(description="Interaction closed or resolve error."),
         },
     )
     @action(detail=False, methods=["post"])
@@ -336,8 +301,7 @@ class InteractionViewSet(viewsets.ViewSet):
             offer_id=body.validated_data["offer_id"],
         )
         if not result.success:
-            # Map "not found" shapes to 404, otherwise 400.
-            if "not found" in result.message.lower():
+            if result.data.get("not_found"):
                 raise NotFound(result.message)
             raise ValidationError(result.message)
 
@@ -346,7 +310,7 @@ class InteractionViewSet(viewsets.ViewSet):
         else:
             _stash(request, result.data["session"])
         return Response(
-            _serialize_state(
+            serialize_npc_session_state(
                 result.data["session"],
                 last_result_message=result.data.get("last_result_message", ""),
             ),
@@ -355,7 +319,12 @@ class InteractionViewSet(viewsets.ViewSet):
     @extend_schema(
         responses={
             200: InteractionStateSerializer,
-            404: OpenApiResponse(description="No interaction in progress."),
+            400: OpenApiResponse(
+                description="No puppeted character or no interaction in progress."
+            ),
+            404: OpenApiResponse(
+                description="No interaction in progress or interaction already ended."
+            ),
         },
     )
     @action(detail=False, methods=["post"])
@@ -368,4 +337,4 @@ class InteractionViewSet(viewsets.ViewSet):
             raise NotFound(result.message)
 
         request.session.pop(_SESSION_KEY, None)
-        return Response(_serialize_state(result.data["session"]))
+        return Response(serialize_npc_session_state(result.data["session"]))

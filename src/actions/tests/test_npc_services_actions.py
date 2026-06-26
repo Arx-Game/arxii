@@ -1,5 +1,7 @@
 """Tests for the NPC-service registry Actions (#1493)."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.definitions.npc_services import (
@@ -15,6 +17,7 @@ from world.npc_services.factories import (
     PermitOfferDetailsFactory,
 )
 from world.npc_services.services import start_interaction
+from world.scenes.services import MissingPrimaryPersonaError
 
 
 def _pc():
@@ -39,6 +42,19 @@ class StartNPCInteractionActionTests(TestCase):
         character = _pc()
         result = start_npc_interaction.run(actor=character, role_id=999999)
         self.assertFalse(result.success)
+
+    def test_start_missing_primary_persona_returns_invariant_breach(self):
+        character = CharacterFactory()
+        role = NPCRoleFactory()
+        NPCServiceOfferFactory(role=role, label="menu", eligibility_rule={})
+        with patch(
+            "world.scenes.services.persona_for_character",
+            side_effect=MissingPrimaryPersonaError(character),
+        ):
+            result = start_npc_interaction.run(actor=character, role_id=role.pk)
+        self.assertFalse(result.success)
+        self.assertTrue(result.data.get("invariant_breach"))
+        self.assertEqual(result.message, "No active character sheet.")
 
 
 class ResolveNPCOfferActionTests(TestCase):

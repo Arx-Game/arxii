@@ -7,6 +7,7 @@ matching registry Action so telnet players reach the same seam as the web.
 
 from __future__ import annotations
 
+import re
 from typing import Any, ClassVar
 
 from actions.definitions.npc_services import (
@@ -17,17 +18,21 @@ from actions.definitions.npc_services import (
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from world.npc_services.models import NPCRole
-from world.npc_services.views import _serialize_state
+from world.npc_services.services import serialize_npc_session_state
 
 
 class CmdHire(ArxCommand):
     """Hire or commission services from an NPC.
 
     Usage:
-        hire                      — show current interaction and offers
-        hire <role name or id>  — start an interaction with that NPC role
-        hire offer <id>           — resolve an available offer
-        hire end                  — end the current interaction
+        hire                              — show current interaction and offers
+        hire <role name or id>           — start an interaction with that NPC role
+        hire <role name or id> as <npc>  — start an interaction with a specific named NPC
+        hire offer <id>                  — resolve an available offer
+        hire end                         — end the current interaction
+
+    The optional ``as <npc>`` clause selects a named persona for class-2+ NPCs.
+    It resolves the name the same way other targeted commands do (``self.caller.search``).
     """
 
     key = "hire"
@@ -71,16 +76,43 @@ class CmdHire(ArxCommand):
     def _clear_session(self) -> None:
         setattr(self.caller.session.ndb, self._SESSION_KEY, None)
 
+    def _parse_start_args(self, args: str) -> tuple[str, str | None]:
+        """Split ``hire <role> [as <persona>]`` into role query and persona name."""
+        match = re.match(r"^(.+?)\s+as\s+(.+)$", args, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip(), match.group(2).strip()
+        return args, None
+
+    def _resolve_persona_id(self, name: str | None) -> int | None:
+        """Use ``self.caller.search`` to turn a persona name into a primary-key id."""
+        if not name:
+            return None
+        target = self.caller.search(name)
+        if not target:
+            msg = f"Could not find persona '{name}'."
+            raise CommandError(msg)
+        return target.pk
+
     def _do_start(self, args: str) -> None:
         if self._session() is not None:
             self.msg("You already have an interaction in progress. Use 'hire end' first.")
             return
+        role_query, persona_name = self._parse_start_args(args)
         role = self.resolve_by_name_or_id(
             self._role_model(),
-            args,
+            role_query,
             not_found_msg="No NPC role by that name or id.",
         )
-        result = start_npc_interaction.run(actor=self.caller, role_id=role.pk)
+        try:
+            npc_persona_id = self._resolve_persona_id(persona_name)
+        except CommandError as err:
+            self.msg(str(err))
+            return
+        result = start_npc_interaction.run(
+            actor=self.caller,
+            role_id=role.pk,
+            npc_persona_id=npc_persona_id,
+        )
         if not result.success:
             # The action swallows MissingPrimaryPersonaError and flags it via
             # invariant_breach; in all failure cases, surface the message and stop cleanly.
@@ -136,7 +168,7 @@ class CmdHire(ArxCommand):
         self._show_offers(session)
 
     def _show_offers(self, session: Any) -> None:
-        state = _serialize_state(session)
+        state = serialize_npc_session_state(session)
         lines = ["|wAvailable offers:|n"]
         for offer in state["available_offers"]:
             marker = " (final)" if offer["is_final"] else ""

@@ -114,7 +114,11 @@ class ResolveNPCOfferAction(Action):
 
         offer = NPCServiceOffer.objects.filter(pk=offer_id).first()
         if offer is None:
-            return ActionResult(success=False, message="That offer was not found.")
+            return ActionResult(
+                success=False,
+                message="That offer was not found.",
+                data={"not_found": True},
+            )
 
         try:
             result = resolve_offer(session, offer)
