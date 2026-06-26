@@ -51,7 +51,16 @@ They do not use the command system, dispatchers, or handlers.
   `target_type=SELF`, kwarg `persona_id`; the single action.run() path for set-active shared by
   telnet `CmdPersona` and the web `PersonaViewSet.set_active`. Validates the persona belongs to
   the actor's own sheet; wraps `world.scenes.services.set_active_persona` (the sole mutator).
-  Pose/sdesc reflection of the active persona is #1109's scope, not this action.)
+  Pose/sdesc reflection of the active persona is #1109's scope, not this action;
+  `fatigue.py` — `RestAction`, key `"rest"` (#1491/#1524), REGISTRY backend, `target_type=SELF`;
+  spend AP to gain `well_rested` for the next dawn reset. Gated by `CanRestPrerequisite`
+  (own home only, not in combat). Wraps `world.fatigue.services.rest`; shared by telnet `CmdRest`
+  and the web `RestView`;
+  `npc_services.py` — `StartNPCInteractionAction` / `ResolveNPCOfferAction` /
+  `EndNPCInteractionAction`, keys `"npc_start"`, `"npc_resolve"`, `"npc_end"` (#1493), REGISTRY
+  backend, `target_type=SELF`; thin wrappers around `world.npc_services.services.start_interaction`,
+  `resolve_offer`, and `end_interaction`. Shared by telnet `CmdHire` and the web
+  `InteractionViewSet`.)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 

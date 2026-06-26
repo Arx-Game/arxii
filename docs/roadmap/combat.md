@@ -692,9 +692,11 @@ guard wired into `resolve_round`/`declare_action`; duel-state serializers.
 `use_technique` → `deduct_anima`/soulfray so a non-lethal duel draws no overburn deficit,
 clamps soulfray below any death-risk stage, and never fires a `character_loss` consequence.
 
-**Web-first actions:** `challenge` (social-consent-gated) / `accept` / `decline` /
+**Actions (telnet + web):** `challenge` (social-consent-gated) / `accept` / `decline` /
 `withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
-(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch.
+(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch. **Telnet:**
+the `duel <subverb>` namespace (`CmdDuel`, #1492) routes challenge/accept/decline/withdraw/risk
+through the same `dispatch_player_action` REGISTRY seam; `yield` stays on `combat yield` (#1453).
 
 ### Duels — Phase 2 (SHIPPED — 2026-06-20)
 
@@ -1151,5 +1153,22 @@ gated-edge crossing. Builds on the Phase-1 and Blueprint (#1017) positioning bas
 ## Design Document
 
 See `docs/plans/2026-04-05-party-combat-design.md` for the full Party Combat design.
+
+## GM encounter lifecycle (telnet)
+
+The `encounter` namespace gives GMs the same encounter controls as the web
+`/api/combat/` lifecycle endpoints. All subcommands require the caller to be the
+encounter's scene GM or staff; the backing action enforces the gate.
+
+| Subcommand | Action key | Purpose |
+|---|---|---|
+| `encounter begin` | `begin_encounter_round` | Advance the active encounter from between-rounds to declaring. |
+| `encounter resolve` | `resolve_encounter_round` | Resolve the current declaring round. |
+| `encounter add <name> <tier> [pool]` | `add_opponent` | Add an NPC opponent to the active encounter. |
+| `encounter default <tier>` | `preview_opponent_defaults` | Preview the computed stat block for a tier without mutating state. |
+| `encounter addpc <character>` | `add_encounter_participant` | Add a PC participant to the active encounter. |
+| `encounter removepc <participant>` | `remove_encounter_participant` | Remove a PC participant from the encounter. |
+| `encounter pause` | `pause_encounter` | Toggle the encounter's paused state. |
+| `encounter end` | `end_encounter` | Force-end the active encounter as abandoned. |
 
 ## Notes

@@ -40,6 +40,11 @@ from world.npc_services.models import (
     NPCStanding,
     OfferCooldown,
 )
+from world.npc_services.offer_policy import mission_pool_count
+from world.npc_services.serializers import (
+    InteractionOfferSerializer,
+    InteractionStateSerializer,
+)
 from world.predicates.predicates import CharacterPredicateContext, evaluate
 
 if TYPE_CHECKING:
@@ -641,3 +646,51 @@ def end_interaction(session: InteractionSession) -> None:
         npc_persona=session.npc_persona,
         defaults={"affection": new_affection},
     )
+
+
+def serialize_npc_session_state(
+    session: InteractionSession,
+    *,
+    last_result_message: str = "",
+) -> dict:
+    """Compose the response payload from a (live or freshly-closed) session.
+
+    Public helper shared by the web viewset and the telnet ``hire`` command.
+    """
+    # #726: surface a standing-driven number of POOL offers (strangers see one
+    # trial job, trusted contacts a full slate). MENU offers are unaffected —
+    # ``available_offers`` always returns every eligible MENU option in full.
+    offers = (
+        available_offers(
+            session,
+            pool_count=mission_pool_count(
+                role=session.role,
+                persona=session.persona,
+                npc_persona=session.npc_persona,
+            ),
+        )
+        if not session.closed
+        else []
+    )
+    serialized_offers = InteractionOfferSerializer(
+        [
+            {
+                "id": o.pk,
+                "label": o.label,
+                "kind": o.kind,
+                "is_final": o.is_final,
+                "rapport_requirement": o.rapport_requirement,
+            }
+            for o in offers
+        ],
+        many=True,
+    ).data
+    return InteractionStateSerializer(
+        {
+            "role_id": session.role.pk,
+            "current_rapport": session.current_rapport,
+            "closed": session.closed,
+            "available_offers": serialized_offers,
+            "last_result_message": last_result_message,
+        }
+    ).data

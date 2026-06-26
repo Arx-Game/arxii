@@ -9700,15 +9700,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_end_create'];
     delete?: never;
@@ -9727,15 +9728,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_resolve_create'];
     delete?: never;
@@ -9754,15 +9756,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_start_create'];
     delete?: never;
@@ -10810,6 +10813,40 @@ export interface paths {
     put?: never;
     /** @description Reroll a random scene target slot. */
     post: operations['progression_random_scenes_reroll_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/unlocks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a paginated list of purchasable progression unlocks. */
+    get: operations['progression_unlocks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/unlocks/purchase/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Purchase an unlock by dispatching PurchaseUnlockAction. */
+    post: operations['progression_unlocks_purchase_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -12068,6 +12105,42 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/skills/training-allocations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return all allocations for the active character plus remaining budget. */
+    get: operations['skills_training_allocations_list'];
+    put?: never;
+    /** @description Create a new training allocation for the active character. */
+    post: operations['skills_training_allocations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Remove a training allocation owned by the active character. */
+    delete: operations['skills_training_allocations_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Update an existing training allocation owned by the active character. */
+    patch: operations['skills_training_allocations_partial_update'];
+    trace?: never;
+  };
   '/api/social-providers/': {
     parameters: {
       query?: never;
@@ -12077,6 +12150,134 @@ export interface paths {
     };
     /** @description Return available social auth providers with credentials configured. */
     get: operations['social_providers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/memberships/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_memberships_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/memberships/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_memberships_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve membership offers visible to the requester.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve membership offers visible to the requester.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_offers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/organizations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve organizations the requester is an active member of.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant organizations.
+     */
+    get: operations['societies_organizations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/organizations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve organizations the requester is an active member of.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant organizations.
+     */
+    get: operations['societies_organizations_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -12100,6 +12301,50 @@ export interface paths {
      *     are discovered in the world, not browsed (diegetic-discovery, #676).
      */
     get: operations['societies_rankings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/ranks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve rank ladders for organizations the requester belongs to.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant rank ladders.
+     */
+    get: operations['societies_ranks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/ranks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve rank ladders for organizations the requester belongs to.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant rank ladders.
+     */
+    get: operations['societies_ranks_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -17766,6 +18011,13 @@ export interface components {
       /** @description Shows through normal clothing? Required True at tier 4+. */
       is_visible_at_rest?: boolean;
     };
+    /** @description Validate input for creating a training allocation. */
+    ManageTrainingAddRequest: {
+      skill_id?: number | null;
+      specialization_id?: number | null;
+      ap_amount: number;
+      mentor_persona_id?: number | null;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -17787,6 +18039,12 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /** @description Minimal read-only representation of a mentor persona. */
+    MentorPersona: {
+      readonly id: number;
+      /** @description Display name for this persona */
+      name: string;
+    };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -18896,6 +19154,86 @@ export interface components {
       ledger: components['schemas']['LedgerRow'][];
       demands: components['schemas']['DemandRow'][];
     };
+    Organization: {
+      readonly id: number;
+      /** @description The organization's name */
+      name: string;
+      /** @description A description of the organization's purpose and history */
+      description?: string;
+      readonly society_name: string;
+      readonly org_type_name: string;
+      readonly ranks: components['schemas']['OrganizationRank'][];
+    };
+    OrganizationMembership: {
+      readonly id: number;
+      /** @description The organization this membership belongs to */
+      organization: number;
+      readonly organization_name: string;
+      /** @description The persona (character identity) that holds this membership */
+      persona: number;
+      readonly persona_name: string;
+      readonly rank: components['schemas']['OrganizationRank'];
+      readonly title: string;
+      /**
+       * Format: date-time
+       * @description When the persona joined this organization
+       */
+      readonly joined_date: string;
+      /**
+       * Format: date-time
+       * @description When the persona voluntarily left the organization
+       */
+      left_at?: string | null;
+      /**
+       * Format: date-time
+       * @description When the persona was forcibly removed from the organization
+       */
+      exiled_at?: string | null;
+      readonly is_active: boolean;
+    };
+    OrganizationMembershipOffer: {
+      readonly id: number;
+      organization: number;
+      readonly organization_name: string;
+      from_persona: number;
+      readonly from_persona_name: string;
+      to_persona?: number | null;
+      readonly to_persona_name: string;
+      kind: components['schemas']['OrganizationMembershipOfferKindEnum'];
+      /** @default pending */
+      status: components['schemas']['OrganizationMembershipOfferStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    /**
+     * @description * `invite` - Invite
+     *     * `application` - Application
+     * @enum {string}
+     */
+    OrganizationMembershipOfferKindEnum: 'invite' | 'application';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    OrganizationMembershipOfferStatusEnum: 'pending' | 'accepted' | 'declined' | 'cancelled';
+    OrganizationRank: {
+      readonly id: number;
+      /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
+      name: string;
+      /** @description Authority tier (1 highest, 5 lowest) */
+      tier: number;
+      /** @description Members at this rank can invite others to the organization */
+      can_invite?: boolean;
+      /** @description Members at this rank can expel lower-ranked members */
+      can_kick?: boolean;
+      /** @description Members at this rank can promote/demote others */
+      can_manage_ranks?: boolean;
+    };
     OrganizationSearch: {
       id: number;
       name: string;
@@ -19891,6 +20229,66 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['OfferCooldown'][];
     };
+    PaginatedOrganizationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Organization'][];
+    };
+    PaginatedOrganizationMembershipList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationMembership'][];
+    };
+    PaginatedOrganizationMembershipOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationMembershipOffer'][];
+    };
+    PaginatedOrganizationRankList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationRank'][];
+    };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
       count: number;
@@ -20116,6 +20514,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PlayerTrust'][];
+    };
+    PaginatedProgressionUnlockItemList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ProgressionUnlockItem'][];
     };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
@@ -21075,6 +21488,11 @@ export interface components {
       /** @description Null while the story is at the frontier (unauthored) or before start. */
       current_episode?: number | null;
       is_active?: boolean;
+    };
+    /** @description Validate input for updating a training allocation. */
+    PatchedManageTrainingUpdateRequest: {
+      ap_amount?: number;
+      mentor_persona_id?: number | null;
     };
     /**
      * @description Staff CRUD for trigger-based MissionGiver rows (#729).
@@ -22426,6 +22844,32 @@ export interface components {
       has_undiscovered: boolean;
       milestones: components['schemas']['ProgressionMilestone'][];
     };
+    /**
+     * @description Discriminated list item for purchasable progression unlocks.
+     *
+     *     Two ``unlock_type`` variants are supported:
+     *
+     *     - ``class_level`` — purchase a class/level unlock with XP.
+     *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+     */
+    ProgressionUnlockItem: {
+      unlock_type: string;
+      display_name: string;
+      xp_cost: number;
+      requirements_met: boolean;
+      locked_reason: string | null;
+      class_level_unlock_id: number | null;
+      class_name: string | null;
+      target_level: number | null;
+      thread_id: number | null;
+      boundary_level: number | null;
+      thread_name: string | null;
+      thread_level: number | null;
+      thread_resonance_id: number | null;
+      thread_resonance_name: string | null;
+      thread_target_kind: string | null;
+      dev_points_to_boundary: number | null;
+    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -22466,6 +22910,21 @@ export interface components {
       action_kind?: string;
       anchors_in_play?: number[];
       combat_encounter_id?: number | null;
+    };
+    /** @description Input serializer for purchasing a progression unlock. */
+    PurchaseUnlockRequest: {
+      unlock_type: components['schemas']['UnlockTypeEnum'];
+      class_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
+    };
+    /** @description Response serializer for a completed unlock purchase. */
+    PurchaseUnlockResponse: {
+      unlock_type: string;
+      unlock_id: number | null;
+      thread_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
     };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
@@ -24789,6 +25248,22 @@ export interface components {
        */
       readonly required_distinction_id: number | null;
     };
+    /** @description Read-only serializer for a character's training allocation. */
+    TrainingAllocation: {
+      readonly id: number;
+      readonly skill: components['schemas']['SkillList'];
+      readonly specialization: components['schemas']['Specialization'];
+      readonly mentor: components['schemas']['MentorPersona'];
+      /** @description Action points allocated per week (minimum 1) */
+      ap_amount: number;
+      /** @description Return AP left in the character's weekly training budget. */
+      readonly remaining_weekly_budget: number;
+    };
+    /** @description Schema wrapper for the training allocation list response. */
+    TrainingAllocationList: {
+      allocations: components['schemas']['TrainingAllocation'][];
+      remaining_weekly_budget: number;
+    };
     /** @description Serializer for trait definitions. */
     Trait: {
       readonly id: number;
@@ -25044,6 +25519,12 @@ export interface components {
       /** @description Whether this category is currently in use */
       is_active?: boolean;
     };
+    /**
+     * @description * `class_level` - Class Level
+     *     * `thread_xp_lock` - Thread XP Lock
+     * @enum {string}
+     */
+    UnlockTypeEnum: 'class_level' | 'thread_xp_lock';
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
@@ -38802,6 +39283,13 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
+      /** @description No puppeted character. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description No interaction in progress. */
       404: {
         headers: {
@@ -38832,14 +39320,14 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
-      /** @description Offer not eligible / session closed. */
+      /** @description No puppeted character, no offer, offer not eligible, or the interaction has already ended. */
       400: {
         headers: {
           [name: string]: unknown;
         };
         content?: never;
       };
-      /** @description No interaction in progress / offer not found. */
+      /** @description No interaction in progress or offer not found. */
       404: {
         headers: {
           [name: string]: unknown;
@@ -38869,8 +39357,29 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
+      /** @description No puppeted character or no role was provided. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description NPC role or persona was not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description An interaction is already in flight. */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Character sheet invariant breach (missing primary persona). */
+      500: {
         headers: {
           [name: string]: unknown;
         };
@@ -40883,6 +41392,53 @@ export interface operations {
       };
     };
   };
+  progression_unlocks_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedProgressionUnlockItemList'];
+        };
+      };
+    };
+  };
+  progression_unlocks_purchase_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PurchaseUnlockRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PurchaseUnlockResponse'];
+        };
+      };
+    };
+  };
   progression_votes_list: {
     parameters: {
       query?: never;
@@ -42672,6 +43228,93 @@ export interface operations {
       };
     };
   };
+  skills_training_allocations_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocationList'][];
+        };
+      };
+    };
+  };
+  skills_training_allocations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ManageTrainingAddRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
+        };
+      };
+    };
+  };
+  skills_training_allocations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedManageTrainingUpdateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
+        };
+      };
+    };
+  };
   social_providers_retrieve: {
     parameters: {
       query?: never;
@@ -42687,6 +43330,147 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  societies_memberships_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationMembershipList'];
+        };
+      };
+    };
+  };
+  societies_memberships_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Organization Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationMembership'];
+        };
+      };
+    };
+  };
+  societies_offers_list: {
+    parameters: {
+      query?: {
+        from_persona?: number;
+        kind?: string;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        status?: string;
+        to_persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationMembershipOfferList'];
+        };
+      };
+    };
+  };
+  societies_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization membership offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationMembershipOffer'];
+        };
+      };
+    };
+  };
+  societies_organizations_list: {
+    parameters: {
+      query?: {
+        org_type?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        society?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationList'];
+        };
+      };
+    };
+  };
+  societies_organizations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Organization'];
+        };
       };
     };
   };
@@ -42715,6 +43499,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  societies_ranks_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationRankList'];
+        };
+      };
+    };
+  };
+  societies_ranks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization rank. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationRank'];
+        };
       };
     };
   };

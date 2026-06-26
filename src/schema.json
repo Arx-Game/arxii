@@ -15841,15 +15841,16 @@ paths:
     post:
       operationId: npc_services_interactions_end_create
       description: |-
-        Player-facing endpoints driving the in-memory interaction state machine.
+        Player-facing endpoints driving the NPC-service interaction state machine.
 
         One active interaction per Django session — calling ``start`` while a
         session is in-flight returns 409. ``resolve`` and ``end`` operate on
         the current in-flight session; both return 404 if none exists.
 
-        The PC's persona is resolved from the request user's puppeted
-        character via :func:`persona_for_character` (raises loud on missing
-        sheet per the CLAUDE.md invariant — surfaces as 400).
+        The viewset is a thin wrapper over the registry Actions in
+        ``actions.definitions.npc_services``; each endpoint delegates to
+        ``action.run(actor=character)`` and manages the small session slice
+        stored in ``request.session``.
       tags:
       - npc-services
       security:
@@ -15861,21 +15862,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/InteractionState'
           description: ''
+        '400':
+          description: No puppeted character.
         '404':
           description: No interaction in progress.
   /api/npc-services/interactions/resolve/:
     post:
       operationId: npc_services_interactions_resolve_create
       description: |-
-        Player-facing endpoints driving the in-memory interaction state machine.
+        Player-facing endpoints driving the NPC-service interaction state machine.
 
         One active interaction per Django session — calling ``start`` while a
         session is in-flight returns 409. ``resolve`` and ``end`` operate on
         the current in-flight session; both return 404 if none exists.
 
-        The PC's persona is resolved from the request user's puppeted
-        character via :func:`persona_for_character` (raises loud on missing
-        sheet per the CLAUDE.md invariant — surfaces as 400).
+        The viewset is a thin wrapper over the registry Actions in
+        ``actions.definitions.npc_services``; each endpoint delegates to
+        ``action.run(actor=character)`` and manages the small session slice
+        stored in ``request.session``.
       tags:
       - npc-services
       requestBody:
@@ -15893,23 +15897,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/InteractionState'
           description: ''
-        '404':
-          description: No interaction in progress / offer not found.
         '400':
-          description: Offer not eligible / session closed.
+          description: No puppeted character, no offer, offer not eligible, or the
+            interaction has already ended.
+        '404':
+          description: No interaction in progress or offer not found.
   /api/npc-services/interactions/start/:
     post:
       operationId: npc_services_interactions_start_create
       description: |-
-        Player-facing endpoints driving the in-memory interaction state machine.
+        Player-facing endpoints driving the NPC-service interaction state machine.
 
         One active interaction per Django session — calling ``start`` while a
         session is in-flight returns 409. ``resolve`` and ``end`` operate on
         the current in-flight session; both return 404 if none exists.
 
-        The PC's persona is resolved from the request user's puppeted
-        character via :func:`persona_for_character` (raises loud on missing
-        sheet per the CLAUDE.md invariant — surfaces as 400).
+        The viewset is a thin wrapper over the registry Actions in
+        ``actions.definitions.npc_services``; each endpoint delegates to
+        ``action.run(actor=character)`` and manages the small session slice
+        stored in ``request.session``.
       tags:
       - npc-services
       requestBody:
@@ -15927,8 +15933,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/InteractionState'
           description: ''
+        '400':
+          description: No puppeted character or no role was provided.
+        '404':
+          description: NPC role or persona was not found.
         '409':
           description: An interaction is already in flight.
+        '500':
+          description: Character sheet invariant breach (missing primary persona).
   /api/npc-services/mission-details/:
     get:
       operationId: npc_services_mission_details_list
@@ -18320,6 +18332,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/RandomSceneTarget'
           description: ''
+  /api/progression/unlocks/:
+    get:
+      operationId: progression_unlocks_list
+      description: Return a paginated list of purchasable progression unlocks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProgressionUnlockItemList'
+          description: ''
+  /api/progression/unlocks/purchase/:
+    post:
+      operationId: progression_unlocks_purchase_create
+      description: Purchase an unlock by dispatching PurchaseUnlockAction.
+      tags:
+      - progression
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseUnlockRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseUnlockResponse'
+          description: ''
   /api/progression/votes/:
     get:
       operationId: progression_votes_list
@@ -20291,6 +20352,86 @@ paths:
               schema:
                 $ref: '#/components/schemas/Specialization'
           description: ''
+  /api/skills/training-allocations/:
+    get:
+      operationId: skills_training_allocations_list
+      description: Return all allocations for the active character plus remaining
+        budget.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingAllocationList'
+          description: ''
+    post:
+      operationId: skills_training_allocations_create
+      description: Create a new training allocation for the active character.
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManageTrainingAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
+  /api/skills/training-allocations/{id}/:
+    patch:
+      operationId: skills_training_allocations_partial_update
+      description: Update an existing training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManageTrainingUpdateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
+    delete:
+      operationId: skills_training_allocations_destroy
+      description: Remove a training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/social-providers/:
     get:
       operationId: social_providers_retrieve
@@ -20303,6 +20444,195 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/societies/memberships/:
+    get:
+      operationId: societies_memberships_list
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationMembershipList'
+          description: ''
+  /api/societies/memberships/{id}/:
+    get:
+      operationId: societies_memberships_retrieve
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Organization Membership.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMembership'
+          description: ''
+  /api/societies/offers/:
+    get:
+      operationId: societies_offers_list
+      description: |-
+        List/retrieve membership offers visible to the requester.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: query
+        name: from_persona
+        schema:
+          type: number
+      - in: query
+        name: kind
+        schema:
+          type: string
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: to_persona
+        schema:
+          type: number
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationMembershipOfferList'
+          description: ''
+  /api/societies/offers/{id}/:
+    get:
+      operationId: societies_offers_retrieve
+      description: |-
+        List/retrieve membership offers visible to the requester.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization membership
+          offer.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMembershipOffer'
+          description: ''
+  /api/societies/organizations/:
+    get:
+      operationId: societies_organizations_list
+      description: |-
+        List/retrieve organizations the requester is an active member of.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant organizations.
+      parameters:
+      - in: query
+        name: org_type
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: society
+        schema:
+          type: string
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationList'
+          description: ''
+  /api/societies/organizations/{id}/:
+    get:
+      operationId: societies_organizations_retrieve
+      description: |-
+        List/retrieve organizations the requester is an active member of.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant organizations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
   /api/societies/rankings/{id}/:
     get:
       operationId: societies_rankings_retrieve
@@ -20331,6 +20661,62 @@ paths:
           description: ''
         '404':
           description: No ranking display on that object.
+  /api/societies/ranks/:
+    get:
+      operationId: societies_ranks_list
+      description: |-
+        List/retrieve rank ladders for organizations the requester belongs to.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant rank ladders.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationRankList'
+          description: ''
+  /api/societies/ranks/{id}/:
+    get:
+      operationId: societies_ranks_retrieve
+      description: |-
+        List/retrieve rank ladders for organizations the requester belongs to.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
+        Staff see all non-covenant rank ladders.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization rank.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationRank'
+          description: ''
   /api/staff-inbox/:
     get:
       operationId: staff_inbox_retrieve
@@ -32038,6 +32424,24 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    ManageTrainingAddRequest:
+      type: object
+      description: Validate input for creating a training allocation.
+      properties:
+        skill_id:
+          type: integer
+          nullable: true
+        specialization_id:
+          type: integer
+          nullable: true
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
+      required:
+      - ap_amount
     MaturityEnum:
       enum:
       - pitch
@@ -32068,6 +32472,20 @@ components:
         * `character` - Character
         * `placeholder` - Placeholder
         * `npc` - NPC
+    MentorPersona:
+      type: object
+      description: Minimal read-only representation of a mentor persona.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Display name for this persona
+          maxLength: 255
+      required:
+      - id
+      - name
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -34226,6 +34644,182 @@ components:
       - organization_id
       - organization_name
       - spend_rank_max
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: The organization's name
+          maxLength: 100
+        description:
+          type: string
+          description: A description of the organization's purpose and history
+        society_name:
+          type: string
+          readOnly: true
+        org_type_name:
+          type: string
+          readOnly: true
+        ranks:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRank'
+          readOnly: true
+      required:
+      - id
+      - name
+      - org_type_name
+      - ranks
+      - society_name
+    OrganizationMembership:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+          description: The organization this membership belongs to
+        organization_name:
+          type: string
+          readOnly: true
+        persona:
+          type: integer
+          description: The persona (character identity) that holds this membership
+        persona_name:
+          type: string
+          readOnly: true
+        rank:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationRank'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        joined_date:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the persona joined this organization
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the persona voluntarily left the organization
+        exiled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the persona was forcibly removed from the organization
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+      - joined_date
+      - organization
+      - organization_name
+      - persona
+      - persona_name
+      - rank
+      - title
+    OrganizationMembershipOffer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+        organization_name:
+          type: string
+          readOnly: true
+        from_persona:
+          type: integer
+        from_persona_name:
+          type: string
+          readOnly: true
+        to_persona:
+          type: integer
+          nullable: true
+        to_persona_name:
+          type: string
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/OrganizationMembershipOfferKindEnum'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationMembershipOfferStatusEnum'
+          default: pending
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - created_at
+      - from_persona
+      - from_persona_name
+      - id
+      - kind
+      - organization
+      - organization_name
+      - to_persona_name
+    OrganizationMembershipOfferKindEnum:
+      enum:
+      - invite
+      - application
+      type: string
+      description: |-
+        * `invite` - Invite
+        * `application` - Application
+    OrganizationMembershipOfferStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - cancelled
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `cancelled` - Cancelled
+    OrganizationRank:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Diegetic name for this rung (e.g., Guildmaster, Captain)
+          maxLength: 60
+        tier:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Authority tier (1 highest, 5 lowest)
+        can_invite:
+          type: boolean
+          description: Members at this rank can invite others to the organization
+        can_kick:
+          type: boolean
+          description: Members at this rank can expel lower-ranked members
+        can_manage_ranks:
+          type: boolean
+          description: Members at this rank can promote/demote others
+      required:
+      - id
+      - name
+      - tier
     OrganizationSearch:
       type: object
       properties:
@@ -35853,6 +36447,98 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferCooldown'
+    PaginatedOrganizationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    PaginatedOrganizationMembershipList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMembership'
+    PaginatedOrganizationMembershipOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMembershipOffer'
+    PaginatedOrganizationRankList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRank'
     PaginatedOrganizationSearchList:
       type: object
       required:
@@ -36219,6 +36905,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerTrust'
+    PaginatedProgressionUnlockItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressionUnlockItem'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -37762,6 +38471,16 @@ components:
             start.
         is_active:
           type: boolean
+    PatchedManageTrainingUpdateRequest:
+      type: object
+      description: Validate input for updating a training allocation.
+      properties:
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
     PatchedMissionGiverRequest:
       type: object
       description: |-
@@ -40283,6 +41002,77 @@ components:
       - milestones
       - stage
       - stage_label
+    ProgressionUnlockItem:
+      type: object
+      description: |-
+        Discriminated list item for purchasable progression unlocks.
+
+        Two ``unlock_type`` variants are supported:
+
+        - ``class_level`` — purchase a class/level unlock with XP.
+        - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+      properties:
+        unlock_type:
+          type: string
+        display_name:
+          type: string
+        xp_cost:
+          type: integer
+        requirements_met:
+          type: boolean
+        locked_reason:
+          type: string
+          nullable: true
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        class_name:
+          type: string
+          nullable: true
+        target_level:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+        thread_name:
+          type: string
+          nullable: true
+        thread_level:
+          type: integer
+          nullable: true
+        thread_resonance_id:
+          type: integer
+          nullable: true
+        thread_resonance_name:
+          type: string
+          nullable: true
+        thread_target_kind:
+          type: string
+          nullable: true
+        dev_points_to_boundary:
+          type: integer
+          nullable: true
+      required:
+      - boundary_level
+      - class_level_unlock_id
+      - class_name
+      - dev_points_to_boundary
+      - display_name
+      - locked_reason
+      - requirements_met
+      - target_level
+      - thread_id
+      - thread_level
+      - thread_name
+      - thread_resonance_id
+      - thread_resonance_name
+      - thread_target_kind
+      - unlock_type
+      - xp_cost
     Pronouns:
       type: object
       description: Serializer for pronoun sets.
@@ -40363,6 +41153,44 @@ components:
         combat_encounter_id:
           type: integer
           nullable: true
+    PurchaseUnlockRequest:
+      type: object
+      description: Input serializer for purchasing a progression unlock.
+      properties:
+        unlock_type:
+          $ref: '#/components/schemas/UnlockTypeEnum'
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - unlock_type
+    PurchaseUnlockResponse:
+      type: object
+      description: Response serializer for a completed unlock purchase.
+      properties:
+        unlock_type:
+          type: string
+        unlock_id:
+          type: integer
+          nullable: true
+        thread_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - unlock_id
+      - unlock_type
     QualityTier:
       type: object
       description: Serializer for QualityTier lookup records.
@@ -45237,6 +46065,54 @@ components:
       - name
       - required_distinction_id
       - sort_order
+    TrainingAllocation:
+      type: object
+      description: Read-only serializer for a character's training allocation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        skill:
+          allOf:
+          - $ref: '#/components/schemas/SkillList'
+          readOnly: true
+        specialization:
+          allOf:
+          - $ref: '#/components/schemas/Specialization'
+          readOnly: true
+        mentor:
+          allOf:
+          - $ref: '#/components/schemas/MentorPersona'
+          readOnly: true
+        ap_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Action points allocated per week (minimum 1)
+        remaining_weekly_budget:
+          type: integer
+          description: Return AP left in the character's weekly training budget.
+          readOnly: true
+      required:
+      - ap_amount
+      - id
+      - mentor
+      - remaining_weekly_budget
+      - skill
+      - specialization
+    TrainingAllocationList:
+      type: object
+      description: Schema wrapper for the training allocation list response.
+      properties:
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingAllocation'
+        remaining_weekly_budget:
+          type: integer
+      required:
+      - allocations
+      - remaining_weekly_budget
     Trait:
       type: object
       description: Serializer for trait definitions.
@@ -45641,6 +46517,14 @@ components:
       - description
       - display_name
       - name
+    UnlockTypeEnum:
+      enum:
+      - class_level
+      - thread_xp_lock
+      type: string
+      description: |-
+        * `class_level` - Class Level
+        * `thread_xp_lock` - Thread XP Lock
     UpdateBulletinPostInput:
       type: object
       description: |-

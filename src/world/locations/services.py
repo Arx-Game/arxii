@@ -7,12 +7,15 @@ from typing import TYPE_CHECKING, NamedTuple
 from django.db import models, transaction
 from django.utils import timezone
 
+from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
 from world.locations.constants import (
+    ENCLOSURE_SHELTERED_AXES,
     EXPOSURE_STAT_KEYS,
     STAT_CLAMPS,
     STAT_DEFAULTS,
+    WEATHER_EXPOSURE_AXES,
     HolderType,
     KeyType,
     LocationParentType,
@@ -220,15 +223,39 @@ def effective_value(
     return _maybe_clamp(total)
 
 
+def room_enclosure(room: DefaultObject) -> RoomEnclosure:
+    """The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile."""
+    try:
+        return RoomEnclosure(room.room_profile.enclosure)
+    except RoomProfile.DoesNotExist:
+        return RoomEnclosure.WALLED
+
+
+def felt_exposure(room: DefaultObject, *, stat_key: StatKey) -> int:
+    """A room's *felt* exposure on one axis, after enclosure sheltering (#1514).
+
+    Weather axes (WET, WIND) are fully blocked — felt as 0 — when the room's enclosure
+    shelters them (a roof stops rain/snow; walls stop wind). Temperature axes (COLD, HEAT)
+    always seep through and are felt in full; insulation against them comes from
+    fixtures/style, not enclosure. Non-weather, non-exposure stats are returned unchanged.
+    """
+    if stat_key in WEATHER_EXPOSURE_AXES and stat_key in ENCLOSURE_SHELTERED_AXES.get(
+        room_enclosure(room), frozenset()
+    ):
+        return 0
+    return effective_value(room, stat_key=stat_key)
+
+
 def room_discomfort(room: DefaultObject) -> int:
     """Total residual environmental discomfort at a room (#1514).
 
-    Sums the floored exposure axes (``EXPOSURE_STAT_KEYS`` — COLD, HEAT, …). Each axis is
-    cascade-resolved through climate/weather/style (up) and counter-fixtures (down), then
-    clamped at its 0-floor, so a counter can zero out its own axis but never push it negative
-    or affect another. The sum is always ``>= 0``; 0 means a perfectly comfortable room.
+    Sums the *felt* exposure axes (``EXPOSURE_STAT_KEYS`` — COLD, HEAT, WET, WIND): each is
+    cascade-resolved through climate/weather/style (up) and counter-fixtures (down), clamped
+    at its 0-floor (a counter zeroes its own axis but never goes negative or touches another),
+    then gated by enclosure for the weather axes (a sheltered room feels no rain or wind). The
+    sum is always ``>= 0``; 0 means a perfectly comfortable room.
     """
-    return sum(effective_value(room, stat_key=key) for key in EXPOSURE_STAT_KEYS)
+    return sum(felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS)
 
 
 def comfort_score(room: DefaultObject) -> int:

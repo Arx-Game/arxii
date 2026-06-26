@@ -108,6 +108,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
+  - Thread XP-lock crossing: `cross_thread_xp_lock(character_sheet, thread, level)` —
+    reachable via the legacy `POST /api/magic/threads/{id}/cross-xp-lock/` web action
+    and via the shared Unlock Shop (`/api/progression/unlocks/purchase/` + telnet
+    `progression unlock thread=<id> level=<n>`)
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
@@ -263,10 +267,17 @@ Character statistics and dice rolling mechanics.
 - **Source:** `src/world/traits/`
 - **Details:** [traits.md](traits.md)
 ### Skills
-Character abilities with parent skills and specializations.
+Character abilities with parent skills and specializations, plus weekly training
+allocations that convert AP to development points.
 
-- **Models:** `Skill`, `Specialization`, `CharacterSkillValue`, `CharacterSpecializationValue`
-- **Integrates with:** traits (skill checks), character_creation (skill selection)
+- **Models:** `Skill`, `Specialization`, `CharacterSkillValue`,
+  `CharacterSpecializationValue`, `TrainingAllocation`
+- **Actions:** `ManageTrainingAction` (`registry_key="manage_training"`) — shared by
+  web `TrainingAllocationViewSet` and telnet `training` command
+- **Cron:** `run_weekly_skill_cron()` registered as `skills.weekly_training` in
+  `world/game_clock/tasks.py`
+- **Integrates with:** traits (skill checks), character_creation (skill selection),
+  action_points (weekly AP spend), progression (`DevelopmentTransaction` rows)
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
@@ -438,13 +449,15 @@ Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationMembership`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
-- **Enums:** `ReputationTier`
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`
+- **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
+- **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`
+- **Telnet:** `org <subverb>` command; `accept org` / `decline org` offer responses
+- **DRF:** `OrganizationViewSet`, `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, and `/api/societies/offers/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
-- **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse
-  OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints
-  a deed via `fire_renown_award` + `_mint_crossing_deed`.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`)
+- **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 ### Goals
@@ -601,6 +614,11 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
   - `PUT /api/progression/path-intent/` — declare a path intent; body `{ path_id }` (character via `X-Character-ID` header)
   - `DELETE /api/progression/path-intent/` — clear declared intent (character via `X-Character-ID` header)
+  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type`
+  - `POST /api/progression/unlocks/purchase/` — buy a `class_level` or `thread_xp_lock` unlock with XP; dispatches `PurchaseUnlockAction`
+- **Actions:**
+  - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
+- **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
@@ -1354,7 +1372,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)

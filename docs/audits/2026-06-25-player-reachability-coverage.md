@@ -74,9 +74,9 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Combat & duels
 - TELNET+WEB: declare technique w/ effort/target/secondary (#1330); clash-commit (#1451); flee / cover
-  / interpose / join / leave / ready / combo up-down / yield (#1453).
-- WEB-ONLY: PvP **duel** lifecycle — challenge / accept / decline / withdraw / acknowledge-risk
-  (registered Actions, web-dispatchable, **no telnet command, untracked**; only `yield` reached telnet).
+  / interpose / join / leave / ready / combo up-down / yield (#1453); PvP **duel** lifecycle —
+  challenge / accept / decline / withdraw / acknowledge-risk (`duel <subverb>`, `CmdDuel`, #1492; was
+  WEB-ONLY — telnet command added, only `yield` had reached telnet before via `combat yield`).
 - **PLANNED-UNBUILT (→ registry):** soulfray-risk accept + fury commit (#1454); knockback + trap-in-combat
   (#1317); reactive interpose / DANGER-arming (#1316); shapeshift + combat profiles (#1111); ranged /
   reach / archery; mounts; verticality / flying.
@@ -96,12 +96,11 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Progression, skills & classes
 - TELNET+WEB: leveling via "Ritual of the Durance" (CmdRitual draft/join/fire); Audere & Audere Majora
-  intensity/tier crossing (#1344); imbue a thread (raises thread level).
+  intensity/tier crossing (#1344); imbue a thread (raises thread level); **deliberate skill-raising**
+  (create/update/remove `TrainingAllocation` via `ManageTrainingAction` + `training` telnet command + `GET/PATCH/POST/DELETE /api/skills/training-allocations/`, and weekly `process_weekly_training` / `apply_weekly_rust` cron — #1488); **spend XP on a class-level or thread XP-lock unlock** (`PurchaseUnlockAction` + `progression unlock` telnet command + `POST /api/progression/unlocks/purchase/` — #1489).
 - WEB-ONLY: progression rewards — claim kudos / cast-remove vote / random-scene / path-intent (#1348,
   also ADR-0001 bypass).
-- **NO-SURFACE:** **deliberate skill-raising** (create/update/remove training allocation,
-  process_weekly_training — built, zero player wiring; skills also rise automatically via the check
-  pipeline); **spend XP/Legend on an unlock** (spend_xp_on_unlock).
+- **NO-SURFACE:** (none remaining in this category for progression/skills).
 - **PLANNED-UNBUILT (→ registry):** **spell system** (learnable, path-independent); **post-CG Gift
   acquisition** (magic currently freezes at CG); trainer system; path discovery/research/switching;
   technique-designer consequence-pool catalog (#1320).
@@ -120,8 +119,8 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   multi-target per-target consent state machine (ADR-0045); soulfray progression (#712).
 
 ### Body-state: conditions, vitals, fatigue, action points
-- TELNET+WEB: restore-sense (removes Berserk via check).
-- WEB-ONLY: **fatigue rest** (spend AP → Well Rested — telnet players literally cannot rest).
+- TELNET+WEB: restore-sense (removes Berserk via check); **fatigue rest** (spend AP → Well Rested,
+  `RestAction` + telnet `rest` + web `RestView` — both routes converge on the same action, #1491).
 - **NO-SURFACE:** **condition treatment/heal** (`perform_treatment` — THE heal-another-character loop,
   built+tested, zero live callers; `restore_sense` covers only the narrow check-driven Berserk removal,
   not the general loop); suppress/unsuppress/clear conditions; vitals damage/bleed/heal (internal,
@@ -203,12 +202,12 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   accept/cancel (learn knowledge unreachable); secrets player-authoring beyond level-1 flavor.
 
 ### Social structures & collective play
-- TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481).
+- TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481); NPC-service
+  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493).
 - WEB-ONLY: events full lifecycle (create/schedule/start/complete/cancel/invite — no Action, no telnet);
-  NPC-service hire/commission/request (start/resolve/end — no Action, ADR-0001 gap); pay-ransom; roster
-  family CRUD / mail / media / profile-picture; consent **master opt-out + per-category rules + standing
-  whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy MVP-gating,
-  ADR-0033); spread-deed / save-deed-story (#745).
+  pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
+  rules + standing whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy
+  MVP-gating, ADR-0033); spread-deed / save-deed-story (#745).
 - **NO-SURFACE:** captivity capture/escape/rescue/resolve + **demand_ransom (zero production callers)**
   (#931 CLOSED — wire-or-remove + telnet surface); create_solo_deed / create_legend_event /
   grant_deed_knowledge (effect-driven by design); roster approve/deny (admin-only) + hiatus/freeze/
@@ -232,7 +231,7 @@ shows which ledger capabilities each variety exercises and where its gaps are. N
 - **Scene — general RP:** say/pose/consent/endorse (✔ reachable) · reactions/favorites, mark-private,
   Places, keep-vs-discard summary (web-only / blind spots) · implicit start, provisional keep/discard
   (planned).
-- **Scene — combat:** declare/clash/maneuvers (✔) · duel lifecycle (web-only, untracked) · ranged,
+- **Scene — combat:** declare/clash/maneuvers (✔) · duel lifecycle (✔ telnet+web, #1492) · ranged,
   shapeshift, knockback (planned).
 - **Scene — GM-run table:** scene-round set-mode (✔) · combat-round lifecycle, beat-marking, table
   seating (web-only) · umpire tooling, session resolvers (planned). *The whole GM table-running journey
@@ -257,8 +256,9 @@ These are mis-wirings, not coverage gaps — worth fixing directly:
    Telnet-only by accident, not design.
 3. **Persona deed-spread / save-deed-story bypass `action.run()`** — they call
    `create_and_resolve_area_action` directly (ADR-0001 convergence gap) instead of being registry Actions.
-4. **`RestView._get_character_sheet` uses implicit first-sheet selection** (`RosterEntry…first()`) — an
-   ADR/standards smell on the fatigue-rest path.
+4. ~~`RestView._get_character_sheet` uses implicit first-sheet selection (`RosterEntry…first()`) — an
+   ADR/standards smell on the fatigue-rest path.~~ Fixed by #1491: `RestView` now routes through
+   `RestAction.run(actor=current_character)`, which resolves the sheet from the authenticated actor.
 
 ## Stale-doc flags (fix-on-sight per "docs are directives")
 
@@ -266,8 +266,9 @@ These are mis-wirings, not coverage gaps — worth fixing directly:
   `emit_event`/`TriggerDefinition` are wired in combat, conditions, positioning, magic (Milestone #4 closed).
 - `ROADMAP.md:92` lists covenant entity/lifecycle as "post-MVP" — **built** (models + services + rise/
   stand-down rituals); the real gap is telnet/UI.
-- `character-progression.md:51,146` "training system + skill rust not built" — **built**
-  (`TrainingAllocation`, `process_weekly_training`, `apply_weekly_rust`).
+- `character-progression.md:51,146` "training system + skill rust not built" — **built and wired**
+  (`TrainingAllocation`, `ManageTrainingAction`, `training` command, `/api/skills/training-allocations/`,
+  `process_weekly_training`, `apply_weekly_rust`).
 - `codex.md` "research project system needed" — partly **built** (`ResearchProject`, `CodexTeachingOffer`).
 - **#1246 is stale-open** — `CmdFlourish` is built; its deferral premise is gone.
 - **#537 closed** but the `TODO(research-gate)` in `technique_builder.py:168` is still a live permissive stub.

@@ -670,3 +670,16 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | `StoryFeedback` | Post-story trust-building feedback |
 | `TrustCategoryFeedbackRating` | Per-category rating within feedback |
 | `EpisodeScene` | Links scenes to episodes |
+
+## GM story lifecycle (telnet)
+
+The `story` namespace exposes the same lifecycle seams as the web story/episode/beat
+endpoints. All subcommands are gated to the story's Lead GM or staff; `mark` may also
+be performed by an approved Assistant GM for that beat.
+
+| Subcommand | Action key | Purpose |
+|---|---|---|
+| `story complete <story-id>` | `complete_story` | Explicitly conclude a story. |
+| `story resolve <episode-id> [transition-id] [notes]` | `resolve_episode` | Advance the story's active progress through a transition. |
+| `story promote <episode-id> <pitch|outline|plot>` | `promote_episode` | Change the episode's authoring maturity. |
+| `story mark <beat-id> <success|failure> [notes]` | `mark_beat` | Record a GM-marked outcome on a beat. |

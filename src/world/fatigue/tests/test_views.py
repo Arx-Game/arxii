@@ -25,8 +25,14 @@ class RestViewTests(APITestCase):
         )
 
     def setUp(self) -> None:
+        from evennia import create_object
+
         FatiguePool.flush_instance_cache()
         ActionPointPool.flush_instance_cache()
+        self.room = create_object("typeclasses.rooms.Room", key="RestViewHomeRoom", nohome=True)
+        self.sheet.character.location = self.room
+        self.sheet.character.home = self.room
+        self.sheet.character.save()
         self.client.force_authenticate(user=self.account)
 
     def test_rest_succeeds(self) -> None:

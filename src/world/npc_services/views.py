@@ -5,9 +5,8 @@ Two surfaces:
 1. Staff-only CRUD viewsets over `NPCRole`, `NPCServiceOffer`,
    `NPCStanding`, `OfferCooldown`, per-kind details models.
 2. Player-facing `InteractionViewSet` — start/resolve/end actions that
-   drive the in-memory interaction state machine in `services.py`.
-   State lives in `request.session` for the lifetime of one interaction
-   per session.
+   dispatch through ``actions.definitions.npc_services`` and keep the
+   ephemeral interaction state in `request.session`.
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -20,6 +19,11 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.definitions.npc_services import (
+    end_npc_interaction,
+    resolve_npc_offer,
+    start_npc_interaction,
+)
 from world.npc_services.filters import (
     MissionOfferDetailsFilterSet,
     NPCRoleFilterSet,
@@ -36,9 +40,7 @@ from world.npc_services.models import (
     OfferCooldown,
     PermitOfferDetails,
 )
-from world.npc_services.offer_policy import mission_pool_count
 from world.npc_services.serializers import (
-    InteractionOfferSerializer,
     InteractionResolveRequestSerializer,
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
@@ -51,14 +53,9 @@ from world.npc_services.serializers import (
 )
 from world.npc_services.services import (
     InteractionSession,
-    ResolveOfferError,
-    available_offers,
-    end_interaction,
-    resolve_offer,
-    start_interaction,
+    serialize_npc_session_state,
 )
 from world.scenes.models import Persona
-from world.scenes.services import persona_for_character
 
 # Key under which the in-flight interaction state lives in request.session.
 # One active interaction per Django session; start while one exists raises
@@ -159,51 +156,6 @@ class MissionOfferDetailsViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-def _serialize_state(
-    session: InteractionSession,
-    *,
-    last_result_message: str = "",
-) -> dict:
-    """Compose the response payload from a (live or freshly-closed) session."""
-    # #726: surface a standing-driven number of POOL offers (strangers see one
-    # trial job, trusted contacts a full slate). MENU offers are unaffected —
-    # ``available_offers`` always returns every eligible MENU option in full.
-    offers = (
-        available_offers(
-            session,
-            pool_count=mission_pool_count(
-                role=session.role,
-                persona=session.persona,
-                npc_persona=session.npc_persona,
-            ),
-        )
-        if not session.closed
-        else []
-    )
-    serialized_offers = InteractionOfferSerializer(
-        [
-            {
-                "id": o.pk,
-                "label": o.label,
-                "kind": o.kind,
-                "is_final": o.is_final,
-                "rapport_requirement": o.rapport_requirement,
-            }
-            for o in offers
-        ],
-        many=True,
-    ).data
-    return InteractionStateSerializer(
-        {
-            "role_id": session.role.pk,
-            "current_rapport": session.current_rapport,
-            "closed": session.closed,
-            "available_offers": serialized_offers,
-            "last_result_message": last_result_message,
-        }
-    ).data
-
-
 def _stash(request: Request, session: InteractionSession) -> None:
     """Persist the small state slice we need to rehydrate this session."""
     request.session[_SESSION_KEY] = {
@@ -249,15 +201,16 @@ def _rehydrate(request: Request) -> InteractionSession:
 
 
 class InteractionViewSet(viewsets.ViewSet):
-    """Player-facing endpoints driving the in-memory interaction state machine.
+    """Player-facing endpoints driving the NPC-service interaction state machine.
 
     One active interaction per Django session — calling ``start`` while a
     session is in-flight returns 409. ``resolve`` and ``end`` operate on
     the current in-flight session; both return 404 if none exists.
 
-    The PC's persona is resolved from the request user's puppeted
-    character via :func:`persona_for_character` (raises loud on missing
-    sheet per the CLAUDE.md invariant — surfaces as 400).
+    The viewset is a thin wrapper over the registry Actions in
+    ``actions.definitions.npc_services``; each endpoint delegates to
+    ``action.run(actor=character)`` and manages the small session slice
+    stored in ``request.session``.
     """
 
     permission_classes = [IsAuthenticated]
@@ -267,14 +220,10 @@ class InteractionViewSet(viewsets.ViewSet):
 
         DRF's ``request.user`` is the AccountDB; the ``puppet`` property
         on the typeclass returns the live puppet (or None when no
-        Session has puppeted anything). We swallow any access-time
-        exception (test scaffolding can hit an AccountDB without typeclass
-        machinery loaded) and treat it as "no puppet" — surfaced as 400.
+        Session has puppeted anything). A missing attribute means
+        "no puppet" and is surfaced as 400.
         """
-        try:
-            puppet = request.user.puppet
-        except (AttributeError, Exception):  # noqa: BLE001
-            puppet = None
+        puppet = request.user.puppet if hasattr(request.user, "puppet") else None
         if puppet is None:
             msg = (
                 "No puppeted character — log in and assume a character before "
@@ -287,7 +236,12 @@ class InteractionViewSet(viewsets.ViewSet):
         request=InteractionStartRequestSerializer,
         responses={
             201: InteractionStateSerializer,
+            400: OpenApiResponse(description="No puppeted character or no role was provided."),
+            404: OpenApiResponse(description="NPC role or persona was not found."),
             409: OpenApiResponse(description="An interaction is already in flight."),
+            500: OpenApiResponse(
+                description="Character sheet invariant breach (missing primary persona)."
+            ),
         },
     )
     @action(detail=False, methods=["post"])
@@ -299,32 +253,35 @@ class InteractionViewSet(viewsets.ViewSet):
             )
         body = InteractionStartRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        role_id = body.validated_data["role_id"]
-        role = NPCRole.objects.filter(pk=role_id).first()
-        if role is None:
-            msg = f"NPCRole {role_id} not found."
-            raise NotFound(msg)
-        npc_persona = None
-        npc_persona_id = body.validated_data.get("npc_persona_id")
-        if npc_persona_id is not None:
-            npc_persona = Persona.objects.filter(pk=npc_persona_id).first()
-            if npc_persona is None:
-                msg = f"Persona {npc_persona_id} not found."
-                raise NotFound(msg)
         character = self._puppet_character(request)
-        persona = persona_for_character(character)  # raises on missing sheet
-        session = start_interaction(
-            role=role, persona=persona, character=character, npc_persona=npc_persona
+
+        result = start_npc_interaction.run(
+            actor=character,
+            role_id=body.validated_data["role_id"],
+            npc_persona_id=body.validated_data.get("npc_persona_id"),
         )
+        if not result.success:
+            if result.data.get("invariant_breach"):
+                return Response(
+                    {"detail": result.message or "Character sheet invariant breach."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            raise NotFound(result.message)
+        session = result.data["session"]
         _stash(request, session)
-        return Response(_serialize_state(session), status=status.HTTP_201_CREATED)
+        return Response(serialize_npc_session_state(session), status=status.HTTP_201_CREATED)
 
     @extend_schema(
         request=InteractionResolveRequestSerializer,
         responses={
             200: InteractionStateSerializer,
-            404: OpenApiResponse(description="No interaction in progress / offer not found."),
-            400: OpenApiResponse(description="Offer not eligible / session closed."),
+            400: OpenApiResponse(
+                description=(
+                    "No puppeted character, no offer, offer not eligible, "
+                    "or the interaction has already ended."
+                )
+            ),
+            404: OpenApiResponse(description="No interaction in progress or offer not found."),
         },
     )
     @action(detail=False, methods=["post"])
@@ -332,34 +289,44 @@ class InteractionViewSet(viewsets.ViewSet):
         body = InteractionResolveRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         session = _rehydrate(request)
-        offer_id = body.validated_data["offer_id"]
-        offer = NPCServiceOffer.objects.filter(pk=offer_id).first()
-        if offer is None:
-            msg = f"NPCServiceOffer {offer_id} not found."
-            raise NotFound(msg)
-        try:
-            result = resolve_offer(session, offer)
-        except ResolveOfferError as exc:
-            # Surface the typed exception's ``user_message`` — never
-            # ``str(exc)`` (CodeQL: information exposure through an
-            # exception; ``feedback_codeql_exceptions``). The internal
-            # message identifies the offer + role for logs only.
-            raise ValidationError(exc.user_message) from exc
-        if session.closed:
+        character = self._puppet_character(request)
+
+        result = resolve_npc_offer.run(
+            actor=character,
+            session=session,
+            offer_id=body.validated_data["offer_id"],
+        )
+        if not result.success:
+            if result.data.get("not_found"):
+                raise NotFound(result.message)
+            raise ValidationError(result.message)
+
+        if result.data["session"].closed:
             request.session.pop(_SESSION_KEY, None)
         else:
-            _stash(request, session)
-        return Response(_serialize_state(session, last_result_message=result.message))
+            _stash(request, result.data["session"])
+        return Response(
+            serialize_npc_session_state(
+                result.data["session"],
+                last_result_message=result.data.get("last_result_message", ""),
+            ),
+        )
 
     @extend_schema(
         responses={
             200: InteractionStateSerializer,
+            400: OpenApiResponse(description="No puppeted character."),
             404: OpenApiResponse(description="No interaction in progress."),
         },
     )
     @action(detail=False, methods=["post"])
     def end(self, request: Request) -> Response:
         session = _rehydrate(request)
-        end_interaction(session)
+        character = self._puppet_character(request)
+
+        result = end_npc_interaction.run(actor=character, session=session)
+        if not result.success:
+            raise NotFound(result.message)
+
         request.session.pop(_SESSION_KEY, None)
-        return Response(_serialize_state(session))
+        return Response(serialize_npc_session_state(result.data["session"]))

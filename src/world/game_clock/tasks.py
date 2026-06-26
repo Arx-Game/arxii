@@ -521,6 +521,19 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.skills.services import run_weekly_skill_cron
+
+    register_task(
+        CronDefinition(
+            task_key="skills.weekly_training",
+            callable=run_weekly_skill_cron,
+            interval=timedelta(days=7),
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            description=("Process deliberate skill-training allocations and apply weekly rust."),
+        )
+    )
+
     from world.magic.services.sanctum_cron import sanctum_resonance_generation_tick
 
     register_task(

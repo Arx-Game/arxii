@@ -11,6 +11,7 @@ import factory.django as factory_django
 from world.character_creation.factories import RealmFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
     LegendDeedStory,
@@ -20,6 +21,8 @@ from world.societies.models import (
     LegendSpread,
     Organization,
     OrganizationMembership,
+    OrganizationMembershipOffer,
+    OrganizationRank,
     OrganizationReputation,
     OrganizationType,
     PhilosophicalArchetype,
@@ -117,6 +120,9 @@ class OrganizationMembershipFactory(factory_django.DjangoModelFactory):
 
     Note: The persona must be PRIMARY or ESTABLISHED type
     to pass model validation. PersonaFactory defaults to ESTABLISHED.
+
+    ``rank`` may be passed as an ``OrganizationRank`` instance or as an
+    integer tier (1-5) that will be looked up on ``organization.ranks``.
     """
 
     class Meta:
@@ -124,7 +130,43 @@ class OrganizationMembershipFactory(factory_django.DjangoModelFactory):
 
     organization = factory.SubFactory(OrganizationFactory)
     persona = factory.SubFactory(PersonaFactory)
-    rank = 5  # Default to lowest rank
+    rank = factory.LazyAttribute(lambda obj: base_rank_for_organization(obj.organization))
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        rank = kwargs.get("rank")
+        if isinstance(rank, int):
+            kwargs["rank"] = kwargs["organization"].ranks.get(tier=rank)
+        return super()._create(model_class, *args, **kwargs)
+
+
+class OrganizationRankFactory(factory_django.DjangoModelFactory):
+    """Factory for creating OrganizationRank instances.
+
+    Prefer ``OrganizationFactory`` for normal tests: it auto-creates the
+    default five-tier ladder. Use this factory when you need an extra rank
+    or a custom rank for a specific organization.
+    """
+
+    class Meta:
+        model = OrganizationRank
+
+    organization = factory.SubFactory(OrganizationFactory)
+    name = factory.Sequence(lambda n: f"Rank {n}")
+    tier = factory.Sequence(lambda n: n + 1)
+
+
+class OrganizationMembershipOfferFactory(factory_django.DjangoModelFactory):
+    """Factory for creating OrganizationMembershipOffer instances."""
+
+    class Meta:
+        model = OrganizationMembershipOffer
+
+    organization = factory.SubFactory(OrganizationFactory)
+    from_persona = factory.SubFactory(PersonaFactory)
+    to_persona = factory.SubFactory(PersonaFactory)
+    kind = OrganizationMembershipOffer.Kind.INVITE
+    status = OrganizationMembershipOffer.Status.PENDING
 
 
 class SocietyReputationFactory(factory_django.DjangoModelFactory):

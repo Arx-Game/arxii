@@ -132,6 +132,16 @@ actions, backends, and service functions.
   collisions (mirrors `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`.
+- **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
+  routes a leading subverb (`duel challenge <name>` / `accept [id]` / `decline [id]` /
+  `withdraw [id]` / `risk`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` —
+  the same seam the web uses — reaching the already-built duel Actions in
+  `actions/definitions/duels.py` (`challenge`/`accept`/`decline`/`withdraw`/`acknowledge_risk`). Bare
+  `duel` prints a status hub (pending incoming/outgoing challenges + active-duel state). Namespaced —
+  not bare keys — because `accept`/`decline` collide with `CmdAccept`/`CmdDeny`; mirrors `CmdCombat`'s
+  subverb routing. `yield` (concede an active duel) stays on `combat yield` (#1453); the hub points to
+  it. The optional `[id]` selects a specific pending challenge (the #1180 threaded-inbox path); without
+  it the action falls back to the actor's single pending challenge. No business logic in the command.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.
@@ -172,6 +182,22 @@ actions, backends, and service functions.
   toggles persistent quiet mode (`TenureDisplaySettings.appear_offline` via
   `world.roster.services.display.set_appear_offline`): off where/who + unpageable except the
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
+- **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
+  Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
+- **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
+  Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
+  `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
+  `InteractionSession` on `caller.session.ndb` between operations; delegates to the same registry
+  Actions as the web `InteractionViewSet`.
+- **`progression.py`**: `CmdTraining` (`training`) + `CmdProgressionUnlock` (`progression`) —
+  telnet faces of `ManageTrainingAction` and `PurchaseUnlockAction`. `training [list]` shows
+  weekly AP budget and allocations; `training add skill=<id>|spec=<id> ap=<n> [mentor=<id>]`,
+  `training update id=<id> [ap=<n>] [mentor=<id>]`, and `training remove id=<id>` dispatch through
+  `dispatch_player_action` to the REGISTRY `manage_training` action. `progression unlocks` lists
+  class-level and thread XP-lock unlocks from the same read services the web unlock shop uses;
+  `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
+  REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
+  one-word key collisions.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
