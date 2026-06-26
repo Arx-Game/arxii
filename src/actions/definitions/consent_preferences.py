@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 _MSG_NO_IDENTITY = "You have no character identity to manage consent for."
 _MSG_NOT_YOUR_TENURE = "You can only manage consent for your own characters."
 _MSG_NO_CATEGORY = "No consent category named '{}'"
+_MSG_OWNER_INACTIVE = "Your character is not currently active."
+_MSG_ALLOWED_INACTIVE = "That character is not currently active."
+_MSG_ADD_NOT_FOUND = "That character cannot be whitelisted."
+_MSG_REMOVE_NOT_FOUND = "That character is not on the list."
 
 _MODE_DEFAULT = "default"
 _PLAYER_FACING_ALLOWLIST = "whitelist"
@@ -61,6 +65,44 @@ def _resolve_category(key: str | None):
         return SocialConsentCategory.objects.get_by_natural_key(key), ""
     except SocialConsentCategory.DoesNotExist:
         return None, _MSG_NO_CATEGORY.format(key)
+
+
+def _resolve_whitelist_targets(
+    actor: ObjectDB,
+    kwargs: dict[str, Any],
+    *,
+    require_allowed_active: bool,
+    not_found_message: str,
+):
+    """Resolve the owner tenure, category, and allowed tenure for a whitelist op.
+
+    Shared by add/remove whitelist actions. Returns ``(targets, error)``:
+    on success ``targets`` is ``(tenure, category, allowed_tenure)`` and
+    ``error`` is ``None``; on failure ``targets`` is ``None`` and ``error``
+    is a failing ``ActionResult`` the caller returns verbatim.
+    ``require_allowed_active`` is False on the remove path so a now-inactive
+    character can still be taken off the list. ``not_found_message`` is the
+    message returned when no allowed tenure matches the supplied id (the two
+    paths use distinct wording — add: "cannot be whitelisted", remove: "not
+    on the list").
+    """
+    tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
+    if tenure is None:
+        return None, ActionResult(success=False, message=err)
+    if tenure.end_date is not None:
+        return None, ActionResult(success=False, message=_MSG_OWNER_INACTIVE)
+    category, err = _resolve_category(kwargs.get("category_key"))
+    if category is None:
+        return None, ActionResult(success=False, message=err)
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    try:
+        allowed_tenure = RosterTenure.objects.get(pk=kwargs.get("allowed_tenure_id"))
+    except RosterTenure.DoesNotExist:
+        return None, ActionResult(success=False, message=not_found_message)
+    if require_allowed_active and allowed_tenure.end_date is not None:
+        return None, ActionResult(success=False, message=_MSG_ALLOWED_INACTIVE)
+    return (tenure, category, allowed_tenure), None
 
 
 @dataclass
@@ -165,32 +207,16 @@ class AddSocialConsentWhitelistAction(Action):
             add_social_consent_whitelist,
             set_social_consent_preference,
         )
-        from world.roster.models import RosterTenure  # noqa: PLC0415
 
-        tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
-        if tenure is None:
-            return ActionResult(success=False, message=err)
-        if tenure.end_date is not None:
-            return ActionResult(
-                success=False,
-                message="Your character is not currently active.",
-            )
-        category, err = _resolve_category(kwargs.get("category_key"))
-        if category is None:
-            return ActionResult(success=False, message=err)
-        allowed_tenure_id = kwargs.get("allowed_tenure_id")
-        try:
-            allowed_tenure = RosterTenure.objects.get(pk=allowed_tenure_id)
-        except RosterTenure.DoesNotExist:
-            return ActionResult(
-                success=False,
-                message="That character cannot be whitelisted.",
-            )
-        if allowed_tenure.end_date is not None:
-            return ActionResult(
-                success=False,
-                message="That character is not currently active.",
-            )
+        targets, error = _resolve_whitelist_targets(
+            actor,
+            kwargs,
+            require_allowed_active=True,
+            not_found_message=_MSG_ADD_NOT_FOUND,
+        )
+        if error is not None:
+            return error
+        tenure, category, allowed_tenure = targets
         preference = getattr(tenure, "social_consent_preference", None)  # noqa: GETATTR_LITERAL
         if preference is None:
             set_social_consent_preference(tenure, True)
@@ -218,33 +244,19 @@ class RemoveSocialConsentWhitelistAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.consent.services import remove_social_consent_whitelist  # noqa: PLC0415
-        from world.roster.models import RosterTenure  # noqa: PLC0415
 
-        tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
-        if tenure is None:
-            return ActionResult(success=False, message=err)
-        if tenure.end_date is not None:
-            return ActionResult(
-                success=False,
-                message="Your character is not currently active.",
-            )
-        category, err = _resolve_category(kwargs.get("category_key"))
-        if category is None:
-            return ActionResult(success=False, message=err)
-        allowed_tenure_id = kwargs.get("allowed_tenure_id")
-        try:
-            allowed_tenure = RosterTenure.objects.get(pk=allowed_tenure_id)
-        except RosterTenure.DoesNotExist:
-            return ActionResult(
-                success=False,
-                message="That character is not on the list.",
-            )
+        targets, error = _resolve_whitelist_targets(
+            actor,
+            kwargs,
+            require_allowed_active=False,
+            not_found_message=_MSG_REMOVE_NOT_FOUND,
+        )
+        if error is not None:
+            return error
+        tenure, category, allowed_tenure = targets
         removed = remove_social_consent_whitelist(tenure, allowed_tenure, category)
         if not removed:
-            return ActionResult(
-                success=False,
-                message="That character is not on the list.",
-            )
+            return ActionResult(success=False, message=_MSG_REMOVE_NOT_FOUND)
         return ActionResult(
             success=True,
             message=f"{allowed_tenure} removed from {category.name} whitelist.",
