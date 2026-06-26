@@ -34,6 +34,7 @@ from commands.consent import (
     CmdPersuade,
     CmdRestoreSense,
 )
+from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
 from commands.endorse import CmdEndorse, CmdPoses
@@ -202,6 +203,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDuel,
             # Scene lifecycle telnet command (#1445)
             CmdScene,
+            # Deed spread / deed story telnet namespace (#1503)
+            CmdDeed,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1347 — list faces + wear-face active persona switch.

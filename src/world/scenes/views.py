@@ -523,19 +523,14 @@ class PersonaViewSet(
     @action(detail=True, methods=[HTTPMethod.POST])
     def spread(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
         """#745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona."""
-        from django.core.exceptions import ValidationError  # noqa: PLC0415
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 
-        from world.locations.activity_services import room_activity_band  # noqa: PLC0415
-        from world.scenes.action_services import create_and_resolve_area_action  # noqa: PLC0415
         from world.scenes.models import Scene  # noqa: PLC0415
+        from world.skills.models import Specialization  # noqa: PLC0415
         from world.societies.models import LegendEntry  # noqa: PLC0415
         from world.societies.spread_services import (  # noqa: PLC0415
-            SPREAD_TALE_ACTION_KEY,
-            get_or_create_spread_a_tale_template,
             get_spread_specializations,
             get_spreadable_deeds,
-            spread_check_modifiers,
         )
 
         persona = self.get_object()
@@ -562,46 +557,55 @@ class PersonaViewSet(
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        specialization = None
         specialization_id = data.get("specialization")
         if specialization_id:
-            from world.skills.models import Specialization  # noqa: PLC0415
-
             valid_ids = set(get_spread_specializations().values_list("pk", flat=True))
             if specialization_id not in valid_ids:
                 return Response(
                     {"detail": "That form can't be used to spread a tale."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            specialization = Specialization.objects.get(pk=specialization_id)
-        extra_modifiers = spread_check_modifiers(persona.character_sheet.character, specialization)
+            Specialization.objects.get(pk=specialization_id)
 
-        template = get_or_create_spread_a_tale_template()
+        from actions.constants import ActionBackend  # noqa: PLC0415
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+        from actions.player_interface import dispatch_player_action  # noqa: PLC0415
+        from actions.types import ActionRef  # noqa: PLC0415
+
+        character = persona.character_sheet.character
+        ref = ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="spread_tale")
         try:
-            result = create_and_resolve_area_action(
-                scene=scene,
-                initiator_persona=persona,
-                action_template=template,
-                action_key=SPREAD_TALE_ACTION_KEY,
-                pose_text=data["pose_text"],
-                effort_level=data["effort_level"],
-                spread_deed_target=deed,
-                extra_modifiers=extra_modifiers,
+            result = dispatch_player_action(
+                character,
+                ref,
+                {
+                    "persona_id": persona.pk,
+                    "scene_id": scene.pk,
+                    "deed_id": deed.pk,
+                    "effort_level": data["effort_level"],
+                    "specialization_id": specialization_id,
+                    "pose_text": data["pose_text"],
+                    "requester_account_id": request.user.pk,
+                },
             )
-        except ValidationError as exc:
-            return Response({"detail": exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError:
-            # e.g. the deed was deactivated between eligibility and resolution.
-            return Response(
-                {"detail": "The tale could not be spread right now."},
-                status=status.HTTP_409_CONFLICT,
+        except ActionDispatchError as exc:
+            http_status = (
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if exc.code == ActionDispatchError.ANTI_SPAM_COOLDOWN
+                else status.HTTP_400_BAD_REQUEST
             )
+            return Response({"detail": exc.user_message}, status=http_status)
+        detail = result.detail
+        if detail is None or not detail.success:
+            message = detail.message if detail is not None else "The tale could not be spread."
+            http_status = (
+                status.HTTP_409_CONFLICT
+                if message == "The tale could not be spread right now."
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({"detail": message}, status=http_status)
 
-        main = result.action_resolution.main_result
-        outcome = main.check_result.outcome_name if main and main.check_result else "Unknown"
-        band = room_activity_band(scene.location).label
-        payload = {"resolved": True, "outcome": outcome, "band": band}
-        return Response(SpreadResultSerializer(payload).data)
+        return Response(SpreadResultSerializer(detail.data).data)
 
     def _account_controls_persona(self, request: Request, persona: Persona) -> bool:
         """True when the requesting account currently tenures this persona."""
@@ -661,10 +665,7 @@ class PersonaViewSet(
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 
         from world.societies.models import LegendEntry  # noqa: PLC0415
-        from world.societies.spread_services import (  # noqa: PLC0415
-            get_spreadable_deeds,
-            save_deed_story,
-        )
+        from world.societies.spread_services import get_spreadable_deeds  # noqa: PLC0415
 
         persona = self.get_object()
         if not self._account_controls_persona(request, persona):
@@ -682,7 +683,39 @@ class PersonaViewSet(
                 {"detail": "This persona is not aware of that deed."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        story = save_deed_story(author_persona=persona, deed=deed, text=data["text"])
+
+        from actions.constants import ActionBackend  # noqa: PLC0415
+        from actions.errors import ActionDispatchError  # noqa: PLC0415
+        from actions.player_interface import dispatch_player_action  # noqa: PLC0415
+        from actions.types import ActionRef  # noqa: PLC0415
+
+        character = persona.character_sheet.character
+        ref = ActionRef(backend=ActionBackend.SCENE_ADAPTIVE, registry_key="save_deed_story")
+        try:
+            result = dispatch_player_action(
+                character,
+                ref,
+                {
+                    "persona_id": persona.pk,
+                    "deed_id": deed.pk,
+                    "text": data["text"],
+                },
+            )
+        except ActionDispatchError as exc:
+            http_status = (
+                status.HTTP_429_TOO_MANY_REQUESTS
+                if exc.code == ActionDispatchError.ANTI_SPAM_COOLDOWN
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({"detail": exc.user_message}, status=http_status)
+        detail = result.detail
+        if detail is None or not detail.success:
+            message = detail.message if detail is not None else "The story could not be saved."
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        from world.societies.models import LegendDeedStory  # noqa: PLC0415
+
+        story = LegendDeedStory.objects.select_related("author").get(pk=detail.data["story_id"])
         return Response(DeedStorySerializer(story).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(

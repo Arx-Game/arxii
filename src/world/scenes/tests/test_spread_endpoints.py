@@ -36,6 +36,11 @@ class SpreadEndpointTest(APITestCase):
         cls.deed = LegendEntryFactory(persona=PersonaFactory(), base_value=50)
         cls.deed.societies_aware.add(society)
         ActionPointPool.get_or_create_for_character(character)
+        from world.scenes.models import get_scene_round_defaults_config
+
+        config = get_scene_round_defaults_config()
+        config.anti_spam_seconds = 0
+        config.save(update_fields=["anti_spam_seconds"])
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
