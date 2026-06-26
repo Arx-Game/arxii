@@ -286,7 +286,10 @@ class PurchaseUnlockAction(Action):
         from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
         from world.progression.services.spends import spend_xp_on_unlock  # noqa: PLC0415
 
-        unlock_target = ClassLevelUnlock.objects.get(pk=kwargs.get("class_level_unlock_id"))
+        class_level_unlock_id = kwargs.get("class_level_unlock_id")
+        if class_level_unlock_id is None:
+            return ActionResult(success=False, message="class_level_unlock_id is required.")
+        unlock_target = ClassLevelUnlock.objects.get(pk=class_level_unlock_id)
         success, message, unlock = spend_xp_on_unlock(actor, unlock_target)
         if not success:
             return ActionResult(success=False, message=message)
@@ -308,14 +311,19 @@ class PurchaseUnlockAction(Action):
         from world.magic.models import Thread  # noqa: PLC0415
         from world.magic.services.threads import cross_thread_xp_lock  # noqa: PLC0415
 
-        thread = Thread.objects.get(pk=kwargs.get("thread_id"))
+        thread_id = kwargs.get("thread_id")
+        if thread_id is None:
+            return ActionResult(success=False, message="thread_id is required.")
+        thread = Thread.objects.get(pk=thread_id)
         character_sheet = actor.sheet_data
         if thread.owner_id != character_sheet.pk:
             return ActionResult(
                 success=False, message="You can only purchase unlocks for your own threads."
             )
-        boundary_level = int(kwargs.get("boundary_level"))
-        thread_level_unlock = cross_thread_xp_lock(character_sheet, thread, boundary_level)
+        boundary_level = kwargs.get("boundary_level")
+        if boundary_level is None:
+            return ActionResult(success=False, message="boundary_level is required.")
+        thread_level_unlock = cross_thread_xp_lock(character_sheet, thread, int(boundary_level))
         return ActionResult(
             success=True,
             message=f"Thread boundary {boundary_level} unlocked.",

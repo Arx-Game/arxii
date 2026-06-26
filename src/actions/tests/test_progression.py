@@ -359,6 +359,48 @@ class PurchaseUnlockActionTests(TestCase):
         )
 
         self.assertFalse(result.success)
+        self.assertIn("own threads", result.message.lower())
         self.assertIsNone(
             ThreadLevelUnlock.objects.filter(thread=thread, unlocked_level=20).first()
         )
+
+    def test_purchase_thread_xp_lock_missing_boundary_level(self):
+        """A missing boundary_level returns a clean failure, not a TypeError."""
+        character, sheet, account = self._create_character_with_account()
+        thread = ThreadFactory(owner=sheet)
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="thread_xp_lock",
+            thread_id=thread.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("boundary_level is required", result.message.lower())
+
+    def test_purchase_thread_xp_lock_missing_thread_id(self):
+        """A missing thread_id returns a clean failure, not a ValueError."""
+        character, _sheet, account = self._create_character_with_account()
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="thread_xp_lock",
+            boundary_level=20,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("thread_id is required", result.message.lower())
+
+    def test_purchase_class_level_unlock_missing_id(self):
+        """A missing class_level_unlock_id returns a clean failure."""
+        character, _sheet, _account = self._create_character_with_account()
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="class_level",
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("class_level_unlock_id is required", result.message.lower())
