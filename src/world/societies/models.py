@@ -620,20 +620,17 @@ class OrganizationMembership(SharedMemoryModel):
         """Validate the membership."""
         super().clean()
 
-        if self.persona_id:
-            if not self.persona.is_established_or_primary:
-                raise ValidationError(
-                    {
-                        "persona": (
-                            "Only primary identities or established personas "
-                            "can join organizations."
-                        )
-                    }
-                )
+        if self.persona_id and not self.persona.is_established_or_primary:
+            raise ValidationError(
+                {
+                    "persona": (
+                        "Only primary identities or established personas can join organizations."
+                    )
+                }
+            )
 
-        if self.rank_id:
-            if self.rank.organization_id != self.organization_id:
-                raise ValidationError({"rank": "Rank does not belong to this organization."})
+        if self.rank_id and self.rank.organization_id != self.organization_id:
+            raise ValidationError({"rank": "Rank does not belong to this organization."})
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""

@@ -50,6 +50,11 @@ from world.societies.models import OrganizationMembershipOffer
 
 _TARGET_FILTERS = TargetFilters(in_same_scene=True, exclude_self=True)
 
+_MSG_NO_CHARACTER_IDENTITY = "You have no character identity."
+_MSG_WHICH_ORGANIZATION = "Which organization?"
+_MSG_NOT_A_MEMBER = "You are not a member of that organization."
+_MSG_TARGET_NOT_A_MEMBER = "That person is not a member of the organization."
+
 
 def _actor_sheet(actor: ObjectDB) -> Any:
     try:
@@ -156,7 +161,7 @@ class OrgInviteAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         target_persona = _resolve_target_persona(kwargs)
         if target_persona is None:
@@ -164,7 +169,7 @@ class OrgInviteAction(Action):
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         if not _same_room(actor, target_persona):
             return ActionResult(
@@ -207,11 +212,11 @@ class OrgApplyAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         try:
             apply_to_organization(organization, actor_persona)
@@ -247,11 +252,11 @@ class OrgJoinAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         offer = OrganizationMembershipOffer.objects.filter(
             organization=organization,
@@ -300,17 +305,17 @@ class OrgLeaveAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         membership = active_membership_for_persona(organization, actor_persona)
         if membership is None:
             return ActionResult(
                 success=False,
-                message="You are not a member of that organization.",
+                message=_MSG_NOT_A_MEMBER,
             )
 
         leave_organization(membership)
@@ -340,7 +345,7 @@ class OrgPromoteAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         target_persona = _resolve_target_persona(kwargs)
         if target_persona is None:
@@ -348,7 +353,7 @@ class OrgPromoteAction(Action):
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         if not _same_room(actor, target_persona):
             return ActionResult(
@@ -361,12 +366,12 @@ class OrgPromoteAction(Action):
         if target_membership is None:
             return ActionResult(
                 success=False,
-                message="That person is not a member of the organization.",
+                message=_MSG_TARGET_NOT_A_MEMBER,
             )
         if actor_membership is None:
             return ActionResult(
                 success=False,
-                message="You are not a member of that organization.",
+                message=_MSG_NOT_A_MEMBER,
             )
 
         try:
@@ -404,7 +409,7 @@ class OrgDemoteAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         target_persona = _resolve_target_persona(kwargs)
         if target_persona is None:
@@ -412,7 +417,7 @@ class OrgDemoteAction(Action):
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         if not _same_room(actor, target_persona):
             return ActionResult(
@@ -425,12 +430,12 @@ class OrgDemoteAction(Action):
         if target_membership is None:
             return ActionResult(
                 success=False,
-                message="That person is not a member of the organization.",
+                message=_MSG_TARGET_NOT_A_MEMBER,
             )
         if actor_membership is None:
             return ActionResult(
                 success=False,
-                message="You are not a member of that organization.",
+                message=_MSG_NOT_A_MEMBER,
             )
 
         try:
@@ -468,7 +473,7 @@ class OrgExpelAction(Action):
     ) -> ActionResult:
         actor_persona = _actor_persona(actor)
         if actor_persona is None:
-            return ActionResult(success=False, message="You have no character identity.")
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER_IDENTITY)
 
         target_persona = _resolve_target_persona(kwargs)
         if target_persona is None:
@@ -476,7 +481,7 @@ class OrgExpelAction(Action):
 
         organization = _resolve_organization(kwargs.get("organization_id"))
         if organization is None:
-            return ActionResult(success=False, message="Which organization?")
+            return ActionResult(success=False, message=_MSG_WHICH_ORGANIZATION)
 
         if not _same_room(actor, target_persona):
             return ActionResult(
@@ -489,12 +494,12 @@ class OrgExpelAction(Action):
         if target_membership is None:
             return ActionResult(
                 success=False,
-                message="That person is not a member of the organization.",
+                message=_MSG_TARGET_NOT_A_MEMBER,
             )
         if actor_membership is None:
             return ActionResult(
                 success=False,
-                message="You are not a member of that organization.",
+                message=_MSG_NOT_A_MEMBER,
             )
 
         try:
