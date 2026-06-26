@@ -74,6 +74,7 @@ actions, backends, and service functions.
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
   issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`alterations.py`**: `CmdMageScar` (`magescar`) — telnet face of `ResolveAlterationAction` (#1490); lists and resolves pending Mage Scars by library template or scratch-authored fields. Uses namespaced `magescar list` / `magescar resolve <id> ...` subcommands.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.

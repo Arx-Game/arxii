@@ -20,6 +20,7 @@ from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
+from commands.alterations import CmdMageScar
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.consent import (
@@ -143,6 +144,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRitual,
             CmdWeaveThread,
             CmdImbue,
+            # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
+            CmdMageScar,
             CmdEnter,
             CmdFlourish,
             CmdEndorse,

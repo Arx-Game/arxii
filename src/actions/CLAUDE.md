@@ -28,7 +28,11 @@ They do not use the command system, dispatchers, or handlers.
 - **`prerequisites.py`**: `Prerequisite` base class — `is_met(actor, target, context)`
 - **`registry.py`**: Action lookup by key (`get_action`) and by target type (`get_actions_for_target_type`)
 - **`definitions/`**: Concrete action implementations grouped by category
-  (e.g. `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
+  (e.g. `alterations.py` — `ResolveAlterationAction`, key `"resolve_alteration"`,
+  REGISTRY backend, `target_type=SELF`; resolves pending Mage Scars via library
+  template or scratch authoring. Shared by telnet `CmdMageScar` and the web
+  `PendingAlterationViewSet.resolve`, #1490;
+  `ritual.py` — `PerformRitualAction`, key `"perform_ritual"`, the
   action.run() seam for SERVICE/FLOW ritual performance shared by telnet
   `CmdRitual` and the web `RitualPerformView`, #1331;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE

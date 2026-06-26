@@ -207,6 +207,7 @@ class ActionRegistryTests(TestCase):
             "start_scene",
             "finish_scene",
             "set_active_persona",
+            "resolve_alteration",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
