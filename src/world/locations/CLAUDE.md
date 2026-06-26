@@ -11,6 +11,16 @@ hierarchy. Carries two axis types in one cascade:
 
 A single read service (`effective_value`) resolves either axis.
 
+**Climate → comfort (#1514).** The stat axis hosts environmental **exposure** axes
+(`StatKey.COLD`, `StatKey.HEAT`; listed in `EXPOSURE_STAT_KEYS`). Each is a non-negative
+*discomfort* magnitude clamped at a **0-floor** — climate/weather/style push it up,
+counter-fixtures push it down, and the floor means a counter (a hearth's negative COLD
+modifier) can zero out *its* axis but never go negative or touch another. So a hearth eats
+COLD and can never overheat a room. `services.room_discomfort(room)` sums the exposure axes
+(≥0); `services.comfort_score(room)` returns its inverse (0 = comfortable). Adding WET/WIND
+later is one line in `EXPOSURE_STAT_KEYS`. The comfort→effect consumers (AP regen, Conditions),
+enclosure, style affinities, and fixtures are later slices of #1514.
+
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`
 for the resonance axis addition.

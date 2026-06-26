@@ -10,6 +10,7 @@ from django.utils import timezone
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
 from world.locations.constants import (
+    EXPOSURE_STAT_KEYS,
     STAT_CLAMPS,
     STAT_DEFAULTS,
     HolderType,
@@ -217,6 +218,28 @@ def effective_value(
     )
     total = default + sum(mod.current_value() for mod in modifiers)
     return _maybe_clamp(total)
+
+
+def room_discomfort(room: DefaultObject) -> int:
+    """Total residual environmental discomfort at a room (#1514).
+
+    Sums the floored exposure axes (``EXPOSURE_STAT_KEYS`` — COLD, HEAT, …). Each axis is
+    cascade-resolved through climate/weather/style (up) and counter-fixtures (down), then
+    clamped at its 0-floor, so a counter can zero out its own axis but never push it negative
+    or affect another. The sum is always ``>= 0``; 0 means a perfectly comfortable room.
+    """
+    return sum(effective_value(room, stat_key=key) for key in EXPOSURE_STAT_KEYS)
+
+
+def comfort_score(room: DefaultObject) -> int:
+    """A room's net comfort (#1514): the *inverse* of its residual discomfort.
+
+    ``0`` is fully comfortable; more negative is more miserable. This is the consumer-facing
+    handle (e.g. an AP-regen modifier reads it). PLACEHOLDER combination — a flat inverse of
+    the summed exposures until the magnitude/weighting pass on #1514; the shape (higher is
+    better, 0 = comfortable) is stable, the scale is not.
+    """
+    return -room_discomfort(room)
 
 
 class _StatCascadeIndex(NamedTuple):
