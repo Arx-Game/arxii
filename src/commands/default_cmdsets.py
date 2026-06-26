@@ -37,6 +37,7 @@ from commands.consent import (
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
+from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
@@ -83,6 +84,7 @@ from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
+from commands.story import CmdStory
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
 from commands.who import CmdWho
@@ -207,6 +209,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdScene,
             # Deed spread / deed story telnet namespace (#1503)
             CmdDeed,
+            # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
+            CmdEncounter,
+            CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1347 — list faces + wear-face active persona switch.
