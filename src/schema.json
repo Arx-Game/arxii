@@ -18320,6 +18320,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/RandomSceneTarget'
           description: ''
+  /api/progression/unlocks/:
+    get:
+      operationId: progression_unlocks_list
+      description: Return a paginated list of purchasable progression unlocks.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProgressionUnlockItemList'
+          description: ''
+  /api/progression/unlocks/purchase/:
+    post:
+      operationId: progression_unlocks_purchase_create
+      description: Purchase an unlock by dispatching PurchaseUnlockAction.
+      tags:
+      - progression
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseUnlockRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseUnlockResponse'
+          description: ''
   /api/progression/votes/:
     get:
       operationId: progression_votes_list
@@ -20291,6 +20340,86 @@ paths:
               schema:
                 $ref: '#/components/schemas/Specialization'
           description: ''
+  /api/skills/training-allocations/:
+    get:
+      operationId: skills_training_allocations_list
+      description: Return all allocations for the active character plus remaining
+        budget.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingAllocationList'
+          description: ''
+    post:
+      operationId: skills_training_allocations_create
+      description: Create a new training allocation for the active character.
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManageTrainingAddRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
+  /api/skills/training-allocations/{id}/:
+    patch:
+      operationId: skills_training_allocations_partial_update
+      description: Update an existing training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManageTrainingUpdateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
+    delete:
+      operationId: skills_training_allocations_destroy
+      description: Remove a training allocation owned by the active character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/social-providers/:
     get:
       operationId: social_providers_retrieve
@@ -32038,6 +32167,24 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    ManageTrainingAddRequest:
+      type: object
+      description: Validate input for creating a training allocation.
+      properties:
+        skill_id:
+          type: integer
+          nullable: true
+        specialization_id:
+          type: integer
+          nullable: true
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
+      required:
+      - ap_amount
     MaturityEnum:
       enum:
       - pitch
@@ -32068,6 +32215,20 @@ components:
         * `character` - Character
         * `placeholder` - Placeholder
         * `npc` - NPC
+    MentorPersona:
+      type: object
+      description: Minimal read-only representation of a mentor persona.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Display name for this persona
+          maxLength: 255
+      required:
+      - id
+      - name
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -36219,6 +36380,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerTrust'
+    PaginatedProgressionUnlockItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressionUnlockItem'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -37762,6 +37946,16 @@ components:
             start.
         is_active:
           type: boolean
+    PatchedManageTrainingUpdateRequest:
+      type: object
+      description: Validate input for updating a training allocation.
+      properties:
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
     PatchedMissionGiverRequest:
       type: object
       description: |-
@@ -40283,6 +40477,77 @@ components:
       - milestones
       - stage
       - stage_label
+    ProgressionUnlockItem:
+      type: object
+      description: |-
+        Discriminated list item for purchasable progression unlocks.
+
+        Two ``unlock_type`` variants are supported:
+
+        - ``class_level`` — purchase a class/level unlock with XP.
+        - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+      properties:
+        unlock_type:
+          type: string
+        display_name:
+          type: string
+        xp_cost:
+          type: integer
+        requirements_met:
+          type: boolean
+        locked_reason:
+          type: string
+          nullable: true
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        class_name:
+          type: string
+          nullable: true
+        target_level:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+        thread_name:
+          type: string
+          nullable: true
+        thread_level:
+          type: integer
+          nullable: true
+        thread_resonance_id:
+          type: integer
+          nullable: true
+        thread_resonance_name:
+          type: string
+          nullable: true
+        thread_target_kind:
+          type: string
+          nullable: true
+        dev_points_to_boundary:
+          type: integer
+          nullable: true
+      required:
+      - boundary_level
+      - class_level_unlock_id
+      - class_name
+      - dev_points_to_boundary
+      - display_name
+      - locked_reason
+      - requirements_met
+      - target_level
+      - thread_id
+      - thread_level
+      - thread_name
+      - thread_resonance_id
+      - thread_resonance_name
+      - thread_target_kind
+      - unlock_type
+      - xp_cost
     Pronouns:
       type: object
       description: Serializer for pronoun sets.
@@ -40363,6 +40628,44 @@ components:
         combat_encounter_id:
           type: integer
           nullable: true
+    PurchaseUnlockRequest:
+      type: object
+      description: Input serializer for purchasing a progression unlock.
+      properties:
+        unlock_type:
+          $ref: '#/components/schemas/UnlockTypeEnum'
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - unlock_type
+    PurchaseUnlockResponse:
+      type: object
+      description: Response serializer for a completed unlock purchase.
+      properties:
+        unlock_type:
+          type: string
+        unlock_id:
+          type: integer
+          nullable: true
+        thread_level_unlock_id:
+          type: integer
+          nullable: true
+        thread_id:
+          type: integer
+          nullable: true
+        boundary_level:
+          type: integer
+          nullable: true
+      required:
+      - unlock_id
+      - unlock_type
     QualityTier:
       type: object
       description: Serializer for QualityTier lookup records.
@@ -45237,6 +45540,54 @@ components:
       - name
       - required_distinction_id
       - sort_order
+    TrainingAllocation:
+      type: object
+      description: Read-only serializer for a character's training allocation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        skill:
+          allOf:
+          - $ref: '#/components/schemas/SkillList'
+          readOnly: true
+        specialization:
+          allOf:
+          - $ref: '#/components/schemas/Specialization'
+          readOnly: true
+        mentor:
+          allOf:
+          - $ref: '#/components/schemas/MentorPersona'
+          readOnly: true
+        ap_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Action points allocated per week (minimum 1)
+        remaining_weekly_budget:
+          type: integer
+          description: Return AP left in the character's weekly training budget.
+          readOnly: true
+      required:
+      - ap_amount
+      - id
+      - mentor
+      - remaining_weekly_budget
+      - skill
+      - specialization
+    TrainingAllocationList:
+      type: object
+      description: Schema wrapper for the training allocation list response.
+      properties:
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingAllocation'
+        remaining_weekly_budget:
+          type: integer
+      required:
+      - allocations
+      - remaining_weekly_budget
     Trait:
       type: object
       description: Serializer for trait definitions.
@@ -45641,6 +45992,14 @@ components:
       - description
       - display_name
       - name
+    UnlockTypeEnum:
+      enum:
+      - class_level
+      - thread_xp_lock
+      type: string
+      description: |-
+        * `class_level` - Class Level
+        * `thread_xp_lock` - Thread XP Lock
     UpdateBulletinPostInput:
       type: object
       description: |-

@@ -10,6 +10,7 @@ from world.progression.views import (
     ClaimKudosView,
     PathIntentViewSet,
     PathOptionsView,
+    ProgressionUnlockViewSet,
     RandomSceneViewSet,
     VoteViewSet,
 )
@@ -17,6 +18,7 @@ from world.progression.views import (
 router = DefaultRouter()
 router.register("votes", VoteViewSet, basename="vote")
 router.register("random-scenes", RandomSceneViewSet, basename="random-scene")
+router.register("unlocks", ProgressionUnlockViewSet, basename="progression-unlock")
 
 _path_intent_view = PathIntentViewSet.as_view(
     {

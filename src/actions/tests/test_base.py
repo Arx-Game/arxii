@@ -223,6 +223,8 @@ class ActionRegistryTests(TestCase):
             "resolve_episode",
             "promote_episode",
             "mark_beat",
+            "manage_training",
+            "purchase_unlock",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

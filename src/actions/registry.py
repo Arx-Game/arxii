@@ -77,6 +77,7 @@ from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
+from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
@@ -180,6 +181,8 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ManageTrainingAction(),
+    PurchaseUnlockAction(),
     intimidate,
     persuade,
     deceive,
