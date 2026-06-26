@@ -1,5 +1,9 @@
 """Tests for relationship-building Actions."""
 
+from unittest.mock import PropertyMock, patch
+
+from evennia.objects.models import ObjectDB
+
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -7,6 +11,7 @@ from actions.definitions.relationships import (
     RedistributePointsAction,
 )
 from actions.tests.utils import ActionTestCase
+from world.character_sheets.models import CharacterSheet
 from world.relationships.factories import RelationshipTrackFactory
 from world.relationships.models import (
     CharacterRelationship,
@@ -126,6 +131,137 @@ class CreateCapstoneActionTests(ActionTestCase):
         )
         self.assertEqual(progress.capacity, 7)
         self.assertEqual(progress.developed_points, 5)
+
+
+class TargetNameFallbackTests(ActionTestCase):
+    """Ensure _target_name() falls back to a neutral message gracefully."""
+
+    def _setup_relationship(self, track):
+        """Create a relationship with a valid target character."""
+        CreateFirstImpressionAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=track,
+            points=5,
+            title="A striking introduction",
+            writeup="They commanded the room.",
+        )
+
+    def _patch_character_missing(self):
+        """Patch CharacterSheet.character to None without mutating the PK."""
+        return patch.object(
+            CharacterSheet,
+            "character",
+            new_callable=PropertyMock,
+            return_value=None,
+        )
+
+    def test_first_impression_uses_neutral_message_when_target_character_missing(self):
+        track = RelationshipTrackFactory()
+
+        with self._patch_character_missing():
+            result = CreateFirstImpressionAction().run(
+                actor=self.actor,
+                target_sheet=self.target_sheet,
+                track=track,
+                points=3,
+                title="A striking introduction",
+                writeup="They commanded the room.",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "You record a first impression.")
+
+    def test_development_uses_neutral_message_when_target_character_missing(self):
+        source_track = RelationshipTrackFactory()
+        self._setup_relationship(source_track)
+
+        with self._patch_character_missing():
+            result = CreateDevelopmentAction().run(
+                actor=self.actor,
+                target_sheet=self.target_sheet,
+                track=source_track,
+                points=2,
+                title="Growing trust",
+                writeup="We spoke for hours.",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(
+            result.message,
+            f"You develop your regard (2 points on {source_track.name}).",
+        )
+
+    def test_capstone_uses_neutral_message_when_target_character_missing(self):
+        track = RelationshipTrackFactory()
+        self._setup_relationship(track)
+
+        with self._patch_character_missing():
+            result = CreateCapstoneAction().run(
+                actor=self.actor,
+                target_sheet=self.target_sheet,
+                track=track,
+                points=3,
+                title="A defining moment",
+                writeup="We stood back to back against the tide.",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(
+            result.message,
+            f"You mark a capstone in your regard ({track.name}).",
+        )
+
+    def test_redistribute_uses_neutral_message_when_target_character_missing(self):
+        source_track = RelationshipTrackFactory()
+        target_track = RelationshipTrackFactory()
+        self._setup_relationship(source_track)
+        CreateDevelopmentAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=source_track,
+            points=3,
+            title="Growing trust",
+            writeup="We spoke for hours.",
+        )
+
+        with self._patch_character_missing():
+            result = RedistributePointsAction().run(
+                actor=self.actor,
+                target_sheet=self.target_sheet,
+                source_track=source_track,
+                target_track=target_track,
+                points=2,
+                title="Shifting focus",
+                writeup="My regard finds a new shape.",
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(
+            result.message,
+            (f"You shift 2 points from {source_track.name} to {target_track.name}."),
+        )
+
+    def test_target_name_returns_none_when_character_missing(self):
+        """_target_name catches AttributeError and returns None."""
+
+        class MissingCharacterSheet:
+            character = None
+
+        action = CreateFirstImpressionAction()
+        self.assertIsNone(action._target_name(MissingCharacterSheet()))
+
+    def test_target_name_returns_none_when_character_raises_does_not_exist(self):
+        """_target_name catches ObjectDoesNotExist and returns None."""
+        deleted_message = "Character deleted"
+
+        class MissingCharacterSheet:
+            @property
+            def character(self):
+                raise ObjectDB.DoesNotExist(deleted_message)
+
+        action = CreateFirstImpressionAction()
+        self.assertIsNone(action._target_name(MissingCharacterSheet()))
 
 
 class RedistributePointsActionTests(ActionTestCase):
