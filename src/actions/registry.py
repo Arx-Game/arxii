@@ -15,6 +15,7 @@ from actions.definitions.combat_maneuvers import (
     UpgradeComboAction,
 )
 from actions.definitions.communication import (
+    EmitAction,
     MutterAction,
     PemitAction,
     PoseAction,
@@ -90,6 +91,7 @@ _ALL_ACTIONS: list[Action] = [
     SearchAction(),
     SayAction(),
     PoseAction(),
+    EmitAction(),
     WhisperAction(),
     MutterAction(),
     PemitAction(),

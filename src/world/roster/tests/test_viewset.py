@@ -4,6 +4,7 @@ Tests for roster API viewsets.
 
 from unittest.mock import patch
 
+from allauth.account.models import EmailAddress
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -19,7 +20,7 @@ from world.roster.factories import (
     TenureGalleryFactory,
     TenureMediaFactory,
 )
-from world.roster.models import TenureGallery, TenureMedia
+from world.roster.models import RosterApplication, TenureGallery, TenureMedia
 
 
 class TestRosterViewSet(TestCase):
@@ -327,3 +328,51 @@ class TestRosterEntrySetProfilePicture(TestCase):
         assert response.status_code == 204
         self.entry.refresh_from_db()
         assert self.entry.profile_picture == self.media_link
+
+
+class TestRosterEntryApply(TestCase):
+    """Tests applying to play a roster entry character."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.player = PlayerDataFactory()
+        EmailAddress.objects.create(
+            user=self.player.account,
+            email=self.player.account.email,
+            primary=True,
+            verified=True,
+        )
+        self.client.force_authenticate(user=self.player.account)
+        self.entry = RosterEntryFactory()
+
+    def test_apply_creates_roster_application(self):
+        """POSTing apply persists a RosterApplication for the entry's character."""
+        url = f"/api/roster/entries/{self.entry.id}/apply/"
+        message = "I really want to play this character for many compelling reasons."
+
+        response = self.client.post(url, {"message": message}, format="json")
+
+        assert response.status_code == 204
+        application = RosterApplication.objects.get(
+            player_data=self.player,
+            character=self.entry.character_sheet.character,
+        )
+        assert application.application_text == message
+        assert application.status == "pending"
+
+    def test_apply_rejects_duplicate_pending_application(self):
+        """A second application for the same character returns a validation error."""
+        url = f"/api/roster/entries/{self.entry.id}/apply/"
+        message = "I really want to play this character for many compelling reasons."
+        self.client.post(url, {"message": message}, format="json")
+
+        response = self.client.post(url, {"message": message}, format="json")
+
+        assert response.status_code == 400
+        assert (
+            RosterApplication.objects.filter(
+                player_data=self.player,
+                character=self.entry.character_sheet.character,
+            ).count()
+            == 1
+        )
