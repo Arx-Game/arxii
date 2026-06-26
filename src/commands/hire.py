@@ -7,7 +7,6 @@ matching registry Action so telnet players reach the same seam as the web.
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from actions.definitions.npc_services import (
@@ -84,9 +83,12 @@ class CmdHire(ArxCommand):
 
     def _parse_start_args(self, args: str) -> tuple[str, str | None]:
         """Split ``hire <role> [as <persona>]`` into role query and persona name."""
-        match = re.match(r"^(.+?)\s+as\s+(.+)$", args, flags=re.IGNORECASE)
-        if match:
-            return match.group(1).strip(), match.group(2).strip()
+        clause = " as "
+        idx = args.lower().find(clause)
+        if idx != -1:
+            role = args[:idx].strip()
+            persona = args[idx + len(clause) :].strip()
+            return role, persona or None
         return args, None
 
     def _resolve_persona_id(self, name: str | None) -> int | None:
