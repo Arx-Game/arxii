@@ -23,6 +23,12 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.consent_preferences import (
+    AddSocialConsentWhitelistAction,
+    RemoveSocialConsentWhitelistAction,
+    SetSocialConsentCategoryRuleAction,
+    SetSocialConsentPreferenceAction,
+)
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -136,6 +142,10 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     SetActivePersonaAction(),
+    SetSocialConsentPreferenceAction(),
+    SetSocialConsentCategoryRuleAction(),
+    AddSocialConsentWhitelistAction(),
+    RemoveSocialConsentWhitelistAction(),
     SpreadTaleAction(),
     SaveDeedStoryAction(),
     PutInAction(),
