@@ -243,6 +243,8 @@ class ActionRegistryTests(TestCase):
             "create_development",
             "create_capstone",
             "redistribute_points",
+            "give_writeup_kudos",
+            "file_writeup_complaint",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

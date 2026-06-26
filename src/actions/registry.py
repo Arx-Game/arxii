@@ -102,6 +102,8 @@ from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
     CreateFirstImpressionAction,
+    FileWriteupComplaintAction,
+    GiveWriteupKudosAction,
     RedistributePointsAction,
 )
 from actions.definitions.ritual import PerformRitualAction
@@ -215,6 +217,8 @@ _ALL_ACTIONS: list[Action] = [
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    GiveWriteupKudosAction(),
+    FileWriteupComplaintAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     start_npc_interaction,
