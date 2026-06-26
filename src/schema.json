@@ -42712,6 +42712,18 @@ components:
           type: array
           items:
             type: integer
+        treatment_id:
+          type: integer
+          nullable: true
+        target_condition_instance_id:
+          type: integer
+          nullable: true
+        target_pending_alteration_id:
+          type: integer
+          nullable: true
+        bond_thread_id:
+          type: integer
+          nullable: true
       required:
       - action_key
       - initiator_persona

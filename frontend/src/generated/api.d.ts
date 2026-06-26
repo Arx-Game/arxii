@@ -23636,6 +23636,10 @@ export interface components {
       /** @default  */
       delivery: components['schemas']['DeliveryEnum'] | components['schemas']['BlankEnum'];
       delivery_receiver_ids?: number[];
+      treatment_id?: number | null;
+      target_condition_instance_id?: number | null;
+      target_pending_alteration_id?: number | null;
+      bond_thread_id?: number | null;
     };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
