@@ -23,10 +23,18 @@ temperature: `RoomProfile.enclosure` (`evennia_extensions.constants.RoomEnclosur
 OPEN_AIR/ROOFED/WALLED/SEALED) sets which weather a room shelters from
 (`ENCLOSURE_SHELTERED_AXES`: a roof stops rain, walls stop wind). `felt_exposure(room, stat_key=…)`
 returns 0 for a sheltered weather axis, else the cascade value; COLD/HEAT always seep (insulation
-is fixtures/style, a later slice). `room_discomfort(room)` sums *felt* exposures (≥0);
-`comfort_score(room)` is its inverse (0 = comfortable). The comfort→effect consumers (AP regen,
-Conditions), the `ArchitecturalStyle` model, fixtures, and the weather/Season source are later
-slices of #1514.
+is fixtures/style, a later slice). `room_discomfort(room)` sums *felt* exposures (≥0).
+
+**Comfort level (1–10).** `comfort_points(room)` = `effective_value(room, AMENITY)` − `room_discomfort`
+— a wide pool (amenities push up, discomfort down). `comfort_level(room, *, comfort_offset=0)` maps
+it via `COMFORT_LEVEL_FLOORS` to a 1–10 level (5 = "Fine" neutral; bands are PLACEHOLDER, anchored
+to ±10k ends); `comfort_offset` is the occupant's per-character contribution (condition penalties/
+buffs — wounds, fatigue, chilled, protection magic — supplied by the consumer, e.g. the AP-regen
+hook, since the room sets the base and the character's conditions adjust it). `ap_regen_multiplier_pct(level)`
+gives the regen % adjustment. `AMENITY` (positive comfort) is how you *add* comfort toward 6–10
+(luxury/magic), distinct from mitigation (which only cancels discomfort, floored). The comfort→effect
+wiring (AP regen, the Conditions `comfort_penalty` field), comfort **decorations**, and the
+weather source (#1522) are remaining slices of #1514.
 
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`
