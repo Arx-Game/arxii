@@ -614,17 +614,94 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
     vitals.save(update_fields=["life_state", "died_at"])
 
 
+def _resolve_terminal_bleed_out(
+    character_sheet: CharacterSheet,
+    instance: ConditionInstance,
+) -> bool:
+    """Resolve a terminal-stage Bleeding-Out instance through the guarded pool.
+
+    Replaces the old unconditional ``_mark_dead`` at the terminal stage with a
+    death-gated consequence-pool roll (#1479). The roll uses the terminal
+    stage's authored ``resist_check_type`` + ``resist_difficulty`` (ADR-0019 —
+    no hardcoded difficulty) against the ``bleed_out_terminal`` pool's
+    candidates (recover / stay_incapacitated / die).
+
+    The gate (``death_is_permitted``) is applied by EXCLUDING every
+    character-loss (``die``) candidate before selection when death is not
+    permitted, so a PC source, a death_deferred victim, or an absent source can
+    never select death (ADR-0023). The selected outcome is dispatched on its
+    ``character_loss`` flag — the single ``die`` row is the only character-loss
+    candidate, so this also covers the fallback outcome produced when the
+    Failure tier is emptied by the gate (it is non-loss → survive).
+
+    Returns True iff the character died this call. On survival the Bleeding-Out
+    condition is removed (the victim stops dying; any wounds remain) and False
+    is returned. A missing pool (seeding gap) holds the victim in the dying
+    state — it never falls back to unconditional death.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import remove_condition  # noqa: PLC0415
+    from world.vitals.constants import POOL_BLEED_OUT_TERMINAL  # noqa: PLC0415
+    from world.vitals.peril_resolution import death_is_permitted  # noqa: PLC0415
+
+    pool = ConsequencePool.objects.filter(name=POOL_BLEED_OUT_TERMINAL).first()
+    if pool is None:
+        # Seeding gap — cannot run the gated resolution. Holding the victim in
+        # the dying state is the safe degradation (never kill ungated; #1479).
+        return False
+
+    stage = instance.current_stage
+    source_character = instance.source_character
+    candidates = resolve_pool_consequences(pool)
+    if not death_is_permitted(victim_sheet=character_sheet, source_character=source_character):
+        candidates = [c for c in candidates if not c.character_loss]
+
+    # select_consequence + apply_resolution still operate on ObjectDB; walk
+    # back at the boundary (mirrors resolve_vitals_consequence).
+    character = character_sheet.character
+    pending = select_consequence(
+        character,
+        stage.resist_check_type,
+        stage.resist_difficulty,
+        candidates,
+    )
+    apply_resolution(
+        pending,
+        ResolutionContext(character=character, source_character=source_character),
+    )
+
+    selected = pending.selected_consequence
+    if selected.character_loss:
+        _mark_dead(character_sheet)
+        return True
+
+    # Survived (recover / stay_incapacitated / gated-out failure): stop the
+    # bleed-out. _mark_dead stays the single death writer.
+    bleed_out = ConditionTemplate.get_by_name(BLEED_OUT_CONDITION_NAME)
+    remove_condition(character, bleed_out)
+    return False
+
+
 def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
     """Advance staged bleed-out conditions toward death.
 
     For each active ConditionInstance whose condition.name == BLEED_OUT_CONDITION_NAME:
     - If current_stage is None or has no resist_check_type, skip.
-    - Perform the resist check at the stage's resist_difficulty.
-    - On failure (success_level < 0):
-        - If this is the terminal stage (no higher stage_order exists), call
-          _mark_dead(character_sheet) and return True.
-        - Otherwise advance current_stage to the next higher stage_order and save.
-    - On success / non-failure: hold (no change).
+    - At the terminal stage (no higher stage_order exists), resolve through the
+      guarded ``bleed_out_terminal`` consequence pool (_resolve_terminal_bleed_out):
+      death is reachable only when death_is_permitted; otherwise the victim
+      stabilises and the Bleeding-Out condition is cleared.
+    - Otherwise perform the resist check at the stage's resist_difficulty and,
+      on failure (success_level < 0), advance current_stage to the next higher
+      stage_order. On success / non-failure: hold (no change).
 
     Returns True if the character died during this call, else False.
     """
@@ -665,6 +742,13 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
         if stage is None or stage.resist_check_type is None:
             continue
 
+        # Terminal stage: resolve through the guarded consequence pool (death is
+        # gated by death_is_permitted) instead of an unconditional kill (#1479).
+        if _is_terminal_stage(instance):
+            if _resolve_terminal_bleed_out(character_sheet, instance):
+                return True
+            continue
+
         result = perform_check(
             character,
             stage.resist_check_type,
@@ -672,11 +756,7 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
         )
 
         if int(result.success_level) < 0:
-            # Failed resist: advance or die
-            if _is_terminal_stage(instance):
-                _mark_dead(character_sheet)
-                return True
-            # Advance to the next stage
+            # Failed resist on a non-terminal stage: advance to the next stage.
             next_stage = (
                 ConditionStage.objects.filter(
                     condition=instance.condition,
