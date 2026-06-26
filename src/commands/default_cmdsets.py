@@ -23,6 +23,7 @@ from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
+from commands.conditions import CmdTreatCondition
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -168,6 +169,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,
+            CmdTreatCondition,
             CmdDig,
             CmdOpen,
             CmdLink,
