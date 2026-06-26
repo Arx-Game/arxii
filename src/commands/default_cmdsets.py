@@ -65,6 +65,7 @@ from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
+from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
@@ -213,6 +214,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1511 — organization membership lifecycle.
+            CmdOrg,
         )
         for command_cls in command_classes:
             self.add(command_cls())
