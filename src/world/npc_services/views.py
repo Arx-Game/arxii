@@ -58,6 +58,7 @@ from world.npc_services.services import (
     available_offers,
 )
 from world.scenes.models import Persona
+from world.scenes.services import MissingPrimaryPersonaError
 
 # Key under which the in-flight interaction state lives in request.session.
 # One active interaction per Django session; start while one exists raises
@@ -307,6 +308,8 @@ class InteractionViewSet(viewsets.ViewSet):
             npc_persona_id=body.validated_data.get("npc_persona_id"),
         )
         if not result.success:
+            if result.data.get("invariant_breach"):
+                raise MissingPrimaryPersonaError(character)
             raise NotFound(result.message)
         session = result.data["session"]
         _stash(request, session)

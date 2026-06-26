@@ -66,10 +66,10 @@ class CmdHire(ArxCommand):
         return getattr(self.caller.session.ndb, self._SESSION_KEY, None)
 
     def _set_session(self, session: Any) -> None:
-        self.caller.session.ndb.npc_interaction = session
+        setattr(self.caller.session.ndb, self._SESSION_KEY, session)
 
     def _clear_session(self) -> None:
-        self.caller.session.ndb.npc_interaction = None
+        setattr(self.caller.session.ndb, self._SESSION_KEY, None)
 
     def _do_start(self, args: str) -> None:
         if self._session() is not None:
@@ -82,6 +82,8 @@ class CmdHire(ArxCommand):
         )
         result = start_npc_interaction.run(actor=self.caller, role_id=role.pk)
         if not result.success:
+            # The action swallows MissingPrimaryPersonaError and flags it via
+            # invariant_breach; in all failure cases, surface the message and stop cleanly.
             self.msg(result.message)
             return
         self._set_session(result.data["session"])

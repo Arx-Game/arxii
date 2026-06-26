@@ -41,6 +41,7 @@ class StartNPCInteractionAction(Action):
         from world.npc_services.services import start_interaction  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.services import (  # noqa: PLC0415
+            MissingPrimaryPersonaError,
             persona_for_character,
         )
 
@@ -62,8 +63,12 @@ class StartNPCInteractionAction(Action):
 
         try:
             persona = persona_for_character(actor)
-        except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="No active character sheet.")
+        except (AttributeError, ObjectDoesNotExist, MissingPrimaryPersonaError):
+            return ActionResult(
+                success=False,
+                message="No active character sheet.",
+                data={"invariant_breach": True},
+            )
 
         session = start_interaction(
             role=role,

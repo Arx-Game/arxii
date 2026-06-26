@@ -204,7 +204,7 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Social structures & collective play
 - TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481); NPC-service
-  hire/commission/request (start/resolve/end — `HireAction`, telnet `hire`, #1493).
+  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493).
 - WEB-ONLY: events full lifecycle (create/schedule/start/complete/cancel/invite — no Action, no telnet);
   pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
   rules + standing whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy
