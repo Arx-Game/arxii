@@ -89,10 +89,12 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
 - **Slice 2 (done):** WET/WIND axes + **enclosure** (`RoomProfile.enclosure`,
   `RoomEnclosure` OPEN_AIR/ROOFED/WALLED/SEALED) gating the weather axes via `felt_exposure`
   (a roof stops rain, walls stop wind; temperature always seeps).
-- **Later slices:** an `ArchitecturalStyle` model (climate affinities, seeded from lore),
-  stackable comfort **fixtures** (not `RoomFeatureInstance` — that's OneToOne), the
-  Season→climate weather source, comfort→AP-regen and comfort→Conditions (Tehom-coordinated)
-  effects, and the inhabitant/owner surfacing.
+- **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
+  with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
+  cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`.
+- **Later slices:** stackable comfort **decorations** (not `RoomFeatureInstance` — that's OneToOne),
+  the comfort-level/effect engine (comfort→AP-regen, comfort→Conditions [Tehom-coordinated]), the
+  weather source (#1522), and the inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 

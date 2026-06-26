@@ -74,6 +74,11 @@ from actions.definitions.movement import (
     HomeAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_services import (
+    end_npc_interaction,
+    resolve_npc_offer,
+    start_npc_interaction,
+)
 from actions.definitions.organizations import (
     org_apply_action,
     org_demote_action,
@@ -193,6 +198,9 @@ _ALL_ACTIONS: list[Action] = [
     RestAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
+    start_npc_interaction,
+    resolve_npc_offer,
+    end_npc_interaction,
     org_invite_action,
     org_apply_action,
     org_join_action,

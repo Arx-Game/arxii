@@ -64,6 +64,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
+from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
@@ -211,6 +212,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdScene,
             # Deed spread / deed story telnet namespace (#1503)
             CmdDeed,
+            # #1493 — NPC-service hire/commission interaction loop.
+            CmdHire,
             # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
             CmdEncounter,
             CmdStory,

@@ -25,12 +25,16 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.locations.constants import StatKey
+
 # Cross-app FK string constants. Django resolves these lazily at app-ready
 # time; centralizing them here avoids the "literal duplicated N times" SonarCloud
 # code smell and gives a single grep target if the source model ever moves.
 _PROJECT_FK = "projects.Project"
 _POLISH_CATEGORY_FK = "buildings.PolishCategory"
 _PERSONA_FK = "scenes.Persona"
+_CODEX_SUBJECT_FK = "codex.CodexSubject"
+_ARCHITECTURAL_STYLE_FK = "buildings.ArchitecturalStyle"
 
 
 class BuildingKind(SharedMemoryModel):
@@ -189,6 +193,18 @@ class Building(SharedMemoryModel):
         BuildingKind,
         on_delete=models.PROTECT,
         related_name="buildings",
+    )
+    architectural_style = models.ForeignKey(
+        _ARCHITECTURAL_STYLE_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="buildings",
+        help_text=(
+            "Architectural style (#1514) — orthogonal to kind. Its StyleAffinity rows are "
+            "materialized as climate modifiers on this building's Area (cascading to its rooms) "
+            "via buildings.services.set_building_style. Changing it is a renovation Project."
+        ),
     )
     target_size = models.PositiveSmallIntegerField(
         help_text=(
@@ -829,3 +845,70 @@ class BuildingProjectInstancePolish(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.instance}: {self.value} {self.category.name}"
+
+
+class ArchitecturalStyle(SharedMemoryModel):
+    """An authorable architectural style for buildings (#1514).
+
+    Orthogonal to ``BuildingKind`` (a Manor can be Shroudbound Gothic *or* Reefian). Carries
+    climate (and, later, other) affinities as ``StyleAffinity`` rows. Its player-facing lore
+    lives in the linked ``CodexSubject`` — knowing that subject is what lets a character build
+    in the style, and the description is surfaced inline at point-of-use (the builder picker),
+    not siloed in the Codex app.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    codex_subject = models.ForeignKey(
+        _CODEX_SUBJECT_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="architectural_styles",
+        help_text=(
+            "Player-facing lore/description (discovery-gated). Knowing this subject gates "
+            "buildability and supplies the builder's inline blurb. PLACEHOLDER prose seeded "
+            "from the authored style lore."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this style can be selected for new builds.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class StyleAffinity(SharedMemoryModel):
+    """One modifier an architectural style imparts to its building's rooms (#1514).
+
+    ``(style, stat_key) -> value``: positive = a vulnerability (an open-air style → +COLD,
+    −HEAT), negative = insulation (thick stone → −COLD). Materialized as
+    ``LocationValueModifier`` rows on the building's Area when a style is assigned (cascading to
+    its rooms). Adding a new *kind* of mod later (defenses, …) is a new row on a new stat axis —
+    data, not a migration. Magnitudes are a PLACEHOLDER author pass.
+    """
+
+    style = models.ForeignKey(
+        ArchitecturalStyle,
+        on_delete=models.CASCADE,
+        related_name="affinities",
+    )
+    stat_key = models.CharField(max_length=20, choices=StatKey.choices)
+    value = models.IntegerField(
+        help_text="Modifier magnitude: + = vulnerability (more exposure), − = insulation.",
+    )
+
+    class Meta:
+        ordering = ["style", "stat_key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["style", "stat_key"], name="unique_style_affinity_per_axis"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.style.name}: {self.stat_key} {self.value:+d}"

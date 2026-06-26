@@ -474,6 +474,24 @@ class CmdHomeTests(TestCase):
             cmd.func()
             mock_run.assert_called_once_with(actor=caller)
 
+    def test_home_set_requires_standing(self):
+        # home/set on a room you have no owner/tenant standing in is refused (#1514).
+        room = ObjectDBFactory(
+            db_key="HomeRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key="Homeless",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdHome, caller)
+        cmd.switches = [CmdHome.SET_SWITCH]
+        cmd.func()
+        sent = " ".join(str(c.args[0]) for c in caller.msg.call_args_list if c.args)
+        assert "own or rent" in sent
+
 
 class CmdUndressTests(TestCase):
     def test_undress_resolves_with_no_args(self) -> None:

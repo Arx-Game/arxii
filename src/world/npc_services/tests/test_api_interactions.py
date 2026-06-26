@@ -11,8 +11,14 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
+from actions.definitions.npc_services import (
+    end_npc_interaction,
+    resolve_npc_offer,
+    start_npc_interaction,
+)
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.npc_services.factories import (
@@ -21,6 +27,7 @@ from world.npc_services.factories import (
     PermitOfferDetailsFactory,
 )
 from world.npc_services.views import InteractionViewSet
+from world.scenes.services import MissingPrimaryPersonaError
 
 START = "/api/npc-services/interactions/start/"
 RESOLVE = "/api/npc-services/interactions/resolve/"
@@ -74,6 +81,16 @@ class StartInteractionTests(TestCase):
             response = self.client.post(START, {"role_id": 999999}, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.data)
 
+    def test_start_dispatches_action(self) -> None:
+        """The start endpoint must invoke the registry action's run() seam."""
+        with (
+            _patch_puppet(self.character),
+            patch.object(start_npc_interaction, "run", wraps=start_npc_interaction.run) as run,
+        ):
+            response = self.client.post(START, {"role_id": self.role.pk}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        run.assert_called_once()
+
 
 class ResolveOfferTests(TestCase):
     def setUp(self) -> None:
@@ -116,6 +133,15 @@ class ResolveOfferTests(TestCase):
             response = self.client.post(RESOLVE, {"offer_id": gated.pk}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
 
+    def test_resolve_dispatches_action(self) -> None:
+        """The resolve endpoint must invoke the registry action's run() seam."""
+        with _patch_puppet(self.character):
+            self.client.post(START, {"role_id": self.role.pk}, format="json")
+            with patch.object(resolve_npc_offer, "run", wraps=resolve_npc_offer.run) as run:
+                response = self.client.post(RESOLVE, {"offer_id": self.offer.pk}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        run.assert_called_once()
+
 
 class EndInteractionTests(TestCase):
     def setUp(self) -> None:
@@ -140,6 +166,15 @@ class EndInteractionTests(TestCase):
             response = self.client.post(END, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.data)
 
+    def test_end_dispatches_action(self) -> None:
+        """The end endpoint must invoke the registry action's run() seam."""
+        with _patch_puppet(self.character):
+            self.client.post(START, {"role_id": self.role.pk}, format="json")
+            with patch.object(end_npc_interaction, "run", wraps=end_npc_interaction.run) as run:
+                response = self.client.post(END, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        run.assert_called_once()
+
 
 class AuthRequiredTests(TestCase):
     def test_anonymous_blocked(self) -> None:
@@ -148,22 +183,77 @@ class AuthRequiredTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
+def _patch_no_puppet():
+    """Make `_puppet_character` raise ValidationError as it does with no puppet."""
+    return patch.object(
+        InteractionViewSet,
+        "_puppet_character",
+        side_effect=ValidationError("No puppeted character."),
+    )
+
+
 class PuppetInvariantTests(TestCase):
-    # The "no-puppet" case raises a ValidationError in `_puppet_character`
-    # and would surface as 400 in real production traffic, but the test
-    # scaffolding can't exercise it — accessing `Account.puppet` on an
-    # AccountFactory-created account triggers Evennia's cmdset loader
-    # which depends on a live SESSION_HANDLER. We document the path here
-    # and rely on _patch_puppet to test the rest of the lifecycle.
+    def setUp(self) -> None:
+        self.account, self.character = _pc()
+
+    def test_start_without_puppet_returns_400(self) -> None:
+        account = AccountFactory(username="player-no-puppet-start")
+        role = NPCRoleFactory(name="role-no-puppet")
+        client = APIClient()
+        client.force_authenticate(account)
+        with _patch_no_puppet():
+            response = client.post(START, {"role_id": role.pk}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_resolve_without_puppet_returns_400(self) -> None:
+        account = AccountFactory(username="player-no-puppet-resolve")
+        role = NPCRoleFactory(name="role-no-puppet-resolve")
+        NPCServiceOfferFactory(role=role, label="menu", eligibility_rule={})
+        client = APIClient()
+        client.force_authenticate(account)
+        with _patch_puppet(self.character):
+            client.post(START, {"role_id": role.pk}, format="json")
+        with _patch_no_puppet():
+            response = client.post(RESOLVE, {"offer_id": 1}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_end_without_puppet_returns_400(self) -> None:
+        account = AccountFactory(username="player-no-puppet-end")
+        role = NPCRoleFactory(name="role-no-puppet-end")
+        NPCServiceOfferFactory(role=role, label="menu", eligibility_rule={})
+        client = APIClient()
+        client.force_authenticate(account)
+        with _patch_puppet(self.character):
+            client.post(START, {"role_id": role.pk}, format="json")
+        with _patch_no_puppet():
+            response = client.post(END, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_start_invariant_breach_returns_500(self) -> None:
+        account = AccountFactory(username="player-invariant")
+        character = CharacterFactory()
+        role = NPCRoleFactory(name="role-invariant")
+        NPCServiceOfferFactory(role=role, label="menu", eligibility_rule={})
+        client = APIClient()
+        client.force_authenticate(account)
+        with (
+            _patch_puppet(character),
+            patch(
+                "world.scenes.services.persona_for_character",
+                side_effect=MissingPrimaryPersonaError(character),
+            ) as pfc,
+        ):
+            response = client.post(START, {"role_id": role.pk}, format="json")
+        pfc.assert_called_once()
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(response.data["detail"], "No active character sheet.")
 
     def test_puppet_without_sheet_returns_500(self) -> None:
         # Per character_sheets/CLAUDE.md every played character has a
         # CharacterSheet + PRIMARY persona. A puppeted character without
         # one is a programmer error — persona_for_character raises
-        # MissingPrimaryPersonaError, which DRF's custom exception handler
-        # surfaces as a 500. The test asserts that the request does NOT
-        # silently succeed; 500 is the correct shape for an invariant
-        # breach (4xx would hide a real bug).
+        # MissingPrimaryPersonaError, the action flags it as an
+        # invariant_breach, and the view returns a 500 Response.
         account = AccountFactory(username="player-no-sheet")
         bare_character = CharacterFactory()  # no CharacterSheetFactory call
         role = NPCRoleFactory(name="role-no-sheet")
