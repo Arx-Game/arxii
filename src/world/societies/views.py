@@ -59,11 +59,16 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
-    """List/retrieve memberships for personas the requester currently plays."""
+    """List/retrieve memberships for personas the requester currently plays.
 
-    queryset = OrganizationMembership.objects.select_related(
-        "organization", "persona", "rank"
-    ).order_by("-joined_date")
+    Covenants (organizations with a related ``covenant`` row) are excluded.
+    """
+
+    queryset = (
+        OrganizationMembership.objects.select_related("organization", "persona", "rank")
+        .filter(organization__covenant__isnull=True)
+        .order_by("-joined_date")
+    )
     serializer_class = OrganizationMembershipSerializer
     permission_classes = [IsAuthenticated, IsOwnMembership]
     pagination_class = SocietiesPagination
@@ -71,7 +76,7 @@ class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = OrganizationMembershipFilter
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
         return qs.filter(
