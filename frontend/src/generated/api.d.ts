@@ -12155,6 +12155,134 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/memberships/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_memberships_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/memberships/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_memberships_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve membership offers visible to the requester.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve membership offers visible to the requester.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
+    get: operations['societies_offers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/organizations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve organizations the requester is an active member of.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant organizations.
+     */
+    get: operations['societies_organizations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/organizations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve organizations the requester is an active member of.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant organizations.
+     */
+    get: operations['societies_organizations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/rankings/{id}/': {
     parameters: {
       query?: never;
@@ -12170,6 +12298,50 @@ export interface paths {
      *     are discovered in the world, not browsed (diegetic-discovery, #676).
      */
     get: operations['societies_rankings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/ranks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve rank ladders for organizations the requester belongs to.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant rank ladders.
+     */
+    get: operations['societies_ranks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/ranks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve rank ladders for organizations the requester belongs to.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     *     Staff see all non-covenant rank ladders.
+     */
+    get: operations['societies_ranks_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -18979,6 +19151,86 @@ export interface components {
       ledger: components['schemas']['LedgerRow'][];
       demands: components['schemas']['DemandRow'][];
     };
+    Organization: {
+      readonly id: number;
+      /** @description The organization's name */
+      name: string;
+      /** @description A description of the organization's purpose and history */
+      description?: string;
+      readonly society_name: string;
+      readonly org_type_name: string;
+      readonly ranks: components['schemas']['OrganizationRank'][];
+    };
+    OrganizationMembership: {
+      readonly id: number;
+      /** @description The organization this membership belongs to */
+      organization: number;
+      readonly organization_name: string;
+      /** @description The persona (character identity) that holds this membership */
+      persona: number;
+      readonly persona_name: string;
+      readonly rank: components['schemas']['OrganizationRank'];
+      readonly title: string;
+      /**
+       * Format: date-time
+       * @description When the persona joined this organization
+       */
+      readonly joined_date: string;
+      /**
+       * Format: date-time
+       * @description When the persona voluntarily left the organization
+       */
+      left_at?: string | null;
+      /**
+       * Format: date-time
+       * @description When the persona was forcibly removed from the organization
+       */
+      exiled_at?: string | null;
+      readonly is_active: boolean;
+    };
+    OrganizationMembershipOffer: {
+      readonly id: number;
+      organization: number;
+      readonly organization_name: string;
+      from_persona: number;
+      readonly from_persona_name: string;
+      to_persona?: number | null;
+      readonly to_persona_name: string;
+      kind: components['schemas']['OrganizationMembershipOfferKindEnum'];
+      /** @default pending */
+      status: components['schemas']['OrganizationMembershipOfferStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    /**
+     * @description * `invite` - Invite
+     *     * `application` - Application
+     * @enum {string}
+     */
+    OrganizationMembershipOfferKindEnum: 'invite' | 'application';
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    OrganizationMembershipOfferStatusEnum: 'pending' | 'accepted' | 'declined' | 'cancelled';
+    OrganizationRank: {
+      readonly id: number;
+      /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
+      name: string;
+      /** @description Authority tier (1 highest, 5 lowest) */
+      tier: number;
+      /** @description Members at this rank can invite others to the organization */
+      can_invite?: boolean;
+      /** @description Members at this rank can expel lower-ranked members */
+      can_kick?: boolean;
+      /** @description Members at this rank can promote/demote others */
+      can_manage_ranks?: boolean;
+    };
     OrganizationSearch: {
       id: number;
       name: string;
@@ -19973,6 +20225,66 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['OfferCooldown'][];
+    };
+    PaginatedOrganizationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Organization'][];
+    };
+    PaginatedOrganizationMembershipList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationMembership'][];
+    };
+    PaginatedOrganizationMembershipOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationMembershipOffer'][];
+    };
+    PaginatedOrganizationRankList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationRank'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
@@ -42990,6 +43302,147 @@ export interface operations {
       };
     };
   };
+  societies_memberships_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationMembershipList'];
+        };
+      };
+    };
+  };
+  societies_memberships_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Organization Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationMembership'];
+        };
+      };
+    };
+  };
+  societies_offers_list: {
+    parameters: {
+      query?: {
+        from_persona?: number;
+        kind?: string;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        status?: string;
+        to_persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationMembershipOfferList'];
+        };
+      };
+    };
+  };
+  societies_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization membership offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationMembershipOffer'];
+        };
+      };
+    };
+  };
+  societies_organizations_list: {
+    parameters: {
+      query?: {
+        org_type?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        society?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationList'];
+        };
+      };
+    };
+  };
+  societies_organizations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Organization'];
+        };
+      };
+    };
+  };
   societies_rankings_retrieve: {
     parameters: {
       query?: never;
@@ -43015,6 +43468,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  societies_ranks_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationRankList'];
+        };
+      };
+    };
+  };
+  societies_ranks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization rank. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationRank'];
+        };
       };
     };
   };

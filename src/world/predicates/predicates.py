@@ -462,12 +462,13 @@ def _resolve_min_society_standing(ctx: ResolverContext, *, society: str, tier: s
 def _resolve_min_org_rank(ctx: ResolverContext, *, org: str, rank: int) -> bool:
     """True if the presented persona holds at least ``rank`` in the org (#870).
 
-    ``OrganizationMembership.rank`` is 1=leader … 5=lowest, so "at least
-    rank N" means ``membership.rank <= rank`` — e.g. ``rank=3`` admits
-    ranks 1, 2, and 3. Distinct from ``min_org_reputation``, which gates
+    ``OrganizationMembership.rank`` is a foreign key to a five-tier ladder
+    where tier 1 is leader and tier 5 is lowest, so "at least rank N"
+    means ``membership.rank.tier <= rank`` — e.g. ``rank=3`` admits
+    tiers 1, 2, and 3. Distinct from ``min_org_reputation``, which gates
     on the reputation *tier*, not the membership rank.
 
-    Persona-aware + fail-closed: no presented persona → False; no
+    Persona-aware + fail-closed: no presented persona → False; no active
     membership row for (presented_persona, org) → False.
     """
     if ctx.presented_persona is None:
@@ -477,7 +478,9 @@ def _resolve_min_org_rank(ctx: ResolverContext, *, org: str, rank: int) -> bool:
     return OrganizationMembership.objects.filter(
         persona=ctx.presented_persona,
         organization__name=org,
-        rank__lte=rank,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__tier__lte=rank,
     ).exists()
 
 

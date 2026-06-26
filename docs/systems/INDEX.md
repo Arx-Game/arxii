@@ -449,13 +449,15 @@ Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationMembership`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
-- **Enums:** `ReputationTier`
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank`, `OrganizationMembership`, `OrganizationMembershipOffer`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`
+- **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
+- **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`
+- **Telnet:** `org <subverb>` command; `accept org` / `decline org` offer responses
+- **DRF:** `OrganizationViewSet`, `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, and `/api/societies/offers/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
-- **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse
-  OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints
-  a deed via `fire_renown_award` + `_mint_crossing_deed`.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`)
+- **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 ### Goals

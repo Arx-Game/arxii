@@ -257,7 +257,6 @@ class OrganizationMembershipValidationTests(TestCase):
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
-            rank=3,
         )
         assert membership.pk is not None
         assert membership.persona == persona
@@ -268,7 +267,6 @@ class OrganizationMembershipValidationTests(TestCase):
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
-            rank=4,
         )
         assert membership.pk is not None
         assert membership.persona == persona
@@ -293,16 +291,19 @@ class OrganizationMembershipValidationTests(TestCase):
         membership = OrganizationMembershipFactory(
             organization=org,
             persona=persona,
-            rank=2,
+            rank=org.ranks.get(tier=2),
         )
-        expected = "Test Member - Test Org (Rank 2)"
+        expected = "Test Member - Test Org (Rank 2 - Officer)"
         assert str(membership) == expected
 
     def test_membership_get_title(self):
         """Test getting the title from organization for this rank."""
         gang_type = OrganizationTypeFactory(name="gang", rank_2_title="Captain")
         org = OrganizationFactory(org_type=gang_type)
-        membership = OrganizationMembershipFactory(organization=org, rank=2)
+        membership = OrganizationMembershipFactory(
+            organization=org,
+            rank=org.ranks.get(tier=2),
+        )
 
         assert membership.get_title() == "Captain"
 

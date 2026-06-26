@@ -213,6 +213,13 @@ class ActionRegistryTests(TestCase):
             "save_deed_story",
             "manage_training",
             "purchase_unlock",
+            "org_invite",
+            "org_apply",
+            "org_join",
+            "org_leave",
+            "org_promote",
+            "org_demote",
+            "org_expel",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

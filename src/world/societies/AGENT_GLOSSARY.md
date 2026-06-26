@@ -31,3 +31,23 @@ _Avoid_: rumor, telling event, gossip record.
 **Renown**:
 The live award *mechanism* — `fire_renown_award` reading an authored `RenownAwardConfig` (Magnitude / Risk / Reach / Archetypes) — that fires a deed's downstream consequences: fame buffer, permanent prestige, the legend `base_value`, and per-society reputation deltas. Distinct from Legend, which is the metric Renown feeds.
 _Avoid_: fame (fame is one output of Renown), reputation, the Legend total.
+
+**OrganizationRank**:
+A per-organization rung on the five-tier rank ladder (tier 1 highest, tier 5 lowest). Carries the diegetic name for that rung and capability flags (`can_invite`, `can_kick`, `can_manage_ranks`). Generic organizations auto-create a default ladder from their `OrganizationType` titles on first save; covenants do not use this model.
+_Avoid_: rank row, rank level.
+
+**OrganizationMembershipOffer**:
+A pending or resolved invitation or application to join a generic organization. `INVITE` offers are directed at a specific persona (`to_persona`); `APPLICATION` offers are directed at the organization by an applicant (`from_persona`, `to_persona` null). Invites are resolved through the shared offer registry (`accept org` / `decline org`); applications are resolved by an authorized member.
+_Avoid_: org invite, join request.
+
+**Active Membership**:
+An `OrganizationMembership` whose `left_at` and `exiled_at` are both null. Only active memberships count for permissions, blocks, and public lists. `left_at` records a voluntary departure; `exiled_at` records a forced removal.
+_Avoid_: current member, valid membership.
+
+**Rank Tier / Rank Ladder**:
+The numeric authority ordering (1 highest, 5 lowest) shared by `OrganizationType` defaults and `OrganizationRank` overrides. Higher authority (lower tier) is required to promote, demote, or expel lower authority.
+_Avoid_: rank number, rank value.
+
+**Exiled**:
+A membership whose `exiled_at` is set. A new membership is a separate row; exiled history is retained for audit.
+_Avoid_: kicked, removed.

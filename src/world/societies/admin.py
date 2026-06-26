@@ -19,6 +19,8 @@ from world.societies.models import (
     LegendSpread,
     Organization,
     OrganizationMembership,
+    OrganizationMembershipOffer,
+    OrganizationRank,
     OrganizationReputation,
     OrganizationType,
     RankingBandLabel,
@@ -41,13 +43,21 @@ class OrganizationInline(admin.TabularInline):
     show_change_link = True
 
 
+class OrganizationRankInline(admin.TabularInline):
+    """Inline for editing the organization's rank ladder."""
+
+    model = OrganizationRank
+    extra = 0
+    fields = ["name", "tier", "can_invite", "can_kick", "can_manage_ranks"]
+
+
 class OrganizationMembershipInline(admin.TabularInline):
     """Inline for displaying memberships within an organization."""
 
     model = OrganizationMembership
     extra = 0
-    fields = ["persona", "rank", "joined_date"]
-    readonly_fields = ["joined_date"]
+    fields = ["persona", "rank", "joined_date", "left_at", "exiled_at"]
+    readonly_fields = ["joined_date", "left_at", "exiled_at"]
     raw_id_fields = ["persona"]
 
 
@@ -198,7 +208,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ["society__realm", "society", "org_type"]
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
-    inlines = [OrganizationMembershipInline]
+    inlines = [OrganizationRankInline, OrganizationMembershipInline]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "description")}),
@@ -243,11 +253,19 @@ class OrganizationAdmin(admin.ModelAdmin):
 class OrganizationMembershipAdmin(admin.ModelAdmin):
     """Admin interface for OrganizationMembership management."""
 
-    list_display = ["persona", "organization", "rank", "get_title", "joined_date"]
+    list_display = [
+        "persona",
+        "organization",
+        "rank",
+        "get_title",
+        "joined_date",
+        "left_at",
+        "exiled_at",
+    ]
     list_filter = ["organization__society", "organization", "rank"]
     search_fields = ["persona__name", "organization__name"]
-    ordering = ["organization", "rank", "persona__name"]
-    readonly_fields = ["joined_date", "get_title"]
+    ordering = ["organization", "rank__tier", "persona__name"]
+    readonly_fields = ["joined_date", "get_title", "left_at", "exiled_at"]
     raw_id_fields = ["persona"]
 
     def get_title(self, obj):
@@ -255,6 +273,25 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
         return obj.get_title()
 
     get_title.short_description = "Title"
+
+
+@admin.register(OrganizationRank)
+class OrganizationRankAdmin(admin.ModelAdmin):
+    """Admin interface for OrganizationRank management."""
+
+    list_display = ["organization", "name", "tier", "can_invite", "can_kick", "can_manage_ranks"]
+    list_filter = ["organization", "can_invite", "can_kick", "can_manage_ranks"]
+    ordering = ["organization", "tier"]
+
+
+@admin.register(OrganizationMembershipOffer)
+class OrganizationMembershipOfferAdmin(admin.ModelAdmin):
+    """Admin interface for OrganizationMembershipOffer management."""
+
+    list_display = ["organization", "kind", "status", "from_persona", "to_persona", "created_at"]
+    list_filter = ["kind", "status", "organization"]
+    readonly_fields = ["created_at", "resolved_at"]
+    raw_id_fields = ["organization", "from_persona", "to_persona"]
 
 
 # =============================================================================
