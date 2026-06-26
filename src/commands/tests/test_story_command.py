@@ -8,6 +8,11 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.story import CmdStory
+from world.stories.factories import (
+    BeatFactory,
+    EpisodeFactory,
+    StoryFactory,
+)
 
 
 def _make_cmd(caller, args: str) -> CmdStory:
@@ -57,6 +62,13 @@ class CmdStorySubverbTests(TestCase):
     def setUp(self) -> None:
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
+
+        # Numeric ids referenced by the routing tests must exist so the
+        # command layer can resolve them before dispatching.
+        StoryFactory(pk=42, title="Mock Story")
+        EpisodeFactory(pk=12, title="Mock Episode")
+        EpisodeFactory(pk=7, title="Promote Episode")
+        BeatFactory(pk=8)
 
     def _run(self, args: str) -> list[str]:
         cmd = _make_cmd(self.caller, args)
@@ -174,6 +186,7 @@ class CmdStoryPermissionDenialTests(TestCase):
     def setUp(self) -> None:
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
+        StoryFactory(pk=42, title="Mock Story")
 
     @patch("actions.definitions.gm_stories.CompleteStoryAction.run")
     def test_denial_message_surfaces(self, mock_run: MagicMock) -> None:
@@ -185,3 +198,57 @@ class CmdStoryPermissionDenialTests(TestCase):
         cmd.func()
         messages = _messages(self.caller)
         self.assertIn("Only the story's Lead GM or staff may do that.", messages)
+
+
+class CmdStoryResolutionTests(TestCase):
+    """Identifier resolution can use pk or case-insensitive title."""
+
+    def setUp(self) -> None:
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    @patch("actions.definitions.gm_stories.CompleteStoryAction.run")
+    def test_complete_resolves_story_by_title(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Story completed.")
+        story = StoryFactory(title="Crimson")
+
+        self._run("complete crimson")
+
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["story_id"], str(story.pk))
+
+    @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
+    def test_resolve_resolves_episode_by_title(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
+        episode = EpisodeFactory(title="Spire")
+
+        self._run("resolve spire")
+
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["episode_id"], str(episode.pk))
+
+    @patch("actions.definitions.gm_stories.PromoteEpisodeAction.run")
+    def test_promote_resolves_episode_by_title(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Promoted.")
+        episode = EpisodeFactory(title="Whispers")
+
+        self._run("promote whispers plot")
+
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["episode_id"], str(episode.pk))
+        self.assertEqual(kwargs["target"], "plot")
+
+    def test_mark_rejects_non_numeric_beat_id(self) -> None:
+        messages = self._run("mark abc success")
+        self.assertTrue(
+            any("numeric" in m.lower() for m in messages),
+            f"Expected numeric-beat error; got {messages}",
+        )

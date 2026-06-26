@@ -11,6 +11,11 @@ from typing import Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.gm_resolution import (
+    resolve_episode_or_error,
+    resolve_numeric_beat_id_or_error,
+    resolve_story_or_error,
+)
 
 _USAGE = (
     "Usage: story <subcommand>\n"
@@ -27,7 +32,6 @@ _MARK_USAGE = "Usage: story mark <beat-id> <success|failure> [notes]"
 
 _MIN_PROMOTE_TOKENS = 2
 _MIN_MARK_TOKENS = 2
-_TRANSITION_INDEX = 1
 
 _SUBVERB_HANDLERS: dict[str, str] = {
     "complete": "_handle_complete",
@@ -89,13 +93,15 @@ class CmdStory(ArxCommand):
         from actions.definitions.gm_stories import CompleteStoryAction  # noqa: PLC0415
 
         story_id = self._require_arg(rest, _COMPLETE_USAGE)
-        self._run_action(CompleteStoryAction, story_id=story_id.split()[0])
+        story = resolve_story_or_error(story_id)
+        self._run_action(CompleteStoryAction, story_id=str(story.pk))
 
     def _handle_resolve(self, rest: str) -> None:
         """Parse ``resolve <episode-id> [transition-id] [notes]`` and dispatch ResolveEpisodeAction.
 
-        If the token after the episode id is numeric, it is treated as a
-        transition id; all remaining tokens become GM notes.
+        ``Transition`` has no name/title field, so it can only be supplied by
+        numeric pk; any non-numeric second token is treated as the start of GM
+        notes.
         """
         from actions.definitions.gm_stories import ResolveEpisodeAction  # noqa: PLC0415
 
@@ -104,7 +110,8 @@ class CmdStory(ArxCommand):
             msg = _RESOLVE_USAGE
             raise CommandError(msg)
 
-        kwargs: dict[str, object] = {"episode_id": tokens[0]}
+        episode = resolve_episode_or_error(tokens[0])
+        kwargs: dict[str, object] = {"episode_id": str(episode.pk)}
         remaining = tokens[1:]
 
         if remaining and remaining[0].isdigit():
@@ -126,9 +133,10 @@ class CmdStory(ArxCommand):
             msg = _PROMOTE_USAGE
             raise CommandError(msg)
 
+        episode = resolve_episode_or_error(tokens[0])
         self._run_action(
             PromoteEpisodeAction,
-            episode_id=tokens[0],
+            episode_id=str(episode.pk),
             target=tokens[1].lower(),
         )
 
@@ -141,7 +149,7 @@ class CmdStory(ArxCommand):
             msg = _MARK_USAGE
             raise CommandError(msg)
 
-        beat_id = tokens[0]
+        beat_id = resolve_numeric_beat_id_or_error(tokens[0])
         outcome = tokens[1].lower()
         gm_notes = " ".join(tokens[_MIN_MARK_TOKENS:]).strip()
 

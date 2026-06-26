@@ -111,7 +111,7 @@ def _story_or_error(story_id: Any) -> tuple[Story | None, ActionResult | None]:
         return None, ActionResult(success=False, message="A story is required.")
     try:
         return Story.objects.get(pk=story_id), None
-    except Story.DoesNotExist:
+    except (Story.DoesNotExist, ValueError):
         return None, ActionResult(success=False, message="No story with that ID exists.")
 
 
@@ -121,7 +121,7 @@ def _episode_or_error(episode_id: Any) -> tuple[Episode | None, ActionResult | N
         return None, ActionResult(success=False, message="An episode is required.")
     try:
         return Episode.objects.get(pk=episode_id), None
-    except Episode.DoesNotExist:
+    except (Episode.DoesNotExist, ValueError):
         return None, ActionResult(success=False, message="No episode with that ID exists.")
 
 
@@ -131,7 +131,7 @@ def _beat_or_error(beat_id: Any) -> tuple[Beat | None, ActionResult | None]:
         return None, ActionResult(success=False, message="A beat is required.")
     try:
         return Beat.objects.get(pk=beat_id), None
-    except Beat.DoesNotExist:
+    except (Beat.DoesNotExist, ValueError):
         return None, ActionResult(success=False, message="No beat with that ID exists.")
 
 

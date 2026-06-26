@@ -14,6 +14,7 @@ from evennia.accounts.models import AccountDB
 
 from commands.exceptions import CommandError
 from world.character_sheets.models import CharacterSheet
+from world.stories.models import Episode, Story
 
 if TYPE_CHECKING:
     from django.db.models import Model, QuerySet
@@ -76,6 +77,80 @@ def resolve_model_by_pk_or_name(
         raise CommandError(not_found_msg) from exc
 
     return instance
+
+
+def resolve_model_by_pk_or_title(
+    model: type[_T],
+    value: str,
+    *,
+    qs: QuerySet[_T] | None = None,
+    not_found_msg: str,
+    ambiguous_msg: str,
+) -> _T:
+    """Resolve a model instance by primary key or case-insensitive title.
+
+    Numeric input is tried as a primary key first; otherwise an
+    ``iexact`` lookup on the ``title`` field is used.
+
+    Args:
+        model: The Django model class to look up.
+        value: The pk or title supplied by the caller.
+        qs: Optional queryset to restrict the search. Defaults to
+            ``model.objects.all()``.
+        not_found_msg: Message raised in the ``CommandError`` when nothing
+            matches.
+        ambiguous_msg: Message raised in the ``CommandError`` when more than
+            one instance matches the title.
+
+    Raises:
+        CommandError: When no matching instance is found or the title is not
+            unique.
+    """
+    queryset = qs if qs is not None else model.objects.all()
+
+    try:
+        if value.isdigit():
+            instance = queryset.get(pk=value)
+        else:
+            instance = queryset.get(title__iexact=value)
+    except ObjectDoesNotExist as exc:
+        raise CommandError(not_found_msg) from exc
+    except MultipleObjectsReturned as exc:
+        raise CommandError(ambiguous_msg) from exc
+
+    return instance
+
+
+def resolve_story_or_error(value: str) -> Story:
+    """Resolve a ``Story`` by pk or title, raising ``CommandError`` on failure."""
+    return resolve_model_by_pk_or_title(
+        Story,
+        value,
+        not_found_msg="No story with that ID exists.",
+        ambiguous_msg="More than one story matches that title.",
+    )
+
+
+def resolve_episode_or_error(value: str) -> Episode:
+    """Resolve an ``Episode`` by pk or title, raising ``CommandError`` on failure."""
+    return resolve_model_by_pk_or_title(
+        Episode,
+        value,
+        not_found_msg="No episode with that ID exists.",
+        ambiguous_msg="More than one episode matches that title.",
+    )
+
+
+def resolve_numeric_beat_id_or_error(value: str) -> str:
+    """Return *value* if it is numeric, otherwise raise ``CommandError``.
+
+    ``Beat`` has no title/name field, so it can only be resolved by pk.
+    The backing action validates the actual pk existence.
+    """
+    if not value.isdigit():
+        msg = "A beat must be specified by its numeric ID."
+        raise CommandError(msg)
+    return value
 
 
 def resolve_character_sheet_in_room(

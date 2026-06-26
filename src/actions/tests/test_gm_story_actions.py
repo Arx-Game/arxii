@@ -410,3 +410,43 @@ class MarkBeatActionTests(GMStoryActionTestBase):
             outcome=BeatOutcome.SUCCESS,
         )
         self.assertFalse(result.success)
+
+
+class ActionIdentifierValidationTests(GMStoryActionTestBase):
+    """Malformed identifiers surface friendly messages instead of exceptions."""
+
+    def test_complete_rejects_non_numeric_story_id(self) -> None:
+        from actions.definitions.gm_stories import CompleteStoryAction
+
+        result = CompleteStoryAction().run(self.lead_gm_actor, story_id="not-a-pk")
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No story with that ID exists.")
+
+    def test_resolve_rejects_non_numeric_episode_id(self) -> None:
+        from actions.definitions.gm_stories import ResolveEpisodeAction
+
+        result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id="not-a-pk")
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No episode with that ID exists.")
+
+    def test_promote_rejects_non_numeric_episode_id(self) -> None:
+        from actions.definitions.gm_stories import PromoteEpisodeAction
+
+        result = PromoteEpisodeAction().run(
+            self.lead_gm_actor,
+            episode_id="not-a-pk",
+            target=StoryMaturity.PLOT,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No episode with that ID exists.")
+
+    def test_mark_rejects_non_numeric_beat_id(self) -> None:
+        from actions.definitions.gm_stories import MarkBeatAction
+
+        result = MarkBeatAction().run(
+            self.lead_gm_actor,
+            beat_id="not-a-pk",
+            outcome=BeatOutcome.SUCCESS,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No beat with that ID exists.")
