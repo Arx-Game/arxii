@@ -1795,6 +1795,7 @@
 - `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' — A room's comfort level (1–10) for an occupant (#1514).`
 - `comfort_level_for_points(points: 'int') -> 'int' — Map raw comfort points to a 1–10 comfort level (#1514).`
 - `comfort_points(room: 'DefaultObject') -> 'int' — A room's raw comfort points (#1514): ``amenities − felt discomfort``.`
+- `comfort_summary(room: 'DefaultObject') -> 'ComfortSummary' — Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity.`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`

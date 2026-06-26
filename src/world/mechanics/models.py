@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from world.traits.models import Trait
 from world.mechanics.constants import (
     SOURCE_TYPE_DISTINCTION,
+    SOURCE_TYPE_RESIDENCE_COMFORT,
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
     DiscoveryType,
@@ -255,6 +256,17 @@ class ModifierSource(SharedMemoryModel):
 
     # Future: equipment_effect, equipment_instance, spell_effect, etc.
 
+    # === Residence Comfort Source (#1514) ===
+    # Marks the single shared source for residence-comfort AP-regen modifiers. Comfort has no
+    # effect template (it's a computed per-character value), so it's a flag, not an FK pair;
+    # ``modifier_target`` stays None (it spans both ap-regen targets) so the target-match
+    # validation is skipped. Per-character comfort modifiers cascade-delete via their own
+    # ``character`` FK, so this source needs no per-character instance.
+    residence_comfort = models.BooleanField(
+        default=False,
+        help_text="Marks the shared source for residence-comfort AP-regen modifiers (#1514).",
+    )
+
     class Meta:
         verbose_name = "Modifier source"
         verbose_name_plural = "Modifier sources"
@@ -264,6 +276,8 @@ class ModifierSource(SharedMemoryModel):
         """Get the type of source (distinction, equipment, etc.)."""
         if self.distinction_effect_id or self.character_distinction_id:
             return SOURCE_TYPE_DISTINCTION
+        if self.residence_comfort:
+            return SOURCE_TYPE_RESIDENCE_COMFORT
         return SOURCE_TYPE_UNKNOWN
 
     @property
@@ -278,6 +292,8 @@ class ModifierSource(SharedMemoryModel):
         """Human-readable source description."""
         if self.distinction_effect:
             return f"Distinction: {self.distinction_effect.distinction.name}"
+        if self.residence_comfort:
+            return "Residence comfort"
         return SOURCE_TYPE_UNKNOWN.capitalize()
 
     def __str__(self) -> str:
