@@ -33,10 +33,13 @@ from world.buildings.constants import (
     PermitEligibility,
 )
 from world.buildings.models import (
+    ArchitecturalStyle,
     Building,
     BuildingMaterial,
     BuildingPermitDetails,
 )
+from world.locations.constants import KeyType, LocationParentType
+from world.locations.models import LocationValueModifier
 
 if TYPE_CHECKING:
     from world.areas.models import Area
@@ -562,3 +565,46 @@ def contribution_value_for_construction(contribution: Contribution) -> int:
         lore_multiplier = max(0, 1 + (instance.lore_value / LORE_VALUE_DIVISOR))
         return int(monetary * lore_multiplier * MATERIAL_BASE_BOOST * units)
     return 0
+
+
+def _style_modifier_source(building: Building) -> str:
+    """The ``source`` tag for a building's style-derived modifiers (clean replacement)."""
+    return f"style:{building.area_id}"
+
+
+def sync_building_style_modifiers(building: Building) -> None:
+    """Re-materialize a building's architectural-style affinities as cascade modifiers (#1514).
+
+    Deletes the building's prior style-sourced ``LocationValueModifier`` rows on its Area, then
+    creates one per ``StyleAffinity`` of the current style (permanent baselines,
+    ``change_per_day=0``). They cascade to the building's rooms via the location-stats substrate
+    and feed comfort. Idempotent — safe to call after any style change.
+    """
+    source = _style_modifier_source(building)
+    LocationValueModifier.objects.filter(source=source, area_id=building.area_id).delete()
+    style = building.architectural_style
+    if style is None:
+        return
+    for affinity in style.affinities.all():
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=building.area,
+            key_type=KeyType.STAT,
+            stat_key=affinity.stat_key,
+            value=affinity.value,
+            change_per_day=0,
+            source=source,
+        )
+
+
+@transaction.atomic
+def set_building_style(building: Building, style: ArchitecturalStyle | None) -> Building:
+    """Assign (or clear) a building's architectural style and re-sync its climate modifiers.
+
+    Permission gating is the caller's concern (owner standing, renovation-Project completion).
+    The style→modifier materialization lives here so callers don't reimplement it.
+    """
+    building.architectural_style = style
+    building.save(update_fields=["architectural_style"])
+    sync_building_style_modifiers(building)
+    return building

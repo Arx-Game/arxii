@@ -496,6 +496,7 @@
   - area -> areas.Area [OneToOne]
   - owner_persona -> scenes.Persona [FK] (nullable)
   - kind -> buildings.BuildingKind [FK]
+  - architectural_style -> buildings.ArchitecturalStyle [FK] (nullable)
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
@@ -574,11 +575,24 @@
   - instance -> buildings.BuildingProjectInstance [FK]
   - category -> buildings.PolishCategory [FK]
 
+### ArchitecturalStyle
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - buildings <- buildings.Building
+  - affinities <- buildings.StyleAffinity
+
+### StyleAffinity
+**Foreign Keys:**
+  - style -> buildings.ArchitecturalStyle [FK]
+
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
+- `set_building_style(building: 'Building', style: 'ArchitecturalStyle | None') -> 'Building' — Assign (or clear) a building's architectural style and re-sync its climate modifiers.`
+- `sync_building_style_modifiers(building: 'Building') -> 'None' — Re-materialize a building's architectural-style affinities as cascade modifiers (#1514).`
 - `validate_permit_site(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int') -> 'ValidationResult' — Validate a permit can be used at this site for this size.`
 
 
@@ -1038,6 +1052,7 @@
 **Pointed to by:**
   - children <- codex.CodexSubject
   - entries <- codex.CodexEntry
+  - architectural_styles <- buildings.ArchitecturalStyle
 
 ### CodexSubjectBreadcrumb
 **Foreign Keys:**
@@ -2921,8 +2936,10 @@
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
+- `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' — POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
+- `serialize_npc_session_state(session: 'InteractionSession', *, last_result_message: 'str' = '') -> 'dict' — Compose the response payload from a (live or freshly-closed) session.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
 - `template_visible_to(template: 'MissionTemplate', character: 'ObjectDB', *, persona: 'Persona | None' = None) -> 'bool' — True if ``character`` may see / be offered ``template``.`
 
