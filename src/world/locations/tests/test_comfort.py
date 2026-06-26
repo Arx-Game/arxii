@@ -7,12 +7,19 @@ negative or touch another axis. "A hearth eats cold and can never overheat a roo
 
 from django.test import TestCase
 
+from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
-from world.locations.services import comfort_score, effective_value, room_discomfort
+from world.locations.services import (
+    comfort_score,
+    effective_value,
+    felt_exposure,
+    room_discomfort,
+    room_enclosure,
+)
 
 
 class ComfortAxesTests(TestCase):
@@ -74,3 +81,52 @@ class ComfortAxesTests(TestCase):
         self._modifier(ward, StatKey.HEAT, 5)
         assert room_discomfort(room) == 8
         assert comfort_score(room) == -8
+
+
+class EnclosureShelteringTests(TestCase):
+    """Enclosure gates the *weather* axes (WET, WIND) but never temperature (#1514)."""
+
+    def _room(self, enclosure: RoomEnclosure):
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward, enclosure=enclosure)
+        return ward, profile.objectdb
+
+    def _weather(self, area, stat_key: StatKey, value: int) -> None:
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA, area=area, stat_key=stat_key, value=value
+        )
+
+    def test_open_air_feels_all_weather(self) -> None:
+        ward, room = self._room(RoomEnclosure.OPEN_AIR)
+        self._weather(ward, StatKey.WET, 8)
+        self._weather(ward, StatKey.WIND, 5)
+        assert felt_exposure(room, stat_key=StatKey.WET) == 8
+        assert felt_exposure(room, stat_key=StatKey.WIND) == 5
+        assert comfort_score(room) == -13
+
+    def test_roof_blocks_rain_not_wind(self) -> None:
+        ward, room = self._room(RoomEnclosure.ROOFED)
+        self._weather(ward, StatKey.WET, 8)
+        self._weather(ward, StatKey.WIND, 5)
+        assert felt_exposure(room, stat_key=StatKey.WET) == 0  # roof sheds rain/snow
+        assert felt_exposure(room, stat_key=StatKey.WIND) == 5  # wind still reaches you
+        assert comfort_score(room) == -5
+
+    def test_walls_block_rain_and_wind(self) -> None:
+        ward, room = self._room(RoomEnclosure.WALLED)
+        self._weather(ward, StatKey.WET, 8)
+        self._weather(ward, StatKey.WIND, 5)
+        assert felt_exposure(room, stat_key=StatKey.WET) == 0
+        assert felt_exposure(room, stat_key=StatKey.WIND) == 0
+        assert comfort_score(room) == 0
+
+    def test_enclosure_never_shelters_temperature(self) -> None:
+        # Even a sealed room feels the cold — insulation is fixtures/style, not enclosure.
+        ward, room = self._room(RoomEnclosure.SEALED)
+        self._weather(ward, StatKey.COLD, 7)
+        assert felt_exposure(room, stat_key=StatKey.COLD) == 7
+        assert comfort_score(room) == -7
+
+    def test_default_enclosure_is_walled(self) -> None:
+        room = RoomProfileFactory().objectdb  # no enclosure passed → column default
+        assert room_enclosure(room) == RoomEnclosure.WALLED

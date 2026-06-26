@@ -1,1 +1,1 @@
-0003_alter_locationvaluemodifier_stat_key_and_more
+0004_alter_locationvaluemodifier_stat_key_and_more
