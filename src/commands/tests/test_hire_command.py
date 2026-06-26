@@ -11,6 +11,7 @@ from actions.definitions.npc_services import (
 )
 from commands.hire import CmdHire
 from world.npc_services.models import NPCRole
+from world.scenes.models import Persona
 
 
 def _make_cmd(args: str) -> CmdHire:
@@ -58,7 +59,7 @@ class CmdHireRoutingTests(TestCase):
         role.name = "blacksmith"
         qs = MagicMock()
         qs.filter.return_value.filter.return_value.first.return_value = role
-        npc_persona = MagicMock(pk=42)
+        npc_persona = MagicMock(spec=Persona, pk=42)
         cmd.caller.search.return_value = npc_persona
         result = MagicMock(
             success=True,

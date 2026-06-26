@@ -19,6 +19,7 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from world.npc_services.models import NPCRole
 from world.npc_services.services import serialize_npc_session_state
+from world.scenes.models import Persona
 
 
 class CmdHire(ArxCommand):
@@ -31,8 +32,13 @@ class CmdHire(ArxCommand):
         hire offer <id>                  — resolve an available offer
         hire end                         — end the current interaction
 
-    The optional ``as <npc>`` clause selects a named persona for class-2+ NPCs.
+    The optional ``as <npc>`` clause selects a named Persona for class-2+ NPCs.
     It resolves the name the same way other targeted commands do (``self.caller.search``).
+
+    ``hire`` is intentionally a single-word, domain-specific key — the verb only
+    makes sense for NPC-service transactions and mirrors other economy/action verbs
+    such as ``cast`` / ``clash`` / ``flee``. Namespacing it behind ``npc`` would add
+    friction without reducing collision risk.
     """
 
     key = "hire"
@@ -84,11 +90,11 @@ class CmdHire(ArxCommand):
         return args, None
 
     def _resolve_persona_id(self, name: str | None) -> int | None:
-        """Use ``self.caller.search`` to turn a persona name into a primary-key id."""
+        """Use ``self.caller.search`` to turn a Persona name into a primary-key id."""
         if not name:
             return None
         target = self.caller.search(name)
-        if not target:
+        if not target or not isinstance(target, Persona):
             msg = f"Could not find persona '{name}'."
             raise CommandError(msg)
         return target.pk
