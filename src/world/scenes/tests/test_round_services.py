@@ -278,6 +278,41 @@ class SceneRoundResolutionTests(TestCase):
         self._declare_pass(p2)
         assert scene_round_is_complete(self.rnd) is False
 
+    def test_afk_own_peril_skipped_on_quorum_resolve(self):
+        # 3 present, 2 declare (quorum 60 met), the undeclared third is AFK. The AFK
+        # participant's OWN acute condition must NOT tick on the END round-resolution
+        # tick (ADR-0004: an AFK character is not harmed while away), while a declarer's
+        # own condition DOES tick. This is the #1480 companion to the quorum change —
+        # without it, quorum resolution would advance an AFK person's own peril.
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.advance_quorum_pct = 60
+        self.rnd.save(update_fields=["mode", "advance_quorum_pct"])
+        p_decl = self._participant(present=True, initiative_order=0)
+        p_afk = self._participant(present=True, initiative_order=1)  # never declares
+        p_third = self._participant(present=True, initiative_order=2)
+        self._declare_pass(p_decl)
+        self._declare_pass(p_third)
+        dot_template = ConditionTemplateFactory(
+            default_duration_type=DurationType.ROUNDS, default_duration_value=3
+        )
+        decl_dot = ConditionInstanceFactory(
+            target=p_decl.character_sheet.character,
+            condition=dot_template,
+            rounds_remaining=3,
+        )
+        afk_dot = ConditionInstanceFactory(
+            target=p_afk.character_sheet.character,
+            condition=dot_template,
+            rounds_remaining=3,
+        )
+
+        resolve_scene_round(self.rnd)
+
+        decl_dot.refresh_from_db()
+        afk_dot.refresh_from_db()
+        assert decl_dot.rounds_remaining == 2  # declarer's own condition ticked
+        assert afk_dot.rounds_remaining == 3  # AFK (undeclared) own condition skipped
+
 
 class SceneRoundOutcomeBroadcastTests(TestCase):
     """_resolve_scene_declarations broadcasts an OUTCOME narration for each resolved challenge."""

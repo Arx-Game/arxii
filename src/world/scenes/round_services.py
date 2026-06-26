@@ -348,12 +348,33 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     rnd.status = RoundStatus.RESOLVING
     rnd.save(update_fields=["status"])
 
+    # Snapshot who declared this round BEFORE _resolve_scene_declarations deletes the
+    # declaration rows. A present ``can_act`` participant who did NOT declare (swept as an
+    # implicit pass by quorum completion) is excluded from the END-tick target set below:
+    # their OWN acute conditions must not advance from a round they didn't engage in
+    # (ADR-0004 — an AFK character is not harmed while away). Declared participants, absent
+    # participants, and present-``not can_act`` participants (e.g. an unconscious victim)
+    # tick as before.
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    declared_ids = set(
+        rnd.action_declarations.filter(
+            round_number=rnd.round_number, is_immediate=False
+        ).values_list("participant_id", flat=True)
+    )
+    present_ids = {s.character_id for s in _present_character_sheets(rnd.room)}
+
     _resolve_scene_declarations(rnd)
 
     targets = [
         p.character_sheet.character
         for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
             "character_sheet__character"
+        )
+        if not (
+            p.character_sheet.character_id in present_ids
+            and can_act(p.character_sheet)
+            and p.pk not in declared_ids
         )
     ]
     tick_round_for_targets(targets, timing="end")
