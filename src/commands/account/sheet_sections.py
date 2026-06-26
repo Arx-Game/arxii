@@ -195,8 +195,8 @@ def _render_standing_section(command: Command) -> list[str]:
     persona = active_persona_for_sheet(viewer)
     memberships = list(
         OrganizationMembership.objects.filter(persona=persona)
-        .select_related("organization", "organization__org_type")
-        .order_by("rank", "organization__name")
+        .select_related("organization", "organization__org_type", "rank")
+        .order_by("rank__tier", "organization__name")
     )
     reputations = list(
         OrganizationReputation.objects.filter(persona=persona)
@@ -213,8 +213,9 @@ def _format_standing(memberships: list, reputations: list) -> list[str]:
     if memberships:
         lines.append("  Memberships:")
         for membership in memberships:
-            title = membership.organization.get_rank_title(membership.rank)
-            lines.append(f"    {membership.organization.name}: {title} (rank {membership.rank})")
+            tier = membership.rank.tier
+            title = membership.organization.get_rank_title(tier)
+            lines.append(f"    {membership.organization.name}: {title} (rank {tier})")
     if reputations:
         lines.append("  Reputation:")
         lines.extend(

@@ -70,13 +70,15 @@ def get_or_create_treasury(organization: Organization) -> OrganizationTreasury:
 
 
 def can_spend_treasury(treasury: OrganizationTreasury, persona: Persona) -> bool:
-    """Spend authority: an active membership at rank <= spend_rank_max."""
+    """Spend authority: an active membership at tier <= spend_rank_max."""
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
     return OrganizationMembership.objects.filter(
         persona=persona,
         organization_id=treasury.organization_id,
-        rank__lte=treasury.spend_rank_max,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__tier__lte=treasury.spend_rank_max,
     ).exists()
 
 
