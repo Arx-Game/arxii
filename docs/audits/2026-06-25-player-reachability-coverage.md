@@ -202,12 +202,12 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   accept/cancel (learn knowledge unreachable); secrets player-authoring beyond level-1 flavor.
 
 ### Social structures & collective play
-- TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481).
+- TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481); NPC-service
+  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493).
 - WEB-ONLY: events full lifecycle (create/schedule/start/complete/cancel/invite — no Action, no telnet);
-  NPC-service hire/commission/request (start/resolve/end — no Action, ADR-0001 gap); pay-ransom; roster
-  family CRUD / mail / media / profile-picture; consent **master opt-out + per-category rules + standing
-  whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy MVP-gating,
-  ADR-0033); spread-deed / save-deed-story (#745).
+  pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
+  rules + standing whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy
+  MVP-gating, ADR-0033); spread-deed / save-deed-story (#745).
 - **NO-SURFACE:** captivity capture/escape/rescue/resolve + **demand_ransom (zero production callers)**
   (#931 CLOSED — wire-or-remove + telnet surface); create_solo_deed / create_legend_event /
   grant_deed_knowledge (effect-driven by design); roster approve/deny (admin-only) + hiatus/freeze/

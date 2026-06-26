@@ -184,6 +184,11 @@ actions, backends, and service functions.
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
+- **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
+  Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
+  `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
+  `InteractionSession` on `caller.session.ndb` between operations; delegates to the same registry
+  Actions as the web `InteractionViewSet`.
 - **`progression.py`**: `CmdTraining` (`training`) + `CmdProgressionUnlock` (`progression`) —
   telnet faces of `ManageTrainingAction` and `PurchaseUnlockAction`. `training [list]` shows
   weekly AP budget and allocations; `training add skill=<id>|spec=<id> ap=<n> [mentor=<id>]`,
