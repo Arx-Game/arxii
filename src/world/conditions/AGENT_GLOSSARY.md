@@ -31,3 +31,7 @@ _Avoid_: roll bonus, skill modifier
 **Resistance effect channel**:
 The condition effect that modifies damage resistance (`ConditionResistanceModifier`: per-damage-type modifier, null = all types). Resistance is math, not binary immunity — intensity minus resistance gives the net value.
 _Avoid_: armor, immunity, soak
+
+**TreatmentTemplate**:
+The authored definition of a treatment — its name, applicable target condition or pending alteration kind, check type, costs (resonance, anima), whether it requires a bond thread, and optional backlash. The reusable blueprint used by `get_treatment_candidates` and `perform_treatment` when a PC treats another PC's condition or pending magical alteration.
+_Avoid_: cure template, heal type

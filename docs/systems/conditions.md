@@ -125,6 +125,10 @@ from world.conditions.services import (
     get_condition_control_percent_modifier,    # Control loss rate modifier
     get_condition_intensity_percent_modifier,  # Intensity gain modifier
     get_condition_penalty_percent_modifier,    # Check penalty modifier
+
+    # Treatment (player surface)
+    get_treatment_candidates,    # Discover which treatments can target which effects
+    perform_treatment,             # Apply a treatment to reduce severity/tier
 )
 ```
 
@@ -199,6 +203,57 @@ instance.effective_severity # severity * stage.severity_multiplier
 - `GET /api/conditions/character/observed/?target_id=X` - Conditions visible to observers
 
 Note: Conditions are applied through game logic, not directly through the API.
+
+---
+
+## Treatment (player surface)
+
+A character can treat another PC's open `ConditionInstance` or pending
+`PendingAlteration` through the standard scene consent seam, using either the
+telnet `treat` command (`src/commands/conditions.py`) or the web Treat panel
+(`TreatActionPanel`). Both paths converge on the same backend: telnet calls
+`action.run("treat_condition")`, the web endpoint dispatches the same action
+key, and both create a `SceneActionRequest` that is resolved when the target
+player accepts.
+
+### Discovery
+
+`get_treatment_candidates(helper_sheet, target_sheet, scene)` returns the list
+of treatments the helper can apply to the target right now. Each candidate is a
+dict carrying `treatment`, `target_effect`, `target_effect_type`
+(`TARGET_EFFECT_CONDITION` or `TARGET_EFFECT_ALTERATION` from
+`world.conditions.constants`), and `bond_thread`. The same scene/engagement/bond
+gates used by `perform_treatment` are applied during discovery, so the candidate
+list is authoritative.
+
+The web discovery endpoint `GET /api/conditions/treatments/?target_persona_id=N`
+returns a `TreatmentCandidateResponse` envelope (`candidates` + `scene_id`).
+Telnet uses the same query to prompt the helper.
+
+### Consent flow
+
+Treatment targets another PC and therefore flows through
+`create_action_request` → `respond_to_action_request`. Treatment is not
+behavior-altering, so it uses the default-allow consent model: the helper sees
+the target among candidates, the request is sent, and the target player chooses
+ACCEPT or DENY.
+
+### Resolution seam
+
+Treatment requests bypass the `ActionTemplate`/`_resolve_standard_action`
+chain because treatment carries its own check/cost/reduction logic. They are
+resolved by the **custom-action-resolver registry** in
+`world.scenes.action_services` (`CUSTOM_ACTION_RESOLVERS`), registered for the
+action key `"treat_condition"`. On ACCEPT the dispatcher checks the registry
+before the standard path; the resolver calls `perform_treatment` plus
+`create_interaction` and returns `None` (no `PendingActionResolution` is handed
+back to the SCENE_ADAPTIVE pipeline).
+
+The web execution path re-validates the chosen candidate pair server-side via
+`get_treatment_candidates`, so a client cannot fabricate a treatment/effect
+pair that evades scene, engagement, or bond gating.
+
+See ADR-0047 for the rationale behind the custom-action-resolver registry.
 
 ---
 

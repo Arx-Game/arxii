@@ -99,3 +99,4 @@ treat those names as hints to confirm, not gospel.
 - [0044 — Covenant sworn objective is recorded as free text](0044-covenant-sworn-objective-is-free-text.md)
 - [0045 — Multi-target casts validate a target list with per-target consent](0045-multi-target-casts-with-per-target-consent.md)
 - [0046 — Power-tier breakthroughs gate at fixed path thresholds](0046-power-tier-breakthroughs-gate-at-fixed-thresholds.md)
+- [0047 — Custom action resolvers for non-template consent actions](0047-custom-action-resolvers-for-non-template-consent-actions.md)

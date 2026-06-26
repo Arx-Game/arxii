@@ -315,10 +315,14 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
   `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()`
   wired into all `world/conditions/services.py` mutation sites.
-- **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
+- **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`,
+  `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
+  `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
+  `perform_treatment()`
 - **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment
   boon/injury application, behavior-consent gating via `ConditionCategory.alters_behavior`),
-  progression (interactions)
+  progression (interactions), scenes (telnet `treat` + web Treat panel surface converges on the
+  `SceneActionRequest` consent seam via the custom-action-resolver registry)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
