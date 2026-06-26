@@ -62,7 +62,7 @@ class BaseRelationshipAction(Action):
             return None
         try:
             character = target_sheet.character
-        except AttributeError:
+        except (AttributeError, ObjectDoesNotExist):
             return None
         if character is None or character.location_id != actor.location.id:
             return None
