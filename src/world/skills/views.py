@@ -4,6 +4,7 @@ Skills API views.
 
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -41,6 +42,13 @@ _OPERATION_UPDATE = "update"
 _OPERATION_REMOVE = "remove"
 _AP_AMOUNT_KEY = "ap_amount"
 _MENTOR_PERSONA_ID_KEY = "mentor_persona_id"
+
+
+class TrainingAllocationListSerializer(serializers.Serializer):
+    """Schema wrapper for the training allocation list response."""
+
+    allocations = TrainingAllocationSerializer(many=True)
+    remaining_weekly_budget = serializers.IntegerField()
 
 
 class SkillViewSet(viewsets.ReadOnlyModelViewSet):
@@ -158,6 +166,8 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Character-scoped list; small enough to return in full
+    filter_backends = []  # No additional filtering on this character-scoped endpoint
 
     def _active_puppet(self, request):
         """Return the played character, or raise a validation error if absent."""
@@ -182,6 +192,7 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
             raise serializers.ValidationError(self._MISSING_PK_MESSAGE)
         return int(pk)
 
+    @extend_schema(responses={200: TrainingAllocationListSerializer})
     def list(self, request, *args, **kwargs):
         """Return all allocations for the active character plus remaining budget."""
         puppet = self._active_puppet(request)
@@ -209,6 +220,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         )
         return Response({"allocations": serializer.data, "remaining_weekly_budget": remaining})
 
+    @extend_schema(
+        request=ManageTrainingAddSerializer,
+        responses={201: TrainingAllocationSerializer},
+    )
     def create(self, request):
         """Create a new training allocation for the active character."""
         puppet = self._active_puppet(request)
@@ -227,6 +242,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         )
         return Response(read_serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        request=ManageTrainingUpdateSerializer,
+        responses={200: TrainingAllocationSerializer},
+    )
     def partial_update(self, request, pk=None):
         """Update an existing training allocation owned by the active character."""
         puppet = self._active_puppet(request)
@@ -253,6 +272,7 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         )
         return Response(read_serializer.data)
 
+    @extend_schema(responses={204: None})
     def destroy(self, request, pk=None):
         """Remove a training allocation owned by the active character."""
         puppet = self._active_puppet(request)

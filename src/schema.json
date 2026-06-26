@@ -20342,7 +20342,7 @@ paths:
           description: ''
   /api/skills/training-allocations/:
     get:
-      operationId: skills_training_allocations_retrieve
+      operationId: skills_training_allocations_list
       description: Return all allocations for the active character plus remaining
         budget.
       tags:
@@ -20351,17 +20351,33 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingAllocationList'
+          description: ''
     post:
       operationId: skills_training_allocations_create
       description: Create a new training allocation for the active character.
       tags:
       - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManageTrainingAddRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '201':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
   /api/skills/training-allocations/{id}/:
     patch:
       operationId: skills_training_allocations_partial_update
@@ -20374,11 +20390,20 @@ paths:
         required: true
       tags:
       - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManageTrainingUpdateRequest'
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAllocation'
+          description: ''
     delete:
       operationId: skills_training_allocations_destroy
       description: Remove a training allocation owned by the active character.
@@ -32142,6 +32167,24 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    ManageTrainingAddRequest:
+      type: object
+      description: Validate input for creating a training allocation.
+      properties:
+        skill_id:
+          type: integer
+          nullable: true
+        specialization_id:
+          type: integer
+          nullable: true
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
+      required:
+      - ap_amount
     MaturityEnum:
       enum:
       - pitch
@@ -32172,6 +32215,20 @@ components:
         * `character` - Character
         * `placeholder` - Placeholder
         * `npc` - NPC
+    MentorPersona:
+      type: object
+      description: Minimal read-only representation of a mentor persona.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Display name for this persona
+          maxLength: 255
+      required:
+      - id
+      - name
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -37889,6 +37946,16 @@ components:
             start.
         is_active:
           type: boolean
+    PatchedManageTrainingUpdateRequest:
+      type: object
+      description: Validate input for updating a training allocation.
+      properties:
+        ap_amount:
+          type: integer
+          minimum: 1
+        mentor_persona_id:
+          type: integer
+          nullable: true
     PatchedMissionGiverRequest:
       type: object
       description: |-
@@ -40597,9 +40664,6 @@ components:
           type: integer
           nullable: true
       required:
-      - boundary_level
-      - thread_id
-      - thread_level_unlock_id
       - unlock_id
       - unlock_type
     QualityTier:
@@ -45476,6 +45540,54 @@ components:
       - name
       - required_distinction_id
       - sort_order
+    TrainingAllocation:
+      type: object
+      description: Read-only serializer for a character's training allocation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        skill:
+          allOf:
+          - $ref: '#/components/schemas/SkillList'
+          readOnly: true
+        specialization:
+          allOf:
+          - $ref: '#/components/schemas/Specialization'
+          readOnly: true
+        mentor:
+          allOf:
+          - $ref: '#/components/schemas/MentorPersona'
+          readOnly: true
+        ap_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Action points allocated per week (minimum 1)
+        remaining_weekly_budget:
+          type: integer
+          description: Return AP left in the character's weekly training budget.
+          readOnly: true
+      required:
+      - ap_amount
+      - id
+      - mentor
+      - remaining_weekly_budget
+      - skill
+      - specialization
+    TrainingAllocationList:
+      type: object
+      description: Schema wrapper for the training allocation list response.
+      properties:
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingAllocation'
+        remaining_weekly_budget:
+          type: integer
+      required:
+      - allocations
+      - remaining_weekly_budget
     Trait:
       type: object
       description: Serializer for trait definitions.

@@ -12110,7 +12110,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description Return all allocations for the active character plus remaining budget. */
-    get: operations['skills_training_allocations_retrieve'];
+    get: operations['skills_training_allocations_list'];
     put?: never;
     /** @description Create a new training allocation for the active character. */
     post: operations['skills_training_allocations_create'];
@@ -17836,6 +17836,13 @@ export interface components {
       /** @description Shows through normal clothing? Required True at tier 4+. */
       is_visible_at_rest?: boolean;
     };
+    /** @description Validate input for creating a training allocation. */
+    ManageTrainingAddRequest: {
+      skill_id?: number | null;
+      specialization_id?: number | null;
+      ap_amount: number;
+      mentor_persona_id?: number | null;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -17857,6 +17864,12 @@ export interface components {
      * @enum {string}
      */
     MemberTypeEnum: 'character' | 'placeholder' | 'npc';
+    /** @description Minimal read-only representation of a mentor persona. */
+    MentorPersona: {
+      readonly id: number;
+      /** @description Display name for this persona */
+      name: string;
+    };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -21161,6 +21174,11 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
+    /** @description Validate input for updating a training allocation. */
+    PatchedManageTrainingUpdateRequest: {
+      ap_amount?: number;
+      mentor_persona_id?: number | null;
+    };
     /**
      * @description Staff CRUD for trigger-based MissionGiver rows (#729).
      *
@@ -22589,9 +22607,9 @@ export interface components {
     PurchaseUnlockResponse: {
       unlock_type: string;
       unlock_id: number | null;
-      thread_level_unlock_id: number | null;
-      thread_id: number | null;
-      boundary_level: number | null;
+      thread_level_unlock_id?: number | null;
+      thread_id?: number | null;
+      boundary_level?: number | null;
     };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
@@ -24914,6 +24932,22 @@ export interface components {
        *     ``beginning_id`` values and leak filtered data between users.
        */
       readonly required_distinction_id: number | null;
+    };
+    /** @description Read-only serializer for a character's training allocation. */
+    TrainingAllocation: {
+      readonly id: number;
+      readonly skill: components['schemas']['SkillList'];
+      readonly specialization: components['schemas']['Specialization'];
+      readonly mentor: components['schemas']['MentorPersona'];
+      /** @description Action points allocated per week (minimum 1) */
+      ap_amount: number;
+      /** @description Return AP left in the character's weekly training budget. */
+      readonly remaining_weekly_budget: number;
+    };
+    /** @description Schema wrapper for the training allocation list response. */
+    TrainingAllocationList: {
+      allocations: components['schemas']['TrainingAllocation'][];
+      remaining_weekly_budget: number;
     };
     /** @description Serializer for trait definitions. */
     Trait: {
@@ -42851,7 +42885,7 @@ export interface operations {
       };
     };
   };
-  skills_training_allocations_retrieve: {
+  skills_training_allocations_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -42860,12 +42894,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['TrainingAllocationList'][];
+        };
       };
     };
   };
@@ -42876,14 +42911,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ManageTrainingAddRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       201: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
+        };
       };
     };
   };
@@ -42916,14 +42956,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedManageTrainingUpdateRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['TrainingAllocation'];
+        };
       };
     };
   };

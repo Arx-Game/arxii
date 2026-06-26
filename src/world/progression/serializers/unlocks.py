@@ -84,6 +84,6 @@ class PurchaseUnlockResponseSerializer(serializers.Serializer):
 
     unlock_type = serializers.CharField()
     unlock_id = serializers.IntegerField(allow_null=True)
-    thread_level_unlock_id = serializers.IntegerField(allow_null=True)
-    thread_id = serializers.IntegerField(allow_null=True)
-    boundary_level = serializers.IntegerField(allow_null=True)
+    thread_level_unlock_id = serializers.IntegerField(required=False, allow_null=True)
+    thread_id = serializers.IntegerField(required=False, allow_null=True)
+    boundary_level = serializers.IntegerField(required=False, allow_null=True)

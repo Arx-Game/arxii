@@ -124,6 +124,10 @@ class ManageTrainingAction(Action):
             else None
         )
 
+        ap_amount = kwargs.get(_KWARG_AP_AMOUNT)
+        if ap_amount is None:
+            return ActionResult(success=False, message="ap_amount is required.")
+
         mentor = self._resolve_mentor(kwargs.get(_KWARG_MENTOR_PERSONA_ID))
         allocation = create_training_allocation(
             character=actor,
