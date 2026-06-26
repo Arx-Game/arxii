@@ -58,6 +58,7 @@ from commands.evennia_overrides.items import (
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
+from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
@@ -186,6 +187,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1463 — self-presence toggles: transient away + persistent quiet/hidden mode.
             CmdAfk,
             CmdHide,
+            # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
+            CmdRest,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # Unified scene-adaptive cast (#1351)

@@ -172,6 +172,8 @@ actions, backends, and service functions.
   toggles persistent quiet mode (`TenureDisplaySettings.appear_offline` via
   `world.roster.services.display.set_appear_offline`): off where/who + unpageable except the
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
+- **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
+  Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
