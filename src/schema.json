@@ -4305,6 +4305,7 @@ paths:
 
         Rules are owned by the player through their SocialConsentPreference.
         Results are scoped to the requesting player's own tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: query
         name: category
@@ -4333,11 +4334,8 @@ paths:
           description: ''
     post:
       operationId: consent_category_rules_create
-      description: |-
-        ViewSet for per-category consent rules.
-
-        Rules are owned by the player through their SocialConsentPreference.
-        Results are scoped to the requesting player's own tenures.
+      description: Create a category rule via the set_social_consent_category_rule
+        action.
       tags:
       - consent
       requestBody:
@@ -4363,6 +4361,7 @@ paths:
 
         Rules are owned by the player through their SocialConsentPreference.
         Results are scoped to the requesting player's own tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4384,11 +4383,8 @@ paths:
           description: ''
     put:
       operationId: consent_category_rules_update
-      description: |-
-        ViewSet for per-category consent rules.
-
-        Rules are owned by the player through their SocialConsentPreference.
-        Results are scoped to the requesting player's own tenures.
+      description: Update a category rule via the set_social_consent_category_rule
+        action.
       parameters:
       - in: path
         name: id
@@ -4421,6 +4417,7 @@ paths:
 
         Rules are owned by the player through their SocialConsentPreference.
         Results are scoped to the requesting player's own tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4452,6 +4449,7 @@ paths:
 
         Rules are owned by the player through their SocialConsentPreference.
         Results are scoped to the requesting player's own tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4475,6 +4473,7 @@ paths:
 
         Each tenure has at most one preference row. Results are scoped to
         the requesting player's own tenures — other players' rows return 404.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - name: page
         required: false
@@ -4499,11 +4498,8 @@ paths:
           description: ''
     post:
       operationId: consent_preferences_create
-      description: |-
-        ViewSet for per-tenure social consent preferences.
-
-        Each tenure has at most one preference row. Results are scoped to
-        the requesting player's own tenures — other players' rows return 404.
+      description: Create or update a preference via the set_social_consent_preference
+        action.
       tags:
       - consent
       requestBody:
@@ -4529,6 +4525,7 @@ paths:
 
         Each tenure has at most one preference row. Results are scoped to
         the requesting player's own tenures — other players' rows return 404.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4549,11 +4546,7 @@ paths:
           description: ''
     put:
       operationId: consent_preferences_update
-      description: |-
-        ViewSet for per-tenure social consent preferences.
-
-        Each tenure has at most one preference row. Results are scoped to
-        the requesting player's own tenures — other players' rows return 404.
+      description: Update a preference via the set_social_consent_preference action.
       parameters:
       - in: path
         name: id
@@ -4585,6 +4578,7 @@ paths:
 
         Each tenure has at most one preference row. Results are scoped to
         the requesting player's own tenures — other players' rows return 404.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4615,6 +4609,7 @@ paths:
 
         Each tenure has at most one preference row. Results are scoped to
         the requesting player's own tenures — other players' rows return 404.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4664,6 +4659,7 @@ paths:
         Whitelist entries allow specific tenures to target the owner with social
         actions when the owner's category rule is ALLOWLIST mode.
         Results are scoped to the requesting player's own owner tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: query
         name: category
@@ -4692,12 +4688,7 @@ paths:
           description: ''
     post:
       operationId: consent_whitelist_create
-      description: |-
-        ViewSet for consent whitelist entries.
-
-        Whitelist entries allow specific tenures to target the owner with social
-        actions when the owner's category rule is ALLOWLIST mode.
-        Results are scoped to the requesting player's own owner tenures.
+      description: Create a whitelist entry via the add_social_consent_whitelist action.
       tags:
       - consent
       requestBody:
@@ -4724,6 +4715,7 @@ paths:
         Whitelist entries allow specific tenures to target the owner with social
         actions when the owner's category rule is ALLOWLIST mode.
         Results are scoped to the requesting player's own owner tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4751,6 +4743,7 @@ paths:
         Whitelist entries allow specific tenures to target the owner with social
         actions when the owner's category rule is ALLOWLIST mode.
         Results are scoped to the requesting player's own owner tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4784,6 +4777,7 @@ paths:
         Whitelist entries allow specific tenures to target the owner with social
         actions when the owner's category rule is ALLOWLIST mode.
         Results are scoped to the requesting player's own owner tenures.
+        Write endpoints route through the shared REGISTRY action seam.
       parameters:
       - in: path
         name: id
@@ -4810,12 +4804,8 @@ paths:
           description: ''
     delete:
       operationId: consent_whitelist_destroy
-      description: |-
-        ViewSet for consent whitelist entries.
-
-        Whitelist entries allow specific tenures to target the owner with social
-        actions when the owner's category rule is ALLOWLIST mode.
-        Results are scoped to the requesting player's own owner tenures.
+      description: Remove a whitelist entry via the remove_social_consent_whitelist
+        action.
       parameters:
       - in: path
         name: id

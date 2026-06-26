@@ -3083,15 +3083,11 @@ export interface paths {
      *
      *     Rules are owned by the player through their SocialConsentPreference.
      *     Results are scoped to the requesting player's own tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_category_rules_list'];
     put?: never;
-    /**
-     * @description ViewSet for per-category consent rules.
-     *
-     *     Rules are owned by the player through their SocialConsentPreference.
-     *     Results are scoped to the requesting player's own tenures.
-     */
+    /** @description Create a category rule via the set_social_consent_category_rule action. */
     post: operations['consent_category_rules_create'];
     delete?: never;
     options?: never;
@@ -3111,14 +3107,10 @@ export interface paths {
      *
      *     Rules are owned by the player through their SocialConsentPreference.
      *     Results are scoped to the requesting player's own tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_category_rules_retrieve'];
-    /**
-     * @description ViewSet for per-category consent rules.
-     *
-     *     Rules are owned by the player through their SocialConsentPreference.
-     *     Results are scoped to the requesting player's own tenures.
-     */
+    /** @description Update a category rule via the set_social_consent_category_rule action. */
     put: operations['consent_category_rules_update'];
     post?: never;
     /**
@@ -3126,6 +3118,7 @@ export interface paths {
      *
      *     Rules are owned by the player through their SocialConsentPreference.
      *     Results are scoped to the requesting player's own tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     delete: operations['consent_category_rules_destroy'];
     options?: never;
@@ -3135,6 +3128,7 @@ export interface paths {
      *
      *     Rules are owned by the player through their SocialConsentPreference.
      *     Results are scoped to the requesting player's own tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     patch: operations['consent_category_rules_partial_update'];
     trace?: never;
@@ -3151,15 +3145,11 @@ export interface paths {
      *
      *     Each tenure has at most one preference row. Results are scoped to
      *     the requesting player's own tenures — other players' rows return 404.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_preferences_list'];
     put?: never;
-    /**
-     * @description ViewSet for per-tenure social consent preferences.
-     *
-     *     Each tenure has at most one preference row. Results are scoped to
-     *     the requesting player's own tenures — other players' rows return 404.
-     */
+    /** @description Create or update a preference via the set_social_consent_preference action. */
     post: operations['consent_preferences_create'];
     delete?: never;
     options?: never;
@@ -3179,14 +3169,10 @@ export interface paths {
      *
      *     Each tenure has at most one preference row. Results are scoped to
      *     the requesting player's own tenures — other players' rows return 404.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_preferences_retrieve'];
-    /**
-     * @description ViewSet for per-tenure social consent preferences.
-     *
-     *     Each tenure has at most one preference row. Results are scoped to
-     *     the requesting player's own tenures — other players' rows return 404.
-     */
+    /** @description Update a preference via the set_social_consent_preference action. */
     put: operations['consent_preferences_update'];
     post?: never;
     /**
@@ -3194,6 +3180,7 @@ export interface paths {
      *
      *     Each tenure has at most one preference row. Results are scoped to
      *     the requesting player's own tenures — other players' rows return 404.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     delete: operations['consent_preferences_destroy'];
     options?: never;
@@ -3203,6 +3190,7 @@ export interface paths {
      *
      *     Each tenure has at most one preference row. Results are scoped to
      *     the requesting player's own tenures — other players' rows return 404.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     patch: operations['consent_preferences_partial_update'];
     trace?: never;
@@ -3242,16 +3230,11 @@ export interface paths {
      *     Whitelist entries allow specific tenures to target the owner with social
      *     actions when the owner's category rule is ALLOWLIST mode.
      *     Results are scoped to the requesting player's own owner tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_whitelist_list'];
     put?: never;
-    /**
-     * @description ViewSet for consent whitelist entries.
-     *
-     *     Whitelist entries allow specific tenures to target the owner with social
-     *     actions when the owner's category rule is ALLOWLIST mode.
-     *     Results are scoped to the requesting player's own owner tenures.
-     */
+    /** @description Create a whitelist entry via the add_social_consent_whitelist action. */
     post: operations['consent_whitelist_create'];
     delete?: never;
     options?: never;
@@ -3272,6 +3255,7 @@ export interface paths {
      *     Whitelist entries allow specific tenures to target the owner with social
      *     actions when the owner's category rule is ALLOWLIST mode.
      *     Results are scoped to the requesting player's own owner tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     get: operations['consent_whitelist_retrieve'];
     /**
@@ -3280,16 +3264,11 @@ export interface paths {
      *     Whitelist entries allow specific tenures to target the owner with social
      *     actions when the owner's category rule is ALLOWLIST mode.
      *     Results are scoped to the requesting player's own owner tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     put: operations['consent_whitelist_update'];
     post?: never;
-    /**
-     * @description ViewSet for consent whitelist entries.
-     *
-     *     Whitelist entries allow specific tenures to target the owner with social
-     *     actions when the owner's category rule is ALLOWLIST mode.
-     *     Results are scoped to the requesting player's own owner tenures.
-     */
+    /** @description Remove a whitelist entry via the remove_social_consent_whitelist action. */
     delete: operations['consent_whitelist_destroy'];
     options?: never;
     head?: never;
@@ -3299,6 +3278,7 @@ export interface paths {
      *     Whitelist entries allow specific tenures to target the owner with social
      *     actions when the owner's category rule is ALLOWLIST mode.
      *     Results are scoped to the requesting player's own owner tenures.
+     *     Write endpoints route through the shared REGISTRY action seam.
      */
     patch: operations['consent_whitelist_partial_update'];
     trace?: never;
