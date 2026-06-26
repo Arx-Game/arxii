@@ -13,6 +13,11 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from actions.definitions.npc_services import (
+    end_npc_interaction,
+    resolve_npc_offer,
+    start_npc_interaction,
+)
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.npc_services.factories import (
@@ -74,6 +79,16 @@ class StartInteractionTests(TestCase):
             response = self.client.post(START, {"role_id": 999999}, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.data)
 
+    def test_start_dispatches_action(self) -> None:
+        """The start endpoint must invoke the registry action's run() seam."""
+        with (
+            _patch_puppet(self.character),
+            patch.object(start_npc_interaction, "run", wraps=start_npc_interaction.run) as run,
+        ):
+            response = self.client.post(START, {"role_id": self.role.pk}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        run.assert_called_once()
+
 
 class ResolveOfferTests(TestCase):
     def setUp(self) -> None:
@@ -116,6 +131,15 @@ class ResolveOfferTests(TestCase):
             response = self.client.post(RESOLVE, {"offer_id": gated.pk}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
 
+    def test_resolve_dispatches_action(self) -> None:
+        """The resolve endpoint must invoke the registry action's run() seam."""
+        with _patch_puppet(self.character):
+            self.client.post(START, {"role_id": self.role.pk}, format="json")
+            with patch.object(resolve_npc_offer, "run", wraps=resolve_npc_offer.run) as run:
+                response = self.client.post(RESOLVE, {"offer_id": self.offer.pk}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        run.assert_called_once()
+
 
 class EndInteractionTests(TestCase):
     def setUp(self) -> None:
@@ -139,6 +163,15 @@ class EndInteractionTests(TestCase):
         with _patch_puppet(self.character):
             response = self.client.post(END, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.data)
+
+    def test_end_dispatches_action(self) -> None:
+        """The end endpoint must invoke the registry action's run() seam."""
+        with _patch_puppet(self.character):
+            self.client.post(START, {"role_id": self.role.pk}, format="json")
+            with patch.object(end_npc_interaction, "run", wraps=end_npc_interaction.run) as run:
+                response = self.client.post(END, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        run.assert_called_once()
 
 
 class AuthRequiredTests(TestCase):
