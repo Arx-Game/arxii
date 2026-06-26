@@ -1,6 +1,17 @@
-"""Factory definitions for the vitals system tests."""
+"""Factory definitions for the vitals system tests and seed data.
+
+Includes:
+- ``CharacterVitalsFactory`` — character vitals test data.
+- ``create_bleed_out_terminal_pool()`` — seeds the bleed_out_terminal pool.
+- ``create_abandonment_pools()`` — seeds all three abandonment pools.
+
+The pool factories double as integration-test fixtures and seed data per
+the repo convention (see CLAUDE.md "Factories as seed data").
+"""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import factory
 import factory.django as factory_django
@@ -8,6 +19,23 @@ import factory.django as factory_django
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import CharacterLifeState
 from world.vitals.models import CharacterVitals
+
+if TYPE_CHECKING:
+    from actions.models.consequence_pools import ConsequencePool
+
+# ---------------------------------------------------------------------------
+# Outcome-tier label constants used across all peril pools.
+# ---------------------------------------------------------------------------
+
+_OUTCOME_FAILURE = "Failure"
+_OUTCOME_PARTIAL = "Partial Success"
+_OUTCOME_SUCCESS = "Success"
+
+# Natural-key names for the four peril pools.
+POOL_BLEED_OUT_TERMINAL = "bleed_out_terminal"
+POOL_ABANDONMENT_ENEMY = "abandonment_enemy"
+POOL_ABANDONMENT_PVP = "abandonment_pvp"
+POOL_ABANDONMENT_ENVIRONMENTAL = "abandonment_environmental"
 
 
 class CharacterVitalsFactory(factory_django.DjangoModelFactory):
@@ -22,3 +50,164 @@ class CharacterVitalsFactory(factory_django.DjangoModelFactory):
     health = 100
     max_health = 100
     base_max_health = 100
+
+
+# ---------------------------------------------------------------------------
+# Peril consequence pool factories (seed + test fixtures).
+# ---------------------------------------------------------------------------
+
+
+def _get_or_create_outcome(name: str, success_level: int):
+    """Return a CheckOutcome with the given name, creating it if absent."""
+    from world.traits.factories import CheckOutcomeFactory
+
+    return CheckOutcomeFactory(name=name, success_level=success_level)
+
+
+def _seed_pool_consequences(pool, consequence_specs) -> None:
+    """Idempotently seed Consequence + ConsequencePoolEntry rows for a pool.
+
+    Args:
+        pool: ConsequencePool instance.
+        consequence_specs: Iterable of (outcome_tier, label, weight, character_loss).
+    """
+    from actions.models import ConsequencePoolEntry
+    from world.checks.models import Consequence
+
+    for outcome_tier, label, weight, character_loss in consequence_specs:
+        consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=outcome_tier,
+            label=label,
+            defaults={"weight": weight, "character_loss": character_loss},
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=pool,
+            consequence=consequence,
+            defaults={"weight_override": None, "is_excluded": False},
+        )
+
+
+def create_bleed_out_terminal_pool():
+    """Create (or return existing) the bleed_out_terminal ConsequencePool.
+
+    Outcomes authored:
+    - ``recover`` (Success tier, weight=2): character stabilises and
+      recovers from the dying state.
+    - ``stay_incapacitated`` (Partial Success tier, weight=3): character
+      no longer actively bleeds out but remains incapacitated.
+    - ``die`` (Failure tier, weight=1, character_loss=True): character
+      dies — only reachable when death_is_permitted (T5 gates this).
+
+    ConsequenceEffect rows (REMOVE_CONDITION for recover/stay_incapacitated,
+    mark-dead for die) are NOT authored here because the mechanical
+    application is owned by Task 5 (advance_bleed_out rewrite).  No existing
+    EffectType covers "mark character dead", so that branch is left entirely
+    to T5. REMOVE_CONDITION exists but is wired through advance_bleed_out's
+    apply_resolution call rather than being baked into the pool entries — T5
+    decides the exact wiring.
+
+    Returns the ConsequencePool instance (safe to call multiple times —
+    uses get_or_create throughout).
+    """
+    from actions.models import ConsequencePool
+
+    pool, _ = ConsequencePool.objects.get_or_create(
+        name=POOL_BLEED_OUT_TERMINAL,
+        defaults={
+            "description": (
+                "Terminal bleed-out resolution: the character is at the final stage"
+                " of Bleeding Out and must stabilise, remain incapacitated, or die."
+            )
+        },
+    )
+
+    failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
+    partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)
+    success = _get_or_create_outcome(_OUTCOME_SUCCESS, success_level=1)
+
+    _seed_pool_consequences(
+        pool,
+        [
+            (success, "recover", 2, False),
+            (partial, "stay_incapacitated", 3, False),
+            (failure, "die", 1, True),
+        ],
+    )
+
+    return pool
+
+
+def create_abandonment_pools() -> dict[str, ConsequencePool]:
+    """Create (or return existing) the three abandonment ConsequencePools.
+
+    Pools and their intended use:
+    - ``abandonment_enemy``: NPC (enemy) source abandons the downed victim.
+      Higher die weight reflects greater peril from a hostile NPC context.
+      Task 6 will add a ``captured_alive`` consequence to this pool.
+    - ``abandonment_pvp``: PC source abandons the victim.  ADR-0023: PvP is
+      non-lethal, so the ``die`` row exists but is filtered by
+      filter_character_loss + death_is_permitted at resolution time.
+    - ``abandonment_environmental``: No source (environmental hazard, etc.).
+      Moderate danger.
+
+    All three pools share the same three outcome labels:
+    - ``recover`` (Success): character is found/helped in time.
+    - ``stay_incapacitated`` (Partial Success): character stabilises but
+      remains unable to act.
+    - ``die`` (Failure, character_loss=True): only reachable when
+      death_is_permitted (T5 enforces the gate).
+
+    Returns a dict mapping pool name → ConsequencePool.
+    """
+    from actions.models import ConsequencePool
+
+    failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
+    partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)
+    success = _get_or_create_outcome(_OUTCOME_SUCCESS, success_level=1)
+
+    pool_specs = {
+        POOL_ABANDONMENT_ENEMY: {
+            "description": (
+                "Abandonment resolution when the source is a non-PC (enemy) attacker."
+                " Includes a captured-alive outcome (wired by Task 6)."
+            ),
+            "consequences": [
+                (success, "recover", 2, False),
+                (partial, "stay_incapacitated", 2, False),
+                (failure, "die", 2, True),
+            ],
+        },
+        POOL_ABANDONMENT_PVP: {
+            "description": (
+                "Abandonment resolution when the source is a player character."
+                " ADR-0023: die row exists but is filtered by death_is_permitted."
+            ),
+            "consequences": [
+                (success, "recover", 2, False),
+                (partial, "stay_incapacitated", 3, False),
+                (failure, "die", 1, True),
+            ],
+        },
+        POOL_ABANDONMENT_ENVIRONMENTAL: {
+            "description": (
+                "Abandonment resolution when there is no source"
+                " (environmental hazard, unconscious collapse, etc.)."
+            ),
+            "consequences": [
+                (success, "recover", 2, False),
+                (partial, "stay_incapacitated", 2, False),
+                (failure, "die", 1, True),
+            ],
+        },
+    }
+
+    pools: dict[str, ConsequencePool] = {}
+    for pool_name, spec in pool_specs.items():
+        pool, _ = ConsequencePool.objects.get_or_create(
+            name=pool_name,
+            defaults={"description": spec["description"]},
+        )
+        _seed_pool_consequences(pool, spec["consequences"])
+        pools[pool_name] = pool
+
+    return pools

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
 
 
@@ -58,3 +59,35 @@ def death_is_permitted(
         return False
 
     return True
+
+
+def select_abandonment_pool(
+    source_character: "ObjectDB | None",  # noqa: OBJECTDB_PARAM
+) -> "ConsequencePool":
+    """Return the abandonment ConsequencePool appropriate for the source type.
+
+    Routes to one of three pre-authored pools by source character kind:
+    - PC source → ``abandonment_pvp`` pool (ADR-0023: die row filtered at runtime).
+    - Non-PC (NPC) source → ``abandonment_enemy`` pool.
+    - None source → ``abandonment_environmental`` pool.
+
+    The pools must be seeded in the database (via
+    ``world.vitals.factories.create_abandonment_pools``) before this
+    function is called.  Raises ``ConsequencePool.DoesNotExist`` if the
+    named pool is absent — treat that as a seeding gap, not a logic error.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.vitals.factories import (  # noqa: PLC0415
+        POOL_ABANDONMENT_ENEMY,
+        POOL_ABANDONMENT_ENVIRONMENTAL,
+        POOL_ABANDONMENT_PVP,
+    )
+
+    if is_pc_source(source_character):
+        pool_name = POOL_ABANDONMENT_PVP
+    elif source_character is not None:
+        pool_name = POOL_ABANDONMENT_ENEMY
+    else:
+        pool_name = POOL_ABANDONMENT_ENVIRONMENTAL
+
+    return ConsequencePool.objects.get(name=pool_name)
