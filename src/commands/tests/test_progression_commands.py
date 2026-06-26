@@ -10,7 +10,7 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from actions.types import ActionResult, DispatchResult
 from commands.progression import CmdProgressionUnlock, CmdTraining
-from world.action_points.factories import ActionPointConfigFactory
+from world.action_points.models import ActionPointConfig
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import SkillFactory, SpecializationFactory
@@ -46,7 +46,10 @@ class CmdTrainingListTests(TestCase):
         cls.specialization = SpecializationFactory()
         cls.mentor = PersonaFactory()
         cls.weekly_regen = 80
-        ActionPointConfigFactory(name="Default", is_active=True, weekly_regen=cls.weekly_regen)
+        ActionPointConfig.objects.update_or_create(
+            name="Default",
+            defaults={"is_active": True, "weekly_regen": cls.weekly_regen},
+        )
 
     def setUp(self):
         self.character.msg = MagicMock()
