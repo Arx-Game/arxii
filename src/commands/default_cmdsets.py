@@ -35,6 +35,7 @@ from commands.consent import (
     CmdRestoreSense,
 )
 from commands.door import CmdLock, CmdUnlock
+from commands.duels import CmdDuel
 from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
@@ -197,6 +198,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdClashCommit,
             # Shared combat verbs: combat <subverb> (#1453, #1452)
             CmdCombat,
+            # PC-vs-PC duel lifecycle: duel <subverb> (#1492)
+            CmdDuel,
             # Scene lifecycle telnet command (#1445)
             CmdScene,
             # #1470 — owner-gated room editor (name/description/public-private).

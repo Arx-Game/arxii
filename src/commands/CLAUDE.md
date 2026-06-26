@@ -132,6 +132,16 @@ actions, backends, and service functions.
   collisions (mirrors `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`.
+- **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
+  routes a leading subverb (`duel challenge <name>` / `accept [id]` / `decline [id]` /
+  `withdraw [id]` / `risk`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` —
+  the same seam the web uses — reaching the already-built duel Actions in
+  `actions/definitions/duels.py` (`challenge`/`accept`/`decline`/`withdraw`/`acknowledge_risk`). Bare
+  `duel` prints a status hub (pending incoming/outgoing challenges + active-duel state). Namespaced —
+  not bare keys — because `accept`/`decline` collide with `CmdAccept`/`CmdDeny`; mirrors `CmdCombat`'s
+  subverb routing. `yield` (concede an active duel) stays on `combat yield` (#1453); the hub points to
+  it. The optional `[id]` selects a specific pending challenge (the #1180 threaded-inbox path); without
+  it the action falls back to the actor's single pending challenge. No business logic in the command.
 - **`endorse.py`**: `CmdPoses` (`poses`) and `CmdEndorse` (`endorse`) — telnet faces of
   `PoseEndorseAction`, `SceneEntryEndorseAction`, `StylePresentationEndorseAction`.
   `poses <char>` lists endorseable poses in the current scene.

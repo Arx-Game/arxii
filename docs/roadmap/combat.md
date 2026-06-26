@@ -692,9 +692,11 @@ guard wired into `resolve_round`/`declare_action`; duel-state serializers.
 `use_technique` → `deduct_anima`/soulfray so a non-lethal duel draws no overburn deficit,
 clamps soulfray below any death-risk stage, and never fires a `character_loss` consequence.
 
-**Web-first actions:** `challenge` (social-consent-gated) / `accept` / `decline` /
+**Actions (telnet + web):** `challenge` (social-consent-gated) / `accept` / `decline` /
 `withdraw` / `yield` / `acknowledge_risk`. **Frontend:** `combat/duels/DuelChallengeControls`
-(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch.
+(+ yield / acknowledge controls), reusing the existing combat round UI + dispatch. **Telnet:**
+the `duel <subverb>` namespace (`CmdDuel`, #1492) routes challenge/accept/decline/withdraw/risk
+through the same `dispatch_player_action` REGISTRY seam; `yield` stays on `combat yield` (#1453).
 
 ### Duels — Phase 2 (SHIPPED — 2026-06-20)
 
