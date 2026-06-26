@@ -8,6 +8,8 @@ Covers:
 - All four pools (bleed_out_terminal, abandonment_enemy, abandonment_pvp,
   abandonment_environmental) exist and have non-empty entry sets.
 - die rows carry character_loss=True; recover rows carry character_loss=False.
+- Per-pool weight_override is set correctly (weight-sharing guard): die weight
+  in abandonment_enemy differs from bleed_out_terminal and abandonment_pvp.
 
 SQLite-compatible: all factories use get_or_create; no ObjectDB-backed
 model is used in setUpTestData (DbHolder trap — see MEMORY.md).
@@ -134,3 +136,68 @@ class AbandonmentPoolsTests(TestCase):
         pools2 = create_abandonment_pools()
         for name in ("abandonment_enemy", "abandonment_pvp", "abandonment_environmental"):
             self.assertEqual(self.pools[name].pk, pools2[name].pk)
+
+
+class PerPoolWeightTests(TestCase):
+    """weight_override is set per-pool so the weight-sharing bug cannot recur.
+
+    The same Consequence row (keyed on outcome_tier+label) is shared across
+    pools, but each ConsequencePoolEntry carries an explicit weight_override so
+    _entry_to_weighted uses the pool-specific weight, not the Consequence base
+    weight (which only reflects whichever pool created the row first).
+    """
+
+    def setUp(self) -> None:
+        self.bleed_out = create_bleed_out_terminal_pool()
+        self.pools = create_abandonment_pools()
+
+    def _entry_weight(self, pool, label: str) -> int:
+        """Return the resolved weight for a consequence label within a pool."""
+        entry = pool.entries.select_related("consequence").get(consequence__label=label)
+        # weight_override is the pool-specific weight; it must always be set.
+        if entry.weight_override is not None:
+            return entry.weight_override
+        return entry.consequence.weight
+
+    def test_die_weight_bleed_out_is_1(self) -> None:
+        """bleed_out_terminal: die weight=1."""
+        self.assertEqual(self._entry_weight(self.bleed_out, "die"), 1)
+
+    def test_die_weight_enemy_is_2(self) -> None:
+        """abandonment_enemy: die weight=2 (more dangerous hostile-NPC context)."""
+        self.assertEqual(self._entry_weight(self.pools["abandonment_enemy"], "die"), 2)
+
+    def test_die_weight_pvp_is_1(self) -> None:
+        """abandonment_pvp: die weight=1 (PvP die row filtered at runtime per ADR-0023)."""
+        self.assertEqual(self._entry_weight(self.pools["abandonment_pvp"], "die"), 1)
+
+    def test_die_weight_environmental_is_1(self) -> None:
+        """abandonment_environmental: die weight=1."""
+        self.assertEqual(self._entry_weight(self.pools["abandonment_environmental"], "die"), 1)
+
+    def test_stay_incapacitated_weight_bleed_out_is_3(self) -> None:
+        """bleed_out_terminal: stay_incapacitated weight=3."""
+        self.assertEqual(self._entry_weight(self.bleed_out, "stay_incapacitated"), 3)
+
+    def test_stay_incapacitated_weight_enemy_is_2(self) -> None:
+        """abandonment_enemy: stay_incapacitated weight=2."""
+        self.assertEqual(
+            self._entry_weight(self.pools["abandonment_enemy"], "stay_incapacitated"), 2
+        )
+
+    def test_enemy_and_bleed_out_share_consequence_row_but_differ_in_weight(self) -> None:
+        """The die Consequence is the same DB row across pools but pool weights differ."""
+        bleed_entry = self.bleed_out.entries.select_related("consequence").get(
+            consequence__label="die"
+        )
+        enemy_entry = (
+            self.pools["abandonment_enemy"]
+            .entries.select_related("consequence")
+            .get(consequence__label="die")
+        )
+        # Shared row
+        self.assertEqual(bleed_entry.consequence_id, enemy_entry.consequence_id)
+        # Per-pool weights differ
+        self.assertNotEqual(bleed_entry.weight_override, enemy_entry.weight_override)
+        self.assertEqual(bleed_entry.weight_override, 1)
+        self.assertEqual(enemy_entry.weight_override, 2)

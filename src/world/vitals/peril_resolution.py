@@ -77,7 +77,7 @@ def select_abandonment_pool(
     named pool is absent — treat that as a seeding gap, not a logic error.
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
-    from world.vitals.factories import (  # noqa: PLC0415
+    from world.vitals.constants import (  # noqa: PLC0415
         POOL_ABANDONMENT_ENEMY,
         POOL_ABANDONMENT_ENVIRONMENTAL,
         POOL_ABANDONMENT_PVP,

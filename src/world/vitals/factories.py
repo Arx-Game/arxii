@@ -17,11 +17,28 @@ import factory
 import factory.django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.vitals.constants import CharacterLifeState
+from world.vitals.constants import (
+    POOL_ABANDONMENT_ENEMY,
+    POOL_ABANDONMENT_ENVIRONMENTAL,
+    POOL_ABANDONMENT_PVP,
+    POOL_BLEED_OUT_TERMINAL,
+    CharacterLifeState,
+)
 from world.vitals.models import CharacterVitals
 
 if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
+
+# Re-export pool constants so existing callers of factories.POOL_* keep working.
+__all__ = [
+    "POOL_ABANDONMENT_ENEMY",
+    "POOL_ABANDONMENT_ENVIRONMENTAL",
+    "POOL_ABANDONMENT_PVP",
+    "POOL_BLEED_OUT_TERMINAL",
+    "CharacterVitalsFactory",
+    "create_abandonment_pools",
+    "create_bleed_out_terminal_pool",
+]
 
 # ---------------------------------------------------------------------------
 # Outcome-tier label constants used across all peril pools.
@@ -30,12 +47,6 @@ if TYPE_CHECKING:
 _OUTCOME_FAILURE = "Failure"
 _OUTCOME_PARTIAL = "Partial Success"
 _OUTCOME_SUCCESS = "Success"
-
-# Natural-key names for the four peril pools.
-POOL_BLEED_OUT_TERMINAL = "bleed_out_terminal"
-POOL_ABANDONMENT_ENEMY = "abandonment_enemy"
-POOL_ABANDONMENT_PVP = "abandonment_pvp"
-POOL_ABANDONMENT_ENVIRONMENTAL = "abandonment_environmental"
 
 
 class CharacterVitalsFactory(factory_django.DjangoModelFactory):
@@ -67,6 +78,14 @@ def _get_or_create_outcome(name: str, success_level: int):
 def _seed_pool_consequences(pool, consequence_specs) -> None:
     """Idempotently seed Consequence + ConsequencePoolEntry rows for a pool.
 
+    Each ``ConsequencePoolEntry`` stores the pool-specific weight via
+    ``weight_override`` so that pools with different weights for the same
+    consequence label (e.g. ``die`` is weight=2 in abandonment_enemy but
+    weight=1 in bleed_out_terminal) are resolved correctly.  The shared
+    ``Consequence`` row's base ``weight`` is a sensible fallback; the actual
+    weight used during resolution is always the pool entry's ``weight_override``
+    (see ``_entry_to_weighted`` in ``actions/types.py``).
+
     Args:
         pool: ConsequencePool instance.
         consequence_specs: Iterable of (outcome_tier, label, weight, character_loss).
@@ -83,7 +102,7 @@ def _seed_pool_consequences(pool, consequence_specs) -> None:
         ConsequencePoolEntry.objects.get_or_create(
             pool=pool,
             consequence=consequence,
-            defaults={"weight_override": None, "is_excluded": False},
+            defaults={"weight_override": weight, "is_excluded": False},
         )
 
 
