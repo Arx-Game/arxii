@@ -245,6 +245,22 @@ class CombatRoundContext(RoundContext):
             or EffortLevel.MEDIUM
         )
 
+        confirm_soulfray_risk: bool = bool(kwargs.get("confirm_soulfray_risk", False))
+
+        fury_commitment = None
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is not None:
+            from world.magic.models import FuryTier  # noqa: PLC0415
+
+            fury_commitment = FuryTier.objects.filter(pk=fury_commitment_id).first()
+
+        fury_anchor = None
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        if fury_anchor_id is not None:
+            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+            fury_anchor = CharacterSheet.objects.filter(pk=fury_anchor_id).first()
+
         action = declare_action(
             participant,
             focused_action=focused,
@@ -255,6 +271,9 @@ class CombatRoundContext(RoundContext):
             physical_passive=physical,
             social_passive=social,
             mental_passive=mental,
+            confirm_soulfray_risk=confirm_soulfray_risk,
+            fury_commitment=fury_commitment,
+            fury_anchor=fury_anchor,
         )
 
         # AoE / FILTERED_GROUP: persist the full target set as join rows so the

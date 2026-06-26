@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import Technique, TechniqueDamageProfile
+    from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -1681,6 +1681,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     physical_passive: Technique | None = None,
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
+    confirm_soulfray_risk: bool = False,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
 ) -> CombatRoundAction:
     """Declare a PC's action for the current round.
 
@@ -1787,6 +1790,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "maneuver": None,  # Reset maneuver on re-declaration
             "combo_upgrade": None,  # Reset combo on re-declaration
             "is_ready": False,  # Reset ready on re-declaration
+            "confirm_soulfray_risk": confirm_soulfray_risk,
+            "fury_commitment": fury_commitment,
+            "fury_anchor": fury_anchor,
         },
     )
     return action

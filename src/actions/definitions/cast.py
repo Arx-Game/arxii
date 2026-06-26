@@ -201,6 +201,14 @@ class CastTechniqueAction(Action):
         focused_ally_id = kwargs.get("focused_ally_target_id")
         if focused_ally_id is not None:
             decl_kwargs["focused_ally_target_id"] = focused_ally_id
+        if kwargs.get("confirm_soulfray_risk"):
+            decl_kwargs["confirm_soulfray_risk"] = True
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is not None:
+            decl_kwargs["fury_commitment_id"] = fury_commitment_id
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        if fury_anchor_id is not None:
+            decl_kwargs["fury_anchor_id"] = fury_anchor_id
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
