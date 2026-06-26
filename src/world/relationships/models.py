@@ -389,6 +389,14 @@ class CharacterRelationship(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["source", "target"], name="unique_relationship_pair"),
+            # Enforce the self-relationship prohibition at the DB layer: clean()
+            # is bypassed by get_or_create/objects.create, which the services use,
+            # so a DB constraint is the only reliable guard (#1485 — now that the
+            # verbs are player-reachable from web + telnet).
+            models.CheckConstraint(
+                condition=~models.Q(source=models.F("target")),
+                name="relationship_source_not_target",
+            ),
         ]
 
     def __str__(self) -> str:

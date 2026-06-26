@@ -412,3 +412,66 @@ class RedistributePointsActionTests(ActionTestCase):
         )
         self.assertFalse(result.success)
         self.assertIn("invalid", result.message.lower())
+
+
+class SelfTargetGuardTests(ActionTestCase):
+    """No verb may record a relationship with the actor's own character (#1485)."""
+
+    def test_first_impression_rejects_self_target(self):
+        track = RelationshipTrackFactory()
+        result = CreateFirstImpressionAction().run(
+            actor=self.actor,
+            target_sheet=self.actor_sheet,
+            track=track,
+            points=3,
+            title="Navel-gazing",
+            writeup="I find myself fascinating.",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("yourself", result.message.lower())
+        self.assertFalse(
+            CharacterRelationship.objects.filter(
+                source=self.actor_sheet, target=self.actor_sheet
+            ).exists()
+        )
+
+    def test_development_rejects_self_target(self):
+        track = RelationshipTrackFactory()
+        result = CreateDevelopmentAction().run(
+            actor=self.actor,
+            target_sheet=self.actor_sheet,
+            track=track,
+            points=2,
+            title="Growing self-regard",
+            writeup="I grow on me.",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("yourself", result.message.lower())
+
+    def test_capstone_rejects_self_target(self):
+        track = RelationshipTrackFactory()
+        result = CreateCapstoneAction().run(
+            actor=self.actor,
+            target_sheet=self.actor_sheet,
+            track=track,
+            points=10,
+            title="Self oath",
+            writeup="I swore to myself.",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("yourself", result.message.lower())
+
+    def test_redistribute_rejects_self_target(self):
+        source_track = RelationshipTrackFactory()
+        target_track = RelationshipTrackFactory()
+        result = RedistributePointsAction().run(
+            actor=self.actor,
+            target_sheet=self.actor_sheet,
+            source_track=source_track,
+            target_track=target_track,
+            points=3,
+            title="Self shift",
+            writeup="Reconfiguring my self-regard.",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("yourself", result.message.lower())

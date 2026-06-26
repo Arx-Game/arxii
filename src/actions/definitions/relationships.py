@@ -84,6 +84,33 @@ class BaseRelationshipAction(Action):
         except (AttributeError, ObjectDoesNotExist):
             return None
 
+    def _self_target_error(self, sheet: Any, target_sheet: Any) -> str:
+        """Return an error message if the actor targets themselves, else "".
+
+        Mirrors the DB-level ``relationship_source_not_target`` CheckConstraint
+        so players get a friendly failure rather than a 500/IntegrityError. The
+        verbs describe regard for *another* character — a self-relationship is
+        nonsensical and would self-award both author + target XP (#1485).
+        """
+        if target_sheet is not None and sheet is not None and target_sheet.pk == sheet.pk:
+            return "You cannot record a relationship with yourself."
+        return ""
+
+    def _preflight_error(self, sheet: Any, target_sheet: Any, **required: Any) -> str:
+        """Return the first preflight error for a relationship verb, else "".
+
+        Consolidates the no-sheet / missing-required-kwarg / self-target checks
+        into a single message so each ``execute()`` needs one early return
+        (keeps PLR0911 under the limit). ``required`` maps kwarg label → value;
+        the first ``None`` value yields a "No <label> selected." message.
+        """
+        if sheet is None:
+            return "No active character."
+        for label, value in required.items():
+            if value is None:
+                return f"No {label} selected."
+        return self._self_target_error(sheet, target_sheet)
+
 
 @dataclass
 class CreateFirstImpressionAction(BaseRelationshipAction):
@@ -107,20 +134,11 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
         from world.relationships.services import create_first_impression  # noqa: PLC0415
 
         sheet = self._sheet(actor)
-        if sheet is None:
-            return ActionResult(success=False, message="No active character.")
-
         target_sheet = kwargs.get("target_sheet")
         track = kwargs.get("track")
-        missing = (
-            "No target selected."
-            if target_sheet is None
-            else "No track selected."
-            if track is None
-            else ""
-        )
-        if missing:
-            return ActionResult(success=False, message=missing)
+        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        if err:
+            return ActionResult(success=False, message=err)
 
         try:
             points = int(kwargs.get("points", 0))
@@ -171,20 +189,11 @@ class CreateDevelopmentAction(BaseRelationshipAction):
         from world.relationships.services import create_development  # noqa: PLC0415
 
         sheet = self._sheet(actor)
-        if sheet is None:
-            return ActionResult(success=False, message="No active character.")
-
         target_sheet = kwargs.get("target_sheet")
         track = kwargs.get("track")
-        missing = (
-            "No target selected."
-            if target_sheet is None
-            else "No track selected."
-            if track is None
-            else ""
-        )
-        if missing:
-            return ActionResult(success=False, message=missing)
+        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        if err:
+            return ActionResult(success=False, message=err)
 
         relationship = self._relationship(sheet, target_sheet)
 
@@ -246,20 +255,11 @@ class CreateCapstoneAction(BaseRelationshipAction):
         from world.relationships.services import create_capstone  # noqa: PLC0415
 
         sheet = self._sheet(actor)
-        if sheet is None:
-            return ActionResult(success=False, message="No active character.")
-
         target_sheet = kwargs.get("target_sheet")
         track = kwargs.get("track")
-        missing = (
-            "No target selected."
-            if target_sheet is None
-            else "No track selected."
-            if track is None
-            else ""
-        )
-        if missing:
-            return ActionResult(success=False, message=missing)
+        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        if err:
+            return ActionResult(success=False, message=err)
 
         relationship = self._relationship(sheet, target_sheet)
 
@@ -313,23 +313,17 @@ class RedistributePointsAction(BaseRelationshipAction):
         from world.relationships.services import redistribute_points  # noqa: PLC0415
 
         sheet = self._sheet(actor)
-        if sheet is None:
-            return ActionResult(success=False, message="No active character.")
-
         target_sheet = kwargs.get("target_sheet")
         source_track = kwargs.get("source_track")
         target_track = kwargs.get("target_track")
-        missing = (
-            "No target selected."
-            if target_sheet is None
-            else "No source track selected."
-            if source_track is None
-            else "No target track selected."
-            if target_track is None
-            else ""
+        err = self._preflight_error(
+            sheet,
+            target_sheet,
+            target=target_sheet,
+            **{"source track": source_track, "target track": target_track},
         )
-        if missing:
-            return ActionResult(success=False, message=missing)
+        if err:
+            return ActionResult(success=False, message=err)
 
         relationship = self._relationship(sheet, target_sheet)
 
