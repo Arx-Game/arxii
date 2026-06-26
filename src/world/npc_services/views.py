@@ -281,11 +281,11 @@ class InteractionViewSet(viewsets.ViewSet):
             200: InteractionStateSerializer,
             400: OpenApiResponse(
                 description=(
-                    "No puppeted character, no offer, interaction closed, or offer not eligible."
+                    "No puppeted character, no offer, offer not eligible, "
+                    "or the interaction has already ended."
                 )
             ),
             404: OpenApiResponse(description="No interaction in progress or offer not found."),
-            409: OpenApiResponse(description="Interaction closed or resolve error."),
         },
     )
     @action(detail=False, methods=["post"])
@@ -319,12 +319,8 @@ class InteractionViewSet(viewsets.ViewSet):
     @extend_schema(
         responses={
             200: InteractionStateSerializer,
-            400: OpenApiResponse(
-                description="No puppeted character or no interaction in progress."
-            ),
-            404: OpenApiResponse(
-                description="No interaction in progress or interaction already ended."
-            ),
+            400: OpenApiResponse(description="No puppeted character."),
+            404: OpenApiResponse(description="No interaction in progress."),
         },
     )
     @action(detail=False, methods=["post"])

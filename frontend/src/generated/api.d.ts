@@ -9700,15 +9700,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_end_create'];
     delete?: never;
@@ -9727,15 +9728,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_resolve_create'];
     delete?: never;
@@ -9754,15 +9756,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Player-facing endpoints driving the in-memory interaction state machine.
+     * @description Player-facing endpoints driving the NPC-service interaction state machine.
      *
      *     One active interaction per Django session — calling ``start`` while a
      *     session is in-flight returns 409. ``resolve`` and ``end`` operate on
      *     the current in-flight session; both return 404 if none exists.
      *
-     *     The PC's persona is resolved from the request user's puppeted
-     *     character via :func:`persona_for_character` (raises loud on missing
-     *     sheet per the CLAUDE.md invariant — surfaces as 400).
+     *     The viewset is a thin wrapper over the registry Actions in
+     *     ``actions.definitions.npc_services``; each endpoint delegates to
+     *     ``action.run(actor=character)`` and manages the small session slice
+     *     stored in ``request.session``.
      */
     post: operations['npc_services_interactions_start_create'];
     delete?: never;
@@ -38802,6 +38805,13 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
+      /** @description No puppeted character. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description No interaction in progress. */
       404: {
         headers: {
@@ -38832,14 +38842,14 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
-      /** @description Offer not eligible / session closed. */
+      /** @description No puppeted character, no offer, offer not eligible, or the interaction has already ended. */
       400: {
         headers: {
           [name: string]: unknown;
         };
         content?: never;
       };
-      /** @description No interaction in progress / offer not found. */
+      /** @description No interaction in progress or offer not found. */
       404: {
         headers: {
           [name: string]: unknown;
@@ -38869,8 +38879,29 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
+      /** @description No puppeted character or no role was provided. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description NPC role or persona was not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description An interaction is already in flight. */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Character sheet invariant breach (missing primary persona). */
+      500: {
         headers: {
           [name: string]: unknown;
         };
