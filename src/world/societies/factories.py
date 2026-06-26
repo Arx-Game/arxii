@@ -11,6 +11,7 @@ import factory.django as factory_django
 from world.character_creation.factories import RealmFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+from world.societies.membership_services import base_rank_for_organization
 from world.societies.models import (
     CovenantLegendCredit,
     LegendDeedStory,
@@ -126,7 +127,7 @@ class OrganizationMembershipFactory(factory_django.DjangoModelFactory):
 
     organization = factory.SubFactory(OrganizationFactory)
     persona = factory.SubFactory(PersonaFactory)
-    rank = factory.LazyAttribute(lambda obj: obj.organization.ranks.filter(tier=5).first())
+    rank = factory.LazyAttribute(lambda obj: base_rank_for_organization(obj.organization))
 
 
 class OrganizationRankFactory(factory_django.DjangoModelFactory):
