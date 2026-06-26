@@ -61,6 +61,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
+from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
@@ -202,6 +203,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDuel,
             # Scene lifecycle telnet command (#1445)
             CmdScene,
+            # #1493 — NPC-service hire/commission interaction loop.
+            CmdHire,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1347 — list faces + wear-face active persona switch.
