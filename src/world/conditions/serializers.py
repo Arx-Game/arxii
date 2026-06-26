@@ -14,6 +14,7 @@ from world.conditions.models import (
     ConditionStage,
     ConditionTemplate,
     DamageType,
+    TreatmentTemplate,
 )
 
 # =============================================================================
@@ -45,6 +46,34 @@ class DamageTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = DamageType
         fields = ["id", "name", "description", "color_hex", "icon"]
+        read_only_fields = fields
+
+
+class TreatmentTemplateSerializer(serializers.ModelSerializer):
+    """Read-only serializer for treatment template definitions.
+
+    Surfaces the authored recipe for attempting to treat a condition or
+    pending alteration (costs, bond requirement, scene requirement) so the
+    web Treat panel can render the candidate list returned by
+    ``get_treatment_candidates``.
+    """
+
+    target_condition = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = TreatmentTemplate
+        fields = [
+            "id",
+            "key",
+            "name",
+            "description",
+            "target_kind",
+            "requires_bond",
+            "resonance_cost",
+            "anima_cost",
+            "scene_required",
+            "target_condition",
+        ]
         read_only_fields = fields
 
 
