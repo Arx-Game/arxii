@@ -310,7 +310,11 @@ class PurchaseUnlockAction(Action):
 
         thread = Thread.objects.get(pk=kwargs.get("thread_id"))
         character_sheet = actor.sheet_data
-        boundary_level = int(kwargs["boundary_level"])
+        if thread.owner_id != character_sheet.pk:
+            return ActionResult(
+                success=False, message="You can only purchase unlocks for your own threads."
+            )
+        boundary_level = int(kwargs.get("boundary_level"))
         thread_level_unlock = cross_thread_xp_lock(character_sheet, thread, boundary_level)
         return ActionResult(
             success=True,
