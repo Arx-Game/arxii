@@ -10,8 +10,10 @@ Single-actor path (SERVICE/CEREMONY kind):
 
 Multi-participant session path:
     ``ritual sessions``                              — list pending sessions
-    ``ritual draft <name> invite=<char>[,<char>]``   — draft a session
-    ``ritual join <id>``                             — accept your invitation
+    ``ritual draft <name> invite=<char>[,<char>]`` — draft a session
+        (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for rituals
+        that carry setup info, e.g. the soul-tether BILATERAL)
+    ``ritual join <id> [role=sinner|sineater]``      — accept your invitation
     ``ritual decline <id>``                          — decline your invitation
     ``ritual fire <id>``                             — fire the session (initiator only)
 
@@ -32,6 +34,33 @@ from commands.exceptions import CommandError
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire"})
+# Kwargs carried into session/participant dicts for rituals that need setup
+# info (e.g. the soul-tether BILATERAL). Keys match what the ritual's
+# service_function_path reads off RitualSession.session_kwargs /
+# RitualSessionParticipant.participant_kwargs.
+_ROLE_KWARG = "role"
+_RESONANCE_KWARG = "resonance"
+_WRITEUP_KWARG = "writeup"
+_SESSION_RESONANCE_ID_KEY = "resonance_id"
+_SESSION_WRITEUP_KEY = "writeup"
+_PARTICIPANT_ROLE_KEY = "soul_tether_role"
+
+
+def _resolve_soul_tether_role(token: str) -> str:
+    """Map a telnet ``role=`` token to a SoulTetherRole value.
+
+    Returns the canonical uppercase enum value (``"SINNER"`` / ``"SINEATER"``)
+    that the fire handler ``accept_soul_tether_via_session`` compares against.
+    Raises ``CommandError`` for unknown roles.
+    """
+    from world.magic.types.soul_tether import SoulTetherRole  # noqa: PLC0415
+
+    normalized = token.strip().upper()
+    for role in SoulTetherRole:
+        if normalized == role.value:
+            return role.value
+    msg = f"Unknown role '{token}'. Use role=sinner or role=sineater."
+    raise CommandError(msg)
 
 
 class CmdRitual(ArxCommand):
@@ -45,9 +74,11 @@ class CmdRitual(ArxCommand):
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              — list pending sessions
         ``ritual draft <name> invite=<char>[,<char>]``   — draft a session
-        ``ritual join <id>``                             — accept your invitation
-        ``ritual decline <id>``                          — decline your invitation
-        ``ritual fire <id>``                             — fire the session (initiator only)
+            (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for
+            rituals that carry setup info, e.g. the soul-tether BILATERAL)
+        ``ritual join <id> [role=sinner|sineater]``       — accept your invitation
+        ``ritual decline <id>``                           — decline your invitation
+        ``ritual fire <id>``                              — fire the session (initiator only)
     """
 
     key = "ritual"
@@ -107,7 +138,9 @@ class CmdRitual(ArxCommand):
             )
         self.caller.msg("\n".join(lines))
 
-    def _handle_draft(self, rest: str) -> None:
+    def _handle_draft(  # noqa: C901, PLR0912, PLR0915
+        self, rest: str
+    ) -> None:
         """Draft a multi-participant session: ``draft <name> invite=<char>[,<char>]``."""
         from datetime import timedelta  # noqa: PLC0415
 
@@ -122,18 +155,32 @@ class CmdRitual(ArxCommand):
             RitualSessionError,
         )
         from world.magic.models import Ritual  # noqa: PLC0415
+        from world.magic.models.affinity import Resonance  # noqa: PLC0415
         from world.magic.services.sessions import draft_session  # noqa: PLC0415
 
-        # Parse: ``Ritual Name invite=char1[,char2]``
+        # Parse: ``Ritual Name invite=char1[,char2] role=sinner|sineater
+        #         resonance=<name> [writeup=<narrative>]``
         tokens = rest.split()
         name_parts: list[str] = []
         invite_names: list[str] = []
-        for token in tokens:
+        role_token = ""
+        resonance_token = ""
+        writeup = ""
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
             if token.startswith("invite="):
-                value = token[7:]
-                invite_names = [n.strip() for n in value.split(",") if n.strip()]
+                invite_names = [n.strip() for n in token[7:].split(",") if n.strip()]
+            elif token.startswith(f"{_ROLE_KWARG}="):
+                role_token = token[len(_ROLE_KWARG) + 1 :]
+            elif token.startswith(f"{_RESONANCE_KWARG}="):
+                resonance_token = token[len(_RESONANCE_KWARG) + 1 :]
+            elif token.startswith(f"{_WRITEUP_KWARG}="):
+                writeup = " ".join([token[len(_WRITEUP_KWARG) + 1 :], *tokens[index + 1 :]]).strip()
+                break
             else:
                 name_parts.append(token)
+            index += 1
 
         usage = "Usage: ritual draft <ritual_name> invite=<character>[,<character>]"
         name = " ".join(name_parts).strip()
@@ -171,15 +218,33 @@ class CmdRitual(ArxCommand):
             invitees.append(invitee_sheet)
 
         initiator_sheet = self.caller.sheet_data
+
+        # Build session-level + initiator-participant kwargs from the parsed tokens.
+        session_kwargs: dict[str, Any] = {}
+        initiator_participant_kwargs: dict[str, Any] = {}
+        if role_token:
+            initiator_participant_kwargs[_PARTICIPANT_ROLE_KEY] = _resolve_soul_tether_role(
+                role_token
+            )
+        if resonance_token:
+            resonance_name = resonance_token.strip()
+            resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
+            if resonance is None:
+                msg = f"No resonance named '{resonance_name}'."
+                raise CommandError(msg)
+            session_kwargs[_SESSION_RESONANCE_ID_KEY] = resonance.pk
+        if writeup:
+            session_kwargs[_SESSION_WRITEUP_KEY] = writeup
+
         try:
             session = draft_session(
                 ritual=ritual,
                 initiator=initiator_sheet,
                 proposed_terms="",
-                session_kwargs={},
+                session_kwargs=session_kwargs,
                 invitee_sheets=invitees,
                 session_references=[],
-                initiator_participant_kwargs={},
+                initiator_participant_kwargs=initiator_participant_kwargs,
                 initiator_references=[],
                 expires_at=timezone.now() + timedelta(hours=24),
             )
