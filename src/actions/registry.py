@@ -23,6 +23,7 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
+from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -104,6 +105,8 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     SetActivePersonaAction(),
+    SpreadTaleAction(),
+    SaveDeedStoryAction(),
     PutInAction(),
     TakeOutAction(),
     ActivatePermitAction(),
