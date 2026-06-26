@@ -3183,7 +3183,6 @@
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
-- `register_stat_definitions() -> 'None' — Create the StatDefinition rows for project-related achievement stats.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 

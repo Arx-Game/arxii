@@ -105,15 +105,19 @@ def add_contribution(  # noqa: PLR0913
 def _increment_contribution_stat(persona: Persona) -> None:
     """Increment the projects.total_contributed StatTracker for this persona.
 
-    Silent no-op if the StatDefinition isn't seeded (defensive — apps.ready()
-    seeds it, but isolated tests may skip ready()).
+    Lazily creates the StatDefinition row if it does not exist yet, matching the
+    pattern used by combat achievement counters. No import-time / app-ready DB
+    queries are performed here.
     """
     from world.achievements.models import StatDefinition  # noqa: PLC0415
 
-    try:
-        stat_def = StatDefinition.objects.get(key="projects.total_contributed")
-    except StatDefinition.DoesNotExist:
-        return
+    stat_def, _ = StatDefinition.objects.get_or_create(
+        key="projects.total_contributed",
+        defaults={
+            "name": "Total Project Contributions",
+            "description": "Total contributions made across all projects.",
+        },
+    )
     # The stats handler API varies — best to call via the persona's character_sheet.
     # Defensive guard: if the API doesn't exist as assumed, skip silently.
     import contextlib  # noqa: PLC0415
@@ -218,33 +222,3 @@ def scan_active_projects() -> int:
         transitioned += 1
 
     return transitioned
-
-
-# ---------------------------------------------------------------------------
-# StatDefinition seeding (called at app-ready)
-# ---------------------------------------------------------------------------
-
-
-def register_stat_definitions() -> None:
-    """Create the StatDefinition rows for project-related achievement stats.
-
-    Idempotent (get_or_create). Called at app-ready time in apps.py.
-    """
-    from world.achievements.models import StatDefinition  # noqa: PLC0415
-
-    StatDefinition.objects.get_or_create(
-        key="projects.total_contributed",
-        defaults={
-            "name": "Total Project Contributions",
-            "description": "Total contributions made across all projects.",
-        },
-    )
-    StatDefinition.objects.get_or_create(
-        key="projects.completed_critical",
-        defaults={
-            "name": "Critical Project Completions",
-            "description": (
-                "Number of projects the character contributed to that completed at CRITICAL tier."
-            ),
-        },
-    )

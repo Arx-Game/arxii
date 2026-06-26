@@ -837,8 +837,8 @@ ROOM_FEATURE_PROGRESSION).
   (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
 - **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
   `ContributionPrivacy`
-- **Stat definitions:** Project achievement stats are seeded in `AppConfig.ready()` via
-  `register_stat_definitions()`
+- **Stat definitions:** Project achievement stats are created lazily on first
+  contribution (same pattern as combat achievement counters)
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
 
