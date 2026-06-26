@@ -92,8 +92,13 @@ class CmdHome(ArxCommand):
     locks = "cmd:all()"
     action = HomeAction()
 
+    SET_SWITCH: ClassVar[str] = "set"
+
     def _execute(self) -> None:
-        if "set" in self.switches:  # noqa: STRING_LITERAL — Evennia switch token
+        # ``switches`` is populated by the cmdhandler at parse time; a directly-constructed
+        # command (unit tests) may not have it, so default to empty.
+        switches = getattr(self, "switches", None) or ()  # noqa: GETATTR_LITERAL
+        if self.SET_SWITCH in switches:
             self._set_home()
             return
         super()._execute()
