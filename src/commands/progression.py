@@ -16,6 +16,7 @@ from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
+    from world.progression.types import DetailedUnlockEntry
 
 # Telnet argument keys used by both commands.
 _KEY_SKILL = "skill"
@@ -304,7 +305,6 @@ class CmdProgressionUnlock(DispatchCommand):
 
     def _show_listing(self) -> None:
         """Render available class-level and thread XP-lock unlocks."""
-        from world.magic.services.threads import near_xp_lock_threads  # noqa: PLC0415
         from world.progression.services.spends import (  # noqa: PLC0415
             get_available_unlocks_for_character,
         )
@@ -315,38 +315,53 @@ class CmdProgressionUnlock(DispatchCommand):
         except AttributeError:
             sheet = None
 
-        lines = ["Available progression unlocks:"]
-
         available = get_available_unlocks_for_character(character)
         entries = list(available[_AVAILABLE_KEY]) + list(available[_LOCKED_KEY])
-        if entries:
-            for entry in entries:
-                unlock = entry[_UNLOCK_KEY]
-                failed = entry.get(_FAILED_REQUIREMENTS_KEY, [])
-                status = "" if entry[_REQUIREMENTS_MET_KEY] else " (locked)"
-                reason = "; ".join(failed) if failed else ""
-                lines.append(
-                    f"[class] {unlock.character_class.name} level {unlock.target_level}: "
-                    f"{entry[_XP_COST_KEY]} XP{status}"
-                )
-                if reason:
-                    lines.append(f"        {reason}")
-        else:
-            lines.append("No class-level unlocks available.")
 
+        lines = ["Available progression unlocks:"]
+        lines.extend(self._render_class_unlock_entries(entries))
         if sheet is not None:
-            thread_prospects = near_xp_lock_threads(sheet)
-            if thread_prospects:
-                lines.append("")
-                lines.append("Thread XP-lock boundaries:")
-                for prospect in thread_prospects:
-                    thread = prospect.thread
-                    thread_name = thread.name or "Unnamed Thread"
-                    lines.append(
-                        f"[thread] {thread_name} level {prospect.boundary_level}: "
-                        f"{prospect.xp_cost} XP"
-                    )
-            elif not entries:
-                lines.append("No thread XP-lock boundaries available.")
+            lines.extend(self._render_thread_unlocks(sheet, has_entries=bool(entries)))
 
         self.msg("\n".join(lines))
+
+    def _render_class_unlock_entries(self, entries: list[DetailedUnlockEntry]) -> list[str]:
+        """Return rendered lines for class-level unlocks."""
+        if not entries:
+            return ["No class-level unlocks available."]
+        lines: list[str] = []
+        for entry in entries:
+            unlock = entry[_UNLOCK_KEY]
+            failed = entry.get(_FAILED_REQUIREMENTS_KEY, [])
+            status = "" if entry[_REQUIREMENTS_MET_KEY] else " (locked)"
+            reason = "; ".join(failed) if failed else ""
+            lines.append(
+                f"[class] {unlock.character_class.name} level {unlock.target_level}: "
+                f"{entry[_XP_COST_KEY]} XP{status}"
+            )
+            if reason:
+                lines.append(f"        {reason}")
+        return lines
+
+    def _render_thread_unlocks(
+        self,
+        sheet: Any,
+        *,
+        has_entries: bool,
+    ) -> list[str]:
+        """Return rendered lines for thread XP-lock boundaries."""
+        from world.magic.services.threads import near_xp_lock_threads  # noqa: PLC0415
+
+        thread_prospects = near_xp_lock_threads(sheet)
+        if not thread_prospects:
+            if has_entries:
+                return []
+            return ["No thread XP-lock boundaries available."]
+        lines = ["", "Thread XP-lock boundaries:"]
+        for prospect in thread_prospects:
+            thread = prospect.thread
+            thread_name = thread.name or "Unnamed Thread"
+            lines.append(
+                f"[thread] {thread_name} level {prospect.boundary_level}: {prospect.xp_cost} XP"
+            )
+        return lines
