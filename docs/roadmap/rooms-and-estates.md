@@ -72,6 +72,25 @@ per-row decay/growth on modifiers. See
 - Many other consumer systems (encounter generator, DC modifier, weather,
   magic, events bonuses) plug in over time
 
+## Climate → comfort (#1514, in progress)
+
+Mechanical climate + a build-to-win comfort loop (motivated by the Arx-1 "Great Mango
+Incident": flavour-only weather let a Caribbean open-air manor be built in four-season Arx).
+Make climate *mechanical* so the world enforces theme through play, and let players win
+against it by building — never a GM veto, just more work. Full design + anti-reinvention
+ledger in issue **#1514**; security/access half (windows-as-egress, guards/defenses) split to
+**#1515**.
+
+- **Model:** typed **exposure axes** (`StatKey.COLD`/`HEAT`, extensible to WET/WIND via
+  `EXPOSURE_STAT_KEYS`), each floored at 0 on the existing location-stats cascade — the floor
+  *is* the "counters never harm" guarantee. Climate/weather/style push axes up; counter-fixtures
+  push them down; `comfort_score(room)` reads the inverse of the summed residuals.
+- **Slice 1 (done):** the COLD/HEAT axes + `room_discomfort` / `comfort_score` reads.
+- **Later slices:** enclosure (generalise `is_outdoor`), an `ArchitecturalStyle` model (climate
+  affinities, seeded from lore), stackable comfort **fixtures** (not `RoomFeatureInstance` —
+  that's OneToOne), the Season→climate hook, comfort→AP-regen and comfort→Conditions
+  (Tehom-coordinated) effects, and the inhabitant/owner surfacing.
+
 ## What's Needed for MVP
 
 - **Stats substrate** — designed (see above); ready to implement
