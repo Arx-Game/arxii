@@ -540,8 +540,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """Return the pk of the Persona named by ``self._target_name``, or None.
 
         Used on the non-combat path when ``at <name>`` names a scene participant.
-        The lookup is scoped to personas owned by accounts participating in the
-        active scene at the caller's location.
+        The lookup walks the active scene's participants, resolves each
+        participant's active persona from cached data, and matches on name.
 
         Raises:
             CommandError: If a target name was given but no matching Persona exists
@@ -549,28 +549,33 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """
         if not self._target_name:
             return None
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-        from world.scenes.models import Persona  # noqa: PLC0415
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        name = self._target_name
+        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        name = self._target_name.lower()
         scene = _get_active_scene(self.caller.location)
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)
 
-        persona = (
-            Persona.objects.filter(
-                name__iexact=name,
-                character_sheet__roster_entry__tenures__end_date__isnull=True,
-                character_sheet__roster_entry__tenures__player_data__account__in=scene.participants.all(),
-            )
-            .distinct()
-            .first()
-        )
-        if persona is None:
-            msg = f"No persona named '{name}' is participating in this scene."
-            raise CommandError(msg)
-        return persona.pk
+        for account in scene.participants.all():
+            try:
+                player_data = account.player_data
+            except (AttributeError, ObjectDoesNotExist):
+                continue
+            for character in player_data.get_available_characters():
+                try:
+                    sheet = character.sheet_data
+                    persona = active_persona_for_sheet(sheet)
+                except (AttributeError, ObjectDoesNotExist):
+                    continue
+                if persona.name.lower() == name:
+                    return persona.pk
+
+        msg = f"No persona named '{self._target_name}' is participating in this scene."
+        raise CommandError(msg)
 
     def _cast_pull(self) -> CastPullDeclaration | None:
         """Return a ``CastPullDeclaration`` if pull= was declared, else ``None``.
