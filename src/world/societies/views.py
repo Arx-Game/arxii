@@ -39,7 +39,9 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     Staff see all non-covenant organizations.
     """
 
-    queryset = Organization.objects.prefetch_related("ranks").order_by("id")  # noqa: PREFETCH_STRING
+    queryset = Organization.objects.prefetch_related(
+        "ranks",  # noqa: PREFETCH_STRING
+    ).order_by("id")
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = SocietiesPagination
