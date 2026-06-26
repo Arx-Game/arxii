@@ -62,6 +62,7 @@ class ConsentPreferenceActionsTests(TestCase):
             mode=ConsentMode.ALLOWLIST,
         )
         assert result.success is True
+        assert "whitelist" in result.message
         assert SocialConsentCategoryRule.objects.filter(
             preference__tenure=self.tenure,
             mode=ConsentMode.ALLOWLIST,
@@ -158,6 +159,7 @@ class ConsentPreferenceActionsTests(TestCase):
             allowed_tenure_id=allowed.pk,
         )
         assert result.success is False
+        assert "not on the list" in result.message
 
     def test_cannot_manage_other_players_tenure(self):
         other_player = PlayerDataFactory()

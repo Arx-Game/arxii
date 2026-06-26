@@ -21,6 +21,16 @@ _MSG_NOT_YOUR_TENURE = "You can only manage consent for your own characters."
 _MSG_NO_CATEGORY = "No consent category named '{}'"
 
 _MODE_DEFAULT = "default"
+_PLAYER_FACING_ALLOWLIST = "whitelist"
+
+
+def _display_mode(mode: str | None) -> str | None:
+    """Map internal consent-mode values to player-facing vocabulary."""
+    from world.consent.constants import ConsentMode  # noqa: PLC0415
+
+    if mode == ConsentMode.ALLOWLIST:
+        return _PLAYER_FACING_ALLOWLIST
+    return mode
 
 
 def _resolve_owner_tenure(actor: ObjectDB, tenure_id: int | None):
@@ -131,7 +141,7 @@ class SetSocialConsentCategoryRuleAction(Action):
             return ActionResult(success=False, message=str(exc))
         return ActionResult(
             success=True,
-            message=f"{category.name} set to {mode}.",
+            message=f"{category.name} set to {_display_mode(mode)}.",
         )
 
 
