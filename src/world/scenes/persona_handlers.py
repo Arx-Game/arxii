@@ -32,22 +32,13 @@ class ScenePersonaHandler:
         Walks the scene's cached participations, resolves each participant's
         active persona from cached player/tenure data, and returns the list.
         """
-        from evennia_extensions.models import PlayerData  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        participations = self.scene.participations_cached
-        account_ids = {p.account_id for p in participations}
-        if not account_ids:
-            return []
-
-        player_data_map = {
-            pd.account_id: pd for pd in PlayerData.objects.filter(account_id__in=account_ids)
-        }
-
         personas: list[Persona] = []
-        for account_id in account_ids:
-            player_data = player_data_map.get(account_id)
-            if player_data is None:
+        for participation in self.scene.participations_cached:
+            try:
+                player_data = participation.account.player_data
+            except ObjectDoesNotExist:
                 continue
             for character in player_data.get_available_characters():
                 try:
