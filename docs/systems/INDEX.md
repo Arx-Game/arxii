@@ -695,15 +695,15 @@ action consent flow, and a three-mode non-combat round framework.
     - `distinct_actors_this_round(scene_round) -> int` — distinct participants with declarations this round.
     - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
     - `advance_pose_order_round_if_quorum(scene_round) -> SceneRound` — advance `round_number` when quorum met (round stays DECLARING).
-    - `scene_round_is_complete(scene_round) -> bool` — presence-gated: True when all present ACTIVE participants have a deferred declaration.
-    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round.
+    - `scene_round_is_complete(scene_round) -> bool` — quorum-gated (#1480): True when ≥ `ceil(advance_quorum_pct / 100 × present_active_count)` present ACTIVE `can_act` participants have a deferred (`is_immediate=False`) declaration; at 100 reduces to unanimity. Absent and present-`not can_act` participants are implicit passes.
+    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared present `can_act` participant is excluded from the END-tick target set so their own acute conditions don't advance (ADR-0004); declared/absent/unconscious participants tick as before.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
     - `add_present_as_co_owners(scene, room)` — mark every present character with a controlling account as a co-owner at scene creation (anti-grab: latecomers are non-owners).
     - `finish_scene_full(scene, by_account=None)` — full scene-finish orchestration: `finish_scene()` → `on_scene_finished()` → deferred fatigue resets → `broadcast_scene_message(END)`. Idempotent.
-    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` on STRICT-exit with pending declarations (#1466 removed the DANGER-immutable block — danger rounds are ordinary STRICT rounds).
+    - `set_scene_round_mode(scene_round, *, mode, advance_quorum_pct, max_actions_per_round, per_target_repeat_lock) -> SceneRound` (`round_services.py`) — apply mode/knob changes in-place; raises `RoundModeError` on STRICT-exit with pending declarations (#1466 removed the DANGER-immutable block — danger rounds are ordinary STRICT rounds). #1480: after applying, re-checks completion on a DECLARING STRICT round so a quorum change takes effect immediately.
     - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None` (`round_services.py`) — ensure an active scene round for the room (enrolling everyone present); creates a STRICT `SceneRound(start_reason=DANGER)` when none active, else the peril rides the existing round (#1466; renamed from `auto_start_or_extend_danger_round`).
 - **Read-visibility surface (canonical):**
   - `Scene.objects.viewable_by(account)` — queryset; staff=all, auth non-staff=public OR participant,

@@ -79,17 +79,24 @@ Key service functions for scene round lifecycle:
 - `resolve_scene_round(scene_round)`: Unconditional resolver — runs declared CHALLENGE actions in
   initiative order, fires the end-round tick (which advances acute conditions — DoTs, bleed-out, plummet),
   then either advances to the next round or **auto-ends** (a `start_reason==DANGER` round COMPLETES once
-  `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition).
+  `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition). **AFK
+  own-peril skip (#1480):** a present `can_act` participant who did NOT declare this round (swept as an
+  implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute
+  conditions do not advance from a round they didn't engage in (ADR-0004 — an AFK character is not harmed
+  while away). Declared, absent, and present-`not can_act` (unconscious) participants tick as before.
 - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
   for the character's room (enrolling everyone present). When none is active, creates a STRICT
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller
   guarantees the character is not in active combat. (Renamed from `auto_start_or_extend_danger_round`.)
-- `maybe_resolve_scene_round(scene_round)`: Resolves only when presence-gated completion is met
-  (every present ACTIVE participant who *can act* has a deferred declaration row).
-- `scene_round_is_complete(scene_round) -> bool`: True when all present ACTIVE participants who *can act*
-  have a deferred (`is_immediate=False`) declaration for the current round. Absent and present-but-`not
-  can_act` participants (e.g. an unconscious bleeding victim) are implicit passes — they never block, so a
-  conscious bystander's declaration alone can drive resolution (AFK-safety + no deadlock).
+- `maybe_resolve_scene_round(scene_round)`: Resolves only when quorum-gated completion is met.
+- `scene_round_is_complete(scene_round) -> bool`: True when enough present ACTIVE participants who *can
+  act* have a deferred (`is_immediate=False`) declaration for the current round — the threshold is
+  `ceil(advance_quorum_pct / 100 × present_active_count)` (the same field POSE_ORDER uses; at 100 it
+  reduces to unanimity, so a GM/staff can still require everyone). Absent and present-but-`not can_act`
+  participants are implicit passes (never block); an undeclared present `can_act` participant counts
+  toward the denominator but not the declared count, so a quorum below 100 lets the round resolve without
+  them — ending the single-AFK-participant deadlock (#1480) without a wall clock. The AFK participant's
+  own peril is skipped separately at resolution (see `resolve_scene_round`).
 
 ### `views.py`
 - **`SceneViewSet`**: Scene CRUD operations and filtering
@@ -137,7 +144,9 @@ Scene rounds support three action-gating modes (orthogonal to `start_reason`):
 | `POSE_ORDER` | Actions resolve immediately; after `ceil(quorum_pct × active_count)` distinct actors |
 | | have acted, `round_number` advances. Default for social rounds. |
 | `STRICT` | Actions are declared into a ledger while `is_declaration_open`; the full round |
-| | resolves batch when presence-gated completion is met or a GM force-resolves. Danger |
+| | resolves batch when quorum-gated completion is met (`ceil(advance_quorum_pct/100 × present_active)`,
+| | #1480 — not unanimity) or a GM force-resolves. An undeclared present `can_act` participant's own |
+| | peril is skipped on the END tick (ADR-0004). Danger |
 | | rounds (#1466) are STRICT: the peril ticks at resolution; the round auto-ends when it clears. |
 
 `SceneRoundDefaultsConfig` (singleton pk=1, accessed via `get_scene_round_defaults_config()`) lets
