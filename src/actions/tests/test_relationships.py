@@ -178,3 +178,101 @@ class RedistributePointsActionTests(ActionTestCase):
         )
         self.assertEqual(source_progress.developed_points, 1)
         self.assertEqual(target_progress.developed_points, 2)
+
+    def test_redistribute_requires_target_sheet(self):
+        action = RedistributePointsAction()
+        result = action.run(
+            actor=self.actor,
+            source_track=RelationshipTrackFactory(),
+            target_track=RelationshipTrackFactory(),
+            points=1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("target", result.message.lower())
+
+    def test_redistribute_requires_source_track(self):
+        action = RedistributePointsAction()
+        result = action.run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            target_track=RelationshipTrackFactory(),
+            points=1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("source track", result.message.lower())
+
+    def test_redistribute_requires_target_track(self):
+        action = RedistributePointsAction()
+        result = action.run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            source_track=RelationshipTrackFactory(),
+            points=1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("target track", result.message.lower())
+
+    def test_redistribute_fails_when_not_enough_points(self):
+        source_track = RelationshipTrackFactory()
+        target_track = RelationshipTrackFactory()
+        CreateFirstImpressionAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=source_track,
+            points=5,
+            title="A striking introduction",
+            writeup="They commanded the room.",
+        )
+        CreateDevelopmentAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=source_track,
+            points=3,
+            title="Growing trust",
+            writeup="We spoke for hours.",
+        )
+
+        action = RedistributePointsAction()
+        result = action.run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            source_track=source_track,
+            target_track=target_track,
+            points=5,
+            title="Too much",
+            writeup="My regard overreaches.",
+        )
+        self.assertFalse(result.success)
+
+    def test_redistribute_fails_with_invalid_points(self):
+        source_track = RelationshipTrackFactory()
+        target_track = RelationshipTrackFactory()
+        CreateFirstImpressionAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=source_track,
+            points=5,
+            title="A striking introduction",
+            writeup="They commanded the room.",
+        )
+        CreateDevelopmentAction().run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            track=source_track,
+            points=3,
+            title="Growing trust",
+            writeup="We spoke for hours.",
+        )
+
+        action = RedistributePointsAction()
+        result = action.run(
+            actor=self.actor,
+            target_sheet=self.target_sheet,
+            source_track=source_track,
+            target_track=target_track,
+            points="not-a-number",
+            title="Shifting focus",
+            writeup="My regard finds a new shape.",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("invalid", result.message.lower())

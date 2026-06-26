@@ -55,40 +55,16 @@ class BaseRelationshipAction(Action):
         except (AttributeError, ObjectDoesNotExist):
             return None
 
-    def _resolve_target_sheet(self, actor: ObjectDB, target_name_or_id: str) -> Any:
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-
-        sheet = self._sheet(actor)
-        if sheet is None:
-            return None, "No active character."
-
-        value = target_name_or_id.strip()
-        qs = CharacterSheet.objects.select_related("character")
-        if value.isdigit():
-            target_sheet = qs.filter(pk=int(value)).first()
-        else:
-            target_sheet = qs.filter(character__db_key__iexact=value).first()
-        if target_sheet is None:
-            return None, f"Could not find '{value}'."
-        if target_sheet == sheet:
-            return None, "You cannot target yourself."
-        return target_sheet, ""
-
-    def _resolve_track(self, track_name_or_id: str) -> Any:
-        from world.relationships.models import RelationshipTrack  # noqa: PLC0415
-
-        value = track_name_or_id.strip()
-        qs = RelationshipTrack.objects.all()
-        if value.isdigit():
-            return qs.filter(pk=int(value)).first()
-        return qs.filter(name__iexact=value).first()
-
     def _active_scene_for(self, actor: ObjectDB, target_sheet: Any) -> Any:
         from world.scenes.models import Scene  # noqa: PLC0415
 
         if actor.location is None:
             return None
-        if target_sheet.character.location_id != actor.location.id:
+        try:
+            character = target_sheet.character
+        except AttributeError:
+            return None
+        if character is None or character.location_id != actor.location.id:
             return None
         return Scene.objects.filter(location=actor.location, is_active=True).first()
 
@@ -326,7 +302,6 @@ class RedistributePointsAction(BaseRelationshipAction):
         target_sheet = kwargs.get("target_sheet")
         source_track = kwargs.get("source_track")
         target_track = kwargs.get("target_track")
-        relationship = self._relationship(sheet, target_sheet)
         missing = (
             "No target selected."
             if target_sheet is None
@@ -339,8 +314,14 @@ class RedistributePointsAction(BaseRelationshipAction):
         if missing:
             return ActionResult(success=False, message=missing)
 
+        relationship = self._relationship(sheet, target_sheet)
+
         try:
             points = int(kwargs.get("points", 0))
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Invalid points value.")
+
+        try:
             change = redistribute_points(
                 relationship=relationship,
                 author=sheet,
@@ -351,8 +332,6 @@ class RedistributePointsAction(BaseRelationshipAction):
                 points=points,
                 visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
             )
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid points value.")
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
