@@ -209,6 +209,9 @@ class ActionRegistryTests(TestCase):
             "set_active_persona",
             "resolve_alteration",
             "rest",
+            "npc_start",
+            "npc_resolve",
+            "npc_end",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

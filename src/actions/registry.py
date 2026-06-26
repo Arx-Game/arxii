@@ -56,6 +56,11 @@ from actions.definitions.movement import (
     HomeAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_services import (
+    end_npc_interaction,
+    resolve_npc_offer,
+    start_npc_interaction,
+)
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
@@ -149,6 +154,9 @@ _ALL_ACTIONS: list[Action] = [
     FinishSceneAction(),
     ResolveAlterationAction(),
     RestAction(),
+    start_npc_interaction,
+    resolve_npc_offer,
+    end_npc_interaction,
     intimidate,
     persuade,
     deceive,
