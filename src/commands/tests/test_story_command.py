@@ -10,6 +10,7 @@ from actions.types import ActionResult
 from commands.story import CmdStory
 from world.stories.factories import (
     BeatFactory,
+    ChapterFactory,
     EpisodeFactory,
     StoryFactory,
 )
@@ -63,12 +64,14 @@ class CmdStorySubverbTests(TestCase):
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
 
-        # Numeric ids referenced by the routing tests must exist so the
-        # command layer can resolve them before dispatching.
-        StoryFactory(pk=42, title="Mock Story")
-        EpisodeFactory(pk=12, title="Mock Episode")
-        EpisodeFactory(pk=7, title="Promote Episode")
-        BeatFactory(pk=8)
+        # Objects referenced by numeric id in the routing tests.  Pks are left
+        # to the database so the test stays valid regardless of Postgres sequence
+        # state; each test reads the generated pk from these attributes.
+        self.story = StoryFactory(title="Mock Story")
+        self.chapter = ChapterFactory(story=self.story)
+        self.episode = EpisodeFactory(title="Mock Episode", chapter=self.chapter)
+        self.promote_episode = EpisodeFactory(title="Promote Episode", chapter=self.chapter)
+        self.beat = BeatFactory(episode=self.episode)
 
     def _run(self, args: str) -> list[str]:
         cmd = _make_cmd(self.caller, args)
@@ -78,11 +81,12 @@ class CmdStorySubverbTests(TestCase):
     @patch("actions.definitions.gm_stories.CompleteStoryAction.run")
     def test_complete_dispatches_story_id(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Story completed.")
-        messages = self._run("complete 42")
+        story_id = str(self.story.pk)
+        messages = self._run(f"complete {story_id}")
         mock_run.assert_called_once()
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["actor"], self.caller)
-        self.assertEqual(kwargs["story_id"], "42")
+        self.assertEqual(kwargs["story_id"], story_id)
         self.assertIn("Story completed.", messages)
 
     def test_complete_requires_story_id(self) -> None:
@@ -95,36 +99,40 @@ class CmdStorySubverbTests(TestCase):
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
     def test_resolve_episode_only(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
-        messages = self._run("resolve 12")
+        episode_id = str(self.episode.pk)
+        messages = self._run(f"resolve {episode_id}")
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["actor"], self.caller)
-        self.assertEqual(kwargs["episode_id"], "12")
+        self.assertEqual(kwargs["episode_id"], episode_id)
         self.assertNotIn("chosen_transition_id", kwargs)
         self.assertIn("Episode resolved.", messages)
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
     def test_resolve_with_numeric_transition(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
-        self._run("resolve 12 5")
+        episode_id = str(self.episode.pk)
+        self._run(f"resolve {episode_id} 5")
         kwargs = mock_run.call_args.kwargs
-        self.assertEqual(kwargs["episode_id"], "12")
+        self.assertEqual(kwargs["episode_id"], episode_id)
         self.assertEqual(kwargs["chosen_transition_id"], "5")
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
     def test_resolve_with_notes(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
-        self._run("resolve 12 final confrontation")
+        episode_id = str(self.episode.pk)
+        self._run(f"resolve {episode_id} final confrontation")
         kwargs = mock_run.call_args.kwargs
-        self.assertEqual(kwargs["episode_id"], "12")
+        self.assertEqual(kwargs["episode_id"], episode_id)
         self.assertNotIn("chosen_transition_id", kwargs)
         self.assertEqual(kwargs["gm_notes"], "final confrontation")
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
     def test_resolve_with_transition_and_notes(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
-        self._run("resolve 12 5 final confrontation")
+        episode_id = str(self.episode.pk)
+        self._run(f"resolve {episode_id} 5 final confrontation")
         kwargs = mock_run.call_args.kwargs
-        self.assertEqual(kwargs["episode_id"], "12")
+        self.assertEqual(kwargs["episode_id"], episode_id)
         self.assertEqual(kwargs["chosen_transition_id"], "5")
         self.assertEqual(kwargs["gm_notes"], "final confrontation")
 
@@ -138,10 +146,11 @@ class CmdStorySubverbTests(TestCase):
     @patch("actions.definitions.gm_stories.PromoteEpisodeAction.run")
     def test_promote_dispatches_episode_and_target(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Promoted.")
-        messages = self._run("promote 7 plot")
+        episode_id = str(self.promote_episode.pk)
+        messages = self._run(f"promote {episode_id} plot")
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["actor"], self.caller)
-        self.assertEqual(kwargs["episode_id"], "7")
+        self.assertEqual(kwargs["episode_id"], episode_id)
         self.assertEqual(kwargs["target"], "plot")
         self.assertIn("Promoted.", messages)
 
@@ -155,10 +164,11 @@ class CmdStorySubverbTests(TestCase):
     @patch("actions.definitions.gm_stories.MarkBeatAction.run")
     def test_mark_dispatches_beat_outcome_and_notes(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Beat marked.")
-        messages = self._run("mark 8 success the heroes won")
+        beat_id = str(self.beat.pk)
+        messages = self._run(f"mark {beat_id} success the heroes won")
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["actor"], self.caller)
-        self.assertEqual(kwargs["beat_id"], "8")
+        self.assertEqual(kwargs["beat_id"], beat_id)
         self.assertEqual(kwargs["outcome"], "success")
         self.assertEqual(kwargs["gm_notes"], "the heroes won")
         self.assertIn("Beat marked.", messages)
@@ -166,9 +176,10 @@ class CmdStorySubverbTests(TestCase):
     @patch("actions.definitions.gm_stories.MarkBeatAction.run")
     def test_mark_without_notes(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Beat marked.")
-        self._run("mark 8 failure")
+        beat_id = str(self.beat.pk)
+        self._run(f"mark {beat_id} failure")
         kwargs = mock_run.call_args.kwargs
-        self.assertEqual(kwargs["beat_id"], "8")
+        self.assertEqual(kwargs["beat_id"], beat_id)
         self.assertEqual(kwargs["outcome"], "failure")
         self.assertEqual(kwargs.get("gm_notes", ""), "")
 
@@ -186,7 +197,7 @@ class CmdStoryPermissionDenialTests(TestCase):
     def setUp(self) -> None:
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
-        StoryFactory(pk=42, title="Mock Story")
+        self.story = StoryFactory(title="Mock Story")
 
     @patch("actions.definitions.gm_stories.CompleteStoryAction.run")
     def test_denial_message_surfaces(self, mock_run: MagicMock) -> None:
@@ -194,7 +205,7 @@ class CmdStoryPermissionDenialTests(TestCase):
             success=False,
             message="Only the story's Lead GM or staff may do that.",
         )
-        cmd = _make_cmd(self.caller, "complete 42")
+        cmd = _make_cmd(self.caller, f"complete {self.story.pk}")
         cmd.func()
         messages = _messages(self.caller)
         self.assertIn("Only the story's Lead GM or staff may do that.", messages)
