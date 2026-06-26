@@ -257,7 +257,6 @@ class OrganizationMembershipValidationTests(TestCase):
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
-            rank=self.organization.ranks.get(tier=3),
         )
         assert membership.pk is not None
         assert membership.persona == persona
@@ -268,7 +267,6 @@ class OrganizationMembershipValidationTests(TestCase):
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
-            rank=self.organization.ranks.get(tier=4),
         )
         assert membership.pk is not None
         assert membership.persona == persona
