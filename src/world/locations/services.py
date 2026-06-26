@@ -856,7 +856,7 @@ def transfer_ownership(  # noqa: PLR0913
             existing.ended_at = when
             existing.save()
 
-        return LocationOwnership.objects.create(
+        ownership = LocationOwnership.objects.create(
             parent_type=parent_type,
             area=area,
             room_profile=room_profile,
@@ -866,6 +866,10 @@ def transfer_ownership(  # noqa: PLR0913
             acquired_at=when,
             notes=notes,
         )
+        # Acquire a room with no home yet → it becomes your home until you change it (#1514).
+        # Area-level ownership and org owners are skipped (no single character / not a room).
+        maybe_default_residence(to_persona, room_profile)
+        return ownership
 
 
 def grant_tenancy(  # noqa: PLR0913
@@ -888,7 +892,7 @@ def grant_tenancy(  # noqa: PLR0913
 
     parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
     tenant_type = HolderType.PERSONA if tenant_persona is not None else HolderType.ORGANIZATION
-    return LocationTenancy.objects.create(
+    tenancy = LocationTenancy.objects.create(
         parent_type=parent_type,
         area=area,
         room_profile=room_profile,
@@ -898,6 +902,59 @@ def grant_tenancy(  # noqa: PLR0913
         ends_at=ends_at,
         notes=notes,
     )
+    # Rent a room with no home yet → it becomes your home until you change it (#1514).
+    maybe_default_residence(tenant_persona, room_profile)
+    return tenancy
+
+
+def _character_for_persona(persona: Persona | None) -> DefaultObject | None:
+    """The character (ObjectDB) behind a persona, or None."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    if persona is None:
+        return None
+    try:
+        return persona.character_sheet.character
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+
+
+def set_residence(*, character: DefaultObject, room: DefaultObject) -> None:
+    """Set a character's primary residence (#1514).
+
+    Reuses Evennia's ``home`` — the location ``CmdHome`` recalls to and the fall-back if the
+    current room is destroyed — which is the intended dual meaning for a residence. Permission
+    gating (the character has owner/tenant standing in ``room``) is the caller's concern.
+    """
+    character.home = room
+
+
+def _has_chosen_residence(character: DefaultObject) -> bool:
+    """Whether the character has a *real* residence vs none / the system default fall-back home.
+
+    Evennia gives every object a default ``home`` (``settings.DEFAULT_HOME``), so "no residence
+    yet" is not simply ``home is None`` — it's that *or* the global default.
+    """
+    from django.conf import settings  # noqa: PLC0415
+
+    home = character.home
+    if home is None:
+        return False
+    default = settings.DEFAULT_HOME
+    return default is None or f"#{home.id}" != default
+
+
+def maybe_default_residence(persona: Persona | None, room_profile: RoomProfile | None) -> None:
+    """Default a persona's character home to this room when it has none yet (#1514).
+
+    Called when a persona accepts a room (tenancy/ownership). Per-character (Evennia ``home``),
+    triggered by a persona grant; never overwrites a residence the player has already chosen.
+    """
+    if persona is None or room_profile is None:
+        return
+    character = _character_for_persona(persona)
+    if character is not None and not _has_chosen_residence(character):
+        set_residence(character=character, room=room_profile.objectdb)
 
 
 def end_tenancy(

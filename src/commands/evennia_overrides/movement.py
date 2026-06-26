@@ -77,9 +77,44 @@ class CmdGive(ArxCommand):
 
 
 class CmdHome(ArxCommand):
-    """Return to your home location."""
+    """Return to your home — or set it.
+
+    Usage:
+      home        - recall to your home location
+      home/set    - make the room you're standing in your home (you must own or rent it)
+
+    Your home is where ``home`` recalls you to; a residence defaults to the first room you
+    rent or acquire until you change it here (#1514).
+    """
 
     key = "home"
     aliases: ClassVar[list[str]] = ["recall"]
     locks = "cmd:all()"
     action = HomeAction()
+
+    def _execute(self) -> None:
+        if "set" in self.switches:  # noqa: STRING_LITERAL — Evennia switch token
+            self._set_home()
+            return
+        super()._execute()
+
+    def _set_home(self) -> None:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from commands.exceptions import CommandError  # noqa: PLC0415
+        from world.locations.services import is_owner, is_tenant, set_residence  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        room = self.caller.location
+        if room is None:
+            msg = "You aren't anywhere you could call home."
+            raise CommandError(msg)
+        try:
+            persona = active_persona_for_sheet(self.caller.sheet_data)
+        except (AttributeError, ObjectDoesNotExist):
+            persona = None
+        if persona is None or not (is_owner(persona, room) or is_tenant(persona, room)):
+            msg = "You can only set your home to a room you own or rent."
+            raise CommandError(msg)
+        set_residence(character=self.caller, room=room)
+        self.msg(f"Home set to {room.key}.")
