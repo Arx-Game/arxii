@@ -91,7 +91,7 @@ def _resolve_treatment_request(
         scene=action_request.scene,
         treatment=treatment,
         target_effect=target_effect,
-        bond_thread=getattr(action_request, "thread_used", None),  # noqa: GETATTR_LITERAL
+        bond_thread=action_request.thread_used,
     )
 
     content = _describe_treatment_outcome(treatment, target_effect, outcome)

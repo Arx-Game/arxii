@@ -155,6 +155,14 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         related_name="treatment_action_requests",
         help_text="Pending alteration being treated, when applicable.",
     )
+    thread_used = models.ForeignKey(
+        "magic.Thread",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="treatment_action_requests",
+        help_text="Bond thread used to pay the cost of a treatment, when required.",
+    )
     action_key = models.CharField(
         max_length=100,
         blank=True,

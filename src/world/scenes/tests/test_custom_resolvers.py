@@ -65,6 +65,34 @@ class ResolveTreatmentRequestTests(TestCase):
         )
 
     @patch("world.conditions.services.perform_treatment")
+    def test_resolve_treatment_forwards_thread_used(self, mock_perform_treatment):
+        from world.magic.factories import ThreadFactory
+
+        thread = ThreadFactory()
+        self.request.thread_used = thread
+        self.request.save()
+        mock_perform_treatment.return_value = TreatmentOutcome(
+            attempt=MagicMock(),
+            outcome=MagicMock(),
+            effect_applied=False,
+            severity_reduced=0,
+            tiers_reduced=0,
+            helper_backlash_applied=0,
+            target_resolved=True,
+        )
+
+        _resolve_treatment_request(self.request)
+
+        mock_perform_treatment.assert_called_once_with(
+            helper_sheet=self.request.initiator_persona.character_sheet,
+            target_sheet=self.request.target_persona.character_sheet,
+            scene=self.request.scene,
+            treatment=self.request.treatment,
+            target_effect=self.request.target_condition_instance,
+            bond_thread=thread,
+        )
+
+    @patch("world.conditions.services.perform_treatment")
     def test_resolve_treatment_no_target_raises(self, mock_perform_treatment):
         self.request.target_condition_instance = None
         self.request.save()
