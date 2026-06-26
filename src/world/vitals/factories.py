@@ -106,6 +106,47 @@ def _seed_pool_consequences(pool, consequence_specs) -> None:
         )
 
 
+def _seed_captured_alive_consequence(enemy_pool) -> None:
+    """Idempotently seed the captured_alive Consequence + ConsequenceEffect on enemy_pool.
+
+    ``captured_alive`` is a non-lethal survival outcome exclusive to the enemy
+    abandonment pool — an NPC captor exists; PvP and environmental pools have no
+    captor to receive the prisoner, so this entry must NOT be added there.
+
+    The ConsequenceEffect wires the existing ``EffectType.CAPTURE`` handler
+    (``_apply_capture`` in ``world/mechanics/effect_handlers.py``) with
+    ``capture_offscreen_loss_allowed=False`` (the safe default — off-screen loss
+    remains gated until #931 generalises enforcement).  The captor organization
+    is left unset (None): the routine pool-level capture uses no named captor.
+    """
+    from actions.models import ConsequencePoolEntry
+    from world.checks.constants import EffectTarget, EffectType
+    from world.checks.models import Consequence, ConsequenceEffect
+
+    partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)
+
+    consequence, _ = Consequence.objects.get_or_create(
+        outcome_tier=partial,
+        label="captured_alive",
+        defaults={"weight": 2, "character_loss": False},
+    )
+    ConsequencePoolEntry.objects.get_or_create(
+        pool=enemy_pool,
+        consequence=consequence,
+        defaults={"weight_override": 2, "is_excluded": False},
+    )
+    # Wire the existing CAPTURE handler — no new EffectType needed.
+    ConsequenceEffect.objects.get_or_create(
+        consequence=consequence,
+        effect_type=EffectType.CAPTURE,
+        execution_order=0,
+        defaults={
+            "target": EffectTarget.SELF,
+            "capture_offscreen_loss_allowed": False,
+        },
+    )
+
+
 def create_bleed_out_terminal_pool():
     """Create (or return existing) the bleed_out_terminal ConsequencePool.
 
@@ -228,5 +269,9 @@ def create_abandonment_pools() -> dict[str, ConsequencePool]:
         )
         _seed_pool_consequences(pool, spec["consequences"])
         pools[pool_name] = pool
+
+    # Wire the captured_alive CAPTURE effect onto the enemy pool only — NPC captors
+    # exist there; PvP and environmental pools have no captor to receive the prisoner.
+    _seed_captured_alive_consequence(pools[POOL_ABANDONMENT_ENEMY])
 
     return pools
