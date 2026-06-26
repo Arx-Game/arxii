@@ -540,8 +540,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """Return the pk of the Persona named by ``self._target_name``, or None.
 
         Used on the non-combat path when ``at <name>`` names a scene participant.
-        The lookup walks the active scene's participants, resolves each
-        participant's active persona from cached data, and matches on name.
+        The lookup scopes to the active scene's cached participant personas.
 
         Raises:
             CommandError: If a target name was given but no matching Persona exists
@@ -549,10 +548,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         """
         if not self._target_name:
             return None
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
         from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         name = self._target_name.lower()
         scene = _get_active_scene(self.caller.location)
@@ -560,19 +557,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             msg = "There is no active scene here."
             raise CommandError(msg)
 
-        for account in scene.participants.all():
-            try:
-                player_data = account.player_data
-            except (AttributeError, ObjectDoesNotExist):
-                continue
-            for character in player_data.get_available_characters():
-                try:
-                    sheet = character.sheet_data
-                    persona = active_persona_for_sheet(sheet)
-                except (AttributeError, ObjectDoesNotExist):
-                    continue
-                if persona.name.lower() == name:
-                    return persona.pk
+        for persona in scene.persona_handler.active_participant_personas:
+            if persona.name.lower() == name:
+                return persona.pk
 
         msg = f"No persona named '{self._target_name}' is participating in this scene."
         raise CommandError(msg)
