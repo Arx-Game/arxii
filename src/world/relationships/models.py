@@ -890,7 +890,7 @@ class WriteupFeedbackBase(SharedMemoryModel):
         constraints = [
             models.CheckConstraint(
                 name="%(class)s_exactly_one_writeup",
-                check=(
+                condition=(
                     Q(update__isnull=False, development__isnull=True, capstone__isnull=True)
                     | Q(update__isnull=True, development__isnull=False, capstone__isnull=True)
                     | Q(update__isnull=True, development__isnull=True, capstone__isnull=False)
