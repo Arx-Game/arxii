@@ -5,7 +5,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { fetchConditionInstance, fetchDamageTypes } from './api';
+import { fetchConditionInstance, fetchDamageTypes, fetchTreatmentCandidates } from './api';
 
 /**
  * Fetch a single condition instance by pk.
@@ -26,5 +26,18 @@ export function useDamageTypes() {
     queryKey: ['conditions', 'damage-types'],
     queryFn: fetchDamageTypes,
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Fetch treatments the helper may offer a target persona (#1486).
+ * Disabled when either id is null: targetPersonaId (no target chosen) or
+ * characterId (no active character resolved for the X-Character-ID header).
+ */
+export function useTreatmentCandidates(targetPersonaId: number | null, characterId: number | null) {
+  return useQuery({
+    queryKey: ['conditions', 'treatment-candidates', targetPersonaId],
+    queryFn: () => fetchTreatmentCandidates(targetPersonaId as number, characterId as number),
+    enabled: targetPersonaId != null && characterId != null,
   });
 }
