@@ -14,10 +14,16 @@ from world.fatigue.services import get_or_create_fatigue_pool
 
 class RestActionTests(TestCase):
     def setUp(self) -> None:
+        from evennia import create_object
+
         FatiguePool.flush_instance_cache()
         ActionPointPool.flush_instance_cache()
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        self.room = create_object("typeclasses.rooms.Room", key="RestHomeRoom", nohome=True)
+        self.character.location = self.room
+        self.character.home = self.room
+        self.character.save()
 
     def _create_ap_pool(self, current: int) -> ActionPointPool:
         return ActionPointPool.objects.create(
@@ -61,11 +67,42 @@ class RestActionTests(TestCase):
         self.assertFalse(result.success)
         self.assertIn("action points", result.message.lower())
 
+    def test_rest_fails_when_not_at_home(self) -> None:
+        """Resting is only allowed at the character's own home."""
+        from evennia import create_object
+
+        self._create_ap_pool(200)
+        other_room = create_object("typeclasses.rooms.Room", key="NotHomeRoom", nohome=True)
+        self.character.location = other_room
+        self.character.save()
+
+        result = RestAction().run(actor=self.character)
+        self.assertFalse(result.success)
+        self.assertIn("home", result.message.lower())
+
+    def test_rest_fails_when_in_combat(self) -> None:
+        """Resting is blocked while in an active combat encounter."""
+        from world.combat.factories import CombatParticipantFactory
+
+        self._create_ap_pool(200)
+        # Active combat participant in a BETWEEN_ROUNDS encounter (active status).
+        CombatParticipantFactory(character_sheet=self.sheet)
+
+        result = RestAction().run(actor=self.character)
+        self.assertFalse(result.success)
+        self.assertIn("combat", result.message.lower())
+
     def test_rest_fails_without_sheet(self) -> None:
         """An actor with no character sheet gets a uniform failure."""
+        from evennia import create_object
+
         from evennia_extensions.factories import ObjectDBFactory
 
         bare_object = ObjectDBFactory(db_key="Bare Object")
+        room = create_object("typeclasses.rooms.Room", key="BareRoom", nohome=True)
+        bare_object.location = room
+        bare_object.home = room
+        bare_object.save()
         result = RestAction().run(actor=bare_object)
         self.assertFalse(result.success)
         self.assertIn("active character", result.message.lower())
