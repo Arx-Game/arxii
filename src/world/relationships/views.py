@@ -1,10 +1,14 @@
 """API views for the relationships system."""
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
 from world.relationships.filters import RelationshipCapstoneFilter
@@ -20,9 +24,13 @@ from world.relationships.models import (
     RelationshipUpdate,
 )
 from world.relationships.serializers import (
+    CapstoneWriteSerializer,
     CharacterRelationshipListSerializer,
     CharacterRelationshipSerializer,
+    DevelopmentWriteSerializer,
+    FirstImpressionWriteSerializer,
     HybridRelationshipTypeSerializer,
+    RedistributeWriteSerializer,
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
     RelationshipTrackSerializer,
@@ -141,3 +149,167 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
             )
             .order_by("-created_at")
         )
+
+
+class RelationshipUpdateViewSet(GenericViewSet):
+    """Write-only endpoints for relationship-building verbs.
+
+    List/detail relationship state remains on CharacterRelationshipViewSet;
+    this ViewSet only exposes the four mutation actions.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = FirstImpressionWriteSerializer
+
+    def get_serializer_class(self):  # type: ignore[override]
+        """Return the write serializer matching the current action."""
+        mapping = {
+            "first_impression": FirstImpressionWriteSerializer,
+            "develop": DevelopmentWriteSerializer,
+            "capstone": CapstoneWriteSerializer,
+            "redistribute": RedistributeWriteSerializer,
+        }
+        return mapping.get(self.action, FirstImpressionWriteSerializer)
+
+    def _resolve_target_sheet(self, target_persona_id: int):
+        """Resolve a target persona ID to its CharacterSheet."""
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        return (
+            Persona.objects.filter(pk=target_persona_id).select_related("character_sheet").first()
+        )
+
+    def _resolve_actor(self, request):
+        """Return the caller's active puppet ObjectDB if they own its sheet."""
+        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        if actor is None:
+            return None, "No active character."
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return None, "No active character."
+        if sheet.character.db_account_id != request.user.pk:
+            return None, "No active character."
+        return actor, ""
+
+    def _resolve_track(self, track_id: int, label: str):
+        """Resolve a track by pk; return ``(track, None)`` or ``(None, Response)``."""
+        try:
+            return RelationshipTrack.objects.get(pk=track_id), None
+        except RelationshipTrack.DoesNotExist:
+            return None, Response(
+                {"success": False, "message": f"{label} track not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def _build_kwargs(self, data: dict) -> tuple[dict | None, Response | None]:
+        """Build action kwargs from validated serializer data.
+
+        Returns ``(kwargs, None)`` on success or ``(None, error_response)`` if a
+        referenced track cannot be resolved. impression/develop/capstone target a
+        single ``track``; redistribute moves points between ``source_track`` and
+        ``target_track`` instead.
+        """
+        kwargs: dict[str, object] = {
+            "target_sheet": data["target_sheet"],
+            "points": data["points"],
+            "title": data["title"],
+            "writeup": data["writeup"],
+            "visibility": data["visibility"],
+        }
+        if "track_id" in data:  # noqa: STRING_LITERAL
+            track, err = self._resolve_track(data["track_id"], "Relationship")
+            if err is not None:
+                return None, err
+            kwargs["track"] = track
+        if "coloring" in data:  # noqa: STRING_LITERAL
+            kwargs["coloring"] = data["coloring"]
+        if "xp_awarded" in data:  # noqa: STRING_LITERAL
+            kwargs["xp_awarded"] = data["xp_awarded"]
+        if "source_track_id" in data:  # noqa: STRING_LITERAL
+            track, err = self._resolve_track(data["source_track_id"], "Source")
+            if err is not None:
+                return None, err
+            kwargs["source_track"] = track
+        if "target_track_id" in data:  # noqa: STRING_LITERAL
+            track, err = self._resolve_track(data["target_track_id"], "Target")
+            if err is not None:
+                return None, err
+            kwargs["target_track"] = track
+        return kwargs, None
+
+    def _run_action(self, request, action_class):
+        """Validate input, resolve IDs, and run the relationship action."""
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return Response(
+                {"success": False, "message": error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        target_persona = self._resolve_target_sheet(data["target_persona_id"])
+        if target_persona is None:
+            return Response(
+                {"success": False, "message": "Target persona not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        data["target_sheet"] = target_persona.character_sheet
+
+        kwargs, err = self._build_kwargs(data)
+        if err is not None:
+            return err
+
+        result = action_class().run(actor=actor, **kwargs)
+        if not result.success:
+            return Response(
+                {"success": False, "message": result.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "success": True,
+                "message": result.message,
+                "data": result.data or {},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"])
+    def first_impression(self, request):
+        """Record a first impression toward another character."""
+        from actions.definitions.relationships import (  # noqa: PLC0415
+            CreateFirstImpressionAction,
+        )
+
+        return self._run_action(request, CreateFirstImpressionAction)
+
+    @action(detail=False, methods=["post"])
+    def develop(self, request):
+        """Solidify temporary points into permanent developed points."""
+        from actions.definitions.relationships import (  # noqa: PLC0415
+            CreateDevelopmentAction,
+        )
+
+        return self._run_action(request, CreateDevelopmentAction)
+
+    @action(detail=False, methods=["post"])
+    def capstone(self, request):
+        """Record a monumental relationship capstone."""
+        from actions.definitions.relationships import (  # noqa: PLC0415
+            CreateCapstoneAction,
+        )
+
+        return self._run_action(request, CreateCapstoneAction)
+
+    @action(detail=False, methods=["post"])
+    def redistribute(self, request):
+        """Move developed points between tracks in an existing relationship."""
+        from actions.definitions.relationships import (  # noqa: PLC0415
+            RedistributePointsAction,
+        )
+
+        return self._run_action(request, RedistributePointsAction)
