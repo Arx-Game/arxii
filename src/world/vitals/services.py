@@ -400,6 +400,7 @@ def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
     death_pool: ConsequencePool,
     extra_modifiers: int,
     combat_interaction_factory: Callable[[], Interaction] | None,
+    source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> bool:
     """Resolve the death tier; return True if processing should stop (character dying)."""
     death_breakdown = collect_check_modifiers(character_sheet, death_check_type)
@@ -409,6 +410,7 @@ def _apply_death_tier(  # noqa: PLR0913 - one keyword arg per resolved tier inpu
         death_difficulty,
         death_pool,
         extra_modifiers=extra_modifiers + death_breakdown.total,
+        source_character=source_character,
     )
     result.modifier_breakdown = death_breakdown
     if _applied_bleed_out(pending):
@@ -462,13 +464,14 @@ def _apply_knockout_tier(  # noqa: PLR0913 - one keyword arg per resolved tier i
         )
 
 
-def process_damage_consequences(
+def process_damage_consequences(  # noqa: PLR0913 - each param is a distinct survivability input
     character_sheet: CharacterSheet | None,
     damage_dealt: int,
     damage_type: DamageType | None,
     *,
     extra_modifiers: int = 0,
     combat_interaction_factory: Callable[[], Interaction] | None = None,
+    source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> DamageConsequenceResult:
     """Process survivability consequences after damage is applied.
 
@@ -557,6 +560,7 @@ def process_damage_consequences(
             death_pool=death_pool,
             extra_modifiers=extra_modifiers + saves.death,
             combat_interaction_factory=combat_interaction_factory,
+            source_character=source_character,
         ):
             return result
 
@@ -839,13 +843,14 @@ def get_vitals_consequence_config() -> VitalsConsequenceConfig:
     return cfg
 
 
-def resolve_vitals_consequence(
+def resolve_vitals_consequence(  # noqa: PLR0913 - each param is a distinct consequence-pipeline input
     character_sheet: CharacterSheet,
     check_type: CheckTypeHint,
     target_difficulty: int,
     pool: ConsequencePool,
     *,
     extra_modifiers: int = 0,
+    source_character: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
 ) -> PendingResolution:
     """Resolve one survivability consequence through the consequence-pool pipeline.
 
@@ -873,7 +878,10 @@ def resolve_vitals_consequence(
         consequences,
         extra_modifiers=extra_modifiers,
     )
-    apply_resolution(pending, ResolutionContext(character=character))
+    apply_resolution(
+        pending,
+        ResolutionContext(character=character, source_character=source_character),
+    )
     return pending
 
 

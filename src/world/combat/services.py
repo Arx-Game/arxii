@@ -3432,6 +3432,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         damage_dealt=dmg_result.damage_dealt,
         damage_type=npc_action.threat_entry.damage_type,
         combat_interaction_factory=get_npc_action_interaction,
+        source_character=opponent.objectdb,
     )
     outcome.damage_consequences.append(consequence)
 
