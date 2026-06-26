@@ -11091,6 +11091,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/capstone/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Record a monumental relationship capstone. */
+    post: operations['relationships_relationship_updates_capstone_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/develop/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Solidify temporary points into permanent developed points. */
+    post: operations['relationships_relationship_updates_develop_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/first_impression/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Record a first impression toward another character. */
+    post: operations['relationships_relationship_updates_first_impression_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/redistribute/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Move developed points between tracks in an existing relationship. */
+    post: operations['relationships_relationship_updates_redistribute_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationships/': {
     parameters: {
       query?: never;
@@ -14376,6 +14444,26 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
+    /** @description Serializer for creating a relationship capstone event. */
+    CapstoneWrite: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default shared */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description Serializer for creating a relationship capstone event. */
+    CapstoneWriteRequest: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default shared */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
     /** @description Nested pull declaration on the cast endpoint (#854). */
     CastPullRequestRequest: {
       resonance_id: number;
@@ -15112,6 +15200,13 @@ export interface components {
       }[];
     };
     /**
+     * @description * `positive` - Positive
+     *     * `neutral` - Neutral
+     *     * `negative` - Negative
+     * @enum {string}
+     */
+    ColoringEnum: 'positive' | 'neutral' | 'negative';
+    /**
      * @description * `message` - Message
      *     * `status_change` - Status Change
      * @enum {string}
@@ -15695,6 +15790,30 @@ export interface components {
       captive_name: string;
       captor: string;
       amount: number;
+    };
+    /** @description Serializer for creating a relationship development update. */
+    DevelopmentWrite: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default 0 */
+      xp_awarded: number;
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description Serializer for creating a relationship development update. */
+    DevelopmentWriteRequest: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default 0 */
+      xp_awarded: number;
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
     };
     /**
      * @description * `trivial` - Trivial
@@ -16860,6 +16979,30 @@ export interface components {
       /** Format: double */
       percentage: number;
       zone: components['schemas']['ZoneEnum'];
+    };
+    /** @description Serializer for creating a first impression. */
+    FirstImpressionWrite: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default neutral */
+      coloring: components['schemas']['ColoringEnum'];
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description Serializer for creating a first impression. */
+    FirstImpressionWriteRequest: {
+      target_persona_id: number;
+      track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default neutral */
+      coloring: components['schemas']['ColoringEnum'];
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
     };
     FormTrait: {
       readonly id: number;
@@ -22998,6 +23141,28 @@ export interface components {
      * @enum {string}
      */
     Reach83dEnum: 'game_wide' | 'specified';
+    /** @description Serializer for redistributing relationship points between tracks. */
+    RedistributeWrite: {
+      target_persona_id: number;
+      source_track_id: number;
+      target_track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description Serializer for redistributing relationship points between tracks. */
+    RedistributeWriteRequest: {
+      target_persona_id: number;
+      source_track_id: number;
+      target_track_id: number;
+      points: number;
+      title: string;
+      writeup: string;
+      /** @default private */
+      visibility: components['schemas']['VisibilityFdaEnum'];
+    };
     /**
      * @description * `story_resolved` - Story resolved
      *     * `chapter_reached` - Chapter reached or passed
@@ -23028,7 +23193,7 @@ export interface components {
        *     * `gossip` - Gossip
        *     * `public` - Public
        */
-      readonly visibility: components['schemas']['RelationshipCapstoneVisibilityEnum'];
+      readonly visibility: components['schemas']['VisibilityFdaEnum'];
       /** @description Optional scene this capstone is based on */
       readonly linked_scene: number | null;
       /**
@@ -23037,14 +23202,6 @@ export interface components {
        */
       readonly created_at: string;
     };
-    /**
-     * @description * `private` - Private
-     *     * `shared` - Shared
-     *     * `gossip` - Gossip
-     *     * `public` - Public
-     * @enum {string}
-     */
-    RelationshipCapstoneVisibilityEnum: 'private' | 'shared' | 'gossip' | 'public';
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
       readonly id: number;
@@ -25597,6 +25754,14 @@ export interface components {
      * @enum {string}
      */
     VisibilityF91Enum: 'default' | 'very_private';
+    /**
+     * @description * `private` - Private
+     *     * `shared` - Shared
+     *     * `gossip` - Gossip
+     *     * `public` - Public
+     * @enum {string}
+     */
+    VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {
       physical: components['schemas']['FatiguePoolStatus'];
@@ -41708,6 +41873,98 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RelationshipCapstone'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_capstone_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CapstoneWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CapstoneWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_develop_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DevelopmentWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DevelopmentWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_first_impression_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FirstImpressionWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FirstImpressionWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_redistribute_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RedistributeWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RedistributeWrite'];
         };
       };
     };
