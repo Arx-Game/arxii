@@ -120,8 +120,8 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   multi-target per-target consent state machine (ADR-0045); soulfray progression (#712).
 
 ### Body-state: conditions, vitals, fatigue, action points
-- TELNET+WEB: restore-sense (removes Berserk via check).
-- WEB-ONLY: **fatigue rest** (spend AP → Well Rested — telnet players literally cannot rest).
+- TELNET+WEB: restore-sense (removes Berserk via check); **fatigue rest** (spend AP → Well Rested,
+  `RestAction` + telnet `rest` + web `RestView` — both routes converge on the same action, #1491).
 - **NO-SURFACE:** **condition treatment/heal** (`perform_treatment` — THE heal-another-character loop,
   built+tested, zero live callers; `restore_sense` covers only the narrow check-driven Berserk removal,
   not the general loop); suppress/unsuppress/clear conditions; vitals damage/bleed/heal (internal,
@@ -257,8 +257,9 @@ These are mis-wirings, not coverage gaps — worth fixing directly:
    Telnet-only by accident, not design.
 3. **Persona deed-spread / save-deed-story bypass `action.run()`** — they call
    `create_and_resolve_area_action` directly (ADR-0001 convergence gap) instead of being registry Actions.
-4. **`RestView._get_character_sheet` uses implicit first-sheet selection** (`RosterEntry…first()`) — an
-   ADR/standards smell on the fatigue-rest path.
+4. ~~`RestView._get_character_sheet` uses implicit first-sheet selection (`RosterEntry…first()`) — an
+   ADR/standards smell on the fatigue-rest path.~~ Fixed by #1491: `RestView` now routes through
+   `RestAction.run(actor=current_character)`, which resolves the sheet from the authenticated actor.
 
 ## Stale-doc flags (fix-on-sight per "docs are directives")
 

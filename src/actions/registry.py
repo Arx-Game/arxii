@@ -37,6 +37,7 @@ from actions.definitions.endorsements import (
     StylePresentationEndorseAction,
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
+from actions.definitions.fatigue import RestAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -147,6 +148,7 @@ _ALL_ACTIONS: list[Action] = [
     StartSceneAction(),
     FinishSceneAction(),
     ResolveAlterationAction(),
+    RestAction(),
     intimidate,
     persuade,
     deceive,
