@@ -19,6 +19,7 @@ from world.societies.exceptions import (
     CrossOrganizationRankError,
     InvalidOrganizationPersonaError,
     NoPendingInvitationError,  # noqa: F401
+    NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageOrganizationError,
@@ -41,6 +42,12 @@ if TYPE_CHECKING:
 
 # Organization type name used to detect covenant-style organizations.
 _COVENANT_TYPE_NAME = "covenant"
+
+
+def _assert_generic_organization(organization: Organization) -> None:
+    """Raise if the organization is a covenant, which has its own lifecycle."""
+    if organization.org_type and organization.org_type.name == _COVENANT_TYPE_NAME:
+        raise NotAGenericOrganizationError
 
 
 def ensure_default_rank_ladder(organization: Organization) -> list[OrganizationRank]:
@@ -111,6 +118,8 @@ def join_organization(
     """Create a new active membership at the base rank for an organization."""
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
+    _assert_generic_organization(organization)
+
     if active_membership_for_persona(organization, persona) is not None:
         raise AlreadyOrganizationMemberError
 
@@ -155,6 +164,8 @@ def invite_to_organization(
     """Create an INVITE offer from one member to another persona."""
     from world.societies.models import OrganizationMembershipOffer  # noqa: PLC0415
 
+    _assert_generic_organization(organization)
+
     actor_membership = active_membership_for_persona(organization, from_persona)
     if actor_membership is None or not actor_membership.rank.can_invite:
         raise NotAuthorizedToInviteError
@@ -188,6 +199,8 @@ def apply_to_organization(
 ) -> OrganizationMembershipOffer:
     """Create an APPLICATION offer from a persona to an organization."""
     from world.societies.models import OrganizationMembershipOffer  # noqa: PLC0415
+
+    _assert_generic_organization(organization)
 
     if not from_persona.is_established_or_primary:
         raise InvalidOrganizationPersonaError

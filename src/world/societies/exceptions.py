@@ -132,3 +132,10 @@ class CrossOrganizationRankError(OrganizationMembershipError):
 class NoPendingInvitationError(OrganizationMembershipError):
     user_message = "You have no pending invitation to that organization."
     SAFE_MESSAGES = frozenset({"You have no pending invitation to that organization."})
+
+
+class NotAGenericOrganizationError(OrganizationMembershipError):
+    user_message = "This organization uses a covenant membership lifecycle, not the generic one."
+    SAFE_MESSAGES = frozenset(
+        {"This organization uses a covenant membership lifecycle, not the generic one."}
+    )

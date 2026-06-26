@@ -72,7 +72,7 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
 class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(source="organization.name", read_only=True)
     from_persona_name = serializers.CharField(source="from_persona.name", read_only=True)
-    to_persona_name = serializers.CharField(source="to_persona.name", read_only=True)
+    to_persona_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OrganizationMembershipOffer
@@ -89,3 +89,6 @@ class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):
             "created_at",
             "resolved_at",
         ]
+
+    def get_to_persona_name(self, obj: OrganizationMembershipOffer) -> str:
+        return obj.to_persona.name if obj.to_persona else ""

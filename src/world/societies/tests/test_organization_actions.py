@@ -23,9 +23,11 @@ from world.roster.factories import RosterEntryFactory
 from world.societies.factories import (
     OrganizationFactory,
     OrganizationMembershipOfferFactory,
+    OrganizationTypeFactory,
 )
-from world.societies.membership_services import join_organization
+from world.societies.membership_services import active_membership_for_persona, join_organization
 from world.societies.models import OrganizationMembershipOffer
+from world.societies.offer_handlers import OrgInviteHandler
 
 
 class OrganizationActionTests(TestCase):
@@ -125,6 +127,111 @@ class OrganizationActionTests(TestCase):
         assert result.success is True
         target_membership.refresh_from_db()
         assert target_membership.exiled_at is not None
+
+    def test_invite_action_rejects_covenant_organization(self):
+        covenant_org = OrganizationFactory(
+            org_type=OrganizationTypeFactory(name="covenant"),
+        )
+        result = org_invite_action.execute(
+            self.actor,
+            target=self.target,
+            organization_id=covenant_org.pk,
+        )
+        assert result.success is False
+        assert "covenant" in result.message.lower()
+
+    def test_apply_action_rejects_covenant_organization(self):
+        covenant_org = OrganizationFactory(
+            org_type=OrganizationTypeFactory(name="covenant"),
+        )
+        result = org_apply_action.execute(
+            self.target,
+            organization_id=covenant_org.pk,
+        )
+        assert result.success is False
+        assert "covenant" in result.message.lower()
+
+    def test_join_action_rejects_covenant_organization(self):
+        covenant_org = OrganizationFactory(
+            org_type=OrganizationTypeFactory(name="covenant"),
+        )
+        invite = OrganizationMembershipOfferFactory(
+            organization=covenant_org,
+            from_persona=self.actor_persona,
+            to_persona=self.target_persona,
+            kind=OrganizationMembershipOffer.Kind.INVITE,
+            status=OrganizationMembershipOffer.Status.PENDING,
+        )
+        result = org_join_action.execute(
+            self.target,
+            organization_id=covenant_org.pk,
+        )
+        assert result.success is False
+        assert "covenant" in result.message.lower()
+        invite.refresh_from_db()
+        assert invite.status == OrganizationMembershipOffer.Status.PENDING
+
+
+class OrgInviteHandlerTests(TestCase):
+    def setUp(self):
+        self.org = OrganizationFactory()
+        self.manager_rank = self.org.ranks.get(tier=1)
+
+        self.actor_roster = RosterEntryFactory()
+        self.actor = self.actor_roster.character_sheet.character
+        self.actor_persona = self.actor_roster.character_sheet.primary_persona
+
+        self.target_roster = RosterEntryFactory()
+        self.target = self.target_roster.character_sheet.character
+        self.target_persona = self.target_roster.character_sheet.primary_persona
+
+        self.room = RoomProfileFactory().objectdb
+        self.actor.move_to(self.room, quiet=True)
+        self.target.move_to(self.room, quiet=True)
+
+        self.actor_membership = join_organization(self.org, self.actor_persona)
+        self.actor_membership.rank = self.manager_rank
+        self.actor_membership.save()
+
+        self.handler = OrgInviteHandler()
+
+    def test_pending_for_returns_pending_invitation(self):
+        invite = OrganizationMembershipOfferFactory(
+            organization=self.org,
+            from_persona=self.actor_persona,
+            to_persona=self.target_persona,
+            kind=OrganizationMembershipOffer.Kind.INVITE,
+            status=OrganizationMembershipOffer.Status.PENDING,
+        )
+        found = self.handler.pending_for(self.target_roster.character_sheet)
+        assert found == invite
+
+    def test_accept_dispatches_join_action_and_resolves_offer(self):
+        invite = OrganizationMembershipOfferFactory(
+            organization=self.org,
+            from_persona=self.actor_persona,
+            to_persona=self.target_persona,
+            kind=OrganizationMembershipOffer.Kind.INVITE,
+            status=OrganizationMembershipOffer.Status.PENDING,
+        )
+        message = self.handler.accept(invite, self.target, "")
+        assert "join" in message.lower()
+        invite.refresh_from_db()
+        assert invite.status == OrganizationMembershipOffer.Status.ACCEPTED
+        assert active_membership_for_persona(self.org, self.target_persona) is not None
+
+    def test_decline_resolves_offer(self):
+        invite = OrganizationMembershipOfferFactory(
+            organization=self.org,
+            from_persona=self.actor_persona,
+            to_persona=self.target_persona,
+            kind=OrganizationMembershipOffer.Kind.INVITE,
+            status=OrganizationMembershipOffer.Status.PENDING,
+        )
+        message = self.handler.decline(invite, self.target)
+        assert "decline" in message.lower()
+        invite.refresh_from_db()
+        assert invite.status == OrganizationMembershipOffer.Status.DECLINED
 
 
 _DISPATCH = "commands.command.dispatch_player_action"

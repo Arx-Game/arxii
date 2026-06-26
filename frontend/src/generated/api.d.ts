@@ -12162,7 +12162,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List/retrieve memberships for personas the requester currently plays. */
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
     get: operations['societies_memberships_list'];
     put?: never;
     post?: never;
@@ -12179,7 +12183,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List/retrieve memberships for personas the requester currently plays. */
+    /**
+     * @description List/retrieve memberships for personas the requester currently plays.
+     *
+     *     Covenants (organizations with a related ``covenant`` row) are excluded.
+     */
     get: operations['societies_memberships_retrieve'];
     put?: never;
     post?: never;

@@ -6,11 +6,9 @@ from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from actions.definitions.organizations import org_join_action
 from world.scenes.services import active_persona_for_sheet
-from world.societies.membership_services import (
-    decline_invitation,
-    join_organization,
-)
+from world.societies.membership_services import decline_invitation
 from world.societies.models import OrganizationMembershipOffer
 
 
@@ -47,17 +45,17 @@ class OrgInviteHandler:
         caller: Any,
         _args: str,
     ) -> str:
-        """Accept the invitation by creating the membership directly."""
+        """Accept the invitation by dispatching the shared org_join action."""
         sheet = caller.sheet_data if hasattr(caller, "sheet_data") else None
         if sheet is None:
             return "You need a character sheet for that."
         try:
-            persona = active_persona_for_sheet(sheet)
+            active_persona_for_sheet(sheet)
         except ObjectDoesNotExist:
             return "You have no character identity."
 
-        join_organization(offer.organization, persona)
-        return f"You join {offer.organization.name}."
+        result = org_join_action.run(caller, organization_id=offer.organization.pk)
+        return result.message or f"You join {offer.organization.name}."
 
     def decline(
         self,

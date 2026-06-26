@@ -20435,8 +20435,10 @@ paths:
   /api/societies/memberships/:
     get:
       operationId: societies_memberships_list
-      description: List/retrieve memberships for personas the requester currently
-        plays.
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
       parameters:
       - in: query
         name: is_active
@@ -20466,8 +20468,10 @@ paths:
   /api/societies/memberships/{id}/:
     get:
       operationId: societies_memberships_retrieve
-      description: List/retrieve memberships for personas the requester currently
-        plays.
+      description: |-
+        List/retrieve memberships for personas the requester currently plays.
+
+        Covenants (organizations with a related ``covenant`` row) are excluded.
       parameters:
       - in: path
         name: id

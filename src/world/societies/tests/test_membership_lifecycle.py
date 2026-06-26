@@ -7,11 +7,12 @@ from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.exceptions import (
     AlreadyOrganizationMemberError,
+    NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
 )
-from world.societies.factories import OrganizationFactory
+from world.societies.factories import OrganizationFactory, OrganizationTypeFactory
 from world.societies.membership_services import (
     accept_application,
     accept_invitation,
@@ -131,3 +132,24 @@ class MembershipLifecycleTests(TestCase):
         target = join_organization(self.org, self.member)
         with pytest.raises(NotAuthorizedToKickError):
             expel_member(target, self.base_member_membership)
+
+
+class CovenantGuardTests(TestCase):
+    def setUp(self):
+        self.covenant_org = OrganizationFactory(
+            org_type=OrganizationTypeFactory(name="covenant"),
+        )
+        self.member = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
+        self.manager = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
+
+    def test_join_organization_rejects_covenant(self):
+        with pytest.raises(NotAGenericOrganizationError):
+            join_organization(self.covenant_org, self.member)
+
+    def test_invite_to_organization_rejects_covenant(self):
+        with pytest.raises(NotAGenericOrganizationError):
+            invite_to_organization(self.covenant_org, self.manager, self.member)
+
+    def test_apply_to_organization_rejects_covenant(self):
+        with pytest.raises(NotAGenericOrganizationError):
+            apply_to_organization(self.covenant_org, self.member)

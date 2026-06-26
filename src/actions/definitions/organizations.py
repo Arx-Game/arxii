@@ -26,6 +26,7 @@ from world.societies.exceptions import (
     CannotDemoteError,
     CannotPromoteError,
     InvalidOrganizationPersonaError,
+    NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
     NotAuthorizedToManageRanksError,
@@ -178,6 +179,7 @@ class OrgInviteAction(Action):
             AlreadyOrganizationMemberError,
             InvalidOrganizationPersonaError,
             OrganizationOfferPendingError,
+            NotAGenericOrganizationError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -217,6 +219,7 @@ class OrgApplyAction(Action):
             AlreadyOrganizationMemberError,
             InvalidOrganizationPersonaError,
             OrganizationOfferPendingError,
+            NotAGenericOrganizationError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -269,6 +272,7 @@ class OrgJoinAction(Action):
             OrganizationOfferNotForYouError,
             AlreadyOrganizationMemberError,
             OrganizationMemberBlockError,
+            NotAGenericOrganizationError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
