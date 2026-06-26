@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionResult, TargetType
+from world.magic.types import AlterationResolutionError
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -56,30 +57,35 @@ class ResolveAlterationAction(Action):
         except MagicalAlterationTemplate.DoesNotExist:
             return None, "That library entry was not found."
 
-        errors = validate_alteration_resolution(
-            pending_tier=pending.tier,
-            pending_affinity_id=pending.origin_affinity_id,
-            pending_resonance_id=pending.origin_resonance_id,
-            payload={"library_entry_pk": library_template.pk},
-            is_staff=is_staff,
-            character_sheet=sheet,
-        )
-        if errors:
-            return None, "; ".join(errors)
+        try:
+            errors = validate_alteration_resolution(
+                pending_tier=pending.tier,
+                pending_affinity_id=pending.origin_affinity_id,
+                pending_resonance_id=pending.origin_resonance_id,
+                payload={"library_entry_pk": library_template.pk},
+                is_staff=is_staff,
+                character_sheet=sheet,
+            )
+            if errors:
+                return None, "; ".join(errors)
 
-        result = resolve_pending_alteration(
-            pending=pending,
-            name=library_template.condition_template.name,
-            player_description=library_template.condition_template.player_description,
-            observer_description=library_template.condition_template.observer_description,
-            weakness_damage_type=library_template.weakness_damage_type,
-            weakness_magnitude=library_template.weakness_magnitude,
-            resonance_bonus_magnitude=library_template.resonance_bonus_magnitude,
-            social_reactivity_magnitude=library_template.social_reactivity_magnitude,
-            is_visible_at_rest=library_template.is_visible_at_rest,
-            resolved_by=account,
-            library_template=library_template,
-        )
+            result = resolve_pending_alteration(
+                pending=pending,
+                name=library_template.condition_template.name,
+                player_description=library_template.condition_template.player_description,
+                observer_description=library_template.condition_template.observer_description,
+                weakness_damage_type=library_template.weakness_damage_type,
+                weakness_magnitude=library_template.weakness_magnitude,
+                resonance_bonus_magnitude=library_template.resonance_bonus_magnitude,
+                social_reactivity_magnitude=library_template.social_reactivity_magnitude,
+                is_visible_at_rest=library_template.is_visible_at_rest,
+                resolved_by=account,
+                library_template=library_template,
+            )
+        except AlterationResolutionError as exc:
+            return None, exc.user_message
+        except Exception:  # noqa: BLE001
+            return None, "The Mage Scar could not be resolved. Please contact staff."
         return result, ""
 
     def _resolve_scratch(
@@ -124,30 +130,35 @@ class ResolveAlterationAction(Action):
             "parent_template_id": parent_template_id,
             "is_library_entry": is_library_entry,
         }
-        errors = validate_alteration_resolution(
-            pending_tier=pending.tier,
-            pending_affinity_id=pending.origin_affinity_id,
-            pending_resonance_id=pending.origin_resonance_id,
-            payload=payload,
-            is_staff=is_staff,
-            character_sheet=sheet,
-        )
-        if errors:
-            return None, "; ".join(errors)
+        try:
+            errors = validate_alteration_resolution(
+                pending_tier=pending.tier,
+                pending_affinity_id=pending.origin_affinity_id,
+                pending_resonance_id=pending.origin_resonance_id,
+                payload=payload,
+                is_staff=is_staff,
+                character_sheet=sheet,
+            )
+            if errors:
+                return None, "; ".join(errors)
 
-        result = resolve_pending_alteration(
-            pending=pending,
-            name=name,
-            player_description=player_description,
-            observer_description=observer_description,
-            weakness_damage_type=weakness_damage_type,
-            weakness_magnitude=weakness_magnitude,
-            resonance_bonus_magnitude=resonance_bonus_magnitude,
-            social_reactivity_magnitude=social_reactivity_magnitude,
-            is_visible_at_rest=is_visible_at_rest,
-            resolved_by=account,
-            parent_template=parent_template,
-        )
+            result = resolve_pending_alteration(
+                pending=pending,
+                name=name,
+                player_description=player_description,
+                observer_description=observer_description,
+                weakness_damage_type=weakness_damage_type,
+                weakness_magnitude=weakness_magnitude,
+                resonance_bonus_magnitude=resonance_bonus_magnitude,
+                social_reactivity_magnitude=social_reactivity_magnitude,
+                is_visible_at_rest=is_visible_at_rest,
+                resolved_by=account,
+                parent_template=parent_template,
+            )
+        except AlterationResolutionError as exc:
+            return None, exc.user_message
+        except Exception:  # noqa: BLE001
+            return None, "The Mage Scar could not be resolved. Please contact staff."
         return result, ""
 
     def execute(
@@ -187,13 +198,16 @@ class ResolveAlterationAction(Action):
                     is_staff = bool(account and account.is_staff)
                     library_template_id = kwargs.get("library_template_id")
                     if library_template_id is not None:
-                        result, message = self._resolve_library(
-                            pending,
-                            library_template_id,
-                            account,
-                            is_staff,
-                            sheet,
-                        )
+                        if not isinstance(library_template_id, int):
+                            message = "A valid library entry is required."
+                        else:
+                            result, message = self._resolve_library(
+                                pending,
+                                library_template_id,
+                                account,
+                                is_staff,
+                                sheet,
+                            )
                     else:
                         result, message = self._resolve_scratch(
                             pending,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.definitions.alterations import ResolveAlterationAction
@@ -18,6 +20,7 @@ from world.magic.factories import (
     ResonanceFactory,
 )
 from world.magic.services import staff_clear_alteration
+from world.magic.types import AlterationResolutionError
 
 
 class ResolveAlterationActionTests(TestCase):
@@ -168,3 +171,31 @@ class ResolveAlterationActionTests(TestCase):
         self.assertFalse(result.success)
         self.assertIn("player_description must be at least", result.message or "")
         self.assertIn("observer_description must be at least", result.message or "")
+
+    def test_rejects_non_int_library_template_id(self):
+        pending = self._open_pending()
+
+        result = ResolveAlterationAction().run(
+            actor=self.character,
+            pending_id=pending.pk,
+            library_template_id="not-an-int",
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("library entry is required", result.message or "")
+
+    def test_handles_alteration_resolution_error(self):
+        pending = self._open_pending()
+        library_template = self._library_template(pending)
+
+        with patch("world.magic.services.resolve_pending_alteration") as mock_resolve:
+            mock_resolve.side_effect = AlterationResolutionError("Already resolved.")
+            result = ResolveAlterationAction().run(
+                actor=self.character,
+                pending_id=pending.pk,
+                library_template_id=library_template.pk,
+            )
+
+        self.assertFalse(result.success)
+        self.assertIn("could not be applied", result.message or "")
+        mock_resolve.assert_called_once()
