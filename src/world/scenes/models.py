@@ -30,6 +30,7 @@ from world.societies.constants import FameTier
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
@@ -123,6 +124,13 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     def participations_cached(self) -> list[SceneParticipation]:
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
+
+    @property
+    def persona_handler(self) -> ScenePersonaHandler:
+        """Return a lightweight persona handler for this scene."""
+        from world.scenes.persona_handlers import ScenePersonaHandler  # noqa: PLC0415
+
+        return ScenePersonaHandler(self)
 
     def is_owner(self, account: AccountDB | None) -> bool:
         """Return True if ``account`` owns this scene."""

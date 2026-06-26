@@ -15,9 +15,14 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from commands.combat import CmdDeclareTechnique
 from commands.exceptions import CommandError
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import CharacterResonanceFactory, ThreadFactory
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.types.pull import CastPullDeclaration
+from world.roster.factories import RosterTenureFactory
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Scene
 
 _DERIVE = "world.magic.services.targeting.derive_target_relationship"
 
@@ -327,6 +332,93 @@ class CmdDeclareTechniquePullParseTests(TestCase):
         pull: CastPullDeclaration = kwargs["cast_pull"]
         self.assertEqual(pull.resonance, self.resonance)
         self.assertEqual(pull.threads[0], self.thread)
+
+
+class CmdDeclareTechniqueTargetResolverTests(TestCase):
+    """Non-combat ``at <name>`` target resolution is scoped to the active scene."""
+
+    def setUp(self) -> None:
+        # ObjectDB fixtures must be built in setUp (idmapper/DbHolder trap).
+        self.room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.caller_char = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.target_char = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.bystander_char = ObjectDBFactory(
+            db_key="Cleo",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.caller_sheet = CharacterSheetFactory(character=self.caller_char)
+        self.target_sheet = CharacterSheetFactory(character=self.target_char)
+        self.bystander_sheet = CharacterSheetFactory(character=self.bystander_char)
+
+        self.caller_account = AccountFactory()
+        self.target_account = AccountFactory()
+        self.bystander_account = AccountFactory()
+        RosterTenureFactory(
+            player_data=self.caller_account.player_data,
+            roster_entry__character_sheet=self.caller_sheet,
+        )
+        RosterTenureFactory(
+            player_data=self.target_account.player_data,
+            roster_entry__character_sheet=self.target_sheet,
+        )
+        RosterTenureFactory(
+            player_data=self.bystander_account.player_data,
+            roster_entry__character_sheet=self.bystander_sheet,
+        )
+
+        self.shared_name = "SharedName"
+        self.target_persona = self.target_sheet.primary_persona
+        self.target_persona.name = self.shared_name
+        self.target_persona.save()
+        self.bystander_persona = self.bystander_sheet.primary_persona
+        self.bystander_persona.name = self.shared_name
+        self.bystander_persona.save()
+
+        self.scene = SceneFactory(
+            is_active=True,
+            location=self.room,
+            participants=[self.caller_account, self.target_account],
+        )
+        if hasattr(self.room, "_active_scene_cache"):
+            del self.room._active_scene_cache
+
+    def _make_cmd(self, args: str) -> CmdDeclareTechnique:
+        cmd = CmdDeclareTechnique()
+        cmd.caller = self.caller_char
+        cmd.args = args
+        cmd.raw_string = f"cast {args}"
+        cmd.cmdname = "cast"
+        return cmd
+
+    def test_resolve_target_scoped_to_scene_participants(self) -> None:
+        """A name shared with a non-participant resolves to the participant's persona."""
+        cmd = self._make_cmd(f"Firebolt at {self.shared_name}")
+        cmd._parse_args()
+        persona_id = cmd._resolve_target_persona_id()
+        self.assertEqual(persona_id, self.target_persona.pk)
+
+    def test_resolve_target_requires_active_scene(self) -> None:
+        """No active scene at the caller's location raises CommandError."""
+        Scene.objects.filter(pk=self.scene.pk).update(is_active=False)
+        if hasattr(self.room, "_active_scene_cache"):
+            del self.room._active_scene_cache
+
+        cmd = self._make_cmd(f"Firebolt at {self.shared_name}")
+        cmd._parse_args()
+        with self.assertRaises(CommandError):
+            cmd._resolve_target_persona_id()
 
 
 class CmdsetRegistrationTests(TestCase):
