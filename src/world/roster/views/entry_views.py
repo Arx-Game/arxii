@@ -19,6 +19,7 @@ from world.roster.models import RosterEntry, RosterTenure, TenureMedia
 from world.roster.permissions import IsPlayerOrStaff
 from world.roster.serializers import (
     MyRosterEntrySerializer,
+    RosterApplicationCreateSerializer,
     RosterApplicationSerializer,
     RosterEntrySerializer,
 )
@@ -144,7 +145,18 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        self.get_object()
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        roster_entry = self.get_object()
+        message_serializer = self.get_serializer(data=request.data)
+        message_serializer.is_valid(raise_exception=True)
+
+        create_data = {
+            "character_id": roster_entry.character_sheet.character.id,
+            "application_text": message_serializer.validated_data["message"],
+        }
+        create_serializer = RosterApplicationCreateSerializer(
+            data=create_data,
+            context=self.get_serializer_context(),
+        )
+        create_serializer.is_valid(raise_exception=True)
+        create_serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)

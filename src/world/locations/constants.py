@@ -56,6 +56,13 @@ class StatKey(models.TextChoices):
     LIGHTING = "lighting", "Lighting"
     NOISE = "noise", "Noise"
     TRAFFIC = "traffic", "Traffic"
+    # Environmental exposure axes (#1514 — climate → comfort). Each is a non-negative
+    # *discomfort* magnitude: climate/weather/style push it up, counter-fixtures push it
+    # down, and the 0-floor clamp guarantees a counter can zero out its own axis but never
+    # drive it negative or touch another — so a hearth eats COLD and can never make a room
+    # "too hot". See EXPOSURE_STAT_KEYS + services.comfort_score.
+    COLD = "cold", "Cold exposure"
+    HEAT = "heat", "Heat exposure"
 
 
 # Per-stat default value when no row exists in the cascade chain.
@@ -66,6 +73,9 @@ STAT_DEFAULTS: dict[StatKey, int] = {
     StatKey.LIGHTING: 0,
     StatKey.NOISE: 50,
     StatKey.TRAFFIC: 50,
+    # Exposure axes default to 0 — a room with no climate/weather/style input is neutral.
+    StatKey.COLD: 0,
+    StatKey.HEAT: 0,
 }
 
 # Inclusive (min, max) bounds applied to the final cascade-resolved value.
@@ -79,6 +89,9 @@ STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     StatKey.LIGHTING: (-2, 2),
     StatKey.NOISE: (0, 100),
     StatKey.TRAFFIC: (0, 100),
+    # The (0, …) floor is load-bearing: it is the "counters never harm" guarantee (#1514).
+    StatKey.COLD: (0, 100),
+    StatKey.HEAT: (0, 100),
 }
 
 # Suggested ``change_per_day`` value for new modifiers if the calling
@@ -91,7 +104,15 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.LIGHTING: 0,
     StatKey.NOISE: -2,
     StatKey.TRAFFIC: -1,
+    # Climate/style/fixture contributions are permanent baselines by default (0); transient
+    # weather callers (a cold snap) supply their own negative decay per-row.
+    StatKey.COLD: 0,
+    StatKey.HEAT: 0,
 }
+
+# Environmental discomfort axes that sum into the comfort score (#1514). Listed here so
+# adding WET/WIND later is a one-line change that every comfort read picks up automatically.
+EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (StatKey.COLD, StatKey.HEAT)
 
 
 class HolderType(models.TextChoices):
