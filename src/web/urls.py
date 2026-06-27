@@ -25,6 +25,7 @@ urlpatterns = [
     path("api/npc-services/", include("world.npc_services.urls")),
     path("api/journals/", include("world.journals.urls", namespace="journals")),
     path("api/clock/", include("world.game_clock.urls")),
+    path("api/weather/", include("world.weather.urls")),
     path("api/currency/", include("world.currency.urls")),
     path("api/events/", include("world.events.urls")),
     path("api/combat/", include("world.combat.urls")),

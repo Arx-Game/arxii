@@ -90,7 +90,13 @@ Services (`world.weather.services`):
 - **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
   the room's effective weather + one emit line. Any field is None when its source is absent.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
-  `current_conditions` for the caller's room. The React widget renders the same data.
+  `current_conditions` for the caller's room.
+- **API + React widget**: `GET /api/weather/conditions/?room_id=<id>` (`world.weather.views`
+  `WeatherViewSet`, `ConditionsSerializer`) → the `Conditions` schema. The frontend
+  `WeatherWidget` (`frontend/src/weather/`) reads the active character's room id from Redux,
+  queries it via React Query, and renders a compact "phase · weather" glance in the `GameTopBar`
+  (tooltip carries the full emit line). Weather echoes use `NarrativeCategory.WEATHER`, so
+  `CategoryBadge` must include a `weather` entry (frontend exhaustive map).
 - **Feast-day special weather** (`FeastDay` + `special_weather_for_today`): an annually-recurring
   IC date (`ic_month`, `ic_day`) tied to a special `WeatherType` (Eclipse / Moon Madness,
   `is_automated=False`). On a feast day the tick *forces* that type world-wide, overriding the
@@ -110,8 +116,6 @@ Services (`world.weather.services`):
   Weather is inert in any DB until these are loaded (`roll_region_weather` returns None with no
   types). **Re-seeding edited emits needs an upsert path** (loaddata duplicates the keyless emit
   rows — the #946 idmapper caveat); not yet built.
-- **React weather widget** — a frontend surface consuming `current_conditions` (needs a
-  weather-at-location API endpoint resolving the viewer's active character's room).
 - **Wind as a mechanic** (flyers/arrows/gale spells, driven by the active weather's WIND) —
   combat/technique consumer, **Tehom's domain**; filed as **#1555** (`needs-design`). The WIND
   *provider* side is done (`felt_exposure(room, WIND)` / `current_conditions`).

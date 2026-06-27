@@ -55,7 +55,8 @@ Re-exports from `@/generated/api`:
 - `NarrativeMessage` — full message type
 - `NarrativeMessageDelivery` — delivery join type (includes `acknowledged_at`)
 - `NarrativeCategory` — TextChoices union: `story` / `atmosphere` / `visions` /
-  `happenstance` / `system`
+  `happenstance` / `system` / `covenant` / `renown` / `weather` (weather echoes, #1522;
+  squelchable via `UserCategoryMute`). `CategoryBadge` maps every value — keep it exhaustive.
 - `MyMessagesResponse` — paginated list shape
 
 ### `components/`
