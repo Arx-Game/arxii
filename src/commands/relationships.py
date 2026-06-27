@@ -1,14 +1,26 @@
-"""Relationship-building telnet command — the ``relationship <subverb>`` namespace (#1485).
+"""Relationship-building telnet command — the ``relationship <subverb>`` namespace (#1485 / #1537).
 
 A single command routes the positive relationship-building verbs through
 ``action.run()`` — the same seam the web ``RelationshipUpdateViewSet`` uses —
-plus the telnet-only ``list`` / ``show`` read surfaces. The four write verbs
-reach the Actions in ``actions/definitions/relationships.py``:
+plus the telnet-only ``list`` / ``show`` read surfaces, and the feedback verbs
+``kudos`` / ``complain``.
+
+Write verbs (reach the Actions in ``actions/definitions/relationships.py``):
 
 - ``relationship impression <name> ...``  → ``CreateFirstImpressionAction``
 - ``relationship develop <name> ...``       → ``CreateDevelopmentAction``
 - ``relationship capstone <name> ...``      → ``CreateCapstoneAction``
 - ``relationship redistribute <name> ...``  → ``RedistributePointsAction``
+
+Feedback verbs (#1537):
+
+- ``relationship kudos <ref>``           → ``GiveWriteupKudosAction``
+- ``relationship complain <ref>=<reason>`` → ``FileWriteupComplaintAction``
+
+Writeup references use a type-prefix + pk notation — ``u<pk>`` for
+RelationshipUpdate, ``d<pk>`` for RelationshipDevelopment, ``c<pk>`` for
+RelationshipCapstone — matching the labels shown by ``relationship show``.
+``_parse_writeup_ref`` encodes the shared scheme used in both display and parse.
 
 The verbs live under the ``relationship`` namespace rather than as bare
 top-level keys (e.g. ``impression`` / ``develop``) to avoid exit/channel/alias
@@ -16,8 +28,8 @@ collisions — mirrors ``CmdRitual`` / ``CmdDuel`` subverb routing.
 
 No consent gate: these describe the caller's *regard* for another character,
 they do not compel or provoke the target's behavior (ADR-0024). The Golden Rule
-covers bad-faith writeups; a positive kudos / complaint feedback layer is a
-follow-up (#1328).
+covers bad-faith writeups; the ``kudos`` / ``complaint`` feedback layer lets the
+writeup subject commend or flag a writeup (#1537).
 
 ``linked_scene`` defaults to the caller's active scene in the current room
 when the target is co-located in an active scene — so players can note a moment
@@ -44,10 +56,21 @@ _SUBVERB_CAPSTONE = "capstone"
 _SUBVERB_REDISTRIBUTE = "redistribute"
 _SUBVERB_LIST = "list"
 _SUBVERB_SHOW = "show"
+_SUBVERB_KUDOS = "kudos"
+_SUBVERB_COMPLAIN = "complain"
 _WRITE_SUBVERBS = frozenset(
     {_SUBVERB_IMPRESSION, _SUBVERB_DEVELOP, _SUBVERB_CAPSTONE, _SUBVERB_REDISTRIBUTE}
 )
 _READ_SUBVERBS = frozenset({_SUBVERB_LIST, _SUBVERB_SHOW})
+_FEEDBACK_SUBVERBS = frozenset({_SUBVERB_KUDOS, _SUBVERB_COMPLAIN})
+
+# Writeup reference prefix → writeup_type string (matches what the Action + service expect).
+# Labels are displayed in ``relationship show`` and parsed back here — one scheme, shared.
+_WRITEUP_PREFIX_MAP: dict[str, str] = {
+    "u": "update",
+    "d": "development",
+    "c": "capstone",
+}
 
 # Telnet key=value argument keys.
 _KEY_TRACK = "track"
@@ -125,7 +148,7 @@ class CmdRelationship(ArxCommand):
     Usage:
         relationship                         — list your relationships
         relationship list                    — same as bare ``relationship``
-        relationship show <name|#>           — detail one relationship
+        relationship show <name|#>           — detail one relationship (includes writeup refs)
         relationship impression <name> track=<id|name> points=<n>
             title=<text> writeup=<text> [coloring=positive|neutral|negative]
             [visibility=private|shared|gossip|public]
@@ -135,7 +158,11 @@ class CmdRelationship(ArxCommand):
             title=<text> writeup=<text> [visibility=...]
         relationship redistribute <name> source=<track> target=<track>
             points=<n> title=<text> writeup=<text> [visibility=...]
+        relationship kudos <ref>             — commend a shared writeup
+        relationship complain <ref>=<reason> — file a staff complaint about a writeup
 
+    Writeup refs are shown by ``relationship show``: ``u<id>`` = update,
+    ``d<id>`` = development, ``c<id>`` = capstone (e.g. ``kudos u42``).
     Tracks resolve by name (iexact) or id. ``title`` / ``writeup`` are free
     text — their values run to the next ``key=`` token. An active scene in your
     current room is linked automatically when the target is co-located.
@@ -162,6 +189,10 @@ class CmdRelationship(ArxCommand):
                 self._show_detail(rest)
             elif subverb in _WRITE_SUBVERBS:
                 self._dispatch_write(subverb, rest)
+            elif subverb == _SUBVERB_KUDOS:
+                self._dispatch_kudos(rest)
+            elif subverb == _SUBVERB_COMPLAIN:
+                self._dispatch_complain(rest)
             else:
                 self.msg(self._usage())
         except CommandError as err:
@@ -226,6 +257,71 @@ class CmdRelationship(ArxCommand):
         target_track = self._resolve_track(kwargs.get(_KEY_TARGET_TRACK), label="target track")
         run_kwargs = {**common, "source_track": source_track, "target_track": target_track}
         return RedistributePointsAction(), run_kwargs
+
+    # -- feedback verbs (kudos / complain) ------------------------------------
+
+    def _dispatch_kudos(self, rest: str) -> None:
+        """Commend a shared writeup.  Syntax: ``relationship kudos <ref>``."""
+        from actions.definitions.relationships import GiveWriteupKudosAction  # noqa: PLC0415
+
+        ref = rest.strip()
+        if not ref:
+            msg = (
+                "Usage: relationship kudos <ref>  "
+                "(e.g. 'kudos u42'; see 'relationship show <name|#>' for refs)."
+            )
+            raise CommandError(msg)
+        writeup_type, writeup_id = self._parse_writeup_ref(ref)
+        result = GiveWriteupKudosAction().run(
+            actor=self.caller, writeup_type=writeup_type, writeup_id=writeup_id
+        )
+        if result.message:
+            self.msg(result.message)
+
+    def _dispatch_complain(self, rest: str) -> None:
+        """File a writeup complaint.  Syntax: ``relationship complain <ref>=<reason>``."""
+        from actions.definitions.relationships import FileWriteupComplaintAction  # noqa: PLC0415
+
+        if "=" not in rest:
+            msg = (
+                "Usage: relationship complain <ref>=<reason>  "
+                "(e.g. 'complain u42=This writeup is in bad faith.')."
+            )
+            raise CommandError(msg)
+        ref, _, reason = rest.partition("=")
+        reason = reason.strip()
+        if not reason:
+            msg = "A reason is required. Usage: relationship complain <ref>=<reason>"
+            raise CommandError(msg)
+        writeup_type, writeup_id = self._parse_writeup_ref(ref.strip())
+        result = FileWriteupComplaintAction().run(
+            actor=self.caller,
+            writeup_type=writeup_type,
+            writeup_id=writeup_id,
+            reason=reason,
+        )
+        if result.message:
+            self.msg(result.message)
+
+    def _parse_writeup_ref(self, ref: str) -> tuple[str, int]:
+        """Parse a writeup reference like ``u42``, ``d15``, or ``c7`` into (writeup_type, pk).
+
+        Prefix letters match the labels shown in ``relationship show``:
+        ``u`` = RelationshipUpdate, ``d`` = RelationshipDevelopment, ``c`` = RelationshipCapstone.
+        This is the single shared scheme — the same notation used in both display and parse.
+        """
+        ref = ref.strip().lower()
+        for prefix, writeup_type in _WRITEUP_PREFIX_MAP.items():
+            if ref.startswith(prefix) and len(ref) > len(prefix):
+                pk_str = ref[len(prefix) :]
+                if pk_str.isdigit():
+                    return writeup_type, int(pk_str)
+        msg = (
+            f"Invalid writeup reference '{ref}'. "
+            "Use u<id> (update), d<id> (development), or c<id> (capstone) — "
+            "labels shown by 'relationship show <name|#>'."
+        )
+        raise CommandError(msg)
 
     # -- read verbs ------------------------------------------------------------
 
@@ -384,6 +480,12 @@ class CmdRelationship(ArxCommand):
 
     def _render_detail(self, rel: CharacterRelationship) -> str:
         """A multi-line detail view for one relationship."""
+        from world.relationships.models import (  # noqa: PLC0415
+            RelationshipCapstone,
+            RelationshipDevelopment,
+            RelationshipUpdate,
+        )
+
         target_name = rel.target.character.db_key
         status = "pending" if rel.is_pending else "active"
         lines = [
@@ -403,6 +505,33 @@ class CmdRelationship(ArxCommand):
                 )
         else:
             lines.append("No track progress recorded yet.")
+
+        # Writeups — listed with type-prefix refs so players know what to pass to kudos/complain.
+        updates = list(
+            RelationshipUpdate.objects.filter(relationship=rel)
+            .select_related("track")
+            .order_by("created_at")
+        )
+        developments = list(
+            RelationshipDevelopment.objects.filter(relationship=rel)
+            .select_related("track")
+            .order_by("created_at")
+        )
+        capstones = list(
+            RelationshipCapstone.objects.filter(relationship=rel)
+            .select_related("track")
+            .order_by("created_at")
+        )
+        if updates or developments or capstones:
+            lines.append("|wWriteups:|n  (use ref with 'kudos <ref>' or 'complain <ref>=<reason>')")
+            lines.extend(f"  [u{u.pk}] ({u.visibility}) {u.track.name}: {u.title}" for u in updates)
+            lines.extend(
+                f"  [d{d.pk}] ({d.visibility}) {d.track.name}: {d.title}" for d in developments
+            )
+            lines.extend(
+                f"  [c{c.pk}] ({c.visibility}) {c.track.name}: {c.title}" for c in capstones
+            )
+
         return "\n".join(lines)
 
     @staticmethod
@@ -417,5 +546,6 @@ class CmdRelationship(ArxCommand):
     def _usage(self) -> str:
         return (
             "Usage: relationship [list|show <name|#>|impression <name> ...|"
-            "develop <name> ...|capstone <name> ...|redistribute <name> ...]"
+            "develop <name> ...|capstone <name> ...|redistribute <name> ...|"
+            "kudos <ref>|complain <ref>=<reason>]"
         )

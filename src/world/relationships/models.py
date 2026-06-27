@@ -7,8 +7,10 @@ import math
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
+from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import SoulTetherRole
@@ -855,3 +857,98 @@ class RelationshipChange(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Change: {self.title} ({self.relationship})"
+
+
+class WriteupFeedbackBase(SharedMemoryModel):
+    """Abstract: feedback attached to exactly one relationship writeup."""
+
+    update = models.ForeignKey(
+        "relationships.RelationshipUpdate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set",
+    )
+    development = models.ForeignKey(
+        "relationships.RelationshipDevelopment",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set",
+    )
+    capstone = models.ForeignKey(
+        "relationships.RelationshipCapstone",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        abstract = True
+        constraints = [
+            models.CheckConstraint(
+                name="%(class)s_exactly_one_writeup",
+                condition=(
+                    Q(update__isnull=False, development__isnull=True, capstone__isnull=True)
+                    | Q(update__isnull=True, development__isnull=False, capstone__isnull=True)
+                    | Q(update__isnull=True, development__isnull=True, capstone__isnull=False)
+                ),
+            )
+        ]
+
+    @property
+    def writeup(self):
+        return self.update or self.development or self.capstone
+
+    @property
+    def author_sheet(self):
+        return self.writeup.author
+
+    @property
+    def subject_sheet(self):
+        return self.writeup.relationship.target
+
+
+class WriteupKudos(WriteupFeedbackBase):
+    """A subject's one-way, non-revocable commendation of a writeup about them."""
+
+    account = models.ForeignKey(
+        AccountDB,
+        on_delete=models.CASCADE,
+        related_name="writeup_kudos_given",
+        help_text="The subject's controlling account (the commender).",
+    )
+
+    class Meta(WriteupFeedbackBase.Meta):
+        constraints = [
+            *WriteupFeedbackBase.Meta.constraints,
+            models.UniqueConstraint(
+                fields=["account", "update"],
+                name="unique_kudos_account_update",
+                condition=Q(update__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["account", "development"],
+                name="unique_kudos_account_development",
+                condition=Q(development__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["account", "capstone"],
+                name="unique_kudos_account_capstone",
+                condition=Q(capstone__isnull=False),
+            ),
+        ]
+
+
+class WriteupComplaint(WriteupFeedbackBase):
+    """A bad-faith-RP complaint flagged for staff triage. Zero player-facing signal."""
+
+    complainant = models.ForeignKey(
+        AccountDB,
+        on_delete=models.CASCADE,
+        related_name="writeup_complaints_filed",
+    )
+    reason = models.TextField(help_text="Complainant's free-text rationale for staff review.")
+    resolved = models.BooleanField(default=False, help_text="Staff triage flag.")
