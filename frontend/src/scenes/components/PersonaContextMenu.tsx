@@ -11,7 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Ban, Swords, VolumeX, Zap } from 'lucide-react';
+import { Ban, HeartPulse, Swords, VolumeX, Zap } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
@@ -30,6 +30,7 @@ import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
 import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
+import { TreatActionPanel } from '@/conditions/components/TreatActionPanel';
 
 /** The whisper action awaiting a recipient choice (#907). */
 interface PendingWhisper {
@@ -110,6 +111,7 @@ export function PersonaContextMenu({
   const createBlock = useCreateBlock();
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+  const [treatDialogOpen, setTreatDialogOpen] = useState(false);
 
   function submitBlock() {
     if (blockerPersonaId === null || blockReason.trim() === '') {
@@ -143,8 +145,15 @@ export function PersonaContextMenu({
   // Show all prerequisite-met actions as potential targeted actions.
   const targetedActions: PlayerAction[] = (data?.results ?? []).filter((a) => a.prerequisite_met);
 
-  // The menu is worth showing if there are targeted actions, a challenge, or block/mute.
-  if (targetedActions.length === 0 && !canChallenge && !canModerate) {
+  // Treat affordance (#1486): available for any non-self target once the viewer's
+  // character is resolved.  The discovery endpoint gates candidates server-side,
+  // so the menu item is always offered for eligible targets; an empty candidate
+  // list renders an inline "No treatable conditions." message in the dialog.
+  const canTreat = characterId !== null && !isSelfTarget;
+
+  // The menu is worth showing if there are targeted actions, a challenge, treat,
+  // or block/mute.
+  if (targetedActions.length === 0 && !canChallenge && !canTreat && !canModerate) {
     return <>{children}</>;
   }
 
@@ -292,6 +301,18 @@ export function PersonaContextMenu({
               </DropdownMenuItem>
             </>
           )}
+          {canTreat && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="treat-persona-item"
+                onClick={() => setTreatDialogOpen(true)}
+              >
+                <HeartPulse className="mr-2 h-4 w-4" />
+                Treat…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
@@ -320,6 +341,23 @@ export function PersonaContextMenu({
               data-testid="confirm-block-button"
             >
               Block
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={treatDialogOpen} onOpenChange={setTreatDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Offer treatment to {personaName}</DialogTitle>
+            <DialogDescription>
+              Offer to treat one of their conditions or alterations. They will be asked to accept
+              before anything takes effect.
+            </DialogDescription>
+          </DialogHeader>
+          <TreatActionPanel sceneId={sceneId} targetPersonaId={personaId} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTreatDialogOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

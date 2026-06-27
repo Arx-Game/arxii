@@ -244,6 +244,7 @@
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
+  - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
 
@@ -253,6 +254,7 @@
   - check_type -> checks.CheckType [FK]
   - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
+  - action_requests <- scenes.SceneActionRequest
   - attempts <- conditions.TreatmentAttempt
 
 ### TreatmentAttempt
@@ -1267,6 +1269,7 @@
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
+  - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
 
@@ -1276,6 +1279,7 @@
   - check_type -> checks.CheckType [FK]
   - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
+  - action_requests <- scenes.SceneActionRequest
   - attempts <- conditions.TreatmentAttempt
 
 ### TreatmentAttempt
@@ -1324,6 +1328,7 @@
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
 - `get_penetration_factor(success_level: int) -> decimal.Decimal — Look up the penetration power factor for a given success level (#639).`
 - `get_resistance_modifier(character_sheet: 'CharacterSheet', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
+- `get_treatment_candidates(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene') -> list[dict[str, typing.Any]] — Return valid (treatment, target_effect) pairs for helper to attempt on target.`
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
@@ -2040,6 +2045,7 @@
   - resolved_alteration -> magic.MagicalAlterationTemplate [FK] (nullable)
   - resolved_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
+  - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_alteration <- conditions.TreatmentAttempt
 
 ### MagicalAlterationEvent
@@ -2429,6 +2435,7 @@
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
+  - treatment_action_requests <- scenes.SceneActionRequest
   - cast_pull_declarations <- scenes.SceneCastPullDeclaration
   - treatment_attempts <- conditions.TreatmentAttempt
   - related_journal_entries <- journals.JournalEntry
@@ -3722,6 +3729,10 @@
   - target_persona -> scenes.Persona [FK] (nullable)
   - spread_deed_target -> societies.LegendEntry [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
+  - treatment -> conditions.TreatmentTemplate [FK] (nullable)
+  - target_condition_instance -> conditions.ConditionInstance [FK] (nullable)
+  - target_pending_alteration -> magic.PendingAlteration [FK] (nullable)
+  - thread_used -> magic.Thread [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
   - snapshot_ritual -> magic.Ritual [FK] (nullable)
   - snapshot_stat -> traits.Trait [FK] (nullable)

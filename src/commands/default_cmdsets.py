@@ -24,6 +24,7 @@ from commands.alterations import CmdMageScar
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
+from commands.conditions import CmdTreatCondition
 from commands.consent import (
     CmdAccept,
     CmdDeceive,
@@ -172,6 +173,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPerform,
             CmdEntrance,
             CmdRestoreSense,
+            CmdTreatCondition,
             # #1487 - telnet consent preference management namespace.
             CmdConsent,
             CmdDig,

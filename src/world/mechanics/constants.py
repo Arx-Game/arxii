@@ -20,6 +20,7 @@ TECHNIQUE_STAT_CONTROL = "control"
 
 # ModifierSource.source_type return values
 SOURCE_TYPE_DISTINCTION = "distinction"
+SOURCE_TYPE_RESIDENCE_COMFORT = "residence_comfort"
 SOURCE_TYPE_UNKNOWN = "unknown"
 
 

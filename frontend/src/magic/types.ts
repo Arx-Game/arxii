@@ -23,7 +23,7 @@ export type PaginatedTeachingOfferList =
   components['schemas']['PaginatedThreadWeavingTeachingOfferList'];
 
 // TargetKind — re-export from generated enum
-export type TargetKind = components['schemas']['TargetKindEnum'];
+export type TargetKind = components['schemas']['ThreadTargetKindEnum'];
 export type CharacterResonance = components['schemas']['CharacterResonance'];
 export type SineatingPendingOffer = components['schemas']['SineatingPendingOffer'];
 export type PaginatedSineatingPendingOfferList =

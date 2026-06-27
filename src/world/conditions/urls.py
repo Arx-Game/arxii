@@ -15,6 +15,7 @@ from world.conditions.views import (
     ConditionInstanceViewSet,
     ConditionTemplateViewSet,
     DamageTypeViewSet,
+    TreatmentCandidateViewSet,
 )
 
 router = DefaultRouter()
@@ -32,6 +33,9 @@ router.register("character", CharacterConditionsViewSet, basename="character-con
 
 # Single condition instance retrieve (deep link target, #551)
 router.register("instances", ConditionInstanceViewSet, basename="condition-instance")
+
+# Treatment candidate discovery (heal-another consent flow, #1486)
+router.register("treatments", TreatmentCandidateViewSet, basename="treatment-candidate")
 
 urlpatterns = [
     path("", include(router.urls)),
