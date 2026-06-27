@@ -9,7 +9,7 @@ import type { components } from '@/generated/api';
 
 export type NarrativeMessage = components['schemas']['NarrativeMessage'];
 export type NarrativeMessageDelivery = components['schemas']['NarrativeMessageDelivery'];
-export type NarrativeCategory = components['schemas']['NarrativeMessageCategoryEnum'];
+export type NarrativeCategory = components['schemas']['NarrativeCategoryEnum'];
 
 export interface MyMessagesQueryParams {
   category?: NarrativeCategory;

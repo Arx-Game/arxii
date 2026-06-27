@@ -24978,26 +24978,6 @@ components:
       - target_spec
       - target_type
       - tier
-    CategoryF17Enum:
-      enum:
-      - story
-      - atmosphere
-      - visions
-      - happenstance
-      - system
-      - covenant
-      - renown
-      - weather
-      type: string
-      description: |-
-        * `story` - Story update
-        * `atmosphere` - Atmosphere
-        * `visions` - Visions
-        * `happenstance` - Happenstance
-        * `system` - System
-        * `covenant` - Covenant
-        * `renown` - Renown
-        * `weather` - Weather
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -34772,6 +34752,26 @@ components:
       required:
       - npc_persona
       - persona
+    NarrativeCategoryEnum:
+      enum:
+      - story
+      - atmosphere
+      - visions
+      - happenstance
+      - system
+      - covenant
+      - renown
+      - weather
+      type: string
+      description: |-
+        * `story` - Story update
+        * `atmosphere` - Atmosphere
+        * `visions` - Visions
+        * `happenstance` - Happenstance
+        * `system` - System
+        * `covenant` - Covenant
+        * `renown` - Renown
+        * `weather` - Weather
     NarrativeMessage:
       type: object
       description: Player-facing message representation. Excludes ooc_note.
@@ -34785,7 +34785,7 @@ components:
           description: IC content shown to recipients.
         category:
           allOf:
-          - $ref: '#/components/schemas/CategoryF17Enum'
+          - $ref: '#/components/schemas/NarrativeCategoryEnum'
           readOnly: true
         sender_account:
           type: integer
@@ -47407,7 +47407,7 @@ components:
           type: integer
           readOnly: true
         category:
-          $ref: '#/components/schemas/CategoryF17Enum'
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
         muted_at:
           type: string
           format: date-time
@@ -47421,7 +47421,7 @@ components:
       description: Input serializer for POST /api/narrative/category-mutes/.
       properties:
         category:
-          $ref: '#/components/schemas/CategoryF17Enum'
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
       required:
       - category
     UserCategoryMuteCreateRequest:
@@ -47429,7 +47429,7 @@ components:
       description: Input serializer for POST /api/narrative/category-mutes/.
       properties:
         category:
-          $ref: '#/components/schemas/CategoryF17Enum'
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
       required:
       - category
     UserStoryMute:

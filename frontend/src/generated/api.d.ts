@@ -14627,26 +14627,6 @@ export interface components {
         [key: string]: unknown;
       } | null;
     };
-    /**
-     * @description * `story` - Story update
-     *     * `atmosphere` - Atmosphere
-     *     * `visions` - Visions
-     *     * `happenstance` - Happenstance
-     *     * `system` - System
-     *     * `covenant` - Covenant
-     *     * `renown` - Renown
-     *     * `weather` - Weather
-     * @enum {string}
-     */
-    CategoryF17Enum:
-      | 'story'
-      | 'atmosphere'
-      | 'visions'
-      | 'happenstance'
-      | 'system'
-      | 'covenant'
-      | 'renown'
-      | 'weather';
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -19262,12 +19242,32 @@ export interface components {
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
     };
+    /**
+     * @description * `story` - Story update
+     *     * `atmosphere` - Atmosphere
+     *     * `visions` - Visions
+     *     * `happenstance` - Happenstance
+     *     * `system` - System
+     *     * `covenant` - Covenant
+     *     * `renown` - Renown
+     *     * `weather` - Weather
+     * @enum {string}
+     */
+    NarrativeCategoryEnum:
+      | 'story'
+      | 'atmosphere'
+      | 'visions'
+      | 'happenstance'
+      | 'system'
+      | 'covenant'
+      | 'renown'
+      | 'weather';
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;
       /** @description IC content shown to recipients. */
       readonly body: string;
-      readonly category: components['schemas']['CategoryF17Enum'];
+      readonly category: components['schemas']['NarrativeCategoryEnum'];
       /** @description Null = automated/system-sourced. */
       readonly sender_account: number | null;
       readonly related_story: number | null;
@@ -25996,17 +25996,17 @@ export interface components {
     /** @description Full UserCategoryMute representation. */
     UserCategoryMute: {
       readonly id: number;
-      category: components['schemas']['CategoryF17Enum'];
+      category: components['schemas']['NarrativeCategoryEnum'];
       /** Format: date-time */
       readonly muted_at: string;
     };
     /** @description Input serializer for POST /api/narrative/category-mutes/. */
     UserCategoryMuteCreate: {
-      category: components['schemas']['CategoryF17Enum'];
+      category: components['schemas']['NarrativeCategoryEnum'];
     };
     /** @description Input serializer for POST /api/narrative/category-mutes/. */
     UserCategoryMuteCreateRequest: {
-      category: components['schemas']['CategoryF17Enum'];
+      category: components['schemas']['NarrativeCategoryEnum'];
     };
     /** @description Full UserStoryMute representation. */
     UserStoryMute: {

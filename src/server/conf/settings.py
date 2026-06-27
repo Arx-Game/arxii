@@ -313,6 +313,11 @@ SPECTACULAR_SETTINGS = {
     # appears. Pin ours explicitly.
     "ENUM_NAME_OVERRIDES": {
         "MissionVisibilityEnum": "world.missions.constants.MissionVisibility.choices",
+        # Several serializers expose a `category` field from the same NarrativeCategory
+        # choices (NarrativeMessage, NarrativeMessageDelivery, UserCategoryMute); without
+        # this, spectacular emits a hash-suffixed collision name (CategoryF17Enum) that
+        # churns whenever a new `category` field appears. Pin it (#1522).
+        "NarrativeCategoryEnum": "world.narrative.constants.NarrativeCategory.choices",
     },
 }
 
