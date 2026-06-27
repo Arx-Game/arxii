@@ -113,8 +113,9 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
-  - technique_grants <- magic.TechniqueCapabilityGrant
+  - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -129,8 +130,9 @@
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
-  - technique_damage_profiles <- magic.TechniqueDamageProfile
+  - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
+  - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -148,8 +150,9 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
-  - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
+  - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -746,6 +749,7 @@
   - roster_entry -> roster.RosterEntry [OneToOne] (nullable)
   - path_intent -> progression.PathIntent [OneToOne] (nullable)
   - motif -> magic.Motif [OneToOne] (nullable)
+  - technique_draft -> magic.TechniqueDraft [OneToOne] (nullable)
   - purse -> currency.CharacterPurse [OneToOne] (nullable)
   - weekly_journal_xp -> journals.WeeklyJournalXP [OneToOne] (nullable)
   - fatigue -> fatigue.FatiguePool [OneToOne] (nullable)
@@ -1142,8 +1146,9 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
-  - technique_grants <- magic.TechniqueCapabilityGrant
+  - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -1158,8 +1163,9 @@
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
-  - technique_damage_profiles <- magic.TechniqueDamageProfile
+  - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
+  - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -1177,8 +1183,9 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
-  - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
+  - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -1936,6 +1943,7 @@
 **Pointed to by:**
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - technique_drafts <- magic.TechniqueDraft
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
 
 ### CharacterGift
@@ -1963,16 +1971,19 @@
   - available_restrictions <- magic.Restriction
   - techniques <- magic.Technique
   - cantrips <- magic.Cantrip
+  - technique_drafts <- magic.TechniqueDraft
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
 **Pointed to by:**
   - techniques <- magic.Technique
   - cantrips <- magic.Cantrip
+  - technique_drafts <- magic.TechniqueDraft
 
 ### Restriction
 **Pointed to by:**
   - techniques <- magic.Technique
+  - technique_drafts <- magic.TechniqueDraft
 
 ### IntensityTier
 **Pointed to by:**
@@ -2003,8 +2014,8 @@
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - capability -> conditions.CapabilityType [FK]
+  - technique -> magic.Technique [FK]
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 
 ### TechniqueCapabilityRequirement
@@ -2023,13 +2034,13 @@
 
 ### TechniqueAppliedCondition
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - condition -> conditions.ConditionTemplate [FK]
+  - technique -> magic.Technique [FK]
 
 ### TechniqueDamageProfile
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+  - technique -> magic.Technique [FK]
 
 ### MagicalAlterationTemplate
 **Foreign Keys:**
@@ -2419,6 +2430,32 @@
 ### TechniqueBudgetConfig
 
 ### TechniqueTierBudget
+
+### TechniqueDraft
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [OneToOne]
+  - gift -> magic.Gift [FK] (nullable)
+  - style -> magic.TechniqueStyle [FK] (nullable)
+  - effect_type -> magic.EffectType [FK] (nullable)
+**Pointed to by:**
+  - capability_grants <- magic.TechniqueDraftCapabilityGrant
+  - damage_profiles <- magic.TechniqueDraftDamageProfile
+  - applied_conditions <- magic.TechniqueDraftAppliedCondition
+
+### TechniqueDraftCapabilityGrant
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK]
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - draft -> magic.TechniqueDraft [FK]
 
 ### ThreadPullCost
 

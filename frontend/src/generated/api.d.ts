@@ -8328,7 +8328,13 @@ export interface paths {
      *     Player path: enforces budget, binds CharacterTechnique.
      *     Staff path: advisory budget, no character binding.
      *     Returns 201 with the Technique + breakdown on success;
-     *     400 with breakdown when a player exceeds budget.
+     *     400 with breakdown when a player exceeds budget;
+     *     403 when the tier is not permitted for the character.
+     *
+     *     Both the player path and the staff path (when the staff user has an
+     *     acting in-game character) converge on ``AuthorTechniqueAction.run()``
+     *     (#1496 ADR-0001 convergence). Staff users with no acting character fall
+     *     back to the direct service layer — that path requires no ObjectDB actor.
      */
     post: operations['magic_techniques_author_create'];
     delete?: never;

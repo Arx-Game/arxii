@@ -17,7 +17,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
     `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`, `Cantrip`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
-    `TechniqueCapabilityGrant`
+    `TechniqueCapabilityGrant`,
+    `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
+    (abstract payload bases shared by `Technique*` and `TechniqueDraft*` rows),
+    `TechniqueDraft` (one-per-CharacterSheet in-progress design workbench —
+    `related_name="technique_draft"`; no JSON; all proper columns),
+    `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
+    `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
   - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`
@@ -152,6 +158,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Technique authoring draft workbench (#1496):
+    `get_or_start_draft(character) -> TechniqueDraft`,
+    `discard_draft(character)`,
+    `set_draft_fields(draft, **fields) -> TechniqueDraft`,
+    `add_draft_restriction` / `remove_draft_restriction`,
+    `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
+    and `remove_*` counterparts (`services/technique_draft.py`).
+    `draft_to_design(draft) -> TechniqueDesignInput` — completeness gate → design input.
+    `validate_design_for_character(design, policy, character)` (`services/technique_builder.py`)
+    — gift-ownership gate; single source of truth (telnet + web converge on it).
   - Standalone casting (#1306):
     `ensure_technique_cast_content()` (`seeds_cast.py`) — idempotent seed: shared
     "Technique Cast" `ActionTemplate` + fallback `CheckType` + graded "Magic: Technique
@@ -205,7 +221,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
-  on cardinality/relationship violations) —
+  on cardinality/relationship violations),
+  `NoActiveTechniqueDraft` (no draft to work with),
+  `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time),
+  `UnknownTechniqueVocab` / `UnknownGift` (unknown vocab/gift name in telnet parser),
+  `GiftNotOwned` (character doesn't own the design's gift — `validate_design_for_character`) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
@@ -242,6 +262,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
 - **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
+- **Technique authoring action:** `AuthorTechniqueAction` (key `"author_technique"`, category
+  `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
+  both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
+  (`cmd:perm(Builder)` — staff/GM only).
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

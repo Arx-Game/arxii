@@ -1,0 +1,177 @@
+"""TechniqueDraft: per-character work-in-progress technique authoring state.
+
+A TechniqueDraft holds a character's in-progress technique design until they
+finalise it via the technique-builder pipeline.  Because a draft is intentionally
+incomplete, every design knob is nullable or carries a safe default.
+
+Payload child tables mirror the Technique payloads but point to a draft FK
+instead of a Technique FK:
+
+- TechniqueDraftCapabilityGrant  (inherits AbstractCapabilityGrant)
+- TechniqueDraftDamageProfile    (inherits AbstractDamageProfile)
+- TechniqueDraftAppliedCondition (inherits AbstractAppliedCondition)
+"""
+
+from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractCapabilityGrant,
+    AbstractDamageProfile,
+)
+
+
+class TechniqueDraft(SharedMemoryModel):
+    """In-progress technique being authored by a character.
+
+    Intentionally incomplete: every design knob is nullable or defaulted so the
+    draft can be saved at any point in the authoring workflow.  There is exactly
+    one draft per character (OneToOneField → CharacterSheet).
+    """
+
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="technique_draft",
+        help_text="Character who owns this draft.",
+    )
+    name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Working name for the technique.",
+    )
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Working description for the technique.",
+    )
+
+    # --- design knobs (all nullable/defaulted for partial authoring) ---
+
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_drafts",
+        help_text="Gift this technique will belong to.",
+    )
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_drafts",
+        help_text="Technique style (restricted by Path).",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_drafts",
+        help_text="Type of magical effect.",
+    )
+    action_category = models.CharField(
+        max_length=10,
+        blank=True,
+        default="",
+        help_text="Physical/social/mental arena (optional until finalised).",
+    )
+    tier = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Target tier (derived from level at finalisation; stored for UI).",
+    )
+    intensity = models.PositiveIntegerField(
+        default=0,
+        help_text="Base power of the technique.",
+    )
+    control = models.PositiveIntegerField(
+        default=0,
+        help_text="Base safety/precision.",
+    )
+    anima_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Planned anima cost.",
+    )
+    restrictions = models.ManyToManyField(
+        "magic.Restriction",
+        blank=True,
+        related_name="technique_drafts",
+        help_text="Restrictions applied for power bonuses.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Technique Draft"
+        verbose_name_plural = "Technique Drafts"
+
+    def __str__(self) -> str:
+        label = self.name or "(unnamed)"
+        return f"Draft: {label} [{self.character}]"
+
+
+class TechniqueDraftCapabilityGrant(AbstractCapabilityGrant):
+    """A capability grant row belonging to a TechniqueDraft.
+
+    Inherits all data columns from AbstractCapabilityGrant.
+    """
+
+    draft = models.ForeignKey(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
+    )
+
+    class Meta:
+        verbose_name = "Technique Draft Capability Grant"
+        verbose_name_plural = "Technique Draft Capability Grants"
+
+    def __str__(self) -> str:
+        return f"{self.draft} grants {self.capability}"
+
+
+class TechniqueDraftDamageProfile(AbstractDamageProfile):
+    """A damage profile row belonging to a TechniqueDraft.
+
+    Inherits all data columns from AbstractDamageProfile.
+    """
+
+    draft = models.ForeignKey(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="damage_profiles",
+    )
+
+    class Meta:
+        verbose_name = "Technique Draft Damage Profile"
+        verbose_name_plural = "Technique Draft Damage Profiles"
+
+    def __str__(self) -> str:
+        type_str = self.damage_type.name if self.damage_type else "untyped"
+        return f"{self.draft} → {self.base_damage} {type_str}"
+
+
+class TechniqueDraftAppliedCondition(AbstractAppliedCondition):
+    """An applied-condition row belonging to a TechniqueDraft.
+
+    Inherits all data columns from AbstractAppliedCondition.
+    """
+
+    draft = models.ForeignKey(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="applied_conditions",
+    )
+
+    class Meta:
+        verbose_name = "Technique Draft Applied Condition"
+        verbose_name_plural = "Technique Draft Applied Conditions"
+
+    def __str__(self) -> str:
+        return f"{self.draft} → {self.condition} ({self.target_kind})"

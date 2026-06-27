@@ -7,7 +7,12 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from world.magic.exceptions import TechniqueAuthoringNotPermitted, TechniqueBudgetExceeded
+from world.magic.exceptions import (
+    GiftNotOwned,
+    TechniqueAuthoringNotPermitted,
+    TechniqueBudgetExceeded,
+    UnknownGift,
+)
 from world.magic.models import (
     Restriction,
     Technique,
@@ -252,6 +257,35 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             base_duration_rounds=spec.base_duration_rounds,
         )
     return tech
+
+
+def validate_design_for_character(
+    design: TechniqueDesignInput,
+    policy: AuthoringPolicy,
+    character,
+) -> None:
+    """Enforce the player design gate: gift existence + ownership for PlayerPolicy.
+
+    No-op for StaffPolicy (any gift is allowed, staff bypass ownership check).
+
+    This is the single shared gate used by both the telnet command and the web
+    serializer, so both paths enforce the same rules.
+
+    Raises:
+        UnknownGift: if the gift id does not resolve to a known Gift.
+        GiftNotOwned: if the player does not own the resolved gift.
+    """
+    if not isinstance(policy, PlayerPolicy):
+        return
+    from world.magic.models import CharacterGift, Gift  # noqa: PLC0415
+
+    if not Gift.objects.filter(pk=design.gift_id).exists():
+        raise UnknownGift
+    if (
+        character is None
+        or not CharacterGift.objects.filter(character=character, gift_id=design.gift_id).exists()
+    ):
+        raise GiftNotOwned
 
 
 @transaction.atomic
