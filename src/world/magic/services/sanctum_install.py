@@ -81,6 +81,10 @@ class DissolutionLeaderNotPresentError(DissolutionError):
     user_message = "You must be physically in the Sanctum's room to attempt Dissolution."
 
 
+class DissolutionAlreadyDissolvedError(DissolutionError):
+    user_message = "This Sanctum has already been dissolved."
+
+
 class AbsorbError(ValueError):
     user_message: str = "Cannot absorb from this Sanctum."
 
@@ -381,6 +385,11 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
     )
     from world.magic.services.sanctum_lvm import sum_homecoming_value  # noqa: PLC0415
 
+    # Idempotency guard — reject a second dissolution attempt.
+    if sanctum.feature_instance.dissolved_at is not None:
+        msg = f"Sanctum {sanctum.pk} is already dissolved."
+        raise DissolutionAlreadyDissolvedError(msg)
+
     # Physical-presence gate — the witch is performing a ritual IN the
     # Sanctum's room. Mirrors absorb_sanctum_pool. Anyone with access
     # can attempt; founder vs non-founder difficulty differential lives
@@ -420,11 +429,16 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
             sanctum_details=sanctum,
         )
 
-    # SanctumDetails + RoomFeatureInstance + SanctumPendingPayout rows all
-    # cascade from the RoomFeatureInstance deletion.
+    # Soft-delete the RoomFeatureInstance. SanctumDetails + SanctumPendingPayout
+    # rows are preserved (story-significant data must not be destroyed). The
+    # dissolved instance is excluded from active reads via
+    # ``feature_instance__dissolved_at__isnull=True`` filters on every read path.
+    from django.utils import timezone  # noqa: PLC0415
+
     instance = sanctum.feature_instance
     sanctum_pk = sanctum.pk
-    instance.delete()
+    instance.dissolved_at = timezone.now()
+    instance.save(update_fields=["dissolved_at"])
 
     return DissolutionResult(
         sanctum_id=sanctum_pk,
@@ -449,27 +463,27 @@ def _dissolution_recovery_fraction(tier: OutcomeTier) -> Decimal:
 
 
 def _retire_sanctum_threads(sanctum: SanctumDetails) -> None:
-    """Soft-retire active SANCTUM threads, then hard-delete all of them.
+    """Soft-retire active SANCTUM threads targeting this sanctum.
 
-    Two-phase teardown:
-    1. Stamp ``retired_at`` on threads that were still active, so the history
-       row carries the dissolution timestamp before being removed.
-    2. Hard-delete ALL threads targeting this Sanctum (active + already-retired).
-       This clears the ``Thread.target_sanctum_details`` PROTECT FK so the
-       caller can subsequently delete the ``RoomFeatureInstance`` via cascade
-       without hitting a ``ProtectedError``.
+    Stamps ``retired_at`` on every thread that is still active (``retired_at IS
+    NULL``). Already-retired threads are left untouched. No thread is ever
+    deleted — threads carry player investment (level/developed_points/XP-boundary
+    receipts) and must survive for the historical record.
+
+    The ``Thread.target_sanctum_details`` PROTECT FK is intentionally NOT cleared:
+    the sanctum row itself is soft-deleted (``dissolved_at`` set) rather than
+    removed, so the FK remains valid and the PROTECT constraint is never triggered.
     """
     from django.utils import timezone  # noqa: PLC0415
 
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
 
-    qs = Thread.objects.filter(
+    Thread.objects.filter(
         target_sanctum_details=sanctum,
         target_kind=TargetKind.SANCTUM,
-    )
-    qs.filter(retired_at__isnull=True).update(retired_at=timezone.now())
-    qs.delete()
+        retired_at__isnull=True,
+    ).update(retired_at=timezone.now())
 
 
 def _delete_homecoming_lvm_rows(sanctum: SanctumDetails) -> None:

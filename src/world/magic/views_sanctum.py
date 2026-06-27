@@ -121,6 +121,7 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 Q(feature_instance_id__in=woven_sanctum_ids)
                 | Q(feature_instance__room_profile_id__in=owned_room_ids)
             )
+            .filter(feature_instance__dissolved_at__isnull=True)
             .distinct()
         )
 

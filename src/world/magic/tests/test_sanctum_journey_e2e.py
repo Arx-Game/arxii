@@ -261,16 +261,44 @@ class SanctumTelnetJourneyTests(TestCase):
         )
 
         # ── Step 7: dissolve ─────────────────────────────────────────────────
-        # Owner dissolves the sanctum; SanctumDetails + RoomFeatureInstance gone.
+        # Owner dissolves the sanctum. Dissolution is a SOFT-DELETE: rows are
+        # preserved for the historical record. The RoomFeatureInstance gets
+        # dissolved_at set; SanctumDetails and all Thread rows remain intact.
+        # The sanctum is excluded from active reads after dissolution.
+        from actions.definitions.sanctum import sanctum_in_room
+
         feature_instance_pk = sanctum.feature_instance_id
         cmd = _build_cmd(CmdSanctum, self.owner_char, "dissolve")
         cmd.func()
 
-        self.assertFalse(
+        # Rows STILL EXIST — soft-deleted, not hard-deleted.
+        self.assertTrue(
             SanctumDetails.objects.filter(pk=sanctum_pk).exists(),
-            "Step 7 (dissolve): SanctumDetails not deleted",
+            "Step 7 (dissolve): SanctumDetails was hard-deleted (should be preserved)",
         )
-        self.assertFalse(
+        self.assertTrue(
             RoomFeatureInstance.objects.filter(pk=feature_instance_pk).exists(),
-            "Step 7 (dissolve): RoomFeatureInstance not deleted",
+            "Step 7 (dissolve): RoomFeatureInstance was hard-deleted (should be preserved)",
+        )
+        # dissolved_at is stamped on the RoomFeatureInstance.
+        self.assertTrue(
+            RoomFeatureInstance.objects.filter(
+                pk=feature_instance_pk, dissolved_at__isnull=False
+            ).exists(),
+            "Step 7 (dissolve): RoomFeatureInstance.dissolved_at not set",
+        )
+        # The severed helper thread (severed in step 6) still exists.
+        self.assertTrue(
+            Thread.objects.filter(pk=helper_thread.pk).exists(),
+            "Step 7 (dissolve): helper Thread was deleted (should be preserved)",
+        )
+        helper_thread.refresh_from_db()
+        self.assertIsNotNone(
+            helper_thread.retired_at,
+            "Step 7 (dissolve): helper thread retired_at cleared after dissolution",
+        )
+        # Dissolved sanctum is excluded from active reads.
+        self.assertIsNone(
+            sanctum_in_room(self.owner_char.location),
+            "Step 7 (dissolve): sanctum_in_room still returns dissolved sanctum",
         )

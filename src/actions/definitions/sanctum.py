@@ -73,7 +73,7 @@ def sanctum_in_room(location: Any) -> Any:
         return None
     return (
         SanctumDetails.objects.select_related("feature_instance__room_profile", "resonance_type")
-        .filter(feature_instance__room_profile=rp)
+        .filter(feature_instance__room_profile=rp, feature_instance__dissolved_at__isnull=True)
         .first()
     )
 
