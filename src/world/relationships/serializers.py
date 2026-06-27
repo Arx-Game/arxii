@@ -17,6 +17,9 @@ from world.relationships.models import (
     RelationshipUpdate,
 )
 
+# Choices accepted by the feedback write endpoints.
+WRITEUP_TYPE_CHOICES = ["update", "development", "capstone"]
+
 
 class RelationshipConditionSerializer(serializers.ModelSerializer):
     """Serializer for RelationshipCondition lookup table."""
@@ -105,6 +108,8 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     track_name = serializers.CharField(source="track.name", read_only=True)
+    kudos_count = serializers.SerializerMethodField()
+    viewer_has_kudosed = serializers.SerializerMethodField()
 
     class Meta:
         model = RelationshipUpdate
@@ -122,8 +127,34 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
             "is_first_impression",
             "linked_scene",
             "created_at",
+            "kudos_count",
+            "viewer_has_kudosed",
         ]
         read_only_fields = fields
+
+    def get_kudos_count(self, obj: RelationshipUpdate) -> int:
+        """Return pre-annotated kudos count, or fall back to a query."""
+        try:
+            return obj.kudos_count  # set by viewset annotation
+        except AttributeError:
+            # Fallback for un-annotated single-object reads only. Any viewset
+            # serving this serializer in a list/nested context must annotate
+            # kudos_count via Count() to avoid per-row N+1 queries.
+            return obj.writeupkudos_set.count()
+
+    def get_viewer_has_kudosed(self, obj: RelationshipUpdate) -> bool:
+        """Return True if the request user has kudosed this update."""
+        try:
+            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
+        except AttributeError:
+            pass
+        request = self.context.get("request")
+        if request is None or not request.user.pk:
+            return False
+        # Fallback for un-annotated single-object reads only. Any viewset
+        # serving this serializer in a list/nested context must annotate
+        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
+        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
 
 
 class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
@@ -131,6 +162,8 @@ class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     track_name = serializers.CharField(source="track.name", read_only=True)
+    kudos_count = serializers.SerializerMethodField()
+    viewer_has_kudosed = serializers.SerializerMethodField()
 
     class Meta:
         model = RelationshipDevelopment
@@ -147,8 +180,34 @@ class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
             "visibility",
             "linked_scene",
             "created_at",
+            "kudos_count",
+            "viewer_has_kudosed",
         ]
         read_only_fields = fields
+
+    def get_kudos_count(self, obj: RelationshipDevelopment) -> int:
+        """Return pre-annotated kudos count, or fall back to a query."""
+        try:
+            return obj.kudos_count  # set by viewset annotation
+        except AttributeError:
+            # Fallback for un-annotated single-object reads only. Any viewset
+            # serving this serializer in a list/nested context must annotate
+            # kudos_count via Count() to avoid per-row N+1 queries.
+            return obj.writeupkudos_set.count()
+
+    def get_viewer_has_kudosed(self, obj: RelationshipDevelopment) -> bool:
+        """Return True if the request user has kudosed this development."""
+        try:
+            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
+        except AttributeError:
+            pass
+        request = self.context.get("request")
+        if request is None or not request.user.pk:
+            return False
+        # Fallback for un-annotated single-object reads only. Any viewset
+        # serving this serializer in a list/nested context must annotate
+        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
+        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
 
 
 class RelationshipCapstoneSerializer(serializers.ModelSerializer):
@@ -156,6 +215,8 @@ class RelationshipCapstoneSerializer(serializers.ModelSerializer):
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     track_name = serializers.CharField(source="track.name", read_only=True)
+    kudos_count = serializers.SerializerMethodField()
+    viewer_has_kudosed = serializers.SerializerMethodField()
 
     class Meta:
         model = RelationshipCapstone
@@ -171,8 +232,28 @@ class RelationshipCapstoneSerializer(serializers.ModelSerializer):
             "visibility",
             "linked_scene",
             "created_at",
+            "kudos_count",
+            "viewer_has_kudosed",
         ]
         read_only_fields = fields
+
+    def get_kudos_count(self, obj: RelationshipCapstone) -> int:
+        """Return pre-annotated kudos count, or fall back to a query."""
+        try:
+            return obj.kudos_count  # set by viewset annotation
+        except AttributeError:
+            return obj.writeupkudos_set.count()
+
+    def get_viewer_has_kudosed(self, obj: RelationshipCapstone) -> bool:
+        """Return True if the request user has kudosed this capstone."""
+        try:
+            return bool(obj.viewer_has_kudosed)  # set by viewset annotation
+        except AttributeError:
+            pass
+        request = self.context.get("request")
+        if request is None or not request.user.pk:
+            return False
+        return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
 
 
 class RelationshipChangeSerializer(serializers.ModelSerializer):
@@ -330,3 +411,27 @@ class RedistributeWriteSerializer(serializers.Serializer):
         required=False,
         default=UpdateVisibility.PRIVATE,
     )
+
+
+class WriteupKudosWriteSerializer(serializers.Serializer):
+    """Validate input for the kudos endpoint.
+
+    ``writeup_type`` selects which of the three writeup models the ID refers to.
+    ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+    action (raises WriteupFeedbackError → mapped to a 400 response body).
+    """
+
+    writeup_type = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
+    writeup_id = serializers.IntegerField()
+
+
+class WriteupComplaintWriteSerializer(serializers.Serializer):
+    """Validate input for the complaint endpoint.
+
+    Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+    Permissions (visibility check) are enforced inside the action / service.
+    """
+
+    writeup_type = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
+    writeup_id = serializers.IntegerField()
+    reason = serializers.CharField(allow_blank=False)

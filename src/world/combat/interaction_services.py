@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
     )
     from world.combat.types import ActionOutcome
+    from world.magic.models import FuryTier
     from world.magic.types.power_ledger import PowerLedger
 
 
@@ -37,6 +38,7 @@ def create_action_interaction(
     round_number: int,
     summary_label: str,
     strain_committed: int = 0,
+    fury_committed: FuryTier | None = None,
 ) -> Interaction | None:
     """Create one ACTION-mode Interaction for a resolved action.
 
@@ -85,6 +87,7 @@ def create_action_interaction(
         scene=scene,
         summary_label=summary_label,
         strain_committed=strain_committed,
+        fury_committed=fury_committed,
     )
 
 

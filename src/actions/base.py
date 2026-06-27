@@ -95,8 +95,16 @@ class Action:
         """
         return []
 
-    def round_declaration(self, ctx: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]] | None:
-        """Return (PlayerAction, dispatch_kwargs) to defer to a round, or None for immediate."""
+    def round_declaration(
+        self, ctx: Any, **kwargs: Any
+    ) -> tuple[Any, dict[str, Any]] | ActionResult | None:
+        """Return (PlayerAction, dispatch_kwargs) to defer, ActionResult to short-circuit, or None.
+
+        - ``tuple[PlayerAction, dict]``: record the declaration and return deferred=True.
+        - ``ActionResult``: short-circuit (e.g. soulfray gate) — return the result message,
+          do NOT record a declaration or call execute().
+        - ``None``: fall through to immediate execute().
+        """
         return None
 
     def execute(

@@ -25,7 +25,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
@@ -337,4 +337,169 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertIsNone(
             action.focused_opponent_target_id,
             "focused_opponent_target must be null when technique targets an ally",
+        )
+
+    # -- #1454: player-chosen soulfray-accept + fury decisions ---------------
+
+    @staticmethod
+    def _soulfray_warning():
+        """A non-lethal soulfray warning for the declaration-time gate."""
+        from world.magic.types.techniques import SoulfrayWarning
+
+        return SoulfrayWarning(
+            stage_name="Stage One",
+            stage_description="Your soul frays at the edges.",
+            has_death_risk=False,
+        )
+
+    def test_decline_soulfray_aborts_cast_then_free_redeclare(self) -> None:
+        """A soulfray-risky cast asks first; declining records nothing and frees the turn."""
+        from commands.pending_actions import peek_pending
+        from world.magic.offer_handlers import SoulfrayPendingHandler
+
+        # Soulfray warning present → the cast must prompt, not record a declaration.
+        with patch(
+            "world.magic.services.soulfray.get_soulfray_warning",
+            return_value=self._soulfray_warning(),
+        ):
+            _make_cmd(self.character, f"{self.technique.name} at {self.opponent_name}").func()
+
+        self.assertFalse(
+            CombatRoundAction.objects.filter(participant=self.participant, round_number=1).exists(),
+            "a soulfray-risky cast must not record a declaration before the player accepts",
+        )
+        self.assertIsNotNone(
+            peek_pending(self.sheet.pk),
+            "a PendingCast must be registered while awaiting accept/decline",
+        )
+
+        # Decline → pending cleared, still no declaration, anima untouched.
+        SoulfrayPendingHandler().decline(offer=None, caller=self.character)
+        self.assertIsNone(peek_pending(self.sheet.pk))
+        self.assertFalse(
+            CombatRoundAction.objects.filter(participant=self.participant, round_number=1).exists(),
+        )
+        self.anima.refresh_from_db()
+        self.assertEqual(self.anima.current, 20, "declining must not spend anima")
+
+        # Free re-declare: the round slot is still open, so a (now non-risky) cast records.
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            _make_cmd(self.character, f"{self.technique.name} at {self.opponent_name}").func()
+        self.assertTrue(
+            CombatRoundAction.objects.filter(participant=self.participant, round_number=1).exists(),
+            "after declining, the player may still declare an action this round",
+        )
+
+    def test_accept_soulfray_resolves_cast(self) -> None:
+        """Accepting a soulfray-risky cast records confirm=True and resolves with damage."""
+        from world.magic.offer_handlers import SoulfrayPendingHandler
+
+        with patch(
+            "world.magic.services.soulfray.get_soulfray_warning",
+            return_value=self._soulfray_warning(),
+        ):
+            _make_cmd(self.character, f"{self.technique.name} at {self.opponent_name}").func()
+            # Accept re-dispatches with confirm_soulfray_risk=True → records the declaration.
+            SoulfrayPendingHandler().accept(offer=None, caller=self.character, args="")
+
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertTrue(
+            action.confirm_soulfray_risk,
+            "accepting soulfray must record confirm_soulfray_risk=True on the declaration",
+        )
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_round(self.encounter)
+
+        self.anima.refresh_from_db()
+        self.assertLess(self.anima.current, 20, "an accepted risky cast spends anima")
+        self.opponent.refresh_from_db()
+        self.assertLess(self.opponent.health, self.opponent.max_health)
+
+    def test_fury_commitment_realized_and_audited(self) -> None:
+        """A telnet-declared fury tier + anchor is recorded, realized, and audited."""
+        from world.magic.factories import FuryConfigFactory, FuryTierFactory
+
+        FuryConfigFactory()
+        tier = FuryTierFactory()
+        anchor_sheet = CharacterSheetFactory()
+
+        # Declare through the real telnet command: cast ... fury=<tier> anchor=<name>.
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            _make_cmd(
+                self.character,
+                f"{self.technique.name} at {self.opponent_name} "
+                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+            ).func()
+
+        action = CombatRoundAction.objects.get(participant=self.participant, round_number=1)
+        self.assertEqual(action.fury_commitment_id, tier.pk, "fury tier recorded on declaration")
+        self.assertEqual(action.fury_anchor_id, anchor_sheet.pk, "fury anchor recorded")
+
+        # Resolve: bond gives a real provocation cap; control check succeeds (no Berserk).
+        with (
+            patch("world.combat.services.perform_check") as mock_offense,
+            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.checks.services.perform_check") as mock_control,
+        ):
+            mock_offense.return_value = MagicMock(success_level=2)
+            mock_control.return_value = MagicMock(success_level=2)
+            resolve_round(self.encounter)
+
+        self.anima.refresh_from_db()
+        self.assertLess(self.anima.current, 20, "a fury cast still spends anima")
+        self.opponent.refresh_from_db()
+        self.assertLess(self.opponent.health, self.opponent.max_health)
+
+        action.refresh_from_db()
+        self.assertIsNotNone(action.interaction, "resolved action should have an interaction")
+        self.assertEqual(
+            action.interaction.fury_committed_id,
+            tier.pk,
+            "the realized fury tier must be recorded on the interaction audit",
+        )
+
+    @tag("postgres")
+    def test_fury_lost_control_applies_berserk(self) -> None:
+        """When the control-retention check fails, Fury applies Berserk in combat.
+
+        Tagged postgres: applying a condition exercises apply_condition, which uses
+        a PG-only DISTINCT ON that NotSupportedErrors on the SQLite fast tier.
+        """
+        from world.conditions.models import ConditionInstance
+        from world.magic.factories import (
+            BerserkConditionTemplateFactory,
+            FuryConfigFactory,
+            FuryTierFactory,
+        )
+
+        FuryConfigFactory()
+        BerserkConditionTemplateFactory()  # seed the Berserk ConditionTemplate
+        tier = FuryTierFactory()
+        anchor_sheet = CharacterSheetFactory()
+
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            _make_cmd(
+                self.character,
+                f"{self.technique.name} at {self.opponent_name} "
+                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+            ).func()
+
+        with (
+            patch("world.combat.services.perform_check") as mock_offense,
+            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.checks.services.perform_check") as mock_control,
+        ):
+            mock_offense.return_value = MagicMock(success_level=2)
+            # Below the tier's lucid_grade_floor (2) → control lost → Berserk applied.
+            mock_control.return_value = MagicMock(success_level=1)
+            resolve_round(self.encounter)
+
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.character,
+                condition__name="Berserk",
+            ).exists(),
+            "losing control to fury must apply a Berserk condition to the caster",
         )

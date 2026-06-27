@@ -75,6 +75,7 @@ from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
@@ -163,6 +164,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdFlourish,
             CmdEndorse,
             CmdPoses,
+            CmdReact,
             CmdJudgePresentation,
             CmdIntimidate,
             CmdAccept,

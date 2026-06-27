@@ -81,7 +81,16 @@ They do not use the command system, dispatchers, or handlers.
   `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene` (`randomscene`, alias `rscene`) /
   `CmdPathIntent` (`pathintent`) and the web `ClaimKudosView` / `VoteViewSet` /
   `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses actions" gap
-  for these reward capabilities.)
+  for these reward capabilities;
+  `scene_reactions.py` (#1341) — the three "upvote an interaction" REGISTRY actions, all
+  `target_type=SELF`: `ToggleFavoriteAction` (key `"toggle_interaction_favorite"`, wraps
+  `world.scenes.reaction_toggle_services.toggle_interaction_favorite`),
+  `ToggleReactionAction` (`"toggle_interaction_reaction"`, wraps `toggle_interaction_reaction`),
+  `ReactToWindowAction` (`"react_to_window"`, wraps `react_to_window` / `react_to_interaction`,
+  picking the lazy-open path for `lazy_open` kinds). The two toggle viewsets call the toggle
+  services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
+  and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
+  call it). Shared with telnet `CmdReact`.)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 

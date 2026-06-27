@@ -112,6 +112,8 @@ from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
     CreateFirstImpressionAction,
+    FileWriteupComplaintAction,
+    GiveWriteupKudosAction,
     RedistributePointsAction,
 )
 from actions.definitions.ritual import PerformRitualAction
@@ -123,6 +125,11 @@ from actions.definitions.rounds import (
     PassRoundAction,
     SetRoundModeAction,
     StartRoundAction,
+)
+from actions.definitions.scene_reactions import (
+    ReactToWindowAction,
+    ToggleFavoriteAction,
+    ToggleReactionAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
@@ -221,10 +228,15 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ToggleFavoriteAction(),
+    ToggleReactionAction(),
+    ReactToWindowAction(),
     CreateFirstImpressionAction(),
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    GiveWriteupKudosAction(),
+    FileWriteupComplaintAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),
