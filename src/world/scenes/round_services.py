@@ -382,6 +382,83 @@ def _resolve_downed_victim_peril(
     return downed_ids, advancing_ids
 
 
+def _resolve_abandonment_grace(scene_round: SceneRound, held_ids: set[int]) -> None:
+    """Resolve held downed victims who have waited out the abandonment grace window (#1479 T8).
+
+    For each held (abandoned, non-advancing) downed victim whose acute-peril
+    ``abandoned_since_round`` is set and ``round_number - abandoned_since_round >=
+    abandonment_grace_rounds``, resolve their fate via the source-appropriate
+    abandonment pool. N (``abandonment_grace_rounds``) is staff-tunable on
+    ``SceneRoundDefaultsConfig``. A rescue (the bleed-out cleared before the window
+    elapses) leaves no acute-peril instance, so ``resolve_abandonment`` naturally
+    no-ops — rescue beats the check.
+    """
+    if not held_ids:
+        return
+    from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
+    from world.vitals.peril_resolution import acute_peril_instances  # noqa: PLC0415
+    from world.vitals.services import resolve_abandonment  # noqa: PLC0415
+
+    grace = get_scene_round_defaults_config().abandonment_grace_rounds
+    for p in scene_round.participants.filter(pk__in=held_ids).select_related(
+        "character_sheet__character"
+    ):
+        sheet = p.character_sheet
+        inst = acute_peril_instances(sheet).filter(abandoned_since_round__isnull=False).first()
+        if inst is None:
+            continue
+        if scene_round.round_number - inst.abandoned_since_round >= grace:
+            resolve_abandonment(sheet)
+
+
+def resolve_solo_abandoned_victims(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    departing: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Solo-case abandonment (#1479 Task 8): a departure leaves a downed victim alone.
+
+    When ``departing`` leaves ``room`` and that removes the LAST potential rescuer,
+    any still-downed victim there (present, ``not can_act``, carrying an acute-peril
+    condition) has their fate resolved IMMEDIATELY via the source-appropriate
+    abandonment pool — no frozen limbo waiting for a round that will never come.
+
+    Called from ``Room.at_object_leave``, which fires BEFORE the mover leaves the
+    room's ``contents``; ``departing`` is therefore excluded from the rescuer check.
+    A single cheap room-bound query short-circuits ordinary rooms (no acute peril
+    present → no work).
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.vitals.peril_resolution import (  # noqa: PLC0415
+        _acute_peril_condition_names,
+        potential_rescuer_present,
+    )
+    from world.vitals.services import can_act, resolve_abandonment  # noqa: PLC0415
+
+    sheets = _present_character_sheets(room)
+    char_ids = [s.character_id for s in sheets]
+    if not char_ids:
+        return
+    peril_ids = set(
+        ConditionInstance.objects.filter(
+            target_id__in=char_ids,
+            condition__name__in=_acute_peril_condition_names(),
+        ).values_list("target_id", flat=True)
+    )
+    if not peril_ids:
+        return
+
+    departing_id = departing.id if departing is not None else None
+    for sheet in sheets:
+        if sheet.character_id not in peril_ids:
+            continue
+        if sheet.character_id == departing_id or can_act(sheet):
+            continue
+        if potential_rescuer_present(sheet, room, exclude_character_id=departing_id):
+            continue
+        resolve_abandonment(sheet)
+
+
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
@@ -446,6 +523,12 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
             continue
         targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
+
+    # #1479 Task 8: a held (abandoned, non-advancing) downed victim who has waited
+    # out the abandonment grace window resolves via the source-appropriate
+    # abandonment pool. Done before the auto-end check so a resolved peril lets a
+    # DANGER round complete instead of freezing in limbo.
+    _resolve_abandonment_grace(rnd, downed_victim_ids - advancing_downed_ids)
 
     rnd.status = RoundStatus.BETWEEN_ROUNDS
     rnd.save(update_fields=["status"])

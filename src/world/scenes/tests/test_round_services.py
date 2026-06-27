@@ -390,6 +390,207 @@ class SceneRoundResolutionTests(TestCase):
         assert bleed.abandoned_since_round is None  # cleared — hostile drove again
 
 
+class SceneRoundAbandonmentTests(TestCase):
+    """Abandonment resolution (#1479 Task 8): N-beat grace window + solo-immediate.
+
+    An abandoned downed victim (held, marked) resolves through the
+    source-appropriate abandonment pool once they have waited
+    ``abandonment_grace_rounds`` beats; a departure that removes the last
+    potential rescuer resolves a still-downed victim immediately.
+    """
+
+    def setUp(self):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import BleedingOutConditionFactory, ConditionStageFactory
+        from world.scenes.models import get_scene_round_defaults_config
+        from world.traits.factories import CheckOutcomeFactory
+        from world.vitals.factories import create_abandonment_pools
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.rnd = SceneRoundFactory(
+            room=self.room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            mode=SceneRoundMode.STRICT,
+            start_reason=SceneRoundStartReason.OPT_IN,
+        )
+        self.check_type = CheckTypeFactory()
+        self.bleed_out = BleedingOutConditionFactory()
+        self.stage = ConditionStageFactory(
+            condition=self.bleed_out,
+            stage_order=1,
+            name="Dying",
+            resist_check_type=self.check_type,
+            resist_difficulty=40,
+            rounds_to_next=None,
+        )
+        create_abandonment_pools()
+        self.failure_outcome = CheckOutcomeFactory(name="Failure", success_level=-1)
+        cfg = get_scene_round_defaults_config()
+        cfg.abandonment_grace_rounds = 2
+        cfg.save(update_fields=["abandonment_grace_rounds"])
+
+    def _present(self, *, initiative_order=0):
+        sheet = CharacterSheetFactory()
+        sheet.character.db_location = self.room
+        sheet.character.save(update_fields=["db_location"])
+        return SceneRoundParticipantFactory(
+            scene_round=self.rnd, character_sheet=sheet, initiative_order=initiative_order
+        )
+
+    def _downed_victim(self, *, source_character, abandoned_since_round=None, initiative_order=0):
+        from world.vitals.constants import CharacterLifeState
+        from world.vitals.factories import CharacterVitalsFactory
+
+        p = self._present(initiative_order=initiative_order)
+        CharacterVitalsFactory(
+            character_sheet=p.character_sheet,
+            life_state=CharacterLifeState.ALIVE,
+            health=-5,
+            max_health=100,
+        )
+        inst = ConditionInstanceFactory(
+            target=p.character_sheet.character,
+            condition=self.bleed_out,
+            current_stage=self.stage,
+            source_character=source_character,
+            abandoned_since_round=abandoned_since_round,
+        )
+        return p, inst
+
+    def _declare_pass(self, participant):
+        return SceneActionDeclaration.objects.create(
+            scene_round=self.rnd,
+            round_number=self.rnd.round_number,
+            participant=participant,
+            is_pass=True,
+        )
+
+    def _set_round_number(self, n):
+        self.rnd.round_number = n
+        self.rnd.save(update_fields=["round_number"])
+
+    @staticmethod
+    def _fake_can_act_for(victim_p):
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        return fake_can_act
+
+    def test_abandoned_victim_resolves_after_grace(self):
+        # Held + marked at round 1; resolving round 3 → delta 2 >= grace 2 → fate resolves.
+        from evennia_extensions.factories import CharacterFactory
+
+        npc_source = CharacterFactory()  # off-screen NPC: not enrolled, never drives
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)  # potential rescuer present
+        self._set_round_number(3)
+        self._declare_pass(bystander)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        from world.vitals.constants import CharacterLifeState
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+    def test_abandoned_victim_below_grace_not_resolved(self):
+        from evennia_extensions.factories import CharacterFactory
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        self._set_round_number(2)  # delta 1 < grace 2 → not yet
+        self._declare_pass(bystander)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.ALIVE
+        from world.conditions.models import ConditionInstance
+
+        assert ConditionInstance.objects.filter(
+            target=victim_p.character_sheet.character, condition=self.bleed_out
+        ).exists()
+
+    def test_rescue_before_grace_no_resolution(self):
+        # The bleed-out is cleared before the grace window elapses → no roll, victim saved.
+        from evennia_extensions.factories import CharacterFactory
+        from world.conditions.services import remove_condition
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        self._set_round_number(3)  # grace would be met
+        self._declare_pass(bystander)
+
+        remove_condition(victim_p.character_sheet.character, self.bleed_out)  # rescue
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.ALIVE
+
+    def test_solo_last_rescuer_leaves_resolves_immediately(self):
+        from evennia_extensions.factories import CharacterFactory
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()  # off-screen
+        victim_p, _bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        rescuer = self._present(initiative_order=1)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            self._force_failure(),
+        ):
+            # The last conscious other character leaves the room.
+            self.room.at_object_leave(rescuer.character_sheet.character, None)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+    def _force_failure(self):
+        from world.checks.test_helpers import force_check_outcome
+
+        return force_check_outcome(self.failure_outcome)
+
+
 class SceneRoundOutcomeBroadcastTests(TestCase):
     """_resolve_scene_declarations broadcasts an OUTCOME narration for each resolved challenge."""
 

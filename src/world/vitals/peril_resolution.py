@@ -95,6 +95,8 @@ def hostile_drove_round(
 def potential_rescuer_present(
     victim_sheet: "CharacterSheet",
     room: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    *,
+    exclude_character_id: int | None = None,
 ) -> bool:
     """Return True when someone present could plausibly stabilize the downed victim.
 
@@ -102,6 +104,11 @@ def potential_rescuer_present(
     is NOT the victim, and is NOT the hostile source of the victim's peril (an
     ally/neutral bystander). The abandonment marker is only stamped when such a
     rescuer exists — if nobody could help, "abandoned" is not the right framing.
+
+    ``exclude_character_id`` omits one further character from the rescuer set —
+    used by the solo-departure path (``Room.at_object_leave`` fires while the
+    mover is still in ``room.contents``, so the departing character must not be
+    counted as a remaining rescuer).
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -115,6 +122,8 @@ def potential_rescuer_present(
         except (AttributeError, ObjectDoesNotExist):
             continue
         if sheet.character_id == victim_id or sheet.character_id in source_ids:
+            continue
+        if exclude_character_id is not None and sheet.character_id == exclude_character_id:
             continue
         if can_act(sheet):
             return True

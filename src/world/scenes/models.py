@@ -1241,6 +1241,13 @@ class SceneRoundDefaultsConfig(SharedMemoryModel):
     max_actions_per_round = models.PositiveSmallIntegerField(default=1)
     per_target_repeat_lock = models.BooleanField(default=False)
     anti_spam_seconds = models.PositiveSmallIntegerField(default=5)
+    abandonment_grace_rounds = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "N action-driven beats an abandoned downed victim waits for rescue before"
+            " their fate resolves."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "accounts.AccountDB",

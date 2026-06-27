@@ -118,3 +118,8 @@ class Room(ObjectParent, DefaultRoom):
         """
         super().at_object_leave(obj, target_location, **kwargs)
         self._broadcast_room_state(exclude=obj)
+        # #1479 Task 8: a departure may remove the last potential rescuer from a
+        # downed victim in this room — resolve their abandonment fate immediately.
+        from world.scenes.round_services import resolve_solo_abandoned_victims
+
+        resolve_solo_abandoned_victims(self, departing=obj)

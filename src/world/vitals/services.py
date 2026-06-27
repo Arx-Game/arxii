@@ -614,49 +614,44 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
     vitals.save(update_fields=["life_state", "died_at"])
 
 
-def _resolve_terminal_bleed_out(
+def _resolve_peril_via_pool(
     character_sheet: CharacterSheet,
     instance: ConditionInstance,
+    pool: ConsequencePool,
 ) -> bool:
-    """Resolve a terminal-stage Bleeding-Out instance through the guarded pool.
+    """Resolve an acute-peril ConditionInstance through a guarded consequence pool.
 
-    Replaces the old unconditional ``_mark_dead`` at the terminal stage with a
-    death-gated consequence-pool roll (#1479). The roll uses the terminal
-    stage's authored ``resist_check_type`` + ``resist_difficulty`` (ADR-0019 —
-    no hardcoded difficulty) against the ``bleed_out_terminal`` pool's
-    candidates (recover / stay_incapacitated / die).
+    The shared death-gated core of the acute-peril dying state (#1479): used by
+    BOTH the terminal bleed-out path (``_resolve_terminal_bleed_out``, the
+    ``bleed_out_terminal`` pool) and the abandonment path (``resolve_abandonment``,
+    the source-appropriate ``select_abandonment_pool`` pool). Extracting it keeps
+    a single implementation of "roll the peril's authored resist check against a
+    death-gated candidate set, then dispatch the selected outcome" (no parallel
+    implementations).
 
-    The gate (``death_is_permitted``) is applied by EXCLUDING every
-    character-loss (``die``) candidate before selection when death is not
-    permitted, so a PC source, a death_deferred victim, or an absent source can
-    never select death (ADR-0023). The selected outcome is dispatched on its
-    ``character_loss`` flag — the single ``die`` row is the only character-loss
-    candidate, so this also covers the fallback outcome produced when the
-    Failure tier is emptied by the gate (it is non-loss → survive).
+    The roll uses the instance's current-stage authored ``resist_check_type`` +
+    ``resist_difficulty`` (ADR-0019 — no hardcoded difficulty). The gate
+    (``death_is_permitted``) is applied by EXCLUDING every character-loss
+    (``die``) candidate before selection when death is not permitted, so a PC
+    source, a death_deferred victim, or an absent source can never select death
+    (ADR-0023). The selected outcome is dispatched on its ``character_loss``
+    flag — the single ``die`` row is the only character-loss candidate, so this
+    also covers the fallback outcome produced when the Failure tier is emptied
+    by the gate (it is non-loss → survive). Authored survival effects (e.g.
+    ``captured_alive``'s CAPTURE effect) are applied by ``apply_resolution``.
 
-    Returns True iff the character died this call. On survival the Bleeding-Out
-    condition is removed (the victim stops dying; any wounds remain) and False
-    is returned. A missing pool (seeding gap) holds the victim in the dying
-    state — it never falls back to unconditional death.
+    Returns True iff the character died this call. On survival the instance's
+    acute-peril condition is removed (the victim stops dying; any wounds remain)
+    and False is returned. ``_mark_dead`` stays the single death writer.
     """
-    from actions.models import ConsequencePool  # noqa: PLC0415
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
         resolve_pool_consequences,
         select_consequence,
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
-    from world.vitals.constants import POOL_BLEED_OUT_TERMINAL  # noqa: PLC0415
     from world.vitals.peril_resolution import death_is_permitted  # noqa: PLC0415
-
-    pool = ConsequencePool.objects.filter(name=POOL_BLEED_OUT_TERMINAL).first()
-    if pool is None:
-        # Seeding gap — cannot run the gated resolution. Holding the victim in
-        # the dying state is the safe degradation (never kill ungated; #1479).
-        return False
 
     stage = instance.current_stage
     source_character = instance.source_character
@@ -683,11 +678,84 @@ def _resolve_terminal_bleed_out(
         _mark_dead(character_sheet)
         return True
 
-    # Survived (recover / stay_incapacitated / gated-out failure): stop the
-    # bleed-out. _mark_dead stays the single death writer.
-    bleed_out = ConditionTemplate.get_by_name(BLEED_OUT_CONDITION_NAME)
-    remove_condition(character, bleed_out)
+    # Survived (recover / stay_incapacitated / captured / gated-out failure):
+    # stop the peril by clearing this instance's condition.
+    remove_condition(character, instance.condition)
     return False
+
+
+def _resolve_terminal_bleed_out(
+    character_sheet: CharacterSheet,
+    instance: ConditionInstance,
+) -> bool:
+    """Resolve a terminal-stage Bleeding-Out instance through the guarded pool.
+
+    Replaces the old unconditional ``_mark_dead`` at the terminal stage with a
+    death-gated consequence-pool roll (#1479) against the ``bleed_out_terminal``
+    pool (recover / stay_incapacitated / die). The gated roll + outcome dispatch
+    is the shared ``_resolve_peril_via_pool`` core.
+
+    A missing pool (seeding gap) holds the victim in the dying state — it never
+    falls back to unconditional death.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.vitals.constants import POOL_BLEED_OUT_TERMINAL  # noqa: PLC0415
+
+    pool = ConsequencePool.objects.filter(name=POOL_BLEED_OUT_TERMINAL).first()
+    if pool is None:
+        # Seeding gap — cannot run the gated resolution. Holding the victim in
+        # the dying state is the safe degradation (never kill ungated; #1479).
+        return False
+
+    return _resolve_peril_via_pool(character_sheet, instance, pool)
+
+
+def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
+    """Resolve an abandoned downed victim's fate through the abandonment pool (#1479 T8).
+
+    Selects the source-appropriate abandonment pool
+    (``select_abandonment_pool`` — enemy / pvp / environmental by the peril's
+    ``source_character`` kind) and runs the SAME death-gated core as the terminal
+    bleed-out path (``_resolve_peril_via_pool``). The roll uses the acute-peril
+    instance's current-stage authored ``resist_check_type`` + ``resist_difficulty``
+    (ADR-0019).
+
+    No-op (returns False) when the victim no longer carries an acute-peril
+    instance with a resolvable stage — i.e. a rescue (the bleed-out cleared via
+    ``remove_condition`` / ``perform_treatment``) beats the check. A seeding gap
+    (the abandonment pool is absent) likewise holds the victim rather than killing
+    them ungated.
+
+    Returns True iff the victim died this call.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.vitals.peril_resolution import (  # noqa: PLC0415
+        acute_peril_instances,
+        select_abandonment_pool,
+    )
+
+    if character_sheet is None:
+        return False
+
+    instance = (
+        acute_peril_instances(character_sheet)
+        .select_related("current_stage__resist_check_type")
+        .first()
+    )
+    if (
+        instance is None
+        or instance.current_stage is None
+        or instance.current_stage.resist_check_type is None
+    ):
+        return False
+
+    try:
+        pool = select_abandonment_pool(instance.source_character)
+    except ConsequencePool.DoesNotExist:
+        # Seeding gap — hold the victim rather than resolving ungated (#1479).
+        return False
+
+    return _resolve_peril_via_pool(character_sheet, instance, pool)
 
 
 def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
