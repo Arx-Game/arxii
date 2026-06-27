@@ -92,9 +92,20 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
 - **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
   with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
   cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`.
+- **Climate baseline (#1522, slice 1 done):** `world.weather.Climate` — a per-region signed
+  `temperature`/`moisture` baseline, designated via `Area.climate` and resolved
+  most-specific-wins (`get_effective_climate`, mirrors realm). It decomposes onto the
+  COLD/HEAT/WET/DRY exposure axes and folds into `felt_exposure` *before* the 0-floor (so a
+  cooling fixture fights a desert's heat). A global per-month temperature curve
+  (`MONTH_TEMPERATURE_SHIFT`, read off the IC `game_clock`) rides on top — a temperate region
+  crosses into real winter cold while a tropical region's high baseline keeps "no real winter."
+  Added the `DRY` exposure axis. `WIND` is deliberately *not* climate-driven (transient
+  weather/magic only).
 - **Later slices:** stackable comfort **decorations** (not `RoomFeatureInstance` — that's OneToOne),
   the comfort-level/effect engine (comfort→AP-regen, comfort→Conditions [Tehom-coordinated]), the
-  weather source (#1522), and the inhabitant/owner surfacing.
+  transient **weather layer** (#1522 remaining: `WeatherType`/`WeatherEmit`/`RegionWeatherState`
+  + cron, seeded from the Arx-1 emit corpus, season/phase-gated; special feast-day weather;
+  wind-as-mechanic), and the inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 

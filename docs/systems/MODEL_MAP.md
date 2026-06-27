@@ -410,6 +410,7 @@
   - building_profile -> buildings.Building [OneToOne] (nullable)
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
+  - climate -> weather.Climate [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
 **Pointed to by:**
   - children <- areas.Area
@@ -1071,6 +1072,7 @@
 **Pointed to by:**
   - children <- codex.CodexSubject
   - entries <- codex.CodexEntry
+  - climates <- weather.Climate
   - architectural_styles <- buildings.ArchitecturalStyle
 
 ### CodexSubjectBreadcrumb
@@ -1805,10 +1807,12 @@
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' — The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
+- `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
 - `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' — A room's comfort level (1–10) for an occupant (#1514).`
 - `comfort_level_for_points(points: 'int') -> 'int' — Map raw comfort points to a 1–10 comfort level (#1514).`
 - `comfort_points(room: 'DefaultObject') -> 'int' — A room's raw comfort points (#1514): ``amenities − felt discomfort``.`
 - `comfort_summary(room: 'DefaultObject') -> 'ComfortSummary' — Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity.`
+- `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
@@ -1816,14 +1820,15 @@
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None) -> 'int' — Cascade-resolve a single axis value (stat or resonance) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' — Bulk-resolve cascade values across many rooms for one axis.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' — End a tenancy by setting ``ends_at``.`
-- `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514).`
+- `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
+- `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Create a new LocationTenancy row.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
-- `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514).`
+- `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`

@@ -31,6 +31,14 @@ from world.locations.models import (
     LocationValueOverride,
 )
 from world.societies.models import OrganizationMembership
+from world.weather.services import (
+    climate_exposure_base,
+    current_temperature_shift,
+    get_effective_climate,
+)
+
+# Sentinel distinguishing "climate not supplied, resolve it" from "resolved to no climate".
+_UNRESOLVED = object()
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -43,6 +51,7 @@ if TYPE_CHECKING:
     from world.magic.models import Resonance
     from world.scenes.models import Persona
     from world.societies.models import Organization
+    from world.weather.models import Climate
 
 
 def _room_profile_and_ancestors(
@@ -163,6 +172,50 @@ def _clamp(value: int, stat_key: StatKey) -> int:
     return max(low, min(high, value))
 
 
+def _resolve_cascade(
+    profile: RoomProfile,
+    ancestor_ids: list[int],
+    axis_filter: models.Q,
+) -> tuple[int | None, int]:
+    """Resolve one axis's raw cascade, unclamped (shared by effective_value/felt_exposure).
+
+    Returns ``(override_value, modifier_sum)``: if a most-specific override applies,
+    ``override_value`` is its value and ``modifier_sum`` is 0; otherwise ``override_value``
+    is None and ``modifier_sum`` is the summed modifier ``current_value``s. Neither the axis
+    default nor any clamp is applied here — callers add their base (axis default or climate)
+    and clamp, so climate can combine with local modifiers before the 0-floor.
+    """
+    overrides = list(
+        LocationValueOverride.objects.filter(axis_filter)
+        .select_related("area")
+        .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
+    )
+    if overrides:
+        room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
+        if room_overrides:
+            return room_overrides[0].value, 0
+        return min(overrides, key=lambda o: o.area.level).value, 0
+
+    modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
+        models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
+    )
+    return None, sum(mod.current_value() for mod in modifiers)
+
+
+def _resolve_room_climate(profile: RoomProfile | None) -> tuple[Climate | None, int]:
+    """The room's effective climate and current seasonal temperature shift (#1522).
+
+    Returns ``(None, 0)`` when the room has no profile/area or no climate is designated
+    anywhere up its hierarchy. The seasonal shift is only read when a climate exists.
+    """
+    if profile is None or profile.area_id is None:
+        return None, 0
+    climate = get_effective_climate(profile.area)
+    if climate is None:
+        return None, 0
+    return climate, current_temperature_shift()
+
+
 def effective_value(
     room: DefaultObject,
     *,
@@ -205,25 +258,10 @@ def effective_value(
     if profile is None:
         return _maybe_clamp(default)
 
-    # Step 3: most-specific override wins, modifiers ignored.
-    overrides = list(
-        LocationValueOverride.objects.filter(axis_filter)
-        .select_related("area")
-        .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
-    )
-    if overrides:
-        room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
-        if room_overrides:
-            return _maybe_clamp(room_overrides[0].value)
-        chosen = min(overrides, key=lambda o: o.area.level)
-        return _maybe_clamp(chosen.value)
-
-    # Step 4: sum modifier current_values.
-    modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
-        models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
-    )
-    total = default + sum(mod.current_value() for mod in modifiers)
-    return _maybe_clamp(total)
+    override_val, modifier_sum = _resolve_cascade(profile, ancestor_ids, axis_filter)
+    if override_val is not None:
+        return _maybe_clamp(override_val)
+    return _maybe_clamp(default + modifier_sum)
 
 
 def room_enclosure(room: DefaultObject) -> RoomEnclosure:
@@ -234,31 +272,77 @@ def room_enclosure(room: DefaultObject) -> RoomEnclosure:
         return RoomEnclosure.WALLED
 
 
+class _ExposureContext(NamedTuple):
+    """A room's once-resolved state for felt-exposure reads (#1514, #1522).
+
+    Built once per room by ``_exposure_context`` so multi-axis reads (``room_discomfort``,
+    ``comfort_summary``) don't re-resolve the profile, climate, or enclosure per axis.
+    """
+
+    profile: RoomProfile | None
+    ancestor_ids: list[int]
+    climate: Climate | None
+    temperature_shift: int
+    sheltered_axes: frozenset[StatKey]
+
+
+def _exposure_context(room: DefaultObject) -> _ExposureContext:
+    """Resolve a room's profile, effective climate + seasonal shift, and sheltered axes once."""
+    profile, ancestor_ids = _room_profile_and_ancestors(room)
+    climate, temperature_shift = _resolve_room_climate(profile)
+    sheltered_axes = ENCLOSURE_SHELTERED_AXES.get(room_enclosure(room), frozenset())
+    return _ExposureContext(profile, ancestor_ids, climate, temperature_shift, sheltered_axes)
+
+
+def _felt_exposure_for_axis(ctx: _ExposureContext, stat_key: StatKey) -> int:
+    """One axis's felt exposure given already-resolved room/climate state (#1514, #1522).
+
+    Folds the regional climate base (for exposure axes) into the same pre-floor sum as the
+    local cascade modifiers — so a desert's HEAT base and a cooling fixture's negative HEAT
+    modifier combine before the 0-floor. A warded-sanctum override still trumps both climate
+    and modifiers. Non-exposure stats fall back to ``STAT_DEFAULTS`` as their base.
+    """
+    if stat_key in WEATHER_EXPOSURE_AXES and stat_key in ctx.sheltered_axes:
+        return 0
+    if stat_key in EXPOSURE_STAT_KEYS:
+        base = climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
+    else:
+        base = STAT_DEFAULTS.get(stat_key, 0)
+    if ctx.profile is None:
+        return _clamp(base, stat_key)
+    override_val, modifier_sum = _resolve_cascade(
+        ctx.profile, ctx.ancestor_ids, models.Q(key_type=KeyType.STAT, stat_key=stat_key)
+    )
+    if override_val is not None:
+        return _clamp(override_val, stat_key)
+    return _clamp(base + modifier_sum, stat_key)
+
+
 def felt_exposure(room: DefaultObject, *, stat_key: StatKey) -> int:
-    """A room's *felt* exposure on one axis, after enclosure sheltering (#1514).
+    """A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).
 
     Weather axes (WET, WIND) are fully blocked — felt as 0 — when the room's enclosure
     shelters them (a roof stops rain/snow; walls stop wind). Temperature axes (COLD, HEAT)
     always seep through and are felt in full; insulation against them comes from
-    fixtures/style, not enclosure. Non-weather, non-exposure stats are returned unchanged.
+    fixtures/style, not enclosure. The room's regional climate baseline (#1522) folds into
+    the exposure axes before the 0-floor. Non-weather, non-exposure stats are returned
+    unchanged.
     """
-    if stat_key in WEATHER_EXPOSURE_AXES and stat_key in ENCLOSURE_SHELTERED_AXES.get(
-        room_enclosure(room), frozenset()
-    ):
-        return 0
-    return effective_value(room, stat_key=stat_key)
+    return _felt_exposure_for_axis(_exposure_context(room), stat_key)
 
 
 def room_discomfort(room: DefaultObject) -> int:
-    """Total residual environmental discomfort at a room (#1514).
+    """Total residual environmental discomfort at a room (#1514, #1522).
 
-    Sums the *felt* exposure axes (``EXPOSURE_STAT_KEYS`` — COLD, HEAT, WET, WIND): each is
-    cascade-resolved through climate/weather/style (up) and counter-fixtures (down), clamped
-    at its 0-floor (a counter zeroes its own axis but never goes negative or touches another),
-    then gated by enclosure for the weather axes (a sheltered room feels no rain or wind). The
-    sum is always ``>= 0``; 0 means a perfectly comfortable room.
+    Sums the *felt* exposure axes (``EXPOSURE_STAT_KEYS`` — COLD, HEAT, WET, WIND, DRY): each
+    is the regional climate baseline (#1522) plus the local cascade (weather/style up,
+    counter-fixtures down), clamped at its 0-floor (a counter zeroes its own axis but never
+    goes negative or touches another), then gated by enclosure for the weather axes (a
+    sheltered room feels no rain or wind). Climate and the seasonal shift are resolved once
+    for the whole room. The sum is always ``>= 0``; 0 means a perfectly comfortable room.
     """
-    return sum(felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS)
+    ctx = _exposure_context(room)
+    return sum(_felt_exposure_for_axis(ctx, key) for key in EXPOSURE_STAT_KEYS)
 
 
 def comfort_points(room: DefaultObject) -> int:
@@ -318,7 +402,8 @@ class ComfortSummary(NamedTuple):
 
 def comfort_summary(room: DefaultObject) -> ComfortSummary:
     """Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity."""
-    felt = {key: felt_exposure(room, stat_key=key) for key in EXPOSURE_STAT_KEYS}
+    ctx = _exposure_context(room)
+    felt = {key: _felt_exposure_for_axis(ctx, key) for key in EXPOSURE_STAT_KEYS}
     points = comfort_points(room)
     return ComfortSummary(
         level=comfort_level_for_points(points),

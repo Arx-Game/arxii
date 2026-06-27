@@ -450,6 +450,16 @@ Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 - **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
 - **Source:** `src/world/realms/`
 - **Details:** [realms.md](realms.md)
+### Weather (Climate baseline — #1522)
+Mechanical regional climate feeding the #1514 comfort substrate; transient weather layer is a later slice.
+
+- **Models:** `Climate` (signed `temperature`/`moisture` baseline + `codex_subject` lore FK)
+- **Designation:** `Area.climate` FK (mirrors `Area.realm`)
+- **Key Services:** `get_effective_climate(area)` (most-specific-wins walk-up), `current_temperature_shift()` (per-month curve off the IC `game_clock`), `climate_exposure_base(climate, stat_key, *, temperature_shift=0)` (signed weights → floored COLD/HEAT/WET/DRY axes; WIND never climate-driven)
+- **Comfort integration:** folded into `world.locations.services.felt_exposure` before the 0-floor (a cooling fixture fights a desert's heat); `effective_value` stays climate-free
+- **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve, PLACEHOLDER magnitudes)
+- **Integrates with:** locations (exposure axes + comfort), areas (`Area.climate`), game_clock (IC season/month), codex (lore)
+- **Source:** `src/world/weather/` — see `world/weather/CLAUDE.md`
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 

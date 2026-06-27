@@ -69,6 +69,10 @@ class StatKey(models.TextChoices):
     # (a roof stops WET; walls stop WIND). The weather layer (later slice) populates them.
     WET = "wet", "Wet exposure"
     WIND = "wind", "Wind exposure"
+    # DRY pairs with WET as the moisture axis (#1522): climate designates a region wet or dry.
+    # Unlike WET, dryness seeps everywhere (a roof doesn't stop dry air), so DRY is NOT
+    # enclosure-gated — it's countered by fixtures (water features / humidity), like temperature.
+    DRY = "dry", "Dry exposure"
     # Positive comfort axis (#1514): luxury decorations + magical comfort that push the comfort
     # POOL above neutral toward 6–10. Distinct from mitigation (which only cancels discomfort,
     # floored): amenities are how you ADD comfort, and the high end is deliberately expensive.
@@ -88,6 +92,7 @@ STAT_DEFAULTS: dict[StatKey, int] = {
     StatKey.HEAT: 0,
     StatKey.WET: 0,
     StatKey.WIND: 0,
+    StatKey.DRY: 0,
     StatKey.AMENITY: 0,
 }
 
@@ -109,6 +114,7 @@ STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     StatKey.HEAT: (0, 100_000),
     StatKey.WET: (0, 100_000),
     StatKey.WIND: (0, 100_000),
+    StatKey.DRY: (0, 100_000),
     StatKey.AMENITY: (0, 1_000_000),
 }
 
@@ -128,11 +134,18 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.HEAT: 0,
     StatKey.WET: 0,
     StatKey.WIND: 0,
+    StatKey.DRY: 0,
     StatKey.AMENITY: 0,
 }
 
 # Environmental discomfort axes that sum into the comfort score (#1514).
-EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (StatKey.COLD, StatKey.HEAT, StatKey.WET, StatKey.WIND)
+EXPOSURE_STAT_KEYS: tuple[StatKey, ...] = (
+    StatKey.COLD,
+    StatKey.HEAT,
+    StatKey.WET,
+    StatKey.WIND,
+    StatKey.DRY,
+)
 
 # The subset of exposure axes that are *weather* reaching you physically — enclosure can
 # shelter these (a roof, walls). Temperature (COLD/HEAT) is NOT here: it seeps regardless and

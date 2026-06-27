@@ -11,12 +11,22 @@ hierarchy. Carries two axis types in one cascade:
 
 A single read service (`effective_value`) resolves either axis.
 
-**Climate → comfort (#1514).** The stat axis hosts environmental **exposure** axes
-(`StatKey.COLD`, `HEAT`, `WET`, `WIND`; listed in `EXPOSURE_STAT_KEYS`). Each is a non-negative
-*discomfort* magnitude clamped at a **0-floor** — climate/weather/style push it up,
+**Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
+(`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
+non-negative *discomfort* magnitude clamped at a **0-floor** — climate/weather/style push it up,
 counter-fixtures push it down, and the floor means a counter (a hearth's negative COLD
 modifier) can zero out *its* axis but never go negative or touch another. So a hearth eats
 COLD and can never overheat a room.
+
+**Regional climate baseline (#1522).** `felt_exposure` folds a room's effective `Climate`
+(`world.weather`, resolved most-specific-wins up the area hierarchy via `Area.climate`) into the
+exposure axes: a signed `temperature` → COLD/HEAT, signed `moisture` → WET/DRY, plus a global
+per-month seasonal temperature shift. The climate base lands in the **same pre-floor sum** as the
+local cascade modifiers (`_exposure_context` resolves it once per room), so a desert's HEAT base
+and a cooling fixture's negative HEAT modifier combine *before* the 0-floor (build-to-win). A
+`LocationValueOverride` (warded sanctum) still trumps climate. `WIND` is never climate-driven.
+`effective_value` itself stays climate-free (authored cascade only) — climate is a comfort-read
+concern. See `world/weather/CLAUDE.md`.
 
 **Enclosure** gates the *weather* axes (`WEATHER_EXPOSURE_AXES` = WET, WIND) but never
 temperature: `RoomProfile.enclosure` (`evennia_extensions.constants.RoomEnclosure` —
