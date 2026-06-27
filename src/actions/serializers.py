@@ -77,6 +77,25 @@ class SoulfrayWarningSerializer(serializers.Serializer):
     has_death_risk = serializers.BooleanField(read_only=True)
 
 
+class FuryTierOptionSerializer(serializers.Serializer):
+    """Read-only representation of one selectable FuryTier (#1543)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    depth = serializers.IntegerField(read_only=True)
+    control_penalty = serializers.IntegerField(read_only=True)
+    intensity_bonus = serializers.IntegerField(read_only=True)
+    berserk_severity = serializers.IntegerField(read_only=True)
+
+
+class AnchorOptionSerializer(serializers.Serializer):
+    """Read-only representation of one eligible bonded fury anchor (#1543)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    provocation_cap = serializers.IntegerField(read_only=True)
+
+
 class AvailableEnhancementSerializer(serializers.Serializer):
     """Read-only serializer for AvailableEnhancement (technique enhancement option)."""
 
@@ -133,6 +152,9 @@ class PlayerActionSerializer(serializers.Serializer):
         choices=ActionCategory.choices, read_only=True, allow_null=True
     )
     reach = serializers.CharField(read_only=True, allow_null=True)
+    soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
+    available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
+    eligible_fury_anchors = AnchorOptionSerializer(many=True, read_only=True)
 
     def get_difficulty(self, obj: PlayerAction) -> str | None:
         """Return the difficulty enum value string, or None."""

@@ -16,8 +16,10 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type { ActionContext, ActionSlot, EffortLevel, TargetOption } from '@/actions/types';
-import type { PlayerAction } from '@/scenes/actionTypes';
+import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
+import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
+import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
 import {
   Select,
@@ -144,7 +146,11 @@ function buildFocusedJob(
   focusedContext: ActionContext,
   effortLevel: string,
   dispatchAction: DispatchFn,
-  selectedPull: PullSelection | null
+  selectedPull: PullSelection | null,
+  soulfrayAccepted: boolean,
+  soulfrayWarning: SoulfrayWarningData | null,
+  furyTierId: number | null,
+  furyAnchorId: number | null
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -164,6 +170,12 @@ function buildFocusedJob(
     pullKwargs.pull_thread_ids = selectedPull.thread_ids;
   }
 
+  const furyKwargs: Record<string, number> = {};
+  if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
+  if (furyAnchorId !== null) furyKwargs.fury_anchor_id = furyAnchorId;
+  const soulfrayKwarg =
+    soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
+
   return () =>
     dispatchAction({
       ref: {
@@ -171,7 +183,13 @@ function buildFocusedJob(
         technique_id: focusedContext.techniqueId ?? null,
         action_slot: 'focused',
       },
-      kwargs: { effort_level: effortLevel, ...targetKwargs, ...pullKwargs },
+      kwargs: {
+        effort_level: effortLevel,
+        ...targetKwargs,
+        ...pullKwargs,
+        ...soulfrayKwarg,
+        ...furyKwargs,
+      },
     });
 }
 
@@ -399,6 +417,11 @@ export function YourTurn({
   // ThreadPullDialog. Sent in kwargs of the focused/clash dispatch on submit.
   const [selectedPull, setSelectedPull] = useState<PullSelection | null>(null);
 
+  // Soulfray + fury declaration state for combat-cast focused actions (#1543).
+  const [soulfrayAccepted, setSoulfrayAccepted] = useState(false);
+  const [furyTierId, setFuryTierId] = useState<number | null>(null);
+  const [furyAnchorId, setFuryAnchorId] = useState<number | null>(null);
+
   // Cover picker state — selected ally participant PK (string for Select compatibility).
   const [coverAllyId, setCoverAllyId] = useState<string>('');
   const [maneuverError, setManeuverError] = useState<string | null>(null);
@@ -408,6 +431,9 @@ export function YourTurn({
     setSubmitted(false);
     setPullDialogOpen(false);
     setSelectedPull(null);
+    setSoulfrayAccepted(false);
+    setFuryTierId(null);
+    setFuryAnchorId(null);
     setCoverAllyId('');
     setManeuverError(null);
   }, [roundNumber]);
@@ -522,6 +548,20 @@ export function YourTurn({
     return selected?.reach ?? null;
   })();
 
+  // Soulfray + fury descriptor for the currently selected focused cast (#1543).
+  const focusedCastDescriptor = (() => {
+    if (focusedContext.techniqueId === undefined) return null;
+    return availableActions.find((a) => a.ref.technique_id === focusedContext.techniqueId) ?? null;
+  })();
+  const soulfrayWarning = focusedCastDescriptor?.soulfray_warning ?? null;
+  const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
+  const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
+  const furyOverCap =
+    furyTierId !== null &&
+    furyAnchorId !== null &&
+    (furyTiers.find((t) => t.id === furyTierId)?.depth ?? 0) >
+      (furyAnchors.find((a) => a.id === furyAnchorId)?.provocation_cap ?? 0);
+
   // Current declared maneuver (from own round action).
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
 
@@ -548,6 +588,15 @@ export function YourTurn({
 
     setSubmitError(null);
 
+    if (soulfrayWarning !== null && !soulfrayAccepted) {
+      setSubmitError('Accept the Soulfray risk to proceed.');
+      return;
+    }
+    if (furyOverCap) {
+      setSubmitError('Chosen fury tier exceeds your bond with the anchor.');
+      return;
+    }
+
     // The round effort comes from the focused slot and applies to every
     // declaration (focused + passives). The COMBAT dispatch requires
     // effort_level in kwargs on every ref or it rejects (UNKNOWN_ACTION_REF).
@@ -557,7 +606,16 @@ export function YourTurn({
     // (focused first guarantees the server sees focused before passives).
     // selectedPull (if any) rides on focused and clash kwargs — the backend
     // commits a CombatPull when those kwargs are present.
-    const focusedJob = buildFocusedJob(focusedContext, effortLevel, dispatchAction, selectedPull);
+    const focusedJob = buildFocusedJob(
+      focusedContext,
+      effortLevel,
+      dispatchAction,
+      selectedPull,
+      soulfrayAccepted,
+      soulfrayWarning,
+      furyTierId,
+      furyAnchorId
+    );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
       passiveContexts,
@@ -653,6 +711,27 @@ export function YourTurn({
           actorPositionId={actorPositionId}
           positionAdjacency={encounter?.position_adjacency ?? []}
         />
+        {soulfrayWarning !== null && (
+          <SoulfrayAcceptGate
+            warning={soulfrayWarning}
+            techniqueName={focusedCastDescriptor?.display_name ?? 'Cast'}
+            animaCost={0}
+            accepted={soulfrayAccepted}
+            onAcceptChange={setSoulfrayAccepted}
+            disabled={isLocked}
+          />
+        )}
+        {furyTiers.length > 0 && (
+          <FuryDeclaration
+            tiers={furyTiers}
+            anchors={furyAnchors}
+            tierId={furyTierId}
+            anchorId={furyAnchorId}
+            onTierChange={setFuryTierId}
+            onAnchorChange={setFuryAnchorId}
+            disabled={isLocked}
+          />
+        )}
       </div>
 
       {/* Clash contribution subsection — shown when clash actions are available */}
@@ -878,7 +957,12 @@ export function YourTurn({
       {/* Submit declarations button */}
       <button
         type="button"
-        disabled={isLocked || dispatchPending}
+        disabled={
+          isLocked ||
+          dispatchPending ||
+          (soulfrayWarning !== null && !soulfrayAccepted) ||
+          furyOverCap
+        }
         onClick={() => {
           handleSubmit().catch(() => {});
         }}

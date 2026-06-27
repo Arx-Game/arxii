@@ -23635,6 +23635,23 @@ components:
       required:
       - event_id
       - status
+    AnchorOption:
+      type: object
+      description: Read-only representation of one eligible bonded fury anchor (#1543).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        provocation_cap:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - name
+      - provocation_cap
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -30473,6 +30490,35 @@ components:
         * `true` - True Form
         * `alternate` - Alternate Form
         * `disguise` - Disguise
+    FuryTierOption:
+      type: object
+      description: Read-only representation of one selectable FuryTier (#1543).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        depth:
+          type: integer
+          readOnly: true
+        control_penalty:
+          type: integer
+          readOnly: true
+        intensity_bonus:
+          type: integer
+          readOnly: true
+        berserk_severity:
+          type: integer
+          readOnly: true
+      required:
+      - berserk_severity
+      - control_penalty
+      - depth
+      - id
+      - intensity_bonus
+      - name
     GMApplicationCreate:
       type: object
       description: For players submitting a GM application.
@@ -40695,19 +40741,37 @@ components:
           type: string
           readOnly: true
           nullable: true
+        soulfray_warning:
+          allOf:
+          - $ref: '#/components/schemas/SoulfrayWarning'
+          readOnly: true
+          nullable: true
+        available_fury_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuryTierOption'
+          readOnly: true
+        eligible_fury_anchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnchorOption'
+          readOnly: true
       required:
       - action_category
       - action_template
+      - available_fury_tiers
       - backend
       - check_type
       - description
       - difficulty
       - display_name
+      - eligible_fury_anchors
       - enhancements
       - prerequisite_met
       - prerequisite_reasons
       - reach
       - ref
+      - soulfray_warning
       - strain
       - target_spec
     PlayerFeedbackCreate:

@@ -13954,6 +13954,12 @@ export interface components {
       status: string;
       event_id: number;
     };
+    /** @description Read-only representation of one eligible bonded fury anchor (#1543). */
+    AnchorOption: {
+      readonly id: number;
+      readonly name: string;
+      readonly provocation_cap: number;
+    };
     /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
@@ -17129,6 +17135,15 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
+    /** @description Read-only representation of one selectable FuryTier (#1543). */
+    FuryTierOption: {
+      readonly id: number;
+      readonly name: string;
+      readonly depth: number;
+      readonly control_penalty: number;
+      readonly intensity_bonus: number;
+      readonly berserk_severity: number;
+    };
     /** @description For players submitting a GM application. */
     GMApplicationCreate: {
       application_text: string;
@@ -22721,6 +22736,9 @@ export interface components {
         | (components['schemas']['ActionCategoryEnum'] | components['schemas']['NullEnum'])
         | null;
       readonly reach: string | null;
+      readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
+      readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
+      readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
     };
     /**
      * @description Write serializer - player creates feedback.

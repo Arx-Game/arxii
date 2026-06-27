@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend, ActionCategory, CombatActionSlot, TargetKind
+from world.magic.types.techniques import SoulfrayWarning
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -253,6 +254,12 @@ class PlayerAction:
     # can pre-filter selectable targets by position before declaring.
     reach: str | None = None
 
+    # Soulfray + fury declaration context for combat cast techniques (#1543).
+    # None/empty for non-cast actions; populated by _combat_actions for casts.
+    soulfray_warning: SoulfrayWarning | None = None
+    available_fury_tiers: tuple[FuryTierOption, ...] = ()
+    eligible_fury_anchors: tuple[AnchorOption, ...] = ()
+
 
 class ActionInterrupted(Exception):
     """Raised when a trigger stops an action's intent event."""
@@ -396,3 +403,33 @@ class StrainAvailability:
 
     cap: int
     default: int = 0
+
+
+@dataclass(frozen=True)
+class FuryTierOption:
+    """One selectable Fury tier for the declaration picker (#1543).
+
+    Mirrors the authored ``FuryTier`` fields the player needs to choose.
+    ``id`` is the FuryTier PK sent as ``fury_commitment_id``.
+    """
+
+    id: int
+    name: str
+    depth: int
+    control_penalty: int
+    intensity_bonus: int
+    berserk_severity: int
+
+
+@dataclass(frozen=True)
+class AnchorOption:
+    """One eligible bonded anchor for the fury declaration picker (#1543).
+
+    ``id`` is the anchor CharacterSheet PK sent as ``fury_anchor_id``.
+    ``provocation_cap`` is the bond-derived ceiling pre-computed server-side
+    so the client can gate tiers without a round-trip.
+    """
+
+    id: int
+    name: str
+    provocation_cap: int
