@@ -16,6 +16,7 @@ Multi-participant session path:
     ``ritual join <id> [role=sinner|sineater]``      — accept your invitation
     ``ritual decline <id>``                          — decline your invitation
     ``ritual fire <id>``                             — fire the session (initiator only)
+    ``ritual cancel <id>``                           — cancel a pending session (initiator only)
 
 The web path uses ``RitualSessionViewSet`` for sessions and ``RitualPerformView``
 for single-actor rituals — both converge on the same service functions.
@@ -33,7 +34,7 @@ from commands.exceptions import CommandError
 
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
-_SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire"})
+_SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 # Kwargs carried into session/participant dicts for rituals that need setup
 # info (e.g. the soul-tether BILATERAL). Keys match what the ritual's
 # service_function_path reads off RitualSession.session_kwargs /
@@ -93,6 +94,7 @@ class CmdRitual(ArxCommand):
         ``ritual join <id> [role=sinner|sineater]``       — accept your invitation
         ``ritual decline <id>``                           — decline your invitation
         ``ritual fire <id>``                              — fire the session (initiator only)
+        ``ritual cancel <id>``                           — cancel a pending session (initiator only)
     """
 
     key = "ritual"
@@ -115,6 +117,8 @@ class CmdRitual(ArxCommand):
                     self._handle_decline(rest)
                 elif first == "fire":  # noqa: STRING_LITERAL
                     self._handle_fire(rest)
+                elif first == "cancel":  # noqa: STRING_LITERAL
+                    self._handle_cancel(rest)
             except CommandError as err:
                 self.caller.msg(str(err))
         else:
@@ -357,6 +361,20 @@ class CmdRitual(ArxCommand):
             msg = f"Session #{session_id} cannot fire yet — not all participants have responded."
             raise CommandError(msg) from None
         self.caller.msg(f"Ritual session #{session_id} has been fired. The ritual is complete.")
+
+    def _handle_cancel(self, rest: str) -> None:
+        """Cancel a pending session (initiator only): ``cancel <id>``."""
+        from world.magic.models.sessions import RitualSession  # noqa: PLC0415
+        from world.magic.services.sessions import cancel_session  # noqa: PLC0415
+
+        session_id = self._parse_session_id(rest, "Usage: ritual cancel <session_id>")
+        sheet = self.caller.sheet_data
+        session = RitualSession.objects.filter(pk=session_id, initiator=sheet).first()
+        if session is None:
+            msg = f"Session #{session_id} not found or you are not its initiator."
+            raise CommandError(msg)
+        cancel_session(session=session)
+        self.caller.msg(f"Ritual session #{session_id} has been cancelled.")
 
     # ------------------------------------------------------------------
     # Single-actor helpers (unchanged)
