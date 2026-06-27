@@ -120,8 +120,8 @@ rows. Key service functions:
   design input type; raises `TechniqueDraftIncomplete` on missing required fields.
 
 `validate_design_for_character(design, policy, character)` in `services/technique_builder.py` is
-the shared player-facing gift-ownership gate (the single gate, no longer duplicated in the
-serializer). Call it after `draft_to_design` when finalising from telnet or web. Raises
+the shared player-facing gift-ownership gate — the single source of truth for the gate. Call it
+after `draft_to_design` when finalising from telnet or web. Raises
 `GiftNotOwned` if the character doesn't own the design's gift.
 
 Draft-specific exceptions (in `exceptions.py`): `NoActiveTechniqueDraft`,

@@ -167,7 +167,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     and `remove_*` counterparts (`services/technique_draft.py`).
     `draft_to_design(draft) -> TechniqueDesignInput` — completeness gate → design input.
     `validate_design_for_character(design, policy, character)` (`services/technique_builder.py`)
-    — gift-ownership gate; single source of truth (no longer duplicated in the serializer).
+    — gift-ownership gate; single source of truth (telnet + web converge on it).
   - Standalone casting (#1306):
     `ensure_technique_cast_content()` (`seeds_cast.py`) — idempotent seed: shared
     "Technique Cast" `ActionTemplate` + fallback `CheckType` + graded "Magic: Technique

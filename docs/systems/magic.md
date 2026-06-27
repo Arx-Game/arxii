@@ -120,10 +120,12 @@ excess deals damage to the caster.
 
 ### Technique Authoring Draft Workbench (#1496) [BUILT & WIRED]
 
-Both the web frontend (`TechniqueViewSet.author`) and the staff telnet command (`CmdTechnique`)
-converge on `AuthorTechniqueAction.run()` (`actions/definitions/technique_authoring.py`,
-key `"author_technique"`, category `"magic"`). The action catches all budget/permission/gift/
-draft exceptions and returns a failure `ActionResult`.
+The web frontend (`TechniqueViewSet.author`, player path) and the staff telnet command
+(`CmdTechnique`) converge on `AuthorTechniqueAction.run()`
+(`actions/definitions/technique_authoring.py`, key `"author_technique"`, category `"magic"`).
+The action catches all budget/permission/gift/draft exceptions and returns a failure
+`ActionResult`. (A staff account with no acting character has no `ObjectDB` actor to dispatch,
+so that web case calls `author_staff_technique()` directly.)
 
 **Abstract payload bases** (`models/techniques.py`) — shared by committed and draft rows:
 
@@ -155,7 +157,7 @@ draft exceptions and returns a failure `ActionResult`.
 
 **Shared validation gate** (`services/technique_builder.py`):
 - `validate_design_for_character(design, policy, character)` — gift-ownership check; the single
-  gate (no longer duplicated in the serializer); raises `GiftNotOwned`.
+  source of truth for the gate (telnet + web call it); raises `GiftNotOwned`.
 
 **Exceptions** (in `exceptions.py`): `NoActiveTechniqueDraft`, `TechniqueDraftIncomplete`,
 `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
