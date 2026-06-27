@@ -16,6 +16,7 @@ from world.relationships.models import (
     RelationshipTrack,
     RelationshipTrackProgress,
     RelationshipUpdate,
+    WriteupComplaint,
 )
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
@@ -173,3 +174,42 @@ class RelationshipChangeAdmin(admin.ModelAdmin):
     search_fields = ["title"]
     list_select_related = ["relationship", "source_track", "target_track"]
     readonly_fields = ["created_at"]
+
+
+@admin.register(WriteupComplaint)
+class WriteupComplaintAdmin(admin.ModelAdmin):
+    list_display = [
+        "writeup_ref",
+        "author_sheet_col",
+        "subject_sheet_col",
+        "complainant",
+        "created_at",
+        "resolved",
+    ]
+    list_filter = ["resolved"]
+    search_fields = ["reason"]
+    list_editable = ["resolved"]
+    list_select_related = [
+        "complainant",
+        "update__author",
+        "development__author",
+        "capstone__author",
+    ]
+    readonly_fields = ["created_at"]
+
+    @admin.display(description="Writeup")
+    def writeup_ref(self, obj):
+        writeup = obj.writeup
+        return writeup.title if writeup else "—"
+
+    @admin.display(description="Author")
+    def author_sheet_col(self, obj):
+        writeup = obj.writeup
+        return writeup.author if writeup else "—"
+
+    @admin.display(description="Subject")
+    def subject_sheet_col(self, obj):
+        writeup = obj.writeup
+        if writeup is None:
+            return "—"
+        return writeup.relationship.target
