@@ -16,10 +16,17 @@ from world.mechanics.constants import (
 from world.mechanics.models import CharacterModifier, ModifierTarget
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
+    from world.goals.models import GoalJournal
+    from world.goals.types import GoalInputData
 
 # Base goal points available to distribute at character creation
 DEFAULT_GOAL_POINTS = 30
+
+# Maximum total points a character can allocate across all goals
+MAX_GOAL_POINTS = 30
 
 
 def get_goal_bonus(
@@ -128,6 +135,98 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
     bonus = sum(m.value for m in bonus_modifiers)
 
     return base_points + bonus
+
+
+def set_character_goals(
+    *,
+    character: "ObjectDB",
+    goals: list["GoalInputData"],
+) -> list[CharacterGoal]:
+    """Replace a character's goal allocations, enforcing the weekly revision limit.
+
+    Validates total points (<= MAX_GOAL_POINTS) and rejects duplicate domains.
+    First-time setup (no existing goals) skips the revision gate. Mirrors the
+    former inline ``CharacterGoalViewSet.update_all`` logic; raises ``GoalError``
+    on revision-too-soon / over-cap / duplicate-domain.
+
+    Args:
+        character: The character (ObjectDB) whose goals are being set.
+        goals: Validated goal allocations — each a ``GoalInputData`` dict
+            with ``domain`` (ModifierTarget pk or instance), ``points``, ``notes``.
+
+    Returns:
+        The new ``CharacterGoal`` rows (re-fetch with domain prefetched).
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.goals.models import GoalRevision  # noqa: PLC0415
+    from world.goals.types import GoalError  # noqa: PLC0415
+
+    revision, _created = GoalRevision.objects.get_or_create(character=character)
+    has_existing_goals = CharacterGoal.objects.filter(character=character).exists()
+
+    if has_existing_goals and not revision.can_revise():
+        raise GoalError(GoalError.REVISION_TOO_SOON)
+
+    # Resolve domains + validate cap/duplicates in one pass.
+    resolved: list[tuple[ModifierTarget, int, str]] = []
+    total_points = 0
+    seen_domain_ids: set[int] = set()
+    for goal_data in goals:
+        domain = goal_data["domain"]
+        if isinstance(domain, int):
+            domain = ModifierTarget.objects.get(pk=domain)
+        if domain.pk in seen_domain_ids:
+            raise GoalError(GoalError.DUPLICATE_DOMAIN)
+        seen_domain_ids.add(domain.pk)
+        points = goal_data.get("points", 0)
+        notes = goal_data.get("notes", "")
+        if points > 0 or notes:
+            resolved.append((domain, points, notes))
+        total_points += points
+
+    if total_points > MAX_GOAL_POINTS:
+        raise GoalError(GoalError.OVER_POINT_CAP)
+
+    with transaction.atomic():
+        CharacterGoal.objects.filter(character=character).delete()
+        for domain, points, notes in resolved:
+            CharacterGoal.objects.create(
+                character=character,
+                domain=domain,
+                points=points,
+                notes=notes,
+            )
+        if has_existing_goals:
+            revision.mark_revised()
+
+    return list(CharacterGoal.objects.filter(character=character).select_related("domain"))
+
+
+def log_goal_progress(
+    *,
+    character: "ObjectDB",
+    domain: "ModifierTarget | None",
+    title: str,
+    content: str,
+    is_public: bool = False,
+) -> "GoalJournal":
+    """Create a goal-progress journal entry, awarding flat 1 XP.
+
+    Mirrors the former inline ``GoalJournalViewSet.create`` /
+    ``GoalJournalCreateSerializer.create``. ``domain`` may be ``None`` for
+    unattributed reflections.
+    """
+    from world.goals.models import GoalJournal  # noqa: PLC0415
+
+    return GoalJournal.objects.create(
+        character=character,
+        domain=domain,
+        title=title,
+        content=content,
+        is_public=is_public,
+        xp_awarded=1,
+    )
 
 
 def get_goal_bonuses_breakdown(
