@@ -40,6 +40,44 @@ from world.magic.services.sanctum_weaving import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+
+# ---------------------------------------------------------------------------
+# Module-level resolution helpers — shared with commands/sanctum.py so the
+# room→RoomProfile→SanctumDetails walk lives in exactly one place.
+# ---------------------------------------------------------------------------
+
+
+def room_profile_for_location(location: Any) -> Any:
+    """Return the ``RoomProfile`` for *location*, or ``None``.
+
+    Imported by ``commands/sanctum.py`` so the room-profile resolution is
+    single-sourced.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    if location is None:
+        return None
+    return RoomProfile.objects.filter(objectdb=location).first()
+
+
+def sanctum_in_room(location: Any) -> Any:
+    """Return the ``SanctumDetails`` for the room at *location*, or ``None``.
+
+    Imported by ``commands/sanctum.py`` and tested independently so both
+    surfaces share one resolution path.
+    """
+    from world.magic.models import SanctumDetails  # noqa: PLC0415
+
+    rp = room_profile_for_location(location)
+    if rp is None:
+        return None
+    return (
+        SanctumDetails.objects.select_related("feature_instance__room_profile", "resonance_type")
+        .filter(feature_instance__room_profile=rp)
+        .first()
+    )
+
+
 SANCTUM_EXC = (
     SanctificationError,
     DissolutionError,
@@ -73,25 +111,10 @@ class SanctumActionBase(Action):
         return active_persona_for_sheet(sheet)
 
     def _room_profile(self, actor: ObjectDB) -> Any:
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-
-        if actor.location is None:
-            return None
-        return RoomProfile.objects.filter(objectdb=actor.location).first()
+        return room_profile_for_location(actor.location)
 
     def _sanctum_in_room(self, actor: ObjectDB) -> Any:
-        from world.magic.models import SanctumDetails  # noqa: PLC0415
-
-        rp = self._room_profile(actor)
-        if rp is None:
-            return None
-        return (
-            SanctumDetails.objects.select_related(
-                "feature_instance__room_profile", "resonance_type"
-            )
-            .filter(feature_instance__room_profile=rp)
-            .first()
-        )
+        return sanctum_in_room(actor.location)
 
     @staticmethod
     def _fail(message: str) -> ActionResult:

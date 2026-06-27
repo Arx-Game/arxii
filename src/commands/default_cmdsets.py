@@ -83,6 +83,7 @@ from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
+from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
 from commands.setstage import CmdSetStage
 from commands.social.blocking import (
@@ -164,6 +165,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRitual,
             # #1349 — telnet face of the mission play services (resolve/abandon/group pick+vote).
             CmdMission,
+            # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
+            # weave/dissolve/absorb/sever).
+            CmdSanctum,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
