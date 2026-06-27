@@ -489,6 +489,10 @@ def _combat_actions(
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
+    grants = list(grants)
+    if not grants:
+        return []
+
     fury_tiers = tuple(
         FuryTierOption(
             id=t.pk,
@@ -501,6 +505,18 @@ def _combat_actions(
         for t in FuryTier.objects.order_by("depth")
     )
     soulfray_warning = get_soulfray_warning(character)
+    anchors: list[AnchorOption] = []
+    for rel in CharacterRelationship.objects.filter(
+        source=sheet, is_active=True, is_pending=False
+    ).select_related("target", "target__character"):
+        anchor_sheet = rel.target
+        cap = provocation_cap(character, anchor_sheet)
+        if cap < 1:
+            continue
+        anchor_char = anchor_sheet.character
+        name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
+        anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
+    eligible_fury_anchors = tuple(anchors)
 
     result: list[PlayerAction] = []
     for grant in grants:
@@ -513,17 +529,6 @@ def _combat_actions(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
         )
-        anchors: list[AnchorOption] = []
-        for rel in CharacterRelationship.objects.filter(
-            source=sheet, is_active=True, is_pending=False
-        ).select_related("target", "target__character"):
-            anchor_sheet = rel.target
-            cap = provocation_cap(character, anchor_sheet)
-            if cap < 1:
-                continue
-            anchor_char = anchor_sheet.character
-            name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-            anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
         result.append(
             PlayerAction(
                 backend=ActionBackend.COMBAT,
@@ -535,7 +540,7 @@ def _combat_actions(
                 reach=technique.reach,
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
-                eligible_fury_anchors=tuple(anchors),
+                eligible_fury_anchors=eligible_fury_anchors,
             )
         )
 
