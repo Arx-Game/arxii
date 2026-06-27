@@ -89,7 +89,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, trust tiers, time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
 | [Investigation & Discovery](investigation-discovery.md) | in-progress | Clue model, room search, passive triggers, collaborative research projects, gating, rescue-as-clue — core loop shipped; trigger sources + journal UI remain |
-| [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards |
+| [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards. Action-backed (#1350): web+telnet (`CmdJournal`/`CmdGoal`) converge on `action.run()` |
 | [Societies & Organizations](societies.md) | in-progress | Societies, organizations, reputation, legend, alter egos |
 | [Achievements & Discoveries](achievements.md) | in-progress | Achievement tracking, first-to-discover, stat tracking, chains |
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |

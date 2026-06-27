@@ -470,9 +470,19 @@ Goal domain allocation and journal-based XP progression.
 - **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
-- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget)
+- **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `set_character_goals` / `log_goal_progress` Actions wrap the services; web `CharacterGoalViewSet`/`GoalJournalViewSet` + telnet `CmdGoal` converge on `action.run()`
+- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget), actions (write paths Action-backed)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
+### Journals
+Character journal entries (public/private), praises, retorts, freeform tags, weekly XP.
+
+- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
+- **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
+- **Source:** `src/world/journals/`
 ### Action Points
 Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
