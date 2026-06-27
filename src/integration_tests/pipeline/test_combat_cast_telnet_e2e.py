@@ -543,3 +543,28 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertIn("Anima: 20/20", out)
         self.assertIn("Soulfray: Frayed", out)
         self.assertIn("death risk", out)
+
+    def test_combat_hub_shows_committed_fury(self) -> None:
+        """A declared fury tier + anchor surfaces on the combat hub (pre-resolve)."""
+        from world.magic.factories import FuryConfigFactory, FuryTierFactory
+
+        FuryConfigFactory()
+        tier = FuryTierFactory()
+        anchor_sheet = CharacterSheetFactory()
+
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            _make_cmd(
+                self.character,
+                f"{self.technique.name} at {self.opponent_name} "
+                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+            ).func()
+
+        cmd = _make_combat_cmd(self.character, "")
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            cmd.func()
+        out = "\n".join(cmd._captured)
+        self.assertIn("Fury:", out)
+        self.assertIn(str(tier.depth), out)
+        self.assertIn(anchor_sheet.character.db_key, out)
+        self.assertIn("retained", out)  # no Berserk yet → control retained
+        self.assertNotIn("Berserk:", out)

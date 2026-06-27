@@ -135,12 +135,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         return combo.pk
 
-    def _render_resource_state(self, participant: Any) -> list[str]:
+    def _render_resource_state(self, participant: Any, action: Any) -> list[str]:
         """Anima + soulfray (always, if present) + fury/Berserk (active round only).
 
         Read-only over existing services — no mechanics. ``participant`` is the
-        caller's CombatParticipant or None (outside an encounter); fury/Berserk
-        are suppressed when it is None.
+        caller's CombatParticipant or None; ``action`` is this round's
+        CombatRoundAction (or None). Fury/Berserk are suppressed when
+        ``participant`` is None (outside an encounter).
         """
         from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
@@ -156,7 +157,28 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         if warning is not None:
             risk = " — |rdeath risk|n" if warning.has_death_risk else ""
             lines.append(f"Soulfray: {warning.stage_name}{risk}")
+
+        if participant is not None and action is not None and action.fury_commitment_id:
+            anchor_name = "unknown"
+            if action.fury_anchor_id and action.fury_anchor is not None:
+                anchor_char = action.fury_anchor.character
+                if anchor_char is not None:
+                    anchor_name = anchor_char.db_key
+            control = (self._berserk_active(character) and "lost") or "retained"
+            lines.append(
+                f"Fury: committed (depth {action.fury_commitment.depth}, "
+                f"anchored to {anchor_name}) — control {control}"
+            )
         return lines
+
+    def _berserk_active(self, character: Any) -> bool:
+        """True when a Berserk ConditionInstance is currently active on *character*."""
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        return ConditionInstance.objects.filter(
+            target=character,
+            condition__name="Berserk",
+        ).exists()
 
     def _show_status_hub(self) -> None:
         """Print resource/risk state + the declared action + available subverbs."""
@@ -167,16 +189,22 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         ]
         participant = self._combat_participant_or_none()
         if participant is None:
-            lines.extend(self._render_resource_state(participant))
+            lines.extend(self._render_resource_state(participant, None))
             lines.append("You are not currently declaring in combat.")
         else:
             from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
-            action = CombatRoundAction.objects.filter(
-                participant=participant,
-                round_number=participant.encounter.round_number,
-            ).first()
-            lines.extend(self._render_resource_state(participant))
+            action = (
+                CombatRoundAction.objects.select_related(
+                    "fury_commitment", "fury_anchor__character"
+                )
+                .filter(
+                    participant=participant,
+                    round_number=participant.encounter.round_number,
+                )
+                .first()
+            )
+            lines.extend(self._render_resource_state(participant, action))
             if action is None:
                 lines.append("You have not declared an action this round.")
             else:
