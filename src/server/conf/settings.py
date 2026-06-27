@@ -86,6 +86,7 @@ INSTALLED_APPS += [
     "world.tarot.apps.TarotConfig",
     "world.areas.apps.AreasConfig",
     "world.locations.apps.LocationsConfig",
+    "world.weather.apps.WeatherConfig",
     "world.instances.apps.InstancesConfig",
     "world.captivity.apps.CaptivityConfig",
     "world.journals.apps.JournalsConfig",

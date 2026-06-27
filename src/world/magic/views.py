@@ -145,7 +145,6 @@ from world.magic.services.technique_builder import (
     PlayerPolicy,
     StaffPolicy,
     author_staff_technique,
-    author_technique,
     enforce_policy,
 )
 from world.roster.models import RosterEntry
@@ -325,6 +324,32 @@ def _breakdown_to_dict(breakdown) -> dict:
     }
 
 
+def _map_author_result(action_result) -> Response:
+    """Map an ``AuthorTechniqueAction`` result to the HTTP contract for ``author``.
+
+    - success → 201 with TechniqueSerializer data + ``breakdown`` key
+    - failure with ``error=not_permitted`` in data → 403
+    - failure with ``breakdown`` in data → 400 with detail + breakdown
+    - other failure → 400 with detail
+    """
+    if not action_result.success:
+        err_data = action_result.data or {}
+        if err_data.get("error") == "not_permitted":  # noqa: STRING_LITERAL
+            return Response({"detail": action_result.message}, status=status.HTTP_403_FORBIDDEN)
+        if "breakdown" in err_data:  # noqa: STRING_LITERAL
+            return Response(
+                {
+                    "detail": action_result.message,
+                    "breakdown": _breakdown_to_dict(err_data["breakdown"]),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"detail": action_result.message}, status=status.HTTP_400_BAD_REQUEST)
+    data = TechniqueSerializer(action_result.data["technique"]).data
+    data["breakdown"] = _breakdown_to_dict(action_result.data["breakdown"])
+    return Response(data, status=status.HTTP_201_CREATED)
+
+
 class TechniqueViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Technique records.
@@ -406,7 +431,13 @@ class TechniqueViewSet(viewsets.ModelViewSet):
         Player path: enforces budget, binds CharacterTechnique.
         Staff path: advisory budget, no character binding.
         Returns 201 with the Technique + breakdown on success;
-        400 with breakdown when a player exceeds budget.
+        400 with breakdown when a player exceeds budget;
+        403 when the tier is not permitted for the character.
+
+        Both the player path and the staff path (when the staff user has an
+        acting in-game character) converge on ``AuthorTechniqueAction.run()``
+        (#1496 ADR-0001 convergence). Staff users with no acting character fall
+        back to the direct service layer — that path requires no ObjectDB actor.
         """
         policy, character = self._resolve_policy_and_character(request)
         ser = TechniqueDesignSerializer(
@@ -415,17 +446,29 @@ class TechniqueViewSet(viewsets.ModelViewSet):
         )
         ser.is_valid(raise_exception=True)
         design = ser.validated_data["_design"]
+
+        # Resolve the ObjectDB actor.  Players always have a character; staff
+        # may not (pure data-authoring role with no in-game presence).
+        actor_obj = character.character if character is not None else None
+
+        if actor_obj is not None:
+            from actions.definitions.technique_authoring import (  # noqa: PLC0415
+                AuthorTechniqueAction,
+            )
+
+            action_result = AuthorTechniqueAction().run(
+                actor=actor_obj,
+                design=design,
+                as_staff=isinstance(policy, StaffPolicy),
+            )
+            return _map_author_result(action_result)
+
+        # Staff with no acting in-game character — direct service path.
         try:
-            if isinstance(policy, StaffPolicy):
-                tech, breakdown = author_staff_technique(design)
-            else:
-                tech, breakdown = author_technique(character, design)
+            tech, breakdown = author_staff_technique(design)
         except TechniqueBudgetExceeded as exc:
             return Response(
-                {
-                    "detail": exc.user_message,
-                    "breakdown": _breakdown_to_dict(exc.breakdown),
-                },
+                {"detail": exc.user_message, "breakdown": _breakdown_to_dict(exc.breakdown)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except TechniqueAuthoringNotPermitted as exc:

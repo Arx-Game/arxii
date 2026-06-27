@@ -76,6 +76,14 @@ The magic system for Arx II. Power flows from identity and connection.
 - `Technique` - Authored magical abilities with level, style, effect type (created via the budget builder or staff CRUD — see "Technique authoring" below)
 - `CharacterGift` - Links characters to known Gifts
 - `CharacterTechnique` - Links characters to known Techniques
+- `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition` — abstract bases
+  (`models/techniques.py`) whose columns are shared by both the committed `Technique*` and the draft
+  `TechniqueDraft*` payload rows; each concrete subclass adds only its owner FK.
+- `TechniqueDraft` — one-per-`CharacterSheet` in-progress design workbench
+  (`related_name="technique_draft"`). Created/returned by `get_or_start_draft`; deleted by
+  `discard_draft`. No JSON; every field is a proper column.
+- `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` / `TechniqueDraftAppliedCondition`
+  — payload child rows for `TechniqueDraft`; inherit the abstract bases above.
 - `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
 - `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
 - `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: sineating anima/fatigue costs per unit, per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, rescue budget bases and multipliers. All fields are integers; multipliers encoded as integer-tenths or integer-hundredths. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`.
@@ -97,12 +105,57 @@ The magic system for Arx II. Power flows from identity and connection.
 - `author_technique(character, design)` — player path: `PlayerPolicy` (enforced) → build → bind `CharacterTechnique`.
 - `author_staff_technique(design, *, creator=None)` — staff path: `StaffPolicy` (advisory) → build; no character binding.
 
+**Draft workbench** (`services/technique_draft.py`, `models/technique_draft.py`):
+
+`TechniqueDraft` is the in-progress design row (one per `CharacterSheet`). Its payload children
+inherit the abstract payload bases, so every payload column is identical between draft and committed
+rows. Key service functions:
+- `get_or_start_draft(character) -> TechniqueDraft` — creates or returns the active draft.
+- `discard_draft(character)` — deletes the draft and all child payload rows.
+- `set_draft_fields(draft, **fields)` — updates name/description/gift/style/effect_type/level/etc.
+- `add_draft_restriction(draft, restriction)` / `remove_draft_restriction(draft, restriction)`
+- `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
+  and their `remove_*` counterparts — payload row management.
+- `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness and converts to the
+  design input type; raises `TechniqueDraftIncomplete` on missing required fields.
+
+`validate_design_for_character(design, policy, character)` in `services/technique_builder.py` is
+the shared player-facing gift-ownership gate — the single source of truth for the gate. Call it
+after `draft_to_design` when finalising from telnet or web. Raises
+`GiftNotOwned` if the character doesn't own the design's gift.
+
+Draft-specific exceptions (in `exceptions.py`): `NoActiveTechniqueDraft`,
+`TechniqueDraftIncomplete`, `UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+
+**Action seam** — `AuthorTechniqueAction` (`actions/definitions/technique_authoring.py`,
+key `"author_technique"`, category `"magic"`) is the single commit seam that both the web view
+and the telnet workbench converge on. It calls `draft_to_design` → `validate_design_for_character`
+→ the appropriate context wrapper, catching budget/permission/gift/draft exceptions and returning
+a failure `ActionResult` whose `message` the web view maps to HTTP 400/403.
+
 **API endpoints** on `TechniqueViewSet` (`/api/magic/techniques/`):
-- `POST .../author/` — resolves policy from the requesting user (staff → `StaffPolicy`; otherwise `PlayerPolicy`); returns 201 with `TechniqueSerializer` + breakdown, or 400 with breakdown when a player is over-budget.
+- `POST .../author/` — dispatches `AuthorTechniqueAction.run()` for the player path (HTTP contract
+  preserved: 201/400/403). Staff-without-character uses `author_staff_technique()` directly (no
+  `CharacterSheet` actor). Returns 201 with `TechniqueSerializer` + breakdown, or 400 with
+  breakdown when a player is over-budget.
 - `POST .../price/` — dry-run; returns the `TechniqueCostBreakdown` for any author without creating rows.
 - Base `create`/`update`/`destroy` are staff-only raw admin CRUD (`IsAdminUser` permission).
 
-**Frontend** — `TechniqueBuilderForm` with `mode: "staff" | "player"`. Staff mode shows the budget meter informationally without blocking; player mode gates submit on `within_budget`. `usePriceTechnique` (debounced `POST .../price/`) drives the live budget meter; `useAuthorTechnique` handles submission.
+**Frontend** — `TechniqueBuilderForm` with `mode: "staff" | "player"`. Staff mode shows the budget
+meter informationally without blocking; player mode gates submit on `within_budget`. `usePriceTechnique`
+(debounced `POST .../price/`) drives the live budget meter; `useAuthorTechnique` handles submission.
+
+**Telnet workbench** — `CmdTechnique` (`commands/technique.py`, key `"technique"`, lock
+`cmd:perm(Builder)` — staff/GM-only; not available to base players). Subcommands:
+`draft` (create/show draft), `show` (print current draft), `set <key=value…>` (update fields
+in-place), `restrict <name>` / `grant` / `damage` / `condition` (add payload rows),
+`price` (dry-run breakdown), `author` (finalize via `AuthorTechniqueAction` with `as_staff=True`,
+`StaffPolicy` — no `CharacterTechnique` binding), `discard` (delete draft). Registered in
+`commands/default_cmdsets.py`.
+
+**Exposure** — technique authoring is currently staff/GM-only. Player self-service (CG
+technique-design step or a magical-research unlock — never on-demand) is a deferred
+`needs-design` follow-up; the web `author` endpoint and `PlayerPolicy` seam are already wired.
 
 ### Anima Recovery
 - `Ritual` (execution_kind=SCENE_ACTION) + `RitualCheckConfig` sidecar - Personalized recovery ritual (stat + skill + resonance + check_type)

@@ -17,7 +17,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
     `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`, `Cantrip`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
-    `TechniqueCapabilityGrant`
+    `TechniqueCapabilityGrant`,
+    `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition`
+    (abstract payload bases shared by `Technique*` and `TechniqueDraft*` rows),
+    `TechniqueDraft` (one-per-CharacterSheet in-progress design workbench —
+    `related_name="technique_draft"`; no JSON; all proper columns),
+    `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
+    `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
   - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`
@@ -152,6 +158,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Technique authoring draft workbench (#1496):
+    `get_or_start_draft(character) -> TechniqueDraft`,
+    `discard_draft(character)`,
+    `set_draft_fields(draft, **fields) -> TechniqueDraft`,
+    `add_draft_restriction` / `remove_draft_restriction`,
+    `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
+    and `remove_*` counterparts (`services/technique_draft.py`).
+    `draft_to_design(draft) -> TechniqueDesignInput` — completeness gate → design input.
+    `validate_design_for_character(design, policy, character)` (`services/technique_builder.py`)
+    — gift-ownership gate; single source of truth (telnet + web converge on it).
   - Standalone casting (#1306):
     `ensure_technique_cast_content()` (`seeds_cast.py`) — idempotent seed: shared
     "Technique Cast" `ActionTemplate` + fallback `CheckType` + graded "Magic: Technique
@@ -205,7 +221,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
-  on cardinality/relationship violations) —
+  on cardinality/relationship violations),
+  `NoActiveTechniqueDraft` (no draft to work with),
+  `TechniqueDraftIncomplete` (required fields missing at `draft_to_design` time),
+  `UnknownTechniqueVocab` / `UnknownGift` (unknown vocab/gift name in telnet parser),
+  `GiftNotOwned` (character doesn't own the design's gift — `validate_design_for_character`) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
@@ -242,6 +262,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/entry-flourish/respond/` — body `{offer_id, resonance_id}`; resolves
     offer via `resolve_entry_flourish_offer` and fires the self-grant (#1140)
 - **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
+- **Technique authoring action:** `AuthorTechniqueAction` (key `"author_technique"`, category
+  `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
+  both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
+  (`cmd:perm(Builder)` — staff/GM only).
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
@@ -450,6 +474,21 @@ Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 - **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
 - **Source:** `src/world/realms/`
 - **Details:** [realms.md](realms.md)
+### Weather (Climate baseline + transient weather — #1522)
+Mechanical regional climate + transient weather feeding the #1514 comfort substrate.
+
+- **Models:** `Climate` (signed `temperature`/`moisture` baseline + `codex_subject` lore FK), `WeatherType` (name natural key; `is_automated`, `selection_weight`, `min`/`max_temperature` climate band), `WeatherTypeExposure` (`(type, stat_key) -> value`, mirrors `StyleAffinity`), `WeatherEmit` (season `in_*` + phase `at_*` gated flavour lines), `RegionWeatherState` (current weather per region Area), `FeastDay` (recurring `ic_month`/`ic_day` → special `WeatherType`)
+- **Designation:** `Area.climate` FK (mirrors `Area.realm`); `RegionWeatherState.area` OneToOne
+- **Climate services:** `get_effective_climate(area)` (most-specific-wins walk-up), `current_temperature_shift()` (per-month curve off the IC `game_clock`), `climate_exposure_base(climate, stat_key, *, temperature_shift=0)` (signed weights → floored COLD/HEAT/WET/DRY; WIND never climate-driven)
+- **Weather services:** `get_effective_weather(area)` (resolver), `eligible_weather_types(area)` (climate-temp-band filter), `roll_region_weather(area, *, weather_type=None)` (weighted-random eligible type → state + decaying source-tagged `weather:<area_pk>` exposure modifiers), `apply_weather_exposure`/`clear_region_weather`, `select_weather_emit(area, *, season=None, phase=None)` (season/phase-gated, weighted), `current_conditions(room) -> ConditionsSummary` (IC time + phase + season + weather + emit)
+- **Live loop + surface:** `world.weather.tasks.roll_and_echo_weather` cron (registered in `game_clock` at 2h real ≈ 6 IC h — rerolls each climate region + echoes one emit to online occupants as a `NarrativeCategory.WEATHER` message); telnet `time`/`weather` command (`commands/weather.py` `CmdTime`, with `weather squelch`/`unsquelch`); `GET /api/weather/conditions/?room_id=` (`WeatherViewSet` → `Conditions` schema) + the React `WeatherWidget` (`frontend/src/weather/`) in the `GameTopBar`
+- **Squelch:** `narrative.UserCategoryMute` (account, category) + `narrative.services.set_category_mute`/`is_category_muted` — suppresses a category's live push (e.g. WEATHER) while keeping it readable; gated in `send_narrative_message`
+- **Comfort integration:** climate folds into `world.locations.services.felt_exposure` before the 0-floor (a cooling fixture fights a desert's heat); weather writes the same cascade modifiers; `effective_value` stays climate-free
+- **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve), `WEATHER_FADE_DAYS`, `WEATHER_SOURCE_PREFIX` — PLACEHOLDER magnitudes
+- **Integrates with:** locations (exposure axes + comfort cascade), areas (`Area.climate`, `RegionWeatherState.area`), game_clock (IC season/phase/month), codex (lore)
+- **Feast days:** `special_weather_for_today()` — on an `ic_month`/`ic_day` match the tick forces the feast's special `WeatherType` (Eclipse / Moon Madness) world-wide, overriding the climate-gated roll (the GM-lever automation)
+- **Not yet wired:** re-seed-as-upsert for edited emits (loaddata duplicates keyless emit rows); wind-as-mechanic combat consumer (#1555, Tehom). Madness *mechanical* effects on characters are out of scope (Tehom)
+- **Source:** `src/world/weather/` — see `world/weather/CLAUDE.md`
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 

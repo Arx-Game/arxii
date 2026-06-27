@@ -175,6 +175,7 @@ from actions.definitions.social import (
     resolve_entry_flourish,
     restore_sense,
 )
+from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
@@ -220,6 +221,7 @@ _ALL_ACTIONS: list[Action] = [
     MoveToPositionAction(),
     SetTheStageAction(),
     PerformRitualAction(),
+    AuthorTechniqueAction(),
     ImbueAction(),
     WeaveThreadAction(),
     StartRoundAction(),

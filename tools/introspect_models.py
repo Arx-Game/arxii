@@ -53,6 +53,7 @@ TARGET_APPS = [
     "world.societies",
     "world.stories",
     "world.traits",
+    "world.weather",
 ]
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "systems" / "MODEL_MAP.md"

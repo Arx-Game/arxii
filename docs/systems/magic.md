@@ -118,6 +118,57 @@ separate casting handler. When intensity exceeds control at runtime, effects bec
 unpredictable and anima cost spikes. If anima cost exceeds the character's pool, the
 excess deals damage to the caster.
 
+### Technique Authoring Draft Workbench (#1496) [BUILT & WIRED]
+
+The web frontend (`TechniqueViewSet.author`, player path) and the staff telnet command
+(`CmdTechnique`) converge on `AuthorTechniqueAction.run()`
+(`actions/definitions/technique_authoring.py`, key `"author_technique"`, category `"magic"`).
+The action catches all budget/permission/gift/draft exceptions and returns a failure
+`ActionResult`. (A staff account with no acting character has no `ObjectDB` actor to dispatch,
+so that web case calls `author_staff_technique()` directly.)
+
+**Abstract payload bases** (`models/techniques.py`) — shared by committed and draft rows:
+
+| Model | Purpose |
+|-------|---------|
+| `AbstractCapabilityGrant` | Shared capability-grant columns; no owner FK |
+| `AbstractDamageProfile` | Shared damage-profile columns; no owner FK |
+| `AbstractAppliedCondition` | Shared applied-condition columns; no owner FK |
+
+**Draft workbench models** (`models/technique_draft.py`):
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `TechniqueDraft` | One-per-CharacterSheet in-progress design workbench | `character_sheet` FK (unique, `related_name="technique_draft"`), `name`, `description`, `gift` FK, `style` FK, `effect_type` FK, `intensity`, `control`, `anima_cost`, `level`, `target_type`, `reach`, `restrictions` M2M |
+| `TechniqueDraftCapabilityGrant` | Draft payload — capability grant row (inherits `AbstractCapabilityGrant`) | `draft` FK |
+| `TechniqueDraftDamageProfile` | Draft payload — damage profile row (inherits `AbstractDamageProfile`) | `draft` FK |
+| `TechniqueDraftAppliedCondition` | Draft payload — applied condition row (inherits `AbstractAppliedCondition`) | `draft` FK |
+
+**Draft services** (`services/technique_draft.py`):
+- `get_or_start_draft(character) -> TechniqueDraft` — creates or returns the active draft.
+- `discard_draft(character)` — deletes draft and all payload children.
+- `set_draft_fields(draft, **fields)` — typed field updates (name, description, gift, style,
+  effect_type, level, intensity, control, anima_cost, target_type, reach).
+- `add_draft_restriction` / `remove_draft_restriction` — restriction M2M management.
+- `add_draft_capability_grant` / `add_draft_damage_profile` / `add_draft_applied_condition`
+  and `remove_*` counterparts — payload row management.
+- `draft_to_design(draft) -> TechniqueDesignInput` — validates completeness; raises
+  `TechniqueDraftIncomplete` on missing required fields.
+
+**Shared validation gate** (`services/technique_builder.py`):
+- `validate_design_for_character(design, policy, character)` — gift-ownership check; the single
+  source of truth for the gate (telnet + web call it); raises `GiftNotOwned`.
+
+**Exceptions** (in `exceptions.py`): `NoActiveTechniqueDraft`, `TechniqueDraftIncomplete`,
+`UnknownTechniqueVocab`, `UnknownGift`, `GiftNotOwned`.
+
+**Telnet workbench** — `CmdTechnique` (`commands/technique.py`, key `"technique"`,
+`cmd:perm(Builder)` — staff/GM only). Subcommands: `draft`, `show`, `set`, `restrict`,
+`grant`, `damage`, `condition`, `price`, `author` (dispatches `AuthorTechniqueAction` with
+`StaffPolicy`), `discard`. Registered in `commands/default_cmdsets.py`.
+
+**Exposure:** staff/GM-only. Player self-service is a deferred `needs-design` follow-up.
+
 ### Cantrips (CG Technique Templates)
 
 | Model | Purpose | Key Fields |
@@ -800,6 +851,8 @@ the legacy ThreadType lookup no longer exists.
 | `/character-anima-rituals/` | GET/POST/PATCH/DELETE | Character's rituals |
 | `/character-facets/` | GET/POST/PATCH/DELETE | Character facet assignments |
 | `/techniques/` | GET/POST/PATCH | Character techniques |
+| `/techniques/author/` | POST | Author a technique via `AuthorTechniqueAction`; 201/400/403 |
+| `/techniques/price/` | POST | Dry-run budget breakdown (read-only) |
 
 ### Mage Scars (renamed from Magical Scars — §7.2 display-only)
 
@@ -931,3 +984,9 @@ execute_flow("cast_power", context={
   `world/conditions/types.py`, the neutral condition layer both combat and magic import directly.
 - **CombatRoundActionTarget** — new combat join table for AoE/multi-target technique actions (AREA and
   FILTERED_GROUP). SINGLE/SELF actions continue to use `CombatRoundAction.focused_opponent_target`.
+- **TechniqueDraft** — in-progress design workbench (one per CharacterSheet). Draft child rows
+  (`TechniqueDraftCapabilityGrant`, `TechniqueDraftDamageProfile`, `TechniqueDraftAppliedCondition`)
+  share abstract payload bases with the committed `Technique*` rows — no JSON, all queryable columns.
+- **AuthorTechniqueAction** (key `"author_technique"`) — the single author seam; telnet
+  `CmdTechnique` and the web `POST .../author/` both converge on it. Staff-only via telnet today;
+  player self-service is a deferred `needs-design` follow-up.

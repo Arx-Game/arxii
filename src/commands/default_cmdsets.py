@@ -99,6 +99,8 @@ from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
+from commands.technique import CmdTechnique
+from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
 from commands.who import CmdWho
@@ -220,6 +222,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
+            # #1496 — staff/GM technique authoring workbench (perm(Builder)).
+            CmdTechnique,
             # Unified scene-adaptive cast (#1351)
             CmdDeclareTechnique,
             # Clash contribution (#1451)
@@ -243,6 +247,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSetStage,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
             CmdComfort,
+            # #1522 — IC time + local weather readout (`time`/`weather`).
+            CmdTime,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
             # Training allocation and unlock purchase telnet surfaces.

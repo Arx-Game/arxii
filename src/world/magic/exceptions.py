@@ -381,3 +381,38 @@ class TechniqueBudgetExceeded(MagicError):
     def __init__(self, breakdown=None):
         super().__init__(self.user_message)
         self.breakdown = breakdown
+
+
+# =============================================================================
+# Technique Draft exceptions (#1496)
+# =============================================================================
+
+
+class NoActiveTechniqueDraft(MagicError):
+    user_message = "You have no technique draft. Start one with `technique draft <name>`."
+
+
+class TechniqueDraftIncomplete(MagicError):
+    """Raised when a required draft field is unset at draft_to_design time."""
+
+    user_message = "Draft is incomplete; some required fields are unset."
+
+    def __init__(self, missing_fields: list[str]) -> None:
+        self.missing_fields = list(missing_fields)
+        msg = f"Draft is incomplete. Missing: {', '.join(self.missing_fields)}."
+        self.user_message = msg
+        super().__init__(msg)
+
+
+class UnknownTechniqueVocab(MagicError):
+    user_message = "Unknown technique vocabulary term (gift, style, effect type, or restriction)."
+
+
+class UnknownGift(UnknownTechniqueVocab):
+    """Raised when a gift_id does not resolve to a known Gift."""
+
+    user_message = "Unknown gift."
+
+
+class GiftNotOwned(MagicError):
+    user_message = "You do not know that gift."

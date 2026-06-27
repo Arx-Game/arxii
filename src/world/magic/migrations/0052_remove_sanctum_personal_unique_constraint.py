@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0050_pending_ritual_effect"),
+        ("magic", "0051_alter_techniqueappliedcondition_condition_and_more"),
     ]
 
     operations = [

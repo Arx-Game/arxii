@@ -121,6 +121,36 @@ mapping for the per-character check (today all magic checks use the Arcana aspec
 The targeting model gaps (validity enforcement, AoE, frontend picker, standalone condition
 application) were resolved in #1321 — see the #1321 entry above.
 
+## Telnet technique-authoring workbench (#1496 — BUILT, staff/GM-only)
+
+Closes the `#1328` telnet-coverage gap for technique authoring. Surfaces built:
+
+- **`TechniqueDraft`** + three payload child models (`TechniqueDraftCapabilityGrant`,
+  `TechniqueDraftDamageProfile`, `TechniqueDraftAppliedCondition`) in
+  `src/world/magic/models/technique_draft.py`. Payload children inherit abstract bases
+  (`AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition` in
+  `models/techniques.py`) shared with the committed `Technique*` rows.
+- **Draft services** (`services/technique_draft.py`): `get_or_start_draft`, `discard_draft`,
+  `set_draft_fields`, restriction + payload add/remove helpers, `draft_to_design`.
+- **`validate_design_for_character`** (`services/technique_builder.py`) — gift-ownership
+  gate extracted from the serializer; now the single gate for both telnet and web.
+- **`AuthorTechniqueAction`** (key `"author_technique"`, category `"magic"`,
+  `actions/definitions/technique_authoring.py`) — the single commit seam. Both the web
+  `TechniqueViewSet.author` endpoint and `CmdTechnique` converge on `action.run()`.
+- **Web convergence** — `TechniqueViewSet.author` now dispatches `AuthorTechniqueAction.run()`
+  for the player path (HTTP contract preserved: 201/400/403). Staff-without-character retains
+  a direct `author_staff_technique()` fallback.
+- **`CmdTechnique`** (`commands/technique.py`, key `"technique"`, `cmd:perm(Builder)`) —
+  staff/GM-only telnet workbench with subcommands:
+  `draft show set restrict grant damage condition price author discard`.
+  `author` dispatches `AuthorTechniqueAction` with `as_staff=True` (`StaffPolicy`, advisory
+  budget, no `CharacterTechnique` binding).
+
+**Deferred `needs-design` follow-up:** when and how ordinary players earn technique authoring
+(CG design step, magical-research unlock, or other unlock mechanism — never on-demand).
+The `PlayerPolicy` seam and web `author` endpoint are already wired; the player-tier gate
+is a permissive `TODO` in `technique_builder.py`.
+
 ## Ritual of the Durance (#1352 — BUILT)
 
 The within-tier class-level advancement ceremony is complete. Magic's contribution:

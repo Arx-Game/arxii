@@ -275,3 +275,34 @@ class UserStoryMute(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"UserStoryMute(account=#{self.account_id}, story=#{self.story_id})"
+
+
+class UserCategoryMute(SharedMemoryModel):
+    """A user's preference to suppress real-time pushes for a whole narrative category.
+
+    The category-level analogue of ``UserStoryMute`` (e.g. mute the ``WEATHER`` echo). Like that
+    model, it does NOT gate read access — muted messages still create delivery rows and remain
+    readable in the category's tab; only the live ``character.msg()`` push is skipped.
+    """
+
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="category_mutes",
+    )
+    category = models.CharField(max_length=20, choices=NarrativeCategory.choices)
+    muted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "category"],
+                name="unique_user_category_mute",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["account", "category"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserCategoryMute(account=#{self.account_id}, category={self.category})"

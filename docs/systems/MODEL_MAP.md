@@ -113,8 +113,9 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
-  - technique_grants <- magic.TechniqueCapabilityGrant
+  - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -129,8 +130,9 @@
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
-  - technique_damage_profiles <- magic.TechniqueDamageProfile
+  - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
+  - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -148,8 +150,9 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
-  - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
+  - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -407,9 +410,11 @@
 
 ### Area
 **Foreign Keys:**
+  - weather_state -> weather.RegionWeatherState [OneToOne] (nullable)
   - building_profile -> buildings.Building [OneToOne] (nullable)
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
+  - climate -> weather.Climate [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
 **Pointed to by:**
   - children <- areas.Area
@@ -744,6 +749,7 @@
   - roster_entry -> roster.RosterEntry [OneToOne] (nullable)
   - path_intent -> progression.PathIntent [OneToOne] (nullable)
   - motif -> magic.Motif [OneToOne] (nullable)
+  - technique_draft -> magic.TechniqueDraft [OneToOne] (nullable)
   - purse -> currency.CharacterPurse [OneToOne] (nullable)
   - weekly_journal_xp -> journals.WeeklyJournalXP [OneToOne] (nullable)
   - fatigue -> fatigue.FatiguePool [OneToOne] (nullable)
@@ -1071,6 +1077,8 @@
 **Pointed to by:**
   - children <- codex.CodexSubject
   - entries <- codex.CodexEntry
+  - climates <- weather.Climate
+  - weather_types <- weather.WeatherType
   - architectural_styles <- buildings.ArchitecturalStyle
 
 ### CodexSubjectBreadcrumb
@@ -1138,8 +1146,9 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
-  - technique_grants <- magic.TechniqueCapabilityGrant
+  - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
+  - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - applications <- mechanics.Application
@@ -1154,8 +1163,9 @@
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
-  - technique_damage_profiles <- magic.TechniqueDamageProfile
+  - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
+  - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -1173,8 +1183,9 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
-  - applied_by_techniques <- magic.TechniqueAppliedCondition
+  - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
+  - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -1808,10 +1819,12 @@
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' — The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
+- `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
 - `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' — A room's comfort level (1–10) for an occupant (#1514).`
 - `comfort_level_for_points(points: 'int') -> 'int' — Map raw comfort points to a 1–10 comfort level (#1514).`
 - `comfort_points(room: 'DefaultObject') -> 'int' — A room's raw comfort points (#1514): ``amenities − felt discomfort``.`
 - `comfort_summary(room: 'DefaultObject') -> 'ComfortSummary' — Resolve a room's comfort readout (#1514): level, points, the biting exposures, amenity.`
+- `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
@@ -1819,14 +1832,15 @@
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None) -> 'int' — Cascade-resolve a single axis value (stat or resonance) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' — Bulk-resolve cascade values across many rooms for one axis.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' — End a tenancy by setting ``ends_at``.`
-- `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514).`
+- `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
+- `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Create a new LocationTenancy row.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
-- `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514).`
+- `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
@@ -1929,6 +1943,7 @@
 **Pointed to by:**
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - technique_drafts <- magic.TechniqueDraft
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
 
 ### CharacterGift
@@ -1956,16 +1971,19 @@
   - available_restrictions <- magic.Restriction
   - techniques <- magic.Technique
   - cantrips <- magic.Cantrip
+  - technique_drafts <- magic.TechniqueDraft
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
 **Pointed to by:**
   - techniques <- magic.Technique
   - cantrips <- magic.Cantrip
+  - technique_drafts <- magic.TechniqueDraft
 
 ### Restriction
 **Pointed to by:**
   - techniques <- magic.Technique
+  - technique_drafts <- magic.TechniqueDraft
 
 ### IntensityTier
 **Pointed to by:**
@@ -1996,8 +2014,8 @@
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - capability -> conditions.CapabilityType [FK]
+  - technique -> magic.Technique [FK]
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 
 ### TechniqueCapabilityRequirement
@@ -2016,13 +2034,13 @@
 
 ### TechniqueAppliedCondition
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - condition -> conditions.ConditionTemplate [FK]
+  - technique -> magic.Technique [FK]
 
 ### TechniqueDamageProfile
 **Foreign Keys:**
-  - technique -> magic.Technique [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
+  - technique -> magic.Technique [FK]
 
 ### MagicalAlterationTemplate
 **Foreign Keys:**
@@ -2412,6 +2430,32 @@
 ### TechniqueBudgetConfig
 
 ### TechniqueTierBudget
+
+### TechniqueDraft
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [OneToOne]
+  - gift -> magic.Gift [FK] (nullable)
+  - style -> magic.TechniqueStyle [FK] (nullable)
+  - effect_type -> magic.EffectType [FK] (nullable)
+**Pointed to by:**
+  - capability_grants <- magic.TechniqueDraftCapabilityGrant
+  - damage_profiles <- magic.TechniqueDraftDamageProfile
+  - applied_conditions <- magic.TechniqueDraftAppliedCondition
+
+### TechniqueDraftCapabilityGrant
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK]
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - draft -> magic.TechniqueDraft [FK]
 
 ### ThreadPullCost
 
@@ -2919,12 +2963,18 @@
   - account -> accounts.AccountDB [FK]
   - story -> stories.Story [FK]
 
+### UserCategoryMute
+**Foreign Keys:**
+  - account -> accounts.AccountDB [FK]
+
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
 - `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' — Send a source-ambiguous ambient line to a room's bystanders (#885).`
+- `is_category_muted(*, account: 'AccountDB', category: 'str') -> 'bool' — Whether an account has muted a narrative category's live push.`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
+- `set_category_mute(*, account: 'AccountDB', category: 'str', muted: 'bool') -> 'None' — Mute or unmute a narrative category's real-time push for an account (#1522).`
 
 
 ## world.npc_services
@@ -4382,3 +4432,55 @@
 **Foreign Keys:**
   - chart -> traits.ResultChart [FK]
   - outcome -> traits.CheckOutcome [FK]
+
+
+## world.weather
+
+### Climate
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - areas <- areas.Area
+
+### WeatherType
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - exposures <- weather.WeatherTypeExposure
+  - emits <- weather.WeatherEmit
+  - active_in_regions <- weather.RegionWeatherState
+  - feast_days <- weather.FeastDay
+
+### WeatherTypeExposure
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+
+### WeatherEmit
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+
+### RegionWeatherState
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+  - weather_type -> weather.WeatherType [FK]
+
+### FeastDay
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+
+### Service Functions
+- `apply_weather_exposure(state: 'RegionWeatherState') -> 'None' — Re-materialize a region's weather as decaying source-tagged cascade modifiers (#1522).`
+- `clear_region_weather(area: 'Area') -> 'None' — Remove a region's weather state and its weather-sourced exposure modifiers (#1522).`
+- `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
+- `current_conditions(room: 'DefaultObject') -> 'ConditionsSummary' — IC time + the weather holding at a room, for the ``time`` command and frontend (#1522).`
+- `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
+- `eligible_weather_types(area: 'Area | None') -> 'list[WeatherType]' — Automated, active weather types whose temperature band fits the region's climate (#1522).`
+- `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
+- `get_effective_weather(area: 'Area | None') -> 'RegionWeatherState | None' — Walk up the area hierarchy to the nearest current-weather state (#1522).`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
+- `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
+- `get_ic_season(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.Season | None — Return the current IC season, or None if no clock exists.`
+- `month_temperature_shift(month: 'int') -> 'int' — The global temperature shift for an IC month (1–12); 0 if out of range.`
+- `roll_region_weather(area: 'Area', *, weather_type: 'WeatherType | None' = None) -> 'RegionWeatherState | None' — Set (or roll) a region's current weather and re-apply its exposure modifiers (#1522).`
+- `select_weather_emit(area: 'Area | None', *, season: 'Season | None' = None, phase: 'TimePhase | None' = None) -> 'WeatherEmit | None' — Pick a weighted-random atmospheric emit for a region's current weather (#1522).`
+- `special_weather_for_today(*, real_now: 'datetime | None' = None) -> 'WeatherType | None' — The special weather forced by a feast day on the current IC date, if any (#1522).`
