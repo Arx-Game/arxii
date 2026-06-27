@@ -115,6 +115,11 @@ from actions.definitions.rounds import (
     SetRoundModeAction,
     StartRoundAction,
 )
+from actions.definitions.scene_reactions import (
+    ReactToWindowAction,
+    ToggleFavoriteAction,
+    ToggleReactionAction,
+)
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
     deceive,
@@ -212,6 +217,9 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ToggleFavoriteAction(),
+    ToggleReactionAction(),
+    ReactToWindowAction(),
     CreateFirstImpressionAction(),
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
