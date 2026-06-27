@@ -611,3 +611,19 @@ class CombatCastTelnetE2ETests(TestCase):
         out = "\n".join(cmd._captured)
         self.assertIn("Berserk:", out)
         self.assertIn("active", out)
+
+    def test_combat_hub_outside_combat_shows_anima_only(self) -> None:
+        """Outside any encounter: anima (+ soulfray if present), no fury/Berserk."""
+        # A character with anima but no CombatParticipant / encounter.
+        solo_sheet = CharacterSheetFactory()
+        solo_char = solo_sheet.character
+        CharacterAnimaFactory(character=solo_char, current=7, maximum=10)
+
+        cmd = _make_combat_cmd(solo_char, "")
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            cmd.func()
+        out = "\n".join(cmd._captured)
+        self.assertIn("Anima: 7/10", out)
+        self.assertNotIn("Fury:", out)
+        self.assertNotIn("Berserk:", out)
+        self.assertIn("not currently declaring", out)

@@ -161,9 +161,11 @@ actions, backends, and service functions.
   namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
   `interpose [ally]` / `join` / `leave` / `ready` / `combo <name>` / `revert` / `yield`)
   to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
-  seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub (mirrors
-  `CmdSheet`). Verbs are namespaced — not bare top-level keys — to avoid exit/channel/alias
-  collisions (mirrors `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
+  seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub — anima +
+  soulfray stage (+ fury/Berserk when in an active round) alongside the declared action —
+  mirroring the resource/risk visibility the web combat panel will show (#1543). Verbs are
+  namespaced — not bare top-level keys — to avoid exit/channel/alias collisions (mirrors
+  `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`.
 - **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
