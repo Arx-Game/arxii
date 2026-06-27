@@ -179,3 +179,9 @@ None new. No django-unfold yet (that's #1221). No new models, no migration.
 - Phase B (#1221) tuning dashboard layers onto this hub.
 - Game theme / instance configuration (name, branding) — future direction noted in the
   hub wording; not built.
+- **Seed-source unification pass (deferred, non-blocking):** some CG-world content may
+  already be created independently elsewhere (e.g. by a magic-cluster helper or a
+  progression seeder). Per-cluster, on first contact: grep for other `get_or_create` /
+  seed sites creating the same rows and consolidate to one source (factories-as-seed-data
+  principle). Not a precondition for this PR — unify as each item is authored, not as a
+  separate up-front audit.
