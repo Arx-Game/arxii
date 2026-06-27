@@ -23,9 +23,6 @@ _SUBVERB_WRITE = "write"
 _SUBVERB_RESPOND = "respond"
 _SUBVERB_EDIT = "edit"
 _SUBVERB_LIST = "list"
-_WRITE_SUBVERBS = frozenset({_SUBVERB_WRITE, _SUBVERB_RESPOND, _SUBVERB_EDIT})
-_READ_SUBVERBS = frozenset({_SUBVERB_LIST})
-
 # Telnet key=value argument keys.
 _KEY_TYPE = "type"
 _KEY_TITLE = "title"
@@ -33,15 +30,21 @@ _KEY_BODY = "body"
 _KEY_TAGS = "tags"
 _FLAG_PUBLIC = "public"
 
-# Multi-word value keys — their value runs until the next ``key=`` token.
+# Multi-word value keys — their value runs until the next ``key=`` token or a
+# known bare flag (so ``body=Hello public`` does not swallow ``public``).
 _MULTIWORD_KEYS = frozenset({_KEY_TITLE, _KEY_BODY})
+
+# Bare-token flags — a multi-word value terminates when one appears.
+_KNOWN_FLAGS = frozenset({_FLAG_PUBLIC})
 
 
 def _parse_kwargs(rest: str) -> tuple[dict[str, str], set[str]]:
     """Split ``[key=value ...] [flag ...]`` into a kwargs dict + a flags set.
 
-    A multiword key (title/body) consumes tokens until the next ``key=`` token.
-    Bare tokens with no ``=`` are flags (e.g. ``public``).
+    A multiword key (title/body) consumes tokens until the next ``key=`` token
+    OR a known bare flag (``public``) — so ``body=Hello world public`` yields
+    body="Hello world" and sets the public flag, rather than absorbing the flag
+    into the body. Other bare tokens with no ``=`` are flags.
     """
     tokens = rest.split()
     kwargs: dict[str, str] = {}
@@ -54,11 +57,16 @@ def _parse_kwargs(rest: str) -> tuple[dict[str, str], set[str]]:
                 kwargs[key] = " ".join(value_parts).strip()
             key, _, value = token.partition("=")
             value_parts = [value] if value else []
+        elif key and key in _MULTIWORD_KEYS and token in _KNOWN_FLAGS:
+            kwargs[key] = " ".join(value_parts).strip()
+            key = ""
+            value_parts = []
+            flags.add(token)
         elif key and key in _MULTIWORD_KEYS:
             value_parts.append(token)
         elif key:
             # A bare token after a single-word key — treat as a flag if known.
-            if token in (_FLAG_PUBLIC,):
+            if token in _KNOWN_FLAGS:
                 flags.add(token)
             else:
                 msg = (
@@ -66,7 +74,7 @@ def _parse_kwargs(rest: str) -> tuple[dict[str, str], set[str]]:
                     "Multi-word values are only allowed for title and body."
                 )
                 raise CommandError(msg)
-        elif token in (_FLAG_PUBLIC,):
+        elif token in _KNOWN_FLAGS:
             flags.add(token)
         else:
             msg = f"Unexpected argument '{token}'."
