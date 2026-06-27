@@ -1,13 +1,22 @@
 """Tests for vitals survivability service layer."""
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
+from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory, ClassStageHealthRateFactory
 from world.classes.models import PathStage
-from world.conditions.factories import UnconsciousConditionFactory
+from world.conditions.factories import (
+    BleedingOutConditionFactory,
+    ConditionStageFactory,
+    DamageTypeFactory,
+    UnconsciousConditionFactory,
+)
+from world.conditions.models import ConditionInstance
 from world.fatigue.tests import setup_stat
 from world.traits.constants import PrimaryStat
 from world.traits.factories import CheckOutcomeFactory
@@ -187,6 +196,94 @@ class ProcessDamageConsequencesTest(TestCase):
             damage_type=None,
         )
         assert result.message == "No vitals found"
+
+
+def _build_death_pool_for_bleed_out(*, failure_outcome):
+    """Build a failure-tier Bleeding-Out consequence pool (caller wires to a DamageType)."""
+    bleed_out = BleedingOutConditionFactory()
+    ConditionStageFactory(condition=bleed_out, stage_order=1, name="Bleeding")
+    consequence = ConsequenceFactory(outcome_tier=failure_outcome, character_loss=False)
+    ConsequenceEffectFactory(
+        consequence=consequence,
+        effect_type=EffectType.APPLY_CONDITION,
+        condition_template=bleed_out,
+        target="self",
+    )
+    pool = ConsequencePoolFactory()
+    ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+    return bleed_out, pool
+
+
+@tag("postgres")
+class ProcessDamageConsequencesSourceCharacterTest(TestCase):
+    """Thread source_character through process_damage_consequences → Bleeding-Out.
+
+    @tag("postgres"): apply_condition for progressive Bleeding-Out uses the
+    PG-only DISTINCT ON query path.
+    """
+
+    def setUp(self) -> None:
+        ConditionInstance.objects.all().delete()
+
+    def test_bleed_out_carries_source_character(self) -> None:
+        """Attacker passed as source_character appears on the resulting ConditionInstance."""
+        failure_outcome = CheckOutcomeFactory(name="src-char-death-failure", success_level=-1)
+        bleed_out_template, death_pool = _build_death_pool_for_bleed_out(
+            failure_outcome=failure_outcome
+        )
+
+        attacker = CharacterFactory(db_key="src-attacker")
+        victim = CharacterFactory(db_key="src-victim")
+        sheet = CharacterSheetFactory(character=victim)
+        dtype = DamageTypeFactory(name="src-char-test-dtype")
+        dtype.death_pool = death_pool
+        dtype.save(update_fields=["death_pool"])
+
+        CharacterVitalsFactory(character_sheet=sheet, health=-5, max_health=100)
+
+        with force_check_outcome(failure_outcome):
+            result = process_damage_consequences(
+                character_sheet=sheet,
+                damage_dealt=30,
+                damage_type=dtype,
+                source_character=attacker,
+            )
+
+        assert result.dying is True, "Death tier must have fired"
+        instance = ConditionInstance.objects.filter(
+            target=victim, condition=bleed_out_template
+        ).first()
+        assert instance is not None, "Bleeding-Out ConditionInstance must exist"
+        assert instance.source_character == attacker
+
+    def test_no_source_character_yields_none(self) -> None:
+        """Calling without source_character leaves ConditionInstance.source_character None."""
+        failure_outcome = CheckOutcomeFactory(name="src-char-death-failure-2", success_level=-1)
+        bleed_out_template, death_pool = _build_death_pool_for_bleed_out(
+            failure_outcome=failure_outcome
+        )
+
+        victim2 = CharacterFactory(db_key="src-victim-2")
+        sheet2 = CharacterSheetFactory(character=victim2)
+        dtype2 = DamageTypeFactory(name="src-char-test-dtype-2")
+        dtype2.death_pool = death_pool
+        dtype2.save(update_fields=["death_pool"])
+
+        CharacterVitalsFactory(character_sheet=sheet2, health=-5, max_health=100)
+
+        with force_check_outcome(failure_outcome):
+            result = process_damage_consequences(
+                character_sheet=sheet2,
+                damage_dealt=30,
+                damage_type=dtype2,
+            )
+
+        assert result.dying is True, "Death tier must have fired"
+        instance = ConditionInstance.objects.filter(
+            target=victim2, condition=bleed_out_template
+        ).first()
+        assert instance is not None, "Bleeding-Out ConditionInstance must exist"
+        assert instance.source_character is None
 
 
 class CovenantRoleHealthTest(TestCase):

@@ -688,7 +688,9 @@ action consent flow, and a three-mode non-combat round framework.
   `mode`/`start_reason` orthogonal — danger rounds are STRICT, ensured via
   `ensure_round_for_acute_condition`, #1466), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
   defaults: `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
-  `anti_spam_seconds`; accessed via `get_scene_round_defaults_config()`), `SceneActionDeclaration`
+  `anti_spam_seconds`, `abandonment_grace_rounds` (#1479: N action-driven beats an abandoned downed
+  victim waits before fate resolves; default 2); accessed via `get_scene_round_defaults_config()`),
+  `SceneActionDeclaration`
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
   `max_actions_per_round`), `SceneRoundParticipant`
@@ -717,7 +719,20 @@ action consent flow, and a three-mode non-combat round framework.
     - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
     - `advance_pose_order_round_if_quorum(scene_round) -> SceneRound` — advance `round_number` when quorum met (round stays DECLARING).
     - `scene_round_is_complete(scene_round) -> bool` — quorum-gated (#1480): True when ≥ `ceil(advance_quorum_pct / 100 × present_active_count)` present ACTIVE `can_act` participants have a deferred (`is_immediate=False`) declaration; at 100 reduces to unanimity. Absent and present-`not can_act` participants are implicit passes.
-    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared present `can_act` participant is excluded from the END-tick target set so their own acute conditions don't advance (ADR-0004); declared/absent/unconscious participants tick as before.
+    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in
+      initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared
+      present `can_act` participant is excluded from the END-tick target set so their own acute
+      conditions don't advance (ADR-0004). **Downed-victim narrowing (#1479):** a DOWNED victim's
+      acute peril (Bleeding Out) advances on the END tick only when the peril's `source_character`
+      declared this round (`hostile_drove_round`); otherwise the peril HOLDS and
+      `ConditionInstance.abandoned_since_round` is stamped (`mark_abandoned`) when a potential
+      rescuer is present. After the END tick, `_resolve_abandonment_grace` resolves any victim whose
+      `round_number − abandoned_since_round ≥ SceneRoundDefaultsConfig.abandonment_grace_rounds` via
+      `world.vitals.services.resolve_abandonment`; a resolved peril lets the danger round auto-end.
+    - `resolve_solo_abandoned_victims(room, *, departing=None)` (#1479 Task 8) — when a departure
+      removes the last potential rescuer, any still-downed victim's fate resolves immediately via
+      `resolve_abandonment`; wired into `typeclasses.rooms.Room.at_object_leave`. `departing` is
+      excluded from the rescuer check so the mover is not counted as a remaining rescuer.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
@@ -1374,6 +1389,48 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/combat-magic-integration.md`,
   `docs/architecture/damage-scaling.md`,
   `docs/architecture/combat-conditions.md`
+
+### Vitals
+Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
+combat, poison, spells, exhaustion, and any damage source.
+
+- **Models:** `CharacterVitals` (OneToOne on CharacterSheet; fields: `life_state`
+  (`CharacterLifeState`: ALIVE/DEAD — the binary mortality axis), `health`, `max_health`,
+  `base_max_health` — null = derive from level/stamina/role; `died_at`),
+  `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling + pool FKs:
+  `knockout_pool`, `default_wound_pool`, `default_death_pool`)
+- **Key Services (`world/vitals/services.py`):**
+  - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
+  - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.
+  - `process_damage_consequences(character_sheet, damage, ...)` — full survivability pipeline:
+    knockout check → death check → permanent wound check; each tier rolls the configured pool.
+  - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
+    `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
+  - `_resolve_peril_via_pool(sheet, instance, pool) -> bool` — shared death-gated core for ALL
+    acute-peril resolution: excludes `character_loss` candidates when `death_is_permitted` returns
+    False; clears the condition on both death and survival; single `_mark_dead` writer.
+  - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
+    appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
+- **Key Services (`world/vitals/peril_resolution.py`, #1479):**
+  - `is_pc_source(source_character) -> bool` — PC-detection via `db_account` presence.
+  - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for PC sources
+    (ADR-0023), None sources, and `death_deferred` victims; True for NPC sources only.
+  - `select_abandonment_pool(source_character) -> ConsequencePool` — routes to
+    `abandonment_pvp` / `abandonment_enemy` / `abandonment_environmental` by source kind.
+  - `hostile_drove_round(victim_sheet, scene_round, declared_ids) -> bool` — True when the peril's
+    source declared this round; drives the hold/advance decision in `resolve_scene_round`.
+  - `potential_rescuer_present(victim_sheet, room, *, exclude_character_id=None) -> bool` — True
+    when any conscious non-hostile non-victim is in the room.
+  - `mark_abandoned(victim_sheet, scene_round)`, `clear_abandoned(victim_sheet)` — stamp/clear
+    `ConditionInstance.abandoned_since_round`.
+- **Pool constants (`world/vitals/constants.py`):** `POOL_BLEED_OUT_TERMINAL`,
+  `POOL_ABANDONMENT_ENEMY`, `POOL_ABANDONMENT_PVP`, `POOL_ABANDONMENT_ENVIRONMENTAL` (seeded via
+  `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome).
+- **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
+  death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
+  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment.
+- **Source:** `src/world/vitals/`
+- **Details:** `src/world/vitals/CLAUDE.md` · `docs/roadmap/combat.md` (§Phase 8, Phase 9)
 
 ### Relationships
 Track-based character-to-character regard, conditions, situational modifier gating, and

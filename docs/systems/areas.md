@@ -287,13 +287,24 @@ direct `force_move_to_position` — calls `maybe_emit_fall`, which emits `EventN
 **FELL consumer (`world/areas/positioning/plummet.py`, #1228).** A room-owned system
 trigger (`fall_to_plummet`, `source_condition=None`) dispatches `EventName.FELL` to
 `begin_plummet_handler` via a CALL_SERVICE_FUNCTION flow step. `begin_plummet(faller,
-position)` then (a) ensures an AFK-safe STRICT `SceneRound(start_reason=DANGER)` with the
-faller enrolled (`ensure_round_for_acute_condition`), (b) applies the seeded `Plummeting`
-condition, and (c) instantiates the seeded **"Catch the Faller"** `ChallengeInstance`
-bound to the faller via `target_object`. It is idempotent — a no-op when the faller
-already carries the Plummeting condition. The trigger definition is seeded by
-`wire_fall_triggers()` (positioning factories); `install_fall_triggers(room)` installs
-it (called from `maybe_emit_fall`). The bystander catch resolution (Task 7) is below.
+position)` applies the seeded `Plummeting` condition, then branches on whether anyone is
+present who could catch the faller (`_potential_catcher_present` — a non-faller in the room
+who `can_act`):
+
+- **a potential catcher is present** → instantiate the seeded **"Catch the Faller"**
+  `ChallengeInstance` bound to the faller via `target_object` and ensure an AFK-safe STRICT
+  `SceneRound(start_reason=DANGER)` with present characters enrolled
+  (`ensure_round_for_acute_condition`). The descent then advances one level per round
+  resolution (below), keeping the catch window open;
+- **nobody present to catch** → the fall is environmental and self-completing, so it is
+  **resolved immediately** to the floor + impact in this call (`_descend_to_floor`) rather
+  than freezing in a danger round nothing will drive (ADR-0004: action-driven tempo, no wall
+  clock). A falling character is **never paused mid-air** (#1479).
+
+`begin_plummet` is idempotent — a no-op when the faller already carries the Plummeting
+condition. The trigger definition is seeded by `wire_fall_triggers()` (positioning
+factories); `install_fall_triggers(room)` installs it (called from `maybe_emit_fall`). The
+bystander catch resolution (Task 7) is below.
 
 **Per-round descent + impact (`plummet.py`, #1228, Task 6).** `advance_plummet(targets)`
 is wired into the END-OF-ROUND block of `tick_round_for_targets` (`world/vitals/services.py`),
@@ -338,6 +349,25 @@ translates the graded outcome through `resolve_catch(faller, catcher, resolution
   decrement the accumulated `Plummeting` `ConditionInstance.severity` (floored at 0) — but let
   the descent continue;
 - **failure** (a negative outcome): no-op; the plummet continues.
+
+**Plummet is exempt from the #1479 bleed-out hold/abandonment.** Falling is environmental, so
+the descent **always advances** — it must never be paused mid-air waiting for "who is menacing
+you":
+
+- `resolve_scene_round` exempts plummeting participants (`_plummeting_character_ids`) from the
+  #1480 AFK own-peril skip, so the descent advances on every END tick regardless of who drove
+  the round;
+- `world.vitals.peril_resolution._acute_peril_condition_names()` (the HOLD/ABANDONMENT
+  classification) is **BLEED_OUT only** — a plummeting victim is never a "held downed victim,"
+  is never `abandoned_since_round`-marked, and is never resolved through an abandonment
+  consequence pool (`resolve_abandonment` / `resolve_solo_abandoned_victims` skip it). This is
+  deliberately narrower than `_danger_persists`, which still keys a DANGER round on Bleeding-Out
+  **or** Plummeting so the round keeps ticking the descent until impact;
+- when a departure removes the last potential catcher, `Room.at_object_leave` calls
+  `resolve_unattended_plummets(room, departing=)`, which descends any now-unattended faller to
+  the floor + impact immediately (the gravity counterpart to `resolve_solo_abandoned_victims`,
+  which handles bleed-out via the abandonment pool). An impact-caused bleed-out then follows the
+  normal bleed-out hold/abandonment rules — only the fall itself is exempt.
 
 **Plummet + catch content seed (`world/areas/positioning/plummet_content.py`).**
 `ensure_fall_content()` idempotently seeds all plummet + catch content (it calls

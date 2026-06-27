@@ -87,7 +87,12 @@ def _apply_condition(
     """Apply a condition to the resolved target."""
     target = _resolve_target(effect, context)
     severity = effect.condition_severity or 1
-    apply_condition(target, effect.condition_template, severity=severity)
+    apply_condition(
+        target,
+        effect.condition_template,
+        severity=severity,
+        source_character=context.source_character,
+    )
     condition_name = effect.condition_template.name
     return AppliedEffect(
         effect_type=EffectType.APPLY_CONDITION,

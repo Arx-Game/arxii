@@ -49,6 +49,16 @@ class FellBeginsPlummetTests(TestCase):
         self.faller = sheet.character
         self.faller.db_location = self.room
         self.faller.save(update_fields=["db_location"])
+
+        # A present bystander (a potential catcher): with someone able to attempt a
+        # catch, begin_plummet rides an AFK-safe danger round (multi-round descent +
+        # catch window) instead of resolving the fall immediately. The unattended
+        # (no-catcher) fall is covered by test_plummet_immediate.py.
+        bystander_sheet = CharacterSheetFactory()
+        self.bystander = bystander_sheet.character
+        self.bystander.db_location = self.room
+        self.bystander.save(update_fields=["db_location"])
+
         install_fall_triggers(self.room)
 
         self.chasm = Position.objects.create(

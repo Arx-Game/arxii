@@ -62,6 +62,7 @@ class ResolutionContext:
     challenge_instance: ChallengeInstance | None = None
     action_context: ActionContext | None = None
     target: ObjectDB | None = None
+    source_character: ObjectDB | None = None
     participants: list[Persona] | None = None
     beat: Beat | None = None
     scene: Scene | None = None

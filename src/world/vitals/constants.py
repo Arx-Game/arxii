@@ -91,3 +91,12 @@ SURVIVABILITY_CHECK_CATEGORY: str = "Survival"
 # Production code references this by name; tests create the row via
 # world.mechanics.factories.max_health_modifier_target().
 MAX_HEALTH_MODIFIER_TARGET: str = "max_health"
+
+# ---------------------------------------------------------------------------
+# Peril consequence pool natural-key names
+# ---------------------------------------------------------------------------
+
+POOL_BLEED_OUT_TERMINAL: str = "bleed_out_terminal"
+POOL_ABANDONMENT_ENEMY: str = "abandonment_enemy"
+POOL_ABANDONMENT_PVP: str = "abandonment_pvp"
+POOL_ABANDONMENT_ENVIRONMENTAL: str = "abandonment_environmental"

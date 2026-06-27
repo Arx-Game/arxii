@@ -260,6 +260,31 @@ def _danger_persists(scene_round: SceneRound) -> bool:
     ).exists()
 
 
+def _plummeting_character_ids(scene_round: SceneRound) -> set[int]:
+    """Character ids of ACTIVE participants currently carrying the Plummeting condition.
+
+    Used by ``resolve_scene_round`` to exempt fallers from the #1480 AFK own-peril
+    skip: a fall is environmental and self-completing, so the descent advances on
+    every END tick regardless of whether the faller declared an action this round.
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    char_ids = list(
+        scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
+            "character_sheet__character_id", flat=True
+        )
+    )
+    if not char_ids:
+        return set()
+    return set(
+        ConditionInstance.objects.filter(
+            target_id__in=char_ids,
+            condition__name=PLUMMETING_CONDITION_NAME,
+        ).values_list("target_id", flat=True)
+    )
+
+
 def _present_character_sheets(room: ObjectDB) -> list[CharacterSheet]:
     """CharacterSheets of characters currently in ``room`` (walks room.contents; no per-object query)."""  # noqa: E501
     present = []
@@ -336,6 +361,129 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
     return declared_present_active >= needed
 
 
+def _resolve_downed_victim_peril(
+    scene_round: SceneRound,
+    present_ids: set[int],
+    declared_ids: set[int],
+) -> tuple[set[int], set[int]]:
+    """Classify each downed victim's acute peril for this round (#1479).
+
+    A downed victim is a present ACTIVE participant who cannot act yet carries an
+    active acute-peril condition (Bleeding Out / Plummeting). For each one this
+    stamps or clears the abandonment marker as a side effect and returns
+    ``(downed_victim_participant_ids, advancing_participant_ids)``:
+
+    - ``downed_victim_participant_ids`` — every downed victim found.
+    - ``advancing_participant_ids`` — the subset whose peril SHOULD advance on the
+      END tick because a hostile party drove this round.
+
+    Called BEFORE ``_resolve_scene_declarations`` deletes the declaration rows, so
+    ``hostile_drove_round`` can read this round's declarations.
+    """
+    from world.vitals.peril_resolution import (  # noqa: PLC0415
+        acute_peril_instances,
+        clear_abandoned,
+        hostile_drove_round,
+        mark_abandoned,
+    )
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    downed_ids: set[int] = set()
+    advancing_ids: set[int] = set()
+    for p in scene_round.participants.filter(
+        status=SceneRoundParticipantStatus.ACTIVE
+    ).select_related("character_sheet__character"):
+        sheet = p.character_sheet
+        if sheet.character_id not in present_ids or can_act(sheet):
+            continue
+        if not acute_peril_instances(sheet).exists():
+            continue
+        downed_ids.add(p.pk)
+        if hostile_drove_round(sheet, scene_round, declared_ids):
+            advancing_ids.add(p.pk)
+            clear_abandoned(sheet)
+        else:
+            mark_abandoned(sheet, scene_round)
+    return downed_ids, advancing_ids
+
+
+def _resolve_abandonment_grace(scene_round: SceneRound, held_ids: set[int]) -> None:
+    """Resolve held downed victims who have waited out the abandonment grace window (#1479 T8).
+
+    For each held (abandoned, non-advancing) downed victim whose acute-peril
+    ``abandoned_since_round`` is set and ``round_number - abandoned_since_round >=
+    abandonment_grace_rounds``, resolve their fate via the source-appropriate
+    abandonment pool. N (``abandonment_grace_rounds``) is staff-tunable on
+    ``SceneRoundDefaultsConfig``. A rescue (the bleed-out cleared before the window
+    elapses) leaves no acute-peril instance, so ``resolve_abandonment`` naturally
+    no-ops — rescue beats the check.
+    """
+    if not held_ids:
+        return
+    from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
+    from world.vitals.peril_resolution import acute_peril_instances  # noqa: PLC0415
+    from world.vitals.services import resolve_abandonment  # noqa: PLC0415
+
+    grace = get_scene_round_defaults_config().abandonment_grace_rounds
+    for p in scene_round.participants.filter(pk__in=held_ids).select_related(
+        "character_sheet__character"
+    ):
+        sheet = p.character_sheet
+        inst = acute_peril_instances(sheet).filter(abandoned_since_round__isnull=False).first()
+        if inst is None:
+            continue
+        if scene_round.round_number - inst.abandoned_since_round >= grace:
+            resolve_abandonment(sheet)
+
+
+def resolve_solo_abandoned_victims(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    departing: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Solo-case abandonment (#1479 Task 8): a departure leaves a downed victim alone.
+
+    When ``departing`` leaves ``room`` and that removes the LAST potential rescuer,
+    any still-downed victim there (present, ``not can_act``, carrying an acute-peril
+    condition) has their fate resolved IMMEDIATELY via the source-appropriate
+    abandonment pool — no frozen limbo waiting for a round that will never come.
+
+    Called from ``Room.at_object_leave``, which fires BEFORE the mover leaves the
+    room's ``contents``; ``departing`` is therefore excluded from the rescuer check.
+    A single cheap room-bound query short-circuits ordinary rooms (no acute peril
+    present → no work).
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.vitals.peril_resolution import (  # noqa: PLC0415
+        _acute_peril_condition_names,
+        potential_rescuer_present,
+    )
+    from world.vitals.services import can_act, resolve_abandonment  # noqa: PLC0415
+
+    sheets = _present_character_sheets(room)
+    char_ids = [s.character_id for s in sheets]
+    if not char_ids:
+        return
+    peril_ids = set(
+        ConditionInstance.objects.filter(
+            target_id__in=char_ids,
+            condition__name__in=_acute_peril_condition_names(),
+        ).values_list("target_id", flat=True)
+    )
+    if not peril_ids:
+        return
+
+    departing_id = departing.id if departing is not None else None
+    for sheet in sheets:
+        if sheet.character_id not in peril_ids:
+            continue
+        if sheet.character_id == departing_id or can_act(sheet):
+            continue
+        if potential_rescuer_present(sheet, room, exclude_character_id=departing_id):
+            continue
+        resolve_abandonment(sheet)
+
+
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
@@ -373,20 +521,70 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     )
     present_ids = {s.character_id for s in _present_character_sheets(rnd.room)}
 
+    # Acute-peril narrowing (#1479): decide each DOWNED victim's fate BEFORE
+    # _resolve_scene_declarations deletes this round's declaration rows, since the
+    # hostile-driver check reads this round's declarations. A downed victim is a
+    # present participant who cannot act yet carries an acute-peril condition (e.g.
+    # Bleeding Out). Their peril advances on the END tick ONLY when a hostile party
+    # drove this round; otherwise it HOLDS and we mark them abandoned (when a rescuer
+    # is present). If a hostile drives again, the marker is cleared.
+    downed_victim_ids, advancing_downed_ids = _resolve_downed_victim_peril(
+        rnd, present_ids, declared_ids
+    )
+
+    # #1479 (plummet): a falling character's descent is ENVIRONMENTAL and
+    # self-completing — it must advance every round regardless of who drove the
+    # round, so it is exempt from the #1480 AFK own-peril skip below (and, via
+    # _acute_peril_condition_names excluding PLUMMETING, from the downed-victim
+    # hold/abandonment). Gravity does not pause for an idle round.
+    plummeting_ids = _plummeting_character_ids(rnd)
+
     _resolve_scene_declarations(rnd)
 
-    targets = [
-        p.character_sheet.character
-        for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
-            "character_sheet__character"
-        )
-        if not (
-            p.character_sheet.character_id in present_ids
-            and can_act(p.character_sheet)
+    targets = []
+    # Held-bleed-out+plummeting victims are excluded from the main tick (to keep their
+    # bleed-out held) but must still have their plummet advanced this round.
+    held_plummet_targets = []
+    for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
+        "character_sheet__character"
+    ):
+        sheet = p.character_sheet
+        # #1480: a present, conscious, undeclared participant's OWN peril does not
+        # advance from a round they didn't engage in (AFK own-peril skip) — UNLESS
+        # they are plummeting, whose descent always advances (#1479).
+        if (
+            sheet.character_id in present_ids
+            and can_act(sheet)
             and p.pk not in declared_ids
-        )
-    ]
+            and sheet.character_id not in plummeting_ids
+        ):
+            continue
+        # #1479: a downed victim advances only when a hostile party drove the round.
+        # Plummet exemption: gravity descends every round even when the bleed-out is
+        # held — collect held+plummeting victims separately for a direct advance_plummet
+        # call that does NOT also call advance_bleed_out (#1479 final-review).
+        if p.pk in downed_victim_ids and p.pk not in advancing_downed_ids:
+            if sheet.character_id in plummeting_ids:
+                held_plummet_targets.append(sheet.character)
+            continue
+        targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
+
+    # Advance plummet for victims whose bleed-out is held but who are also falling.
+    # They were excluded from the main tick above to keep their bleed-out held, but
+    # gravity does not pause for an abandoned round — their descent must still advance
+    # (#1479 final-review). advance_plummet is called directly (not tick_round_for_targets)
+    # so advance_bleed_out is NOT triggered for these victims.
+    if held_plummet_targets:
+        from world.areas.positioning.plummet import advance_plummet  # noqa: PLC0415
+
+        advance_plummet(held_plummet_targets)
+
+    # #1479 Task 8: a held (abandoned, non-advancing) downed victim who has waited
+    # out the abandonment grace window resolves via the source-appropriate
+    # abandonment pool. Done before the auto-end check so a resolved peril lets a
+    # DANGER round complete instead of freezing in limbo.
+    _resolve_abandonment_grace(rnd, downed_victim_ids - advancing_downed_ids)
 
     rnd.status = RoundStatus.BETWEEN_ROUNDS
     rnd.save(update_fields=["status"])

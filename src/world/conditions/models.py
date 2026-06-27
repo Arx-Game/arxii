@@ -1150,6 +1150,18 @@ class ConditionInstance(SharedMemoryModel):
         help_text="Set when severity decays to 0. Used to filter out completed instances.",
     )
 
+    # === Abandonment (#1479) ===
+    abandoned_since_round = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Scene round_number at which this acute-peril condition was marked abandoned: "
+            "the bearer is downed (present, cannot act) but no hostile party drove the round "
+            "and a potential rescuer was present, so the peril HELD instead of advancing "
+            "(#1479). Cleared (None) when a hostile party drives the round again."
+        ),
+    )
+
     class Meta:
         constraints = [
             models.UniqueConstraint(

@@ -118,3 +118,14 @@ class Room(ObjectParent, DefaultRoom):
         """
         super().at_object_leave(obj, target_location, **kwargs)
         self._broadcast_room_state(exclude=obj)
+        # #1479 Task 8: a departure may remove the last potential rescuer from a
+        # downed victim in this room — resolve their abandonment fate immediately.
+        from world.scenes.round_services import resolve_solo_abandoned_victims
+
+        resolve_solo_abandoned_victims(self, departing=obj)
+        # #1479 (plummet): a departure may leave a falling character with no one to
+        # catch them — the fall completes to impact immediately rather than freezing
+        # mid-air (falling is environmental, never abandonment-pool-resolved).
+        from world.areas.positioning.plummet import resolve_unattended_plummets
+
+        resolve_unattended_plummets(self, departing=obj)

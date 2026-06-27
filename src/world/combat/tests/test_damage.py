@@ -289,17 +289,24 @@ class KnockoutDeathProcessingTest(TestCase):
         )
         from world.covenants.factories import CovenantRoleFactory
         from world.traits.factories import CheckOutcomeFactory
+        from world.vitals.factories import create_bleed_out_terminal_pool
+
+        # Seed the bleed_out_terminal pool so _resolve_terminal_bleed_out can
+        # route through it (ADR-0049). Without the pool the service fail-safe-holds.
+        create_bleed_out_terminal_pool()
 
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool, base_damage=10)
-        CombatOpponentFactory(
+        opponent = CombatOpponentFactory(
             encounter=encounter,
             tier=OpponentTier.MOOK,
             health=500,
             max_health=500,
             threat_pool=pool,
         )
+        # Get the NPC ObjectDB (db_account=None → death_is_permitted True).
+        npc_objectdb = ObjectDB.objects.get(pk=opponent.objectdb_id)
         sheet = CharacterSheetFactory()
         bleeding_pc = CombatParticipantFactory(
             encounter=encounter,
@@ -337,6 +344,7 @@ class KnockoutDeathProcessingTest(TestCase):
             target=sheet.character,
             condition=bleed_out,
             current_stage=terminal_stage,
+            source_character=npc_objectdb,
         )
 
         # Passives-only action (no focused_action) so no offense check fires
