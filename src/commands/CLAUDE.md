@@ -69,8 +69,9 @@ actions, backends, and service functions.
   - `ritual join <id> [role=sinner|sineater]` — accept your invitation
   - `ritual decline <id>` — decline your invitation
   - `ritual fire <id>` — fire the session (initiator only)
+  - `ritual cancel <id>` — cancel a pending session (initiator only)
 
-  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` directly.
+  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` / `cancel_session` directly.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
