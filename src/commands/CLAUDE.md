@@ -267,6 +267,18 @@ actions, backends, and service functions.
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
+- **`sanctum.py`**: `CmdSanctum` (`sanctum`, #1497) — the sanctum-management namespace. One
+  `DispatchCommand` routes a leading subverb to a REGISTRY `ActionRef` and dispatches through
+  `dispatch_player_action` — the same seam the web `SanctumViewSet` uses — reaching the 7
+  Actions in `actions/definitions/sanctum.py`. Bare `sanctum`/`sanctum status` = status hub
+  (current sanctum in room, weaving wells). Grammar:
+  `sanctum install resonance=<name> owner=<personal|covenant>`,
+  `sanctum weave slot=<personal|covenant|helper>`,
+  `sanctum homecoming amount=<n> [narrative=<text>]`,
+  `sanctum purging resonance=<name> amount=<n>`,
+  `sanctum dissolve`, `sanctum absorb`, `sanctum sever <thread name|id>`.
+  Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdCombat`). No
+  business logic in the command.
 - **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral

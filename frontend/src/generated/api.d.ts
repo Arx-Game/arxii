@@ -7605,8 +7605,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     get: operations['magic_sanctums_list'];
     put?: never;
@@ -7629,8 +7630,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     get: operations['magic_sanctums_retrieve'];
     put?: never;
@@ -7655,8 +7657,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_absorb_create'];
     delete?: never;
@@ -7675,10 +7678,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+     * @description Ritual of Dissolution — ``POST /api/magic/sanctums/{id}/dissolve/``.
      *
-     *     Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
-     *     Service enforces physical presence; tiered check determines
+     *     Wraps :class:`actions.definitions.sanctum.SanctumDissolveAction`.
+     *     Action enforces physical presence; tiered check determines
      *     recovery fraction. Returns the dissolution outcome.
      */
     post: operations['magic_sanctums_dissolve_create'];
@@ -7702,8 +7705,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_homecoming_create'];
     delete?: never;
@@ -7726,8 +7730,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_purging_create'];
     delete?: never;
@@ -7750,8 +7755,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_sever_create'];
     delete?: never;
@@ -7774,8 +7780,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_weave_create'];
     delete?: never;
@@ -7794,11 +7801,11 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Sanctification entry point — `POST /api/magic/sanctums/install/`.
+     * @description Sanctification entry point — ``POST /api/magic/sanctums/install/``.
      *
      *     Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
-     *     Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
-     *     — service does the heavy validation (room ownership, leader
+     *     Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
+     *     — action does the heavy validation (room ownership, leader
      *     standing, physical presence, partial-unique race window). Returns
      *     the new SanctumDetails on success.
      */

@@ -12022,8 +12022,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       tags:
       - magic
       security:
@@ -12045,8 +12046,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12073,8 +12075,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12097,10 +12100,10 @@ paths:
     post:
       operationId: magic_sanctums_dissolve_create
       description: |-
-        Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+        Ritual of Dissolution — ``POST /api/magic/sanctums/{id}/dissolve/``.
 
-        Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
-        Service enforces physical presence; tiered check determines
+        Wraps :class:`actions.definitions.sanctum.SanctumDissolveAction`.
+        Action enforces physical presence; tiered check determines
         recovery fraction. Returns the dissolution outcome.
       parameters:
       - in: path
@@ -12128,8 +12131,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12156,8 +12160,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12184,8 +12189,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12218,8 +12224,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12242,11 +12249,11 @@ paths:
     post:
       operationId: magic_sanctums_install_create
       description: |-
-        Sanctification entry point — `POST /api/magic/sanctums/install/`.
+        Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
         Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
-        Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
-        — service does the heavy validation (room ownership, leader
+        Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
+        — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
         the new SanctumDetails on success.
       tags:

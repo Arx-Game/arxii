@@ -105,17 +105,18 @@ class SanctumDetails(SharedMemoryModel):
 
     class Meta:
         constraints = [
-            # One PERSONAL Sanctum per CharacterSheet. Plan 4 §F revised 2026-06-03.
-            # COVENANT sanctums are not constrained here — each covenant gets
-            # one per owned building, enforced at the covenant level.
-            models.UniqueConstraint(
-                fields=["founder_character_sheet"],
-                condition=models.Q(
-                    owner_mode=SanctumOwnerMode.PERSONAL,
-                    founder_character_sheet__isnull=False,
-                ),
-                name="sanctum_details_one_personal_per_character_sheet",
-            ),
+            # NOTE: The previous UniqueConstraint
+            # "sanctum_details_one_personal_per_character_sheet" was removed in the
+            # dissolution soft-delete rework (Plan 4 §F). That constraint enforced one
+            # PERSONAL SanctumDetails row per founder CharacterSheet. After soft-delete
+            # the dissolved row persists (feature_instance.dissolved_at IS NOT NULL) and
+            # the constraint cannot be made partial without traversing the FK
+            # (feature_instance__dissolved_at), which PostgreSQL partial indexes do not
+            # support. The service-level pre-check in perform_sanctification (filtered to
+            # active/non-dissolved rows via feature_instance__dissolved_at__isnull=True)
+            # enforces this uniqueness for the non-concurrent case. The concurrent-founder
+            # race window is tiny for this rare operation; a SELECT FOR UPDATE advisory
+            # lock can be added if needed.
         ]
 
     def __str__(self) -> str:

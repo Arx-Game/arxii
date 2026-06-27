@@ -114,8 +114,9 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 ### Magic (beyond cast/ritual/imbue/thread/soul-tether, which are TELNET+WEB)
 - TELNET+WEB: pose / scene-entry / style endorsements (resonance grants); restore-sense (talk-down).
 - WEB-ONLY: technique authoring ("design a spell"); **alteration resolution** (clear a Mage Scar — and
-  this *gates advancement*, so telnet players are blocked); **sanctum** 7-op subsystem (install /
-  homecoming / purging / weave / dissolve / absorb / sever); CharacterResonance/Aura/Gift/Anima raw CRUD.
+  this *gates advancement*, so telnet players are blocked); CharacterResonance/Aura/Gift/Anima raw CRUD.
+- TELNET+WEB: **sanctum** 7-op subsystem (install / homecoming / purging / weave / dissolve / absorb /
+  sever) — `CmdSanctum` + `SanctumViewSet` both converge on `action.run()` (#1497).
 - **PLANNED-UNBUILT (→ registry):** ResonanceGrantReversal (endorsements currently irreversible);
   multi-target per-target consent state machine (ADR-0045); soulfray progression (#712).
 

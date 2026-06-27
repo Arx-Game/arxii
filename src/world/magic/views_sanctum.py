@@ -1,17 +1,17 @@
 """Sanctum API views (Plan 4 §F).
 
 Lean MVP surface: list "my Sanctums" (sanctums I own + sanctums I've
-woven into) and POST actions for Homecoming / Purging / Weave / Sever.
-The install-wizard endpoint (create the install Project + nested
-SanctumInstallParams) is a deferred follow-up — opening a project is a
-multi-app coordination (Project + RoomFeatureProgressionDetails +
-SanctumInstallParams) that warrants its own design pass.
+woven into) and POST actions for Homecoming / Purging / Weave / Sever /
+Install / Dissolve / Absorb.  All write endpoints converge on
+``action.run()`` via the seven Actions in
+``actions/definitions/sanctum.py`` (#1497).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -20,8 +20,16 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from actions.definitions.sanctum import (
+    SanctumAbsorbAction,
+    SanctumDissolveAction,
+    SanctumHomecomingAction,
+    SanctumInstallAction,
+    SanctumPurgingAction,
+    SanctumSeverAction,
+    SanctumWeaveAction,
+)
 from world.magic.constants import TargetKind
-from world.magic.exceptions import ResonanceInsufficient
 from world.magic.models import Resonance, SanctumDetails, Thread
 from world.magic.serializers_sanctum import (
     HomecomingActionSerializer,
@@ -30,26 +38,6 @@ from world.magic.serializers_sanctum import (
     SanctumDetailsSerializer,
     SanctumThreadSerializer,
     WeaveActionSerializer,
-)
-from world.magic.services.sanctum_install import (
-    AbsorbError,
-    DissolutionError,
-    SanctificationError,
-    absorb_sanctum_pool,
-    perform_dissolution,
-    perform_sanctification,
-    sanctification_fizzle_detail,
-)
-from world.magic.services.sanctum_rituals import (
-    HomecomingValidationError,
-    PurgingValidationError,
-    perform_homecoming_ritual,
-    perform_purging_ritual,
-)
-from world.magic.services.sanctum_weaving import (
-    SanctumWeavingError,
-    sever_sanctum_thread,
-    weave_sanctum_thread,
 )
 
 if TYPE_CHECKING:
@@ -82,8 +70,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
 
     `list` returns Sanctums the user has standing in (owns or has woven
     into). `retrieve` is gated by the same standing check. POST actions
-    delegate to the service layer; service-level exceptions surface as
-    HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+    delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+    ``ActionResult`` fields map 1:1 to the existing response bodies so the
+    contract is preserved (#1497).
     """
 
     serializer_class = SanctumDetailsSerializer
@@ -132,86 +121,100 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
                 Q(feature_instance_id__in=woven_sanctum_ids)
                 | Q(feature_instance__room_profile_id__in=owned_room_ids)
             )
+            .filter(feature_instance__dissolved_at__isnull=True)
             .distinct()
         )
+
+    # ------------------------------------------------------------------
+    # Actor resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_actor(self, request):
+        """Return the caller's active puppet ObjectDB if they own its sheet.
+
+        Mirrors ``world.relationships.views.RelationshipUpdateViewSet._resolve_actor``.
+        Returns the ObjectDB character (puppet) or ``None`` when resolution
+        fails — caller should respond with HTTP 400.
+        """
+        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        if actor is None:
+            return None
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return None
+        if sheet.character.db_account_id != request.user.pk:
+            return None
+        return actor
+
+    # ------------------------------------------------------------------
+    # Write endpoints — converge on action.run()
+    # ------------------------------------------------------------------
 
     @action(detail=True, methods=["post"], url_path="homecoming")
     def homecoming(self, request, feature_instance_id=None):
         sanctum = self.get_object()
         serializer = HomecomingActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        persona = _active_persona_for_request(request)
-        try:
-            result = perform_homecoming_ritual(
-                sanctum,
-                persona,
-                resonance_sacrificed=serializer.validated_data["resonance_sacrificed"],
-                narrative_text=serializer.validated_data.get("narrative_text", ""),
-            )
-        except (HomecomingValidationError, ResonanceInsufficient) as exc:
-            return _action_error_response(exc)
-        return Response(
-            {
-                "base_resonance_added": result.base_resonance_added,
-                "overflow_escrowed": result.overflow_escrowed,
-                "new_homecoming_sum": result.new_homecoming_sum,
-                "new_cap": result.new_cap,
-                "success_level": result.success_level,
-                "tier": result.tier,
-            }
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        result = SanctumHomecomingAction().run(
+            actor=actor,
+            sanctum=sanctum,
+            resonance_sacrificed=serializer.validated_data["resonance_sacrificed"],
+            narrative_text=serializer.validated_data.get("narrative_text", ""),
         )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
 
     @action(detail=True, methods=["post"], url_path="purging")
     def purging(self, request, feature_instance_id=None):
         sanctum = self.get_object()
         serializer = PurgingActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        persona = _active_persona_for_request(request)
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
         new_resonance = get_object_or_404(
             Resonance, pk=serializer.validated_data["new_resonance_id"]
         )
-        try:
-            result = perform_purging_ritual(
-                sanctum,
-                persona,
-                new_resonance=new_resonance,
-                resonance_sacrificed=serializer.validated_data["resonance_sacrificed"],
-            )
-        except (PurgingValidationError, ResonanceInsufficient) as exc:
-            return _action_error_response(exc)
-        return Response(
-            {
-                "new_resonance_id": result.new_resonance_id,
-                "sum_after_drain": result.sum_after_drain,
-                "sacrifice_paid": result.sacrifice_paid,
-                "success_level": result.success_level,
-                "tier": result.tier,
-            }
+        result = SanctumPurgingAction().run(
+            actor=actor,
+            sanctum=sanctum,
+            new_resonance=new_resonance,
+            resonance_sacrificed=serializer.validated_data["resonance_sacrificed"],
         )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
 
     @action(detail=True, methods=["post"], url_path="weave")
     def weave(self, request, feature_instance_id=None):
         sanctum = self.get_object()
         serializer = WeaveActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        persona = _active_persona_for_request(request)
-        try:
-            thread = weave_sanctum_thread(
-                sanctum,
-                persona.character_sheet,
-                serializer.validated_data["slot_kind"],
-            )
-        except SanctumWeavingError as exc:
-            return _action_error_response(exc)
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        result = SanctumWeaveAction().run(
+            actor=actor,
+            sanctum=sanctum,
+            slot_kind=serializer.validated_data["slot_kind"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        thread = Thread.objects.get(pk=result.data["thread_id"])
         return Response(SanctumThreadSerializer(thread).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], url_path="install")
     def install(self, request):
-        """Sanctification entry point — `POST /api/magic/sanctums/install/`.
+        """Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
         Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
-        Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
-        — service does the heavy validation (room ownership, leader
+        Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
+        — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
         the new SanctumDetails on success.
         """
@@ -219,101 +222,76 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = SanctifyActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        persona = _active_persona_for_request(request)
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
         room_profile = get_object_or_404(
             RoomProfile, pk=serializer.validated_data["room_profile_id"]
         )
         resonance = get_object_or_404(Resonance, pk=serializer.validated_data["resonance_type_id"])
-        try:
-            result = perform_sanctification(
-                room_profile,
-                persona,
-                resonance,
-                owner_mode=serializer.validated_data["owner_mode"],
-            )
-        except SanctificationError as exc:
-            return _action_error_response(exc)
-        if result.fizzled:
-            return Response(
-                {
-                    "fizzled": True,
-                    "success_level": result.success_level,
-                    "tier": result.tier,
-                    "detail": sanctification_fizzle_detail(result.tier),
-                },
-                status=status.HTTP_200_OK,
-            )
-        sanctum = SanctumDetails.objects.get(pk=result.sanctum_id)
+        result = SanctumInstallAction().run(
+            actor=actor,
+            room_profile=room_profile,
+            resonance=resonance,
+            owner_mode=serializer.validated_data["owner_mode"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        if result.data["fizzled"]:
+            return Response(result.data, status=status.HTTP_200_OK)
+        sanctum = SanctumDetails.objects.get(pk=result.data["sanctum_id"])
         return Response(
             {
                 **SanctumDetailsSerializer(sanctum, context={"request": request}).data,
                 "fizzled": False,
-                "success_level": result.success_level,
-                "tier": result.tier,
+                "success_level": result.data["success_level"],
+                "tier": result.data["tier"],
             },
             status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"], url_path="dissolve")
     def dissolve(self, request, feature_instance_id=None):
-        """Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+        """Ritual of Dissolution — ``POST /api/magic/sanctums/{id}/dissolve/``.
 
-        Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
-        Service enforces physical presence; tiered check determines
+        Wraps :class:`actions.definitions.sanctum.SanctumDissolveAction`.
+        Action enforces physical presence; tiered check determines
         recovery fraction. Returns the dissolution outcome.
         """
         sanctum = self.get_object()
-        persona = _active_persona_for_request(request)
-        try:
-            result = perform_dissolution(sanctum, persona)
-        except DissolutionError as exc:
-            return _action_error_response(exc)
-        return Response(
-            {
-                "sanctum_id": result.sanctum_id,
-                "success_level": result.success_level,
-                "recovered_amount": result.recovered_amount,
-                "is_botch": result.is_botch,
-                "tier": result.tier,
-            }
-        )
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        result = SanctumDissolveAction().run(actor=actor, sanctum=sanctum)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
 
     @action(detail=True, methods=["post"], url_path="absorb")
     def absorb(self, request, feature_instance_id=None):
         sanctum = self.get_object()
-        persona = _active_persona_for_request(request)
-        try:
-            result = absorb_sanctum_pool(sanctum, persona)
-        except AbsorbError as exc:
-            return _action_error_response(exc)
-        return Response(
-            {
-                "sanctum_id": result.sanctum_id,
-                "weaving_drained": result.weaving_drained,
-                "owner_bonus_drained": result.owner_bonus_drained,
-                "total_drained": result.total_drained,
-            }
-        )
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+        result = SanctumAbsorbAction().run(actor=actor, sanctum=sanctum)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
 
     @action(detail=True, methods=["post"], url_path="sever/(?P<thread_id>[0-9]+)")
     def sever(self, request, feature_instance_id=None, thread_id=None):
         sanctum = self.get_object()
-        persona = _active_persona_for_request(request)
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
         thread = get_object_or_404(
             Thread,
             pk=thread_id,
             target_sanctum_details=sanctum,
-            owner=persona.character_sheet,
+            owner=actor.sheet_data,
             target_kind=TargetKind.SANCTUM,
         )
-        try:
-            sever_sanctum_thread(thread)
-        except SanctumWeavingError as exc:
-            return _action_error_response(exc)
+        result = SanctumSeverAction().run(actor=actor, thread=thread)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-def _action_error_response(exc: Exception) -> Response:
-    """Surface the typed exception's user_message — never str(exc)."""
-    user_message = getattr(exc, "user_message", "Operation failed.")  # noqa: GETATTR_LITERAL
-    return Response({"detail": user_message}, status=status.HTTP_400_BAD_REQUEST)

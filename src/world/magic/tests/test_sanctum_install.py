@@ -15,6 +15,7 @@ from world.magic.models import (
     SanctumOwnerMode,
     SanctumPendingPayout,
     Thread,
+    ThreadLevelUnlock,
 )
 from world.magic.seeds_checks import (
     SANCTUM_DISSOLUTION_CHECK_TYPE_NAME,
@@ -37,6 +38,7 @@ from world.magic.services.sanctum_install import (
     DISSOLUTION_RECOVERY_SUCCESS,
     AbsorbNothingPendingError,
     AbsorbNotPhysicallyPresentError,
+    DissolutionAlreadyDissolvedError,
     SanctificationFounderHasPersonalSanctumError,
     SanctificationLeaderNotOwnerError,
     SanctificationRoomAlreadyHasFeatureError,
@@ -599,3 +601,203 @@ class SanctificationFizzleDetailTests(SimpleTestCase):
         self.assertIn("take hold", fail_copy)
         # The botch is the darker branch — the rite goes wrong, not merely short.
         self.assertIn("wrong", botch_copy)
+
+
+# ---------------------------------------------------------------------------
+# Dissolution soft-delete invariants
+# ---------------------------------------------------------------------------
+
+
+class PerformDissolutionSoftDeleteTests(TestCase):
+    """Dissolution SOFT-deletes the sanctum and SOFT-retires threads.
+
+    Core regression: imbued threads carry PROTECT FKs (ThreadLevelUnlock /
+    CombatPullResolvedEffect). The old hard-delete path raised ProtectedError;
+    the new path stamps ``dissolved_at`` on the RoomFeatureInstance and
+    ``retired_at`` on threads — nothing is deleted.
+    """
+
+    def _dissolve_sanctum(self, *, leader_is_founder: bool = True):
+        """Build a sanctum + dissolve it; return (sanctum, leader, result)."""
+        from unittest.mock import patch
+
+        sanctum, leader = _build_dissolution_sanctum(leader_is_founder=leader_is_founder)
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            result = perform_dissolution(sanctum, leader)
+        return sanctum, leader, result
+
+    def test_room_feature_instance_still_exists_after_dissolution(self) -> None:
+        """RoomFeatureInstance row is preserved (soft-deleted, not hard-deleted)."""
+        sanctum, _leader, _result = self._dissolve_sanctum()
+        instance = sanctum.feature_instance
+        self.assertTrue(
+            RoomFeatureInstance.objects.filter(pk=instance.pk).exists(),
+            "RoomFeatureInstance was hard-deleted; should be preserved",
+        )
+
+    def test_dissolved_at_stamped_on_feature_instance(self) -> None:
+        """dissolved_at is set on the RoomFeatureInstance after dissolution."""
+        sanctum, _leader, _result = self._dissolve_sanctum()
+        instance = RoomFeatureInstance.objects.get(pk=sanctum.feature_instance_id)
+        self.assertIsNotNone(
+            instance.dissolved_at,
+            "RoomFeatureInstance.dissolved_at not set after dissolution",
+        )
+
+    def test_sanctum_details_still_exists_after_dissolution(self) -> None:
+        """SanctumDetails row is preserved after dissolution."""
+        sanctum, _leader, _result = self._dissolve_sanctum()
+        self.assertTrue(
+            SanctumDetails.objects.filter(pk=sanctum.pk).exists(),
+            "SanctumDetails was hard-deleted; should be preserved",
+        )
+
+    def test_active_thread_retired_at_stamped_after_dissolution(self) -> None:
+        """Active threads targeting the sanctum get retired_at set on dissolution."""
+        from unittest.mock import patch
+
+        sanctum, leader = _build_dissolution_sanctum()
+        thread = Thread.objects.create(
+            owner=leader.character_sheet,
+            resonance=sanctum.resonance_type,
+            target_kind=TargetKind.SANCTUM,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+        )
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            perform_dissolution(sanctum, leader)
+
+        # Use a fresh filter to bypass SharedMemoryModel identity-map cache
+        # (queryset .update() does not refresh cached instances).
+        self.assertTrue(
+            Thread.objects.filter(pk=thread.pk, retired_at__isnull=False).exists(),
+            "Thread.retired_at not set after dissolution",
+        )
+        self.assertTrue(
+            Thread.objects.filter(pk=thread.pk).exists(),
+            "Thread was hard-deleted; should be preserved",
+        )
+
+    def test_imbued_thread_with_level_unlock_no_protected_error(self) -> None:
+        """Dissolving a sanctum with an imbued thread (ThreadLevelUnlock) raises no ProtectedError.
+
+        Regression: the old hard-delete path hit ProtectedError via
+        ThreadLevelUnlock.thread = on_delete=PROTECT. The soft-retire path leaves
+        both the Thread and its ThreadLevelUnlock rows untouched.
+        """
+        from unittest.mock import patch
+
+        sanctum, leader = _build_dissolution_sanctum()
+        thread = Thread.objects.create(
+            owner=leader.character_sheet,
+            resonance=sanctum.resonance_type,
+            target_kind=TargetKind.SANCTUM,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+            level=20,
+            developed_points=200,
+        )
+        # Simulate a real imbuing boundary receipt — this is the PROTECT FK that
+        # used to crash the hard-delete.
+        ThreadLevelUnlock.objects.create(
+            thread=thread,
+            unlocked_level=20,
+            xp_spent=10,
+        )
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            # This must NOT raise ProtectedError.
+            perform_dissolution(sanctum, leader)
+
+        # Thread and its level-unlock survive dissolution.
+        # Use fresh filter queries to bypass SharedMemoryModel identity-map cache.
+        self.assertTrue(
+            Thread.objects.filter(pk=thread.pk, retired_at__isnull=False).exists(),
+            "Thread not retired after dissolution",
+        )
+        self.assertTrue(
+            ThreadLevelUnlock.objects.filter(thread=thread).exists(),
+            "ThreadLevelUnlock was deleted; should be preserved",
+        )
+        # Sanctum row still exists, soft-deleted.
+        self.assertTrue(
+            RoomFeatureInstance.objects.filter(
+                pk=sanctum.feature_instance_id, dissolved_at__isnull=False
+            ).exists(),
+            "RoomFeatureInstance not soft-deleted",
+        )
+
+    def test_dissolved_sanctum_excluded_from_sanctum_in_room(self) -> None:
+        """sanctum_in_room returns None for a room whose sanctum is dissolved."""
+        from actions.definitions.sanctum import sanctum_in_room
+
+        sanctum, _leader, _result = self._dissolve_sanctum()
+        room = sanctum.feature_instance.room_profile.objectdb
+        self.assertIsNone(
+            sanctum_in_room(room),
+            "sanctum_in_room returned a dissolved sanctum; should return None",
+        )
+
+    def test_idempotency_raises_already_dissolved_error(self) -> None:
+        """A second dissolution attempt raises DissolutionAlreadyDissolvedError."""
+        from unittest.mock import patch
+
+        sanctum, leader, _result = self._dissolve_sanctum()
+        with (
+            patch("world.checks.services.perform_check") as mock_check,
+            self.assertRaises(DissolutionAlreadyDissolvedError),
+        ):
+            mock_check.return_value = _mock_check_result(success_level=1)
+            perform_dissolution(sanctum, leader)
+
+    def test_founder_can_refound_personal_sanctum_in_different_room(self) -> None:
+        """A founder who dissolves their Personal Sanctum can found a new one in a different room.
+
+        Regression: the service pre-check was not excluding dissolved sanctums, so
+        re-founding always raised SanctificationFounderHasPersonalSanctumError regardless
+        of the room.
+        """
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.room_features.seeds import ensure_sanctum_kind
+
+        # Build + dissolve sanctum in room A (founder is the leader).
+        sanctum_a, founder = _build_dissolution_sanctum(leader_is_founder=True)
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            perform_dissolution(sanctum_a, founder)
+
+        # Set up room B owned by the same founder.
+        ensure_sanctum_kind()
+        room_b = RoomProfileFactory()
+        LocationOwnershipFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=room_b,
+            holder_type=HolderType.PERSONA,
+            holder_persona=founder,
+            holder_organization=None,
+        )
+        character = founder.character_sheet.character
+        character.db_location = room_b.objectdb
+        character.save(update_fields=["db_location"])
+
+        # Re-founding in room B must succeed without SanctificationFounderHasPersonalSanctumError.
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            result = perform_sanctification(
+                room_b,
+                founder,
+                sanctum_a.resonance_type,
+                owner_mode=SanctumOwnerMode.PERSONAL,
+            )
+
+        self.assertFalse(result.fizzled, "Re-founding after dissolution should succeed")
+        self.assertIsNotNone(result.sanctum_id, "New sanctum_id must be set on success")
+        new_details = SanctumDetails.objects.get(pk=result.sanctum_id)
+        self.assertEqual(new_details.founder_character_sheet, founder.character_sheet)
+        self.assertEqual(new_details.owner_mode, SanctumOwnerMode.PERSONAL)
