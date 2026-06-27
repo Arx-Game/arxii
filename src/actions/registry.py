@@ -99,6 +99,11 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.progression_rewards import (
+    CastVoteAction,
+    ClaimKudosAction,
+    RemoveVoteAction,
+)
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -218,6 +223,9 @@ _ALL_ACTIONS: list[Action] = [
     RedistributePointsAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
+    ClaimKudosAction(),
+    CastVoteAction(),
+    RemoveVoteAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,
