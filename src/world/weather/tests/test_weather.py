@@ -28,11 +28,13 @@ from world.weather.factories import (
 )
 from world.weather.services import (
     clear_region_weather,
+    current_conditions,
     eligible_weather_types,
     get_effective_weather,
     roll_region_weather,
     select_weather_emit,
 )
+from world.weather.tasks import roll_and_echo_weather
 
 
 class WeatherResolutionTests(TestCase):
@@ -171,3 +173,54 @@ class WeatherEmitTests(TestCase):
 
     def test_no_weather_returns_none(self) -> None:
         assert select_weather_emit(AreaFactory(level=AreaLevel.CITY)) is None
+
+
+class CurrentConditionsTests(TestCase):
+    def _room(self, *, climate=None, weather_type=None):
+        region = AreaFactory(level=AreaLevel.CITY, climate=climate)
+        ward = AreaFactory(level=AreaLevel.WARD, parent=region)
+        profile = RoomProfileFactory(area=ward)
+        if weather_type is not None:
+            RegionWeatherStateFactory(area=region, weather_type=weather_type)
+        return profile.objectdb
+
+    def _summer_noon_clock(self) -> None:
+        GameClockFactory(anchor_ic_time=datetime(1010, 7, 15, 12, 0, tzinfo=UTC), paused=True)
+
+    def test_no_clock_no_weather_is_all_none(self) -> None:
+        conditions = current_conditions(self._room())
+        assert conditions.ic_time is None
+        assert conditions.weather_type is None
+        assert conditions.emit_text is None
+
+    def test_reports_time_and_weather_with_emit(self) -> None:
+        self._summer_noon_clock()
+        storm = WeatherTypeFactory(name="Storm")
+        WeatherEmitFactory(weather_type=storm, text="rain lashes down", in_summer=True, at_day=True)
+        conditions = current_conditions(self._room(weather_type=storm))
+        assert conditions.ic_time is not None
+        assert conditions.season == Season.SUMMER
+        assert conditions.phase == TimePhase.DAY
+        assert conditions.weather_type == storm
+        assert conditions.emit_text == "rain lashes down"
+
+    def test_weather_without_a_matching_emit_omits_the_line(self) -> None:
+        self._summer_noon_clock()
+        storm = WeatherTypeFactory()  # no emits at all
+        conditions = current_conditions(self._room(weather_type=storm))
+        assert conditions.weather_type == storm
+        assert conditions.emit_text is None
+
+
+class WeatherTickTests(TestCase):
+    def test_rolls_climate_regions_and_skips_climateless(self) -> None:
+        WeatherTypeFactory()  # one unbounded automated type, eligible anywhere
+        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=10))
+        climateless = AreaFactory(level=AreaLevel.CITY)
+        roll_and_echo_weather()
+        assert get_effective_weather(region) is not None
+        assert get_effective_weather(climateless) is None
+
+    def test_tick_is_safe_with_no_eligible_weather(self) -> None:
+        AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())  # no weather types exist
+        roll_and_echo_weather()  # must not raise

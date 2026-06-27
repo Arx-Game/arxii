@@ -16,6 +16,7 @@ from __future__ import annotations
 import secrets
 from typing import TYPE_CHECKING
 
+from evennia_extensions.models import RoomProfile
 from world.game_clock.services import get_ic_now, get_ic_phase, get_ic_season
 from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
@@ -25,9 +26,12 @@ from world.weather.constants import (
     WEATHER_SOURCE_PREFIX,
 )
 from world.weather.models import RegionWeatherState, WeatherType
+from world.weather.types import ConditionsSummary
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from evennia.objects.objects import DefaultObject
 
     from world.areas.models import Area
     from world.game_clock.constants import Season, TimePhase
@@ -238,3 +242,30 @@ def select_weather_emit(
     if not emits:
         return None
     return _weighted_choice(emits, [max(1, emit.weight) for emit in emits])
+
+
+def _room_area(room: DefaultObject) -> Area | None:
+    """The Area a room sits in, or None if it has no RoomProfile/area."""
+    try:
+        return room.room_profile.area
+    except (RoomProfile.DoesNotExist, AttributeError):
+        return None
+
+
+def current_conditions(room: DefaultObject) -> ConditionsSummary:
+    """IC time + the weather holding at a room, for the ``time`` command and frontend (#1522).
+
+    Reads the IC clock (time/phase/season) and the room's effective weather (most-specific-wins),
+    plus one season/phase-appropriate emit line. Any field is None when its source is absent (no
+    game clock, or no weather designated for the location).
+    """
+    area = _room_area(room)
+    state = get_effective_weather(area)
+    emit = select_weather_emit(area) if state is not None else None
+    return ConditionsSummary(
+        ic_time=get_ic_now(),
+        phase=get_ic_phase(),
+        season=get_ic_season(),
+        weather_type=state.weather_type if state is not None else None,
+        emit_text=emit.text if emit is not None else None,
+    )

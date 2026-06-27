@@ -75,13 +75,30 @@ Services (`world.weather.services`):
 - `apply_weather_exposure(state)` / `clear_region_weather(area)` — (re)write / remove the
   weather modifiers (same cascade as climate/style; countered by the same fixtures).
 - `select_weather_emit(area, *, season=None, phase=None)` — weighted-random emit for the
-  region's weather, gated by the current IC season + phase. The *selection* seam; pushing the
-  line to the room is slice 2b.
+  region's weather, gated by the current IC season + phase.
+
+### The live loop + player surface (slice 2b)
+
+- **Cron** (`world.weather.tasks.roll_and_echo_weather`, registered in `game_clock` at
+  `timedelta(hours=2)` REAL ≈ 6 IC hours): rerolls each climate-bearing region's weather, then
+  echoes one emit to the **online** occupants of its rooms as a `NarrativeCategory.ATMOSPHERE`
+  message (frontend routes it to a tab; offline players skip it — no stale catch-up flood).
+- **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
+  the room's effective weather + one emit line. Any field is None when its source is absent.
+- **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
+  `current_conditions` for the caller's room. The React widget renders the same data.
 
 ## Not yet built (later slices of #1522)
 
-- **Slice 2b** — seed the 263-emit Arx-1 corpus; the cron loop (rolls weather per region on a
-  cadence via `game_clock`); push selected emits to rooms.
+- **Squelch** — `TenureDisplaySettings` has no category mute yet; mirror `narrative.UserStoryMute`
+  semantics (suppress the live push, keep it readable in the atmosphere tab) so players can opt
+  out of the weather echo. (`[BUILT, NOT WIRED]`.)
+- **Corpus seeding** — the 263-emit Arx-1 corpus + the ~5 automated `WeatherType` rows
+  (+ exposures + temp bands) are *data*, seeded via an upsert path from the lore repo (fixtures
+  are gitignored; no management commands). Until seeded, `roll_region_weather` returns None and
+  weather is simply inert — the mechanism is complete, the data isn't shipped here.
+- **React weather widget** — a frontend surface consuming `current_conditions` (needs a
+  weather-at-location API endpoint resolving the viewer's active character's room).
 - **Slice 2c** — special feast-day weather (Moon Madness / Eclipse) on its own automated loop;
   wind as a mechanic (flyers/arrows/gale spells), driven by the active weather's WIND.
 

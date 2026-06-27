@@ -4396,6 +4396,7 @@
 - `apply_weather_exposure(state: 'RegionWeatherState') -> 'None' — Re-materialize a region's weather as decaying source-tagged cascade modifiers (#1522).`
 - `clear_region_weather(area: 'Area') -> 'None' — Remove a region's weather state and its weather-sourced exposure modifiers (#1522).`
 - `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
+- `current_conditions(room: 'DefaultObject') -> 'ConditionsSummary' — IC time + the weather holding at a room, for the ``time`` command and frontend (#1522).`
 - `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
 - `eligible_weather_types(area: 'Area | None') -> 'list[WeatherType]' — Automated, active weather types whose temperature band fits the region's climate (#1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
