@@ -97,6 +97,33 @@ class TestPlayerActionFurySoulfrayDefaults(TestCase):
         assert opt.provocation_cap == 3
 
 
+class TestPlayerActionSerializerFurySoulfray(TestCase):
+    def test_serializer_round_trips_fury_and_soulfray(self) -> None:
+        from actions.serializers import PlayerActionSerializer
+
+        pa = PlayerAction(
+            backend=ActionBackend.COMBAT,
+            display_name="Cast",
+            ref=ActionRef(backend=ActionBackend.COMBAT, technique_id=1),
+            available_fury_tiers=(
+                FuryTierOption(
+                    id=1,
+                    name="Unleashed",
+                    depth=2,
+                    control_penalty=4,
+                    intensity_bonus=5,
+                    berserk_severity=3,
+                ),
+            ),
+            eligible_fury_anchors=(AnchorOption(id=7, name="Rival", provocation_cap=3),),
+        )
+        data = PlayerActionSerializer(pa).data
+        assert data["available_fury_tiers"][0]["depth"] == 2
+        assert data["available_fury_tiers"][0]["berserk_severity"] == 3
+        assert data["eligible_fury_anchors"][0]["provocation_cap"] == 3
+        assert data["soulfray_warning"] is None
+
+
 class TestCombatActionsDescriptorEnrichment(TestCase):
     """_combat_actions populates soulfray_warning + fury fields (#1543)."""
 
