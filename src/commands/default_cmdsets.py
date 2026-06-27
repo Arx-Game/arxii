@@ -69,6 +69,7 @@ from commands.gemit import CmdGemit
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.locations import CmdManageRoom
+from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
@@ -155,6 +156,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLock,
             CmdUnlock,
             CmdRitual,
+            # #1349 — telnet face of the mission play services (resolve/abandon/group pick+vote).
+            CmdMission,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
