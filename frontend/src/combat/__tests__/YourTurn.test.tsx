@@ -291,6 +291,23 @@ function makePlayerAction(clashId: number | null, displayName: string): PlayerAc
   };
 }
 
+/** Focused combat-cast PlayerAction fixture with Soulfray + Fury descriptor fields (#1543). */
+function makeCastPlayerAction(
+  techniqueId: number,
+  displayName: string,
+  overrides: Partial<PlayerAction> = {}
+): PlayerAction {
+  const base = makePlayerAction(null, displayName);
+  return {
+    ...base,
+    ref: { ...base.ref, technique_id: techniqueId },
+    soulfray_warning: null,
+    available_fury_tiers: [],
+    eligible_fury_anchors: [],
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -1334,5 +1351,189 @@ describe('YourTurn — combat pull dispatch kwargs (issue-1455)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('selected-pull-summary')).not.toBeInTheDocument();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7 (issue-1543) — Soulfray + Fury declaration wiring
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () => {
+  const warning = {
+    stage_name: 'Perilous Cast',
+    stage_description: 'This cast risks Soulfray.',
+    has_death_risk: true,
+  };
+
+  const furyTiers = [
+    {
+      id: 10,
+      name: 'Spark',
+      depth: 1,
+      control_penalty: 1,
+      intensity_bonus: 1,
+      berserk_severity: 0,
+    },
+    {
+      id: 11,
+      name: 'Blaze',
+      depth: 3,
+      control_penalty: 2,
+      intensity_bonus: 3,
+      berserk_severity: 1,
+    },
+  ];
+
+  const furyAnchors = [
+    { id: 20, name: 'Keth', provocation_cap: 2 },
+    { id: 21, name: 'Lira', provocation_cap: 5 },
+  ];
+
+  it('sends confirm_soulfray_risk when warning is present and accepted', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(7, 'Doom Touch', { soulfray_warning: warning });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 7 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    expect(screen.getByTestId('soulfray-accept-gate')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /accept the risk/i }));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({
+      effort_level: 'medium',
+      confirm_soulfray_risk: true,
+    });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('does not send fury kwargs when no fury is chosen', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(8, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_anchors: furyAnchors,
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 8 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    expect(screen.getByTestId('fury-declaration')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({ effort_level: 'medium' });
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_commitment_id');
+    expect(calls[0][0].kwargs).not.toHaveProperty('fury_anchor_id');
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('sends fury_commitment_id + fury_anchor_id when fury is chosen within cap', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(9, 'Fury Cast', {
+      soulfray_warning: null,
+      available_fury_tiers: furyTiers,
+      eligible_fury_anchors: furyAnchors,
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 9 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+
+    // Pick tier Spark (depth 1) and anchor Keth (cap 2) — within cap.
+    const tierTrigger = screen.getByTestId('fury-tier-select');
+    await userEvent.click(tierTrigger);
+    const tierOption = await screen.findByText('Spark (depth 1)');
+    await userEvent.click(tierOption);
+
+    const anchorTrigger = screen.getByTestId('fury-anchor-select');
+    await userEvent.click(anchorTrigger);
+    const anchorOption = await screen.findByText('Keth (cap 2)');
+    await userEvent.click(anchorOption);
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({
+      effort_level: 'medium',
+      fury_commitment_id: 10,
+      fury_anchor_id: 20,
+    });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 });
