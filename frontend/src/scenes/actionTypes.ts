@@ -75,6 +75,31 @@ export interface AvailableEnhancement {
   soulfray_warning: SoulfrayWarningData | null;
 }
 
+/**
+ * A fury tier the player may commit for a combat-cast technique (#1543).
+ * Mirrors the backend FuryTierOption serializer shape.
+ */
+export interface FuryTierOption {
+  id: number;
+  name: string;
+  depth: number;
+  control_penalty: number;
+  intensity_bonus: number;
+  /** 0 → never berserk; higher values increase berserk severity on overcommit. */
+  berserk_severity: number;
+}
+
+/**
+ * A bond/anchor eligible to cap fury commitment for a combat-cast technique (#1543).
+ * Mirrors the backend AnchorOption serializer shape.
+ */
+export interface FuryAnchorOption {
+  id: number;
+  name: string;
+  /** Pre-computed bond cap used for client-side tier gating. */
+  provocation_cap: number;
+}
+
 export type ActionCategory = 'physical' | 'social' | 'mental';
 
 export interface PlayerAction {
@@ -98,6 +123,15 @@ export interface PlayerAction {
    * null / "any" → no restriction; "same" → must share a position; "adjacent" → same or neighbouring.
    */
   reach?: string | null;
+  /**
+   * Soulfray warning for combat-cast techniques that risk death (#1543).
+   * null / absent → no death-risk warning applies.
+   */
+  soulfray_warning?: SoulfrayWarningData | null;
+  /** Available fury commitment tiers for combat-cast techniques (#1543). */
+  available_fury_tiers?: FuryTierOption[];
+  /** Eligible fury anchors (bonds) that can cap fury commitment (#1543). */
+  eligible_fury_anchors?: FuryAnchorOption[];
 }
 
 export interface PlayerActionsResponse {
