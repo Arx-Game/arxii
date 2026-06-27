@@ -6377,6 +6377,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/locations/comfort/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /summary/?character_id=<id> — how uncomfortable that character is, and why. */
+    get: operations['locations_comfort_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -14844,6 +14861,23 @@ export interface components {
       description?: string;
       /** @description Minimum level required to have this class (0-10) */
       minimum_level?: number;
+    };
+    /**
+     * @description Read-only per-character comfort readout (mirrors ``CharacterComfortSummary``).
+     *
+     *     ``felt`` is the per-axis residual exposure (room felt minus the character's mitigation,
+     *     floored), keyed by the lowercased exposure-axis name (``cold``/``heat``/``wet``/…) and
+     *     carrying only the nonzero axes.
+     */
+    CharacterComfort: {
+      band: string;
+      band_index: number;
+      discomfort: number;
+      reasons: string[];
+      injury: number;
+      readonly felt: {
+        [key: string]: number;
+      };
     };
     /**
      * @description Read-only serializer for a character's covenant role assignment.
@@ -34893,6 +34927,28 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  locations_comfort_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the character to read comfort for (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterComfort'];
+        };
       };
     };
   };

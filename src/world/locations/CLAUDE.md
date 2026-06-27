@@ -61,6 +61,16 @@ targets (`COMFORT_MITIGATION_TARGET_NAMES`, e.g. `cold_mitigation`), read via `g
 lazily — one-way dependency.) Magnitudes/bands/targets are PLACEHOLDER (seed the targets for
 spells/conditions to write to).
 
+**API + React widget (#1522).** `GET /api/locations/comfort/?character_id=<id>`
+(`world.locations.views.ComfortViewSet`, `CharacterComfortSerializer`) → the `CharacterComfort`
+schema (`band`, `band_index`, `discomfort`, `reasons`, `injury`, `felt` map). Comfort is
+**personal**, so the endpoint only serves a character the requesting account plays
+(`RosterEntry.objects.for_account` tenure gate; unowned/unknown → 404). The frontend
+`ComfortWidget` (`frontend/src/comfort/`) takes the active character id from the `GameTopBar`,
+queries it via React Query, and renders a compact band glance (reasons in the tooltip) **only when
+something is biting** — it stays silent while the character is comfortable, so a cozy room isn't
+cluttered. Mirrors the weather widget's read pattern (`world/weather/CLAUDE.md`).
+
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`
 for the resonance axis addition.

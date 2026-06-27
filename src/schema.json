@@ -10079,6 +10079,30 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/locations/comfort/:
+    get:
+      operationId: locations_comfort_retrieve
+      description: GET /summary/?character_id=<id> — how uncomfortable that character
+        is, and why.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the character to read comfort for (must be your
+          own).
+        required: true
+      tags:
+      - comfort
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterComfort'
+          description: ''
   /api/magic/applicable-pulls/:
     post:
       operationId: magic_applicable_pulls_create
@@ -25530,6 +25554,39 @@ components:
       required:
       - id
       - name
+    CharacterComfort:
+      type: object
+      description: |-
+        Read-only per-character comfort readout (mirrors ``CharacterComfortSummary``).
+
+        ``felt`` is the per-axis residual exposure (room felt minus the character's mitigation,
+        floored), keyed by the lowercased exposure-axis name (``cold``/``heat``/``wet``/…) and
+        carrying only the nonzero axes.
+      properties:
+        band:
+          type: string
+        band_index:
+          type: integer
+        discomfort:
+          type: integer
+        reasons:
+          type: array
+          items:
+            type: string
+        injury:
+          type: integer
+        felt:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+      required:
+      - band
+      - band_index
+      - discomfort
+      - felt
+      - injury
+      - reasons
     CharacterCovenantRole:
       type: object
       description: |-
