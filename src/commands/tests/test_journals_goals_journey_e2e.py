@@ -107,7 +107,9 @@ class JournalCommandErrorTests(TestCase):
 
         flush_cache()
         self.caller = CharacterFactory()
-        CharacterSheetFactory(character=self.caller)
+        self.caller.db_account = AccountFactory()
+        self.caller.save()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
         self.caller.msg = MagicMock()
 
     def test_write_missing_body_reports_error(self) -> None:
@@ -126,6 +128,36 @@ class JournalCommandErrorTests(TestCase):
         _make_journal_cmd(self.caller, "").func()
         self.assertIn("no journal entries", _capture(self.caller).lower())
 
+    def test_respond_to_own_entry_reports_error(self) -> None:
+        # Caller writes a public entry, then tries to respond to it themselves.
+        _make_journal_cmd(
+            self.caller,
+            "write title=My Thoughts body=Some musings. public",
+        ).func()
+        entry = JournalEntry.objects.get(author=self.caller_sheet, title="My Thoughts")
+        _make_journal_cmd(
+            self.caller,
+            f"respond {entry.pk} type=praise title=Self Praise body=I agree with me.",
+        ).func()
+        self.assertIn("your own", _capture(self.caller).lower())
+        # No response row should have been created.
+        self.assertFalse(JournalEntry.objects.filter(parent=entry, response_type="praise").exists())
+
+    def test_respond_to_private_entry_reports_error(self) -> None:
+        # Caller writes a private entry (no `public` flag), then tries to respond.
+        _make_journal_cmd(
+            self.caller,
+            "write title=Secret Thoughts body=Hidden musings.",
+        ).func()
+        entry = JournalEntry.objects.get(author=self.caller_sheet, title="Secret Thoughts")
+        self.assertFalse(entry.is_public)
+        _make_journal_cmd(
+            self.caller,
+            f"respond {entry.pk} type=praise title=Intrusion body=I shouldn't see this.",
+        ).func()
+        self.assertIn("private", _capture(self.caller).lower())
+        self.assertFalse(JournalEntry.objects.filter(parent=entry, response_type="praise").exists())
+
 
 class GoalCommandErrorTests(TestCase):
     def setUp(self) -> None:
@@ -133,6 +165,8 @@ class GoalCommandErrorTests(TestCase):
 
         flush_cache()
         self.caller = CharacterFactory()
+        self.caller.db_account = AccountFactory()
+        self.caller.save()
         self.caller.msg = MagicMock()
 
     def test_unknown_domain_reports_error(self) -> None:
@@ -147,6 +181,25 @@ class GoalCommandErrorTests(TestCase):
     def test_bare_goal_shows_budget(self) -> None:
         _make_goal_cmd(self.caller, "").func()
         self.assertIn(str(MAX_GOAL_POINTS), _capture(self.caller))
+
+    def test_goal_set_revision_too_soon(self) -> None:
+        # First `goal set` succeeds (no existing goals -> revision gate skipped).
+        domain_a = GoalDomainFactory(name="Power")
+        domain_b = GoalDomainFactory(name="Legacy")
+        _make_goal_cmd(
+            self.caller,
+            f"set domain={domain_a.pk}:points=10,domain={domain_b.pk}:points=5",
+        ).func()
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
+
+        # Second `goal set` within the revision window -> REVISION_TOO_SOON.
+        _make_goal_cmd(
+            self.caller,
+            f"set domain={domain_a.pk}:points=20",
+        ).func()
+        self.assertIn("cannot revise", _capture(self.caller).lower())
+        # Original allocations unchanged (the second set was rejected).
+        self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
 
 
 class JournalParserTests(TestCase):
