@@ -1318,7 +1318,9 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE),
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE; plus the
+  player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
+  `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
 - **Key Services (`world/combat/services.py`):**
