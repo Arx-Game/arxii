@@ -34,9 +34,19 @@ class EngageCovenantMembershipAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.covenants.exceptions import (  # noqa: PLC0415
+            CovenantEngagementPrerequisiteNotMetError,
+        )
+        from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
         from world.covenants.services import set_engaged_membership  # noqa: PLC0415
 
-        set_engaged_membership(membership=kwargs["membership"])
+        membership = kwargs["membership"]
+        if not can_engage_membership(membership):
+            return ActionResult(
+                success=False,
+                message=CovenantEngagementPrerequisiteNotMetError.user_message,
+            )
+        set_engaged_membership(membership=membership)
         return ActionResult(success=True, message="You engage your covenant role.")
 
 

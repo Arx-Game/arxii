@@ -14,11 +14,13 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from commands.covenant import CmdCovenant
+from world.covenants.constants import BattleBinding, CovenantType
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
     CovenantManagerRankFactory,
     CovenantRankFactory,
+    CovenantRoleFactory,
 )
 
 
@@ -39,12 +41,25 @@ def _capture(caller: Any) -> str:
 
 
 class CmdCovenantEngageTests(TestCase):
-    """Engage/disengage subverbs run the real Actions and mutate the DB."""
+    """Engage/disengage subverbs run the real Actions and mutate the DB.
+
+    Uses a risen (non-dormant) BATTLE covenant so can_engage_membership passes.
+    DURANCE covenants require a co-present scene and another active member;
+    BATTLE only requires the covenant to be non-dormant.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
+        cls.covenant = CovenantFactory(
+            name="The Ashen Pact",
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            is_dormant=False,
+        )
+        cls.role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
         cls.membership = CharacterCovenantRoleFactory(
-            covenant=CovenantFactory(name="The Ashen Pact")
+            covenant=cls.covenant,
+            covenant_role=cls.role,
         )
 
     def test_engage_single_covenant(self) -> None:
@@ -131,10 +146,28 @@ class CmdCovenantAmbiguousTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
 
         cls.sheet = CharacterSheetFactory()
-        cls.cov_a = CovenantFactory(name="First Covenant")
-        cls.cov_b = CovenantFactory(name="Second Covenant")
-        cls.mem_a = CharacterCovenantRoleFactory(character_sheet=cls.sheet, covenant=cls.cov_a)
-        cls.mem_b = CharacterCovenantRoleFactory(character_sheet=cls.sheet, covenant=cls.cov_b)
+        # Use risen BATTLE covenants so test_engage_by_name_resolves_ambiguity passes
+        # the can_engage_membership gate (DURANCE requires a co-present scene+member).
+        cls.cov_a = CovenantFactory(
+            name="First Covenant",
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            is_dormant=False,
+        )
+        cls.cov_b = CovenantFactory(
+            name="Second Covenant",
+            covenant_type=CovenantType.BATTLE,
+            battle_binding=BattleBinding.STANDING,
+            is_dormant=False,
+        )
+        cls.role_a = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        cls.role_b = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        cls.mem_a = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet, covenant=cls.cov_a, covenant_role=cls.role_a
+        )
+        cls.mem_b = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet, covenant=cls.cov_b, covenant_role=cls.role_b
+        )
 
     def test_engage_ambiguous_covenant_shows_error(self) -> None:
         caller = self.sheet.character
