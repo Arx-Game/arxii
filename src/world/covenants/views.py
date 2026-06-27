@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from world.character_sheets.models import CharacterSheet
 from world.covenants.exceptions import (
     CannotTransferToDepartedMemberError,
     CovenantEngagementPrerequisiteNotMetError,
@@ -46,6 +47,7 @@ from world.covenants.permissions import (
     CanKickFromCovenant,
     IsOwnMembership,
 )
+from world.covenants.selectors import resolve_actor_membership
 from world.covenants.serializers import (
     AssignMemberRequestSerializer,
     CharacterCovenantRoleSerializer,
@@ -458,26 +460,22 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
 
     def _get_actor(self, covenant: Covenant) -> CharacterCovenantRole | None:
         """Return the requesting user's active can_manage_ranks membership, or None."""
-        return (
-            CharacterCovenantRole.objects.filter(
-                covenant=covenant,
-                left_at__isnull=True,
-                rank__can_manage_ranks=True,
-                character_sheet__roster_entry__tenures__end_date__isnull=True,
-                character_sheet__roster_entry__tenures__player_data__account=self.request.user,
-            )
-            .select_related("rank")
-            .first()
+        user_sheets = CharacterSheet.objects.filter(
+            roster_entry__tenures__end_date__isnull=True,
+            roster_entry__tenures__player_data__account=self.request.user,
+        )
+        return resolve_actor_membership(
+            covenant=covenant,
+            character_sheets=user_sheets,
+            capability="can_manage_ranks",
         )
 
     def _any_manager(self, covenant: Covenant) -> CharacterCovenantRole | None:
         """Return any active can_manage_ranks member (for staff bypass). Or None."""
-        return (
-            CharacterCovenantRole.objects.filter(
-                covenant=covenant, left_at__isnull=True, rank__can_manage_ranks=True
-            )
-            .select_related("rank")
-            .first()
+        return resolve_actor_membership(
+            covenant=covenant,
+            character_sheets=CharacterSheet.objects.all(),
+            capability="can_manage_ranks",
         )
 
     def _resolve_actor(

@@ -37,6 +37,7 @@ from commands.consent import (
     CmdRestoreSense,
 )
 from commands.consent_preferences import CmdConsent
+from commands.covenant import CmdCovenant
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -260,6 +261,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdVote,
             CmdRandomScene,
             CmdPathIntent,
+            # #1346 — covenant membership lifecycle telnet namespace.
+            CmdCovenant,
         )
         for command_cls in command_classes:
             self.add(command_cls())

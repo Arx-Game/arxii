@@ -30,6 +30,15 @@ from actions.definitions.consent_preferences import (
     SetSocialConsentCategoryRuleAction,
     SetSocialConsentPreferenceAction,
 )
+from actions.definitions.covenants import (
+    AssignCovenantRankAction,
+    DisengageCovenantMembershipAction,
+    EngageCovenantMembershipAction,
+    KickCovenantMemberAction,
+    LeaveCovenantAction,
+    StandDownBattleCovenantAction,
+    TransferTopRankAction,
+)
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -257,6 +266,13 @@ _ALL_ACTIONS: list[Action] = [
     LogGoalProgressAction(),
     GiveWriteupKudosAction(),
     FileWriteupComplaintAction(),
+    EngageCovenantMembershipAction(),
+    DisengageCovenantMembershipAction(),
+    LeaveCovenantAction(),
+    KickCovenantMemberAction(),
+    AssignCovenantRankAction(),
+    TransferTopRankAction(),
+    StandDownBattleCovenantAction(),
     CreateEventAction(),
     ScheduleEventAction(),
     StartEventAction(),
