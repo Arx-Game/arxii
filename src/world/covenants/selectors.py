@@ -22,14 +22,14 @@ def resolve_actor_membership(
     qs = CharacterCovenantRole.objects.filter(
         covenant=covenant,
         left_at__isnull=True,
-        character_sheet__in=list(character_sheets),
+        character_sheet__in=character_sheets,
     )
     if capability is not None:
         if capability not in _CAPABILITY_FIELDS:
             msg = f"Unknown capability {capability!r}"
             raise ValueError(msg)
         qs = qs.filter(**{f"rank__{capability}": True})
-    return qs.first()
+    return qs.select_related("rank").first()
 
 
 def get_active_memberships(*, character_sheet: CharacterSheet) -> list[CharacterCovenantRole]:
