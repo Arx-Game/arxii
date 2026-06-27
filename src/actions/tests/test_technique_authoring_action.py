@@ -5,6 +5,8 @@ Step 1: write failing tests before implementing the action.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.definitions.technique_authoring import AuthorTechniqueAction
@@ -20,7 +22,7 @@ from world.magic.models import (
     Technique,
     TechniqueTierBudget,
 )
-from world.magic.services.technique_builder import get_technique_budget_config
+from world.magic.services.technique_builder import PlayerPolicy, get_technique_budget_config
 from world.magic.types.technique_builder import TechniqueDesignInput
 
 
@@ -194,3 +196,44 @@ class AuthorTechniqueActionStaffTests(TestCase):
         self.assertFalse(
             CharacterTechnique.objects.filter(character=self.sheet, technique=tech).exists()
         )
+
+
+class AuthorTechniqueActionNotPermittedTests(TestCase):
+    """TechniqueAuthoringNotPermitted failure carries the not_permitted discriminator.
+
+    The web view maps ``data["error"] == "not_permitted"`` → HTTP 403.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.gift = GiftFactory()
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+        TechniqueTierBudget.objects.get_or_create(
+            tier=1,
+            defaults={"power_budget": 100, "representative_level": 1, "label": "Tier 1"},
+        )
+        get_technique_budget_config()
+
+    def _actor(self):
+        return self.sheet.character
+
+    def test_not_permitted_carries_error_discriminator(self) -> None:
+        """When the tier is disallowed, result.data["error"] == "not_permitted"."""
+        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, tier=1)
+        # Patch allowed_tiers to disallow all tiers so TechniqueAuthoringNotPermitted fires.
+        with patch.object(PlayerPolicy, "allowed_tiers", return_value=set()):
+            result = AuthorTechniqueAction().run(actor=self._actor(), design=design)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.data)
+        self.assertEqual(result.data.get("error"), "not_permitted")
+
+    def test_not_permitted_creates_no_rows(self) -> None:
+        """TechniqueAuthoringNotPermitted must not create any Technique rows."""
+        design = _design(self.gift.pk, self.style.pk, self.effect_type.pk, tier=1)
+        before = Technique.objects.count()
+        with patch.object(PlayerPolicy, "allowed_tiers", return_value=set()):
+            AuthorTechniqueAction().run(actor=self._actor(), design=design)
+        self.assertEqual(Technique.objects.count(), before)

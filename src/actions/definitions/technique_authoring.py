@@ -104,12 +104,15 @@ class AuthorTechniqueAction(Action):
                 message=exc.user_message,
                 data={"breakdown": exc.breakdown},
             )
-        except (
-            TechniqueAuthoringNotPermitted,
-            UnknownGift,
-            GiftNotOwned,
-            TechniqueDraftIncomplete,
-        ) as exc:
+        except TechniqueAuthoringNotPermitted as exc:
+            # data discriminator lets the web view map this failure to HTTP 403
+            # rather than the default HTTP 400 (task 5 convergence contract).
+            return ActionResult(
+                success=False,
+                message=exc.user_message,
+                data={"error": "not_permitted"},
+            )
+        except (UnknownGift, GiftNotOwned, TechniqueDraftIncomplete) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         return ActionResult(
