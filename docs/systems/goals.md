@@ -78,6 +78,8 @@ from world.goals.services import (
     get_goal_bonus,
     get_total_goal_points,
     get_goal_bonuses_breakdown,
+    set_character_goals,
+    log_goal_progress,
 )
 
 # Get final goal bonus for a domain (base * percentage modifiers)
@@ -91,7 +93,22 @@ total = get_total_goal_points(character_sheet)
 breakdown = get_goal_bonuses_breakdown(character_sheet)
 # Returns dict[str, GoalBonusBreakdown] mapping domain name to breakdown
 # Each GoalBonusBreakdown has: base_points, percent_modifier, final_bonus
+
+# Replace a character's goal allocations (weekly revision-gated). First-time
+# setup skips the revision gate. Raises GoalError on revision-too-soon /
+# over-cap (MAX_GOAL_POINTS=30) / duplicate-domain.
+created = set_character_goals(character=character, goals=[{"domain": 1, "points": 10, "notes": ""}])
+
+# Create a goal-progress journal entry (records xp_awarded=1 on the row; the
+# actual XP grant to the account is a pre-existing TODO).
+journal = log_goal_progress(character=character, domain=None, title="T", content="...", is_public=False)
 ```
+
+`GoalError` (`world/goals/types.py`) is the user-safe exception class for the
+write services — class-level message constants (`REVISION_TOO_SOON`,
+`OVER_POINT_CAP`, `DUPLICATE_DOMAIN`) + a `user_message` property, mirroring
+`world.journals.types.JournalError`. Responses surface `exc.user_message`,
+never `str(exc)`.
 
 **Percentage modifiers** come from `CharacterModifier` entries linked to distinction effects:
 - `goal_percent/all` - applies to all goal bonuses
@@ -149,6 +166,33 @@ Requires `X-Character-ID` header. Weekly revision limit enforced (first-time set
     "is_public": false
 }
 ```
+
+---
+
+## Actions & Telnet (#1350)
+
+Goal writes are Action-backed — both the web ViewSets and the telnet command
+converge on `action.run()` (ADR-0001). The write services above are reached via
+these REGISTRY Actions in `actions/definitions/goals.py`:
+
+| Action key | Service | Notes |
+|---|---|---|
+| `set_character_goals` | `set_character_goals` | Replaces all allocations; revision-gated. `GoalError` → `ActionResult(success=False, message=exc.user_message)`. |
+| `log_goal_progress` | `log_goal_progress` | Records a goal-progress journal row. |
+
+The web `CharacterGoalViewSet.update_all` / `GoalJournalViewSet.create`
+dispatch through these Actions rather than calling the services directly.
+
+**Telnet** — `CmdGoal` (`src/commands/goals.py`, key `goal`) is the thin
+authoring surface:
+
+- `goal add domain=<id|name> points=<n> [notes=<text>]` — revise one allocation (weekly-gated; merges with the rest)
+- `goal set domain=<id>:points=<n>[,...]` — bulk replace (weekly revision-gated)
+- `goal log [domain=<id|name>] title=<text> content=<text> [public]`
+- bare `goal` — current allocations + points remaining
+
+Both `goal set` and `goal add` share the weekly revision limit (they route
+through the same `set_character_goals` service the web `update_all` uses).
 
 ---
 

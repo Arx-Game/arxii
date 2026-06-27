@@ -62,6 +62,7 @@ from actions.definitions.gm_stories import (
     PromoteEpisodeAction,
     ResolveEpisodeAction,
 )
+from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -71,6 +72,11 @@ from actions.definitions.items import (
     TakeOutAction,
     UnequipAction,
     UseItemAction,
+)
+from actions.definitions.journals import (
+    CreateJournalEntryAction,
+    EditJournalEntryAction,
+    RespondToJournalAction,
 )
 from actions.definitions.locations import RoomEditAction
 from actions.definitions.movement import (
@@ -235,6 +241,11 @@ _ALL_ACTIONS: list[Action] = [
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    CreateJournalEntryAction(),
+    RespondToJournalAction(),
+    EditJournalEntryAction(),
+    SetCharacterGoalsAction(),
+    LogGoalProgressAction(),
     GiveWriteupKudosAction(),
     FileWriteupComplaintAction(),
     ManageTrainingAction(),

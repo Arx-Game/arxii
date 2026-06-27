@@ -18,6 +18,13 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **JournalTag model** — freeform tags per entry with unique constraint
 - **WeeklyJournalXP model** — per-character weekly tracking with timestamp-based reset
 - **Service functions** — `create_journal_entry()`, `create_journal_response()`, `edit_journal_entry()`
+- **Action-backed (#1350, ADR-0001)** — the three write services are wrapped by
+  REGISTRY Actions in `actions/definitions/journals.py`
+  (`create_journal_entry` / `respond_to_journal` / `edit_journal_entry`); both
+  the web `JournalEntryViewSet` and the telnet `CmdJournal` (`journal`
+  command — `write`/`respond`/`edit` subverbs) dispatch through `action.run()`
+  rather than calling services directly. Goals have the same convergence
+  (`set_character_goals` / `log_goal_progress` Actions + `CmdGoal`).
 - **REST API** — full CRUD with pagination, author/tag filtering, owner-only editing
 - **Achievement stats** — emits `journals.total_written`, `journals.total_public`, praise/retort stats
 - **JournalError** — custom exception with explicit user-safe message constants

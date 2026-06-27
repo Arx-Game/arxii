@@ -1559,6 +1559,8 @@
 - `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int — Get the goal bonus for a specific domain, applying percentage modifiers.`
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] — Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
+- `log_goal_progress(*, character: 'ObjectDB', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' — Create a goal-progress journal entry (records 1 XP on the row).`
+- `set_character_goals(*, character: 'ObjectDB', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] — Replace a character's goal allocations, enforcing the weekly revision limit.`
 
 
 ## world.items

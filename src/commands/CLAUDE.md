@@ -239,6 +239,23 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
+  `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
+  [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same
+  registry Actions the web `JournalEntryViewSet` uses: `CreateJournalEntryAction`,
+  `RespondToJournalAction`, `EditJournalEntryAction`. Bare `journal` / `journal list` lists the
+  caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
+  token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
+  collisions.
+- **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
+  routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` (shares the
+  same weekly revision limit as `set`) / `set domain=<id>:points=<n>[,...]` / `log
+  [domain=<id|name>] title=<text> content=<text> [public]`) to the same registry Actions the
+  web `CharacterGoalViewSet` / `GoalJournalViewSet` use: `SetCharacterGoalsAction` and
+  `LogGoalProgressAction`. Bare `goal` / `goal list` shows current point allocations and points
+  remaining. Domains resolve by id or name (iexact); `title`/`content`/`notes` are free text
+  (values run to the next `key=` or the bare `public` flag); `public` is a bare flag. Namespaced
+  to avoid top-level key collisions.
 - **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene`
   (`randomscene`, alias `rscene`) / `CmdPathIntent` (`pathintent`) (#1348) — telnet faces of the
   7 progression-reward Actions. `kudos [claim <category_id> <amount>]` dispatches

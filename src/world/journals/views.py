@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.registry import get_action
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
 from world.journals.filters import JournalEntryFilter
@@ -22,12 +23,6 @@ from world.journals.serializers import (
     JournalEntryListSerializer,
     JournalResponseCreateSerializer,
 )
-from world.journals.services import (
-    create_journal_entry,
-    create_journal_response,
-    edit_journal_entry,
-)
-from world.journals.types import JournalError
 
 
 class JournalEntryPagination(PageNumberPagination):
@@ -173,8 +168,8 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     def create(self, request: Request) -> Response:
         """Create a new journal entry."""
-        sheet = self._get_character_sheet(request)
-        if not sheet:
+        character = self._get_character(request)
+        if not character:
             return Response(
                 {"detail": "No character found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -183,15 +178,20 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         serializer = JournalEntryCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        entry = create_journal_entry(
-            author=sheet,
+        result = get_action("create_journal_entry").run(
+            actor=character,
             title=serializer.validated_data["title"],
             body=serializer.validated_data["body"],
             is_public=serializer.validated_data["is_public"],
             tags=serializer.validated_data.get("tags"),
         )
+        if not result.success:
+            return Response(
+                {"detail": result.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        entry = self._get_entry_for_response(entry.pk)
+        entry = self._get_entry_for_response(result.data["entry_id"])
         return Response(
             JournalEntryDetailSerializer(entry).data,
             status=status.HTTP_201_CREATED,
@@ -199,8 +199,16 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
         """Edit an existing journal entry (owner only)."""
-        sheet = self._get_character_sheet(request)
-        if not sheet:
+        character = self._get_character(request)
+        if not character:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            sheet = character.sheet_data
+        except CharacterSheet.DoesNotExist:
             return Response(
                 {"detail": "No character found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -217,26 +225,34 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         serializer = JournalEntryEditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            updated = edit_journal_entry(
-                entry=entry,
-                title=serializer.validated_data.get("title"),
-                body=serializer.validated_data.get("body"),
-            )
-        except JournalError as exc:
+        result = get_action("edit_journal_entry").run(
+            actor=character,
+            entry=entry,
+            title=serializer.validated_data.get("title"),
+            body=serializer.validated_data.get("body"),
+        )
+        if not result.success:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": result.message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        updated = self._get_entry_for_response(updated.pk)
+        updated = self._get_entry_for_response(result.data["entry_id"])
         return Response(JournalEntryDetailSerializer(updated).data)
 
     @action(detail=True, methods=["post"])
     def respond(self, request: Request, pk: str | None = None) -> Response:
         """Create a praise or retort response to a journal entry."""
-        sheet = self._get_character_sheet(request)
-        if not sheet:
+        character = self._get_character(request)
+        if not character:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            character.sheet_data  # noqa: B018
+        except CharacterSheet.DoesNotExist:
             return Response(
                 {"detail": "No character found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -253,21 +269,20 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         serializer = JournalResponseCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            response_entry = create_journal_response(
-                author=sheet,
-                parent=parent,
-                response_type=serializer.validated_data["response_type"],
-                title=serializer.validated_data["title"],
-                body=serializer.validated_data["body"],
-            )
-        except JournalError as exc:
+        result = get_action("respond_to_journal").run(
+            actor=character,
+            parent=parent,
+            response_type=serializer.validated_data["response_type"],
+            title=serializer.validated_data["title"],
+            body=serializer.validated_data["body"],
+        )
+        if not result.success:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": result.message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        response_entry = self._get_entry_for_response(response_entry.pk)
+        response_entry = self._get_entry_for_response(result.data["entry_id"])
         return Response(
             JournalEntryDetailSerializer(response_entry).data,
             status=status.HTTP_201_CREATED,

@@ -66,9 +66,9 @@ They do not use the command system, dispatchers, or handlers.
   (`"create_development"`), `CreateCapstoneAction` (`"create_capstone"`, visibility defaults
   SHARED), `RedistributePointsAction` (`"redistribute_points"`). Each wraps its
   `world.relationships.services` counterpart; `linked_scene` defaults to the caller's active scene
-  when the target is co-located. Shared `BaseRelationshipAction` + `HasCharacterSheetPrerequisite`.
-  Shared by telnet `CmdRelationship` (`relationship <subverb>`) and the web
-  `RelationshipUpdateViewSet`; no consent gate (ADR-0024);
+  when the target is co-located. Shared `BaseRelationshipAction` reuses
+  `HasCharacterSheetPrerequisite` from `actions.prerequisites`. Shared by telnet `CmdRelationship`
+  (`relationship <subverb>`) and the web `RelationshipUpdateViewSet`; no consent gate (ADR-0024);
   `progression_rewards.py` (#1348) — the 7 progression-reward verbs, all REGISTRY backend,
   `target_type=SELF`: `ClaimKudosAction` (key `"claim_kudos"`; wraps `claim_kudos_for_xp`),
   `CastVoteAction` / `RemoveVoteAction` (keys `"cast_vote"` / `"remove_vote"`; wrap
@@ -173,6 +173,7 @@ coupled to the action's kwarg names by the base class.
 ### Prerequisite implementations (`prerequisites.py`)
 
 - **`StaffOnlyPrerequisite`** — actor's account must be staff.
+- **`HasCharacterSheetPrerequisite`** — actor has an attached `CharacterSheet`.
 - **`HoldsItemPrerequisite`** — actor holds the `item` kwarg.
 - **`ItemUsablePrerequisite`** — item template has `on_use_pool` (is usable); consumables
   must have charges remaining. Delegates to `ItemTemplate.is_usable`.
