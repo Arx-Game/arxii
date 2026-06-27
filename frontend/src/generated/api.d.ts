@@ -11088,6 +11088,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/complaint/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description File a bad-faith-RP complaint against a writeup for staff triage. */
+    post: operations['relationships_relationship_updates_complaint_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationship-updates/develop/': {
     parameters: {
       query?: never;
@@ -11116,6 +11133,23 @@ export interface paths {
     put?: never;
     /** @description Record a first impression toward another character. */
     post: operations['relationships_relationship_updates_first_impression_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/kudos/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Commend a shared relationship writeup on behalf of its subject. */
+    post: operations['relationships_relationship_updates_kudos_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -23181,6 +23215,10 @@ export interface components {
        * @description When this capstone was recorded
        */
       readonly created_at: string;
+      /** @description Return pre-annotated kudos count, or fall back to a query. */
+      readonly kudos_count: number;
+      /** @description Return True if the request user has kudosed this capstone. */
+      readonly viewer_has_kudosed: boolean;
     };
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
@@ -25786,6 +25824,57 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /**
+     * @description Validate input for the complaint endpoint.
+     *
+     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+     *     Permissions (visibility check) are enforced inside the action / service.
+     */
+    WriteupComplaintWrite: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+      reason: string;
+    };
+    /**
+     * @description Validate input for the complaint endpoint.
+     *
+     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+     *     Permissions (visibility check) are enforced inside the action / service.
+     */
+    WriteupComplaintWriteRequest: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+      reason: string;
+    };
+    /**
+     * @description Validate input for the kudos endpoint.
+     *
+     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
+     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
+     */
+    WriteupKudosWrite: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+    };
+    /**
+     * @description Validate input for the kudos endpoint.
+     *
+     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
+     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
+     */
+    WriteupKudosWriteRequest: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+    };
+    /**
+     * @description * `update` - update
+     *     * `development` - development
+     *     * `capstone` - capstone
+     * @enum {string}
+     */
+    WriteupTypeEnum: 'update' | 'development' | 'capstone';
     /**
      * @description * `fresh` - Fresh
      *     * `strained` - Strained
@@ -41880,6 +41969,29 @@ export interface operations {
       };
     };
   };
+  relationships_relationship_updates_complaint_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WriteupComplaintWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WriteupComplaintWrite'];
+        };
+      };
+    };
+  };
   relationships_relationship_updates_develop_create: {
     parameters: {
       query?: never;
@@ -41922,6 +42034,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FirstImpressionWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_kudos_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WriteupKudosWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WriteupKudosWrite'];
         };
       };
     };

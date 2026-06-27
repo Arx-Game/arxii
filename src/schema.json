@@ -18671,6 +18671,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/CapstoneWrite'
           description: ''
+  /api/relationships/relationship-updates/complaint/:
+    post:
+      operationId: relationships_relationship_updates_complaint_create
+      description: File a bad-faith-RP complaint against a writeup for staff triage.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteupComplaintWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteupComplaintWrite'
+          description: ''
   /api/relationships/relationship-updates/develop/:
     post:
       operationId: relationships_relationship_updates_develop_create
@@ -18712,6 +18733,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FirstImpressionWrite'
+          description: ''
+  /api/relationships/relationship-updates/kudos/:
+    post:
+      operationId: relationships_relationship_updates_kudos_create
+      description: Commend a shared relationship writeup on behalf of its subject.
+      tags:
+      - relationships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteupKudosWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteupKudosWrite'
           description: ''
   /api/relationships/relationship-updates/redistribute/:
     post:
@@ -41722,16 +41764,26 @@ components:
           format: date-time
           readOnly: true
           description: When this capstone was recorded
+        kudos_count:
+          type: integer
+          description: Return pre-annotated kudos count, or fall back to a query.
+          readOnly: true
+        viewer_has_kudosed:
+          type: boolean
+          description: Return True if the request user has kudosed this capstone.
+          readOnly: true
       required:
       - author
       - author_name
       - created_at
       - id
+      - kudos_count
       - linked_scene
       - points
       - title
       - track
       - track_name
+      - viewer_has_kudosed
       - visibility
       - writeup
     RelationshipCondition:
@@ -47063,6 +47115,85 @@ components:
       required:
       - choice
       - persona_id
+    WriteupComplaintWrite:
+      type: object
+      description: |-
+        Validate input for the complaint endpoint.
+
+        Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+        Permissions (visibility check) are enforced inside the action / service.
+      properties:
+        writeup_type:
+          $ref: '#/components/schemas/WriteupTypeEnum'
+        writeup_id:
+          type: integer
+        reason:
+          type: string
+      required:
+      - reason
+      - writeup_id
+      - writeup_type
+    WriteupComplaintWriteRequest:
+      type: object
+      description: |-
+        Validate input for the complaint endpoint.
+
+        Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+        Permissions (visibility check) are enforced inside the action / service.
+      properties:
+        writeup_type:
+          $ref: '#/components/schemas/WriteupTypeEnum'
+        writeup_id:
+          type: integer
+        reason:
+          type: string
+          minLength: 1
+      required:
+      - reason
+      - writeup_id
+      - writeup_type
+    WriteupKudosWrite:
+      type: object
+      description: |-
+        Validate input for the kudos endpoint.
+
+        ``writeup_type`` selects which of the three writeup models the ID refers to.
+        ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+        action (raises WriteupFeedbackError → mapped to a 400 response body).
+      properties:
+        writeup_type:
+          $ref: '#/components/schemas/WriteupTypeEnum'
+        writeup_id:
+          type: integer
+      required:
+      - writeup_id
+      - writeup_type
+    WriteupKudosWriteRequest:
+      type: object
+      description: |-
+        Validate input for the kudos endpoint.
+
+        ``writeup_type`` selects which of the three writeup models the ID refers to.
+        ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+        action (raises WriteupFeedbackError → mapped to a 400 response body).
+      properties:
+        writeup_type:
+          $ref: '#/components/schemas/WriteupTypeEnum'
+        writeup_id:
+          type: integer
+      required:
+      - writeup_id
+      - writeup_type
+    WriteupTypeEnum:
+      enum:
+      - update
+      - development
+      - capstone
+      type: string
+      description: |-
+        * `update` - update
+        * `development` - development
+        * `capstone` - capstone
     ZoneEnum:
       enum:
       - fresh

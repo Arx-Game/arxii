@@ -1,7 +1,7 @@
 """API views for the relationships system."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Prefetch
+from django.db.models import Count, Exists, OuterRef, Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -22,6 +22,7 @@ from world.relationships.models import (
     RelationshipTrack,
     RelationshipTrackProgress,
     RelationshipUpdate,
+    WriteupKudos,
 )
 from world.relationships.serializers import (
     CapstoneWriteSerializer,
@@ -34,6 +35,8 @@ from world.relationships.serializers import (
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
     RelationshipTrackSerializer,
+    WriteupComplaintWriteSerializer,
+    WriteupKudosWriteSerializer,
 )
 
 
@@ -137,7 +140,12 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
     filterset_class = RelationshipCapstoneFilter
 
     def get_queryset(self) -> RelationshipCapstone.objects.__class__:  # type: ignore[override]
-        """Return capstones authored by the caller's character sheets, newest first."""
+        """Return capstones authored by the caller's character sheets, newest first.
+
+        Annotates ``kudos_count`` (total commendations) and ``viewer_has_kudosed``
+        (whether this user has commended each capstone) on every row to avoid N+1
+        queries when serializing the list.
+        """
         user = self.request.user
         return (
             RelationshipCapstone.objects.filter(author__character__db_account=user)
@@ -146,6 +154,12 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
                 "author__character",
                 "track",
                 "relationship",
+            )
+            .annotate(
+                kudos_count=Count("writeupkudos_set"),
+                viewer_has_kudosed=Exists(
+                    WriteupKudos.objects.filter(account_id=user.pk, capstone=OuterRef("pk"))
+                ),
             )
             .order_by("-created_at")
         )
@@ -168,6 +182,8 @@ class RelationshipUpdateViewSet(GenericViewSet):
             "develop": DevelopmentWriteSerializer,
             "capstone": CapstoneWriteSerializer,
             "redistribute": RedistributeWriteSerializer,
+            "kudos": WriteupKudosWriteSerializer,
+            "complaint": WriteupComplaintWriteSerializer,
         }
         return mapping.get(self.action, FirstImpressionWriteSerializer)
 
@@ -313,3 +329,49 @@ class RelationshipUpdateViewSet(GenericViewSet):
         )
 
         return self._run_action(request, RedistributePointsAction)
+
+    def _run_feedback_action(self, request, action_class):
+        """Resolve actor, validate input, and dispatch a writeup-feedback action.
+
+        Simpler than ``_run_action``: no target persona resolution or track
+        building — the feedback actions only need ``actor`` + the validated
+        serializer kwargs (``writeup_type``, ``writeup_id``, optional ``reason``).
+        """
+        actor, error = self._resolve_actor(request)
+        if actor is None:
+            return Response(
+                {"success": False, "message": error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        result = action_class().run(actor=actor, **serializer.validated_data)
+        if not result.success:
+            return Response(
+                {"success": False, "message": result.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "success": True,
+                "message": result.message,
+                "data": result.data or {},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"])
+    def kudos(self, request):
+        """Commend a shared relationship writeup on behalf of its subject."""
+        from actions.definitions.relationships import GiveWriteupKudosAction  # noqa: PLC0415
+
+        return self._run_feedback_action(request, GiveWriteupKudosAction)
+
+    @action(detail=False, methods=["post"])
+    def complaint(self, request):
+        """File a bad-faith-RP complaint against a writeup for staff triage."""
+        from actions.definitions.relationships import FileWriteupComplaintAction  # noqa: PLC0415
+
+        return self._run_feedback_action(request, FileWriteupComplaintAction)
