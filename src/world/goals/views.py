@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.registry import get_action
 from web.api.mixins import CharacterContextMixin
 from world.goals.filters import PublicGoalJournalFilterSet
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
@@ -20,7 +21,7 @@ from world.goals.serializers import (
     GoalJournalSerializer,
     get_goal_domains_queryset,
 )
-from world.goals.services import MAX_GOAL_POINTS, log_goal_progress, set_character_goals
+from world.goals.services import MAX_GOAL_POINTS
 from world.goals.types import GoalError
 
 
@@ -110,21 +111,21 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         serializer = CharacterGoalUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            goals = set_character_goals(
-                character=character,
-                goals=serializer.validated_data["goals"],
-            )
-        except GoalError as exc:
-            if exc.user_message == GoalError.REVISION_TOO_SOON:
+        result = get_action("set_character_goals").run(
+            actor=character, goals=serializer.validated_data["goals"]
+        )
+        if not result.success:
+            # Preserve the revision-too-soon shape (with next_revision_at) for the web.
+            if result.message == GoalError.REVISION_TOO_SOON:
                 revision, _ = GoalRevision.objects.get_or_create(character=character)
                 next_revision = revision.last_revised_at + timedelta(weeks=1)
                 return Response(
                     {"detail": "Cannot revise goals yet.", "next_revision_at": next_revision},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
+        goals = CharacterGoal.objects.filter(character=character).select_related("domain")
         total_points = sum(g.points for g in goals)
         revision = GoalRevision.objects.get(character=character)
         return Response(
@@ -189,13 +190,17 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
         serializer = GoalJournalCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        journal = log_goal_progress(
-            character=character,
+        result = get_action("log_goal_progress").run(
+            actor=character,
             domain=serializer.validated_data.get("domain"),
             title=serializer.validated_data["title"],
             content=serializer.validated_data["content"],
             is_public=serializer.validated_data.get("is_public", False),
         )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        journal = GoalJournal.objects.get(pk=result.data["journal_id"])
         return Response(GoalJournalSerializer(journal).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"])
