@@ -139,3 +139,123 @@ class RemoveVoteAction(Action):
         except ProgressionError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message="Vote removed.")
+
+
+@dataclass
+class ClaimRandomSceneAction(Action):
+    """Claim a weekly random-scene target, awarding XP. Wraps ``claim_random_scene``."""
+
+    key: str = "claim_random_scene"
+    name: str = "Claim Random Scene"
+    icon: str = "dice"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.progression.services.random_scene import claim_random_scene  # noqa: PLC0415
+        from world.progression.types import ProgressionError  # noqa: PLC0415
+
+        account = _resolve_account(actor)
+        if account is None:
+            return ActionResult(success=False, message=_NO_ACCOUNT)
+        try:
+            target = claim_random_scene(account=account, target_id=int(kwargs["target_id"]))
+        except ProgressionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True, message=f"Claimed random scene with {target.target_persona.name}."
+        )
+
+
+@dataclass
+class RerollRandomSceneAction(Action):
+    """Reroll a random-scene target slot (one per week). Wraps ``reroll_random_scene_target``."""
+
+    key: str = "reroll_random_scene"
+    name: str = "Reroll Random Scene"
+    icon: str = "rotate"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+        from world.progression.models import RandomSceneTarget  # noqa: PLC0415
+        from world.progression.services.random_scene import (  # noqa: PLC0415
+            reroll_random_scene_target,
+        )
+        from world.progression.types import ProgressionError  # noqa: PLC0415
+
+        account = _resolve_account(actor)
+        if account is None:
+            return ActionResult(success=False, message=_NO_ACCOUNT)
+        game_week = get_current_game_week()
+        target = RandomSceneTarget.objects.filter(
+            pk=kwargs.get("target_id"), account=account, game_week=game_week
+        ).first()
+        if target is None:
+            return ActionResult(success=False, message=ProgressionError.RS_NOT_FOUND)
+        try:
+            updated = reroll_random_scene_target(
+                account=account, slot_number=target.slot_number, game_week=game_week
+            )
+        except ProgressionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"Rerolled to {updated.target_persona.name}.")
+
+
+@dataclass
+class SetPathIntentAction(Action):
+    """Declare the character's intended next path. Wraps ``set_path_intent``."""
+
+    key: str = "set_path_intent"
+    name: str = "Declare Path Intent"
+    icon: str = "compass"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.classes.models import Path  # noqa: PLC0415
+        from world.progression.services.path_intent import set_path_intent  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return ActionResult(success=False, message="No active character.")
+        path = Path.objects.filter(pk=kwargs.get("path_id"), is_active=True).first()
+        if path is None:
+            return ActionResult(success=False, message="That is not a valid path.")
+        set_path_intent(sheet, path)
+        return ActionResult(success=True, message=f"You intend to walk the path of {path.name}.")
+
+
+@dataclass
+class ClearPathIntentAction(Action):
+    """Clear the character's declared path intent. Wraps ``clear_path_intent``."""
+
+    key: str = "clear_path_intent"
+    name: str = "Clear Path Intent"
+    icon: str = "compass"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.progression.services.path_intent import clear_path_intent  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return ActionResult(success=False, message="No active character.")
+        clear_path_intent(sheet)
+        return ActionResult(success=True, message="Path intent cleared.")

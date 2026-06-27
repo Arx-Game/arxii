@@ -1,15 +1,26 @@
-"""Tests for progression-reward actions (ClaimKudos, CastVote, RemoveVote)."""
+"""Tests for progression-reward actions."""
+
+from unittest.mock import patch
 
 from django.test import TestCase
 
 from actions.definitions.progression_rewards import (
     CastVoteAction,
     ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
     RemoveVoteAction,
+    SetPathIntentAction,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import PathFactory
 from world.progression.constants import VoteTargetType
-from world.progression.factories import KudosClaimCategoryFactory, KudosPointsDataFactory
+from world.progression.factories import (
+    KudosClaimCategoryFactory,
+    KudosPointsDataFactory,
+    RandomSceneTargetFactory,
+)
+from world.progression.models.path_intent import PathIntent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import InteractionFactory, PersonaFactory
 
@@ -86,3 +97,32 @@ class VoteActionTests(TestCase):
             target_id=interaction.pk,
         )
         self.assertFalse(result.success)
+
+
+class RandomSceneActionTests(TestCase):
+    @patch("world.progression.services.random_scene.validate_random_scene_claim", return_value=True)
+    def test_claim_success(self, mock_validate) -> None:
+        claimer, account = _actor_with_account()
+        target_persona = PersonaFactory()
+        t_entry = RosterEntryFactory(character_sheet=target_persona.character_sheet)
+        RosterTenureFactory(roster_entry=t_entry)
+        target = RandomSceneTargetFactory(account=account, target_persona=target_persona)
+        result = ClaimRandomSceneAction().run(actor=claimer, target_id=target.pk)
+        self.assertTrue(result.success)
+        target.refresh_from_db()
+        self.assertTrue(target.claimed)
+
+
+class PathIntentActionTests(TestCase):
+    def setUp(self) -> None:
+        PathIntent.flush_instance_cache()
+
+    def test_set_then_clear(self) -> None:
+        actor, _ = _actor_with_account()
+        path = PathFactory(name="Champion")
+        result = SetPathIntentAction().run(actor=actor, path_id=path.pk)
+        self.assertTrue(result.success)
+        self.assertTrue(PathIntent.objects.filter(character_sheet=actor.sheet_data).exists())
+        cleared = ClearPathIntentAction().run(actor=actor)
+        self.assertTrue(cleared.success)
+        self.assertFalse(PathIntent.objects.filter(character_sheet=actor.sheet_data).exists())

@@ -102,7 +102,11 @@ from actions.definitions.progression import ManageTrainingAction, PurchaseUnlock
 from actions.definitions.progression_rewards import (
     CastVoteAction,
     ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
     RemoveVoteAction,
+    RerollRandomSceneAction,
+    SetPathIntentAction,
 )
 from actions.definitions.relationships import (
     CreateCapstoneAction,
@@ -226,6 +230,10 @@ _ALL_ACTIONS: list[Action] = [
     ClaimKudosAction(),
     CastVoteAction(),
     RemoveVoteAction(),
+    ClaimRandomSceneAction(),
+    RerollRandomSceneAction(),
+    SetPathIntentAction(),
+    ClearPathIntentAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

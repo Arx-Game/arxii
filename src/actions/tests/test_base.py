@@ -247,6 +247,10 @@ class ActionRegistryTests(TestCase):
             "claim_kudos",
             "cast_vote",
             "remove_vote",
+            "claim_random_scene",
+            "reroll_random_scene",
+            "set_path_intent",
+            "clear_path_intent",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
