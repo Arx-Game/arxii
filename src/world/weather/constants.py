@@ -1,5 +1,14 @@
 """Constants for the weather system (#1522)."""
 
+# Prefix for the ``source`` tag on weather-written ``LocationValueModifier`` rows, so a region's
+# transient weather exposure can be cleared/rewritten on each roll. Full tag: ``weather:<area_pk>``.
+WEATHER_SOURCE_PREFIX = "weather:"
+
+# How many days a weather exposure takes to fully fade if never refreshed — the per-row
+# ``change_per_day`` is derived as ``round(-value / WEATHER_FADE_DAYS)`` so weather softens between
+# rolls and self-clears if the cron stalls. PLACEHOLDER (real cadence is a tuning pass).
+WEATHER_FADE_DAYS = 1.0
+
 # Global per-month temperature shift applied on top of every region's flat climate
 # baseline (#1522). The IC clock's month (``game_clock`` → ``get_ic_now().month``)
 # indexes this curve; the value is *added* to a climate's signed ``temperature`` before

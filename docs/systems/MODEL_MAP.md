@@ -407,6 +407,7 @@
 
 ### Area
 **Foreign Keys:**
+  - weather_state -> weather.RegionWeatherState [OneToOne] (nullable)
   - building_profile -> buildings.Building [OneToOne] (nullable)
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
@@ -1073,6 +1074,7 @@
   - children <- codex.CodexSubject
   - entries <- codex.CodexEntry
   - climates <- weather.Climate
+  - weather_types <- weather.WeatherType
   - architectural_styles <- buildings.ArchitecturalStyle
 
 ### CodexSubjectBreadcrumb
@@ -4359,3 +4361,48 @@
 **Foreign Keys:**
   - chart -> traits.ResultChart [FK]
   - outcome -> traits.CheckOutcome [FK]
+
+
+## world.weather
+
+### Climate
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - areas <- areas.Area
+
+### WeatherType
+**Foreign Keys:**
+  - codex_subject -> codex.CodexSubject [FK] (nullable)
+**Pointed to by:**
+  - exposures <- weather.WeatherTypeExposure
+  - emits <- weather.WeatherEmit
+  - active_in_regions <- weather.RegionWeatherState
+
+### WeatherTypeExposure
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+
+### WeatherEmit
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+
+### RegionWeatherState
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+  - weather_type -> weather.WeatherType [FK]
+
+### Service Functions
+- `apply_weather_exposure(state: 'RegionWeatherState') -> 'None' — Re-materialize a region's weather as decaying source-tagged cascade modifiers (#1522).`
+- `clear_region_weather(area: 'Area') -> 'None' — Remove a region's weather state and its weather-sourced exposure modifiers (#1522).`
+- `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
+- `current_temperature_shift(*, real_now: 'datetime | None' = None) -> 'int' — The current global seasonal temperature shift from the IC clock (#1522).`
+- `eligible_weather_types(area: 'Area | None') -> 'list[WeatherType]' — Automated, active weather types whose temperature band fits the region's climate (#1522).`
+- `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
+- `get_effective_weather(area: 'Area | None') -> 'RegionWeatherState | None' — Walk up the area hierarchy to the nearest current-weather state (#1522).`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
+- `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
+- `get_ic_season(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.Season | None — Return the current IC season, or None if no clock exists.`
+- `month_temperature_shift(month: 'int') -> 'int' — The global temperature shift for an IC month (1–12); 0 if out of range.`
+- `roll_region_weather(area: 'Area', *, weather_type: 'WeatherType | None' = None) -> 'RegionWeatherState | None' — Set (or roll) a region's current weather and re-apply its exposure modifiers (#1522).`
+- `select_weather_emit(area: 'Area | None', *, season: 'Season | None' = None, phase: 'TimePhase | None' = None) -> 'WeatherEmit | None' — Pick a weighted-random atmospheric emit for a region's current weather (#1522).`

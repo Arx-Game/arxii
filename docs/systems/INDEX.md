@@ -450,15 +450,17 @@ Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 - **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
 - **Source:** `src/world/realms/`
 - **Details:** [realms.md](realms.md)
-### Weather (Climate baseline — #1522)
-Mechanical regional climate feeding the #1514 comfort substrate; transient weather layer is a later slice.
+### Weather (Climate baseline + transient weather — #1522)
+Mechanical regional climate + transient weather feeding the #1514 comfort substrate.
 
-- **Models:** `Climate` (signed `temperature`/`moisture` baseline + `codex_subject` lore FK)
-- **Designation:** `Area.climate` FK (mirrors `Area.realm`)
-- **Key Services:** `get_effective_climate(area)` (most-specific-wins walk-up), `current_temperature_shift()` (per-month curve off the IC `game_clock`), `climate_exposure_base(climate, stat_key, *, temperature_shift=0)` (signed weights → floored COLD/HEAT/WET/DRY axes; WIND never climate-driven)
-- **Comfort integration:** folded into `world.locations.services.felt_exposure` before the 0-floor (a cooling fixture fights a desert's heat); `effective_value` stays climate-free
-- **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve, PLACEHOLDER magnitudes)
-- **Integrates with:** locations (exposure axes + comfort), areas (`Area.climate`), game_clock (IC season/month), codex (lore)
+- **Models:** `Climate` (signed `temperature`/`moisture` baseline + `codex_subject` lore FK), `WeatherType` (`is_automated`, `selection_weight`, `min`/`max_temperature` climate band), `WeatherTypeExposure` (`(type, stat_key) -> value`, mirrors `StyleAffinity`), `WeatherEmit` (season `in_*` + phase `at_*` gated flavour lines), `RegionWeatherState` (current weather per region Area)
+- **Designation:** `Area.climate` FK (mirrors `Area.realm`); `RegionWeatherState.area` OneToOne
+- **Climate services:** `get_effective_climate(area)` (most-specific-wins walk-up), `current_temperature_shift()` (per-month curve off the IC `game_clock`), `climate_exposure_base(climate, stat_key, *, temperature_shift=0)` (signed weights → floored COLD/HEAT/WET/DRY; WIND never climate-driven)
+- **Weather services:** `get_effective_weather(area)` (resolver), `eligible_weather_types(area)` (climate-temp-band filter), `roll_region_weather(area, *, weather_type=None)` (weighted-random eligible type → state + decaying source-tagged `weather:<area_pk>` exposure modifiers), `apply_weather_exposure`/`clear_region_weather`, `select_weather_emit(area, *, season=None, phase=None)` (season/phase-gated, weighted)
+- **Comfort integration:** climate folds into `world.locations.services.felt_exposure` before the 0-floor (a cooling fixture fights a desert's heat); weather writes the same cascade modifiers; `effective_value` stays climate-free
+- **Constants:** `MONTH_TEMPERATURE_SHIFT` (12-value seasonal curve), `WEATHER_FADE_DAYS`, `WEATHER_SOURCE_PREFIX` — PLACEHOLDER magnitudes
+- **Integrates with:** locations (exposure axes + comfort cascade), areas (`Area.climate`, `RegionWeatherState.area`), game_clock (IC season/phase/month), codex (lore)
+- **Not yet wired:** emit corpus seeding + cron loop + room push (2b); special feast-day weather + wind mechanic (2c)
 - **Source:** `src/world/weather/` — see `world/weather/CLAUDE.md`
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
