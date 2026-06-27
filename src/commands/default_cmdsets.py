@@ -66,6 +66,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
+from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.journals import CmdJournal
@@ -234,6 +235,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdProgressionUnlock,
             # #1350 — journal authoring namespace: write/respond/edit subverbs + list hub.
             CmdJournal,
+            # #1350 — goal authoring namespace.
+            CmdGoal,
             # #1485 — relationship-building namespace: impression/develop/capstone/
             # redistribute write verbs + list/show read surfaces.
             CmdRelationship,

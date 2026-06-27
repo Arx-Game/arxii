@@ -215,6 +215,14 @@ actions, backends, and service functions.
   caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
   token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
   collisions.
+- **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
+  routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` / `set
+  domain=<id>:points=<n>[,...]` / `log [domain=<id|name>] title=<text> content=<text>
+  [public]`) to the same registry Actions the web `CharacterGoalViewSet` / `GoalJournalViewSet`
+  use: `SetCharacterGoalsAction` and `LogGoalProgressAction`. Bare `goal` / `goal list` shows
+  current point allocations and points remaining. Domains resolve by id or name (iexact);
+  `title`/`content`/`notes` are free text (values run to the next `key=` or the bare `public`
+  flag); `public` is a bare flag. Namespaced to avoid top-level key collisions.
 - **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
   namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
   `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
