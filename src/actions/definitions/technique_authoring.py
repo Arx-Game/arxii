@@ -93,6 +93,9 @@ class AuthorTechniqueAction(Action):
         policy = StaffPolicy() if as_staff else PlayerPolicy()
 
         try:
+            # Single gift-ownership gate. Defensive on the web player path (the
+            # serializer already enforced it) and a no-op for the staff path;
+            # the telnet workbench relies on it as its only gate.
             validate_design_for_character(design, policy, character)
             if as_staff:
                 technique, breakdown = author_staff_technique(design)

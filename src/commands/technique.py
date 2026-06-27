@@ -39,6 +39,7 @@ _USAGE = (
     "  technique set <field>=<v> ...   — set one or more draft fields\n"
     "    (fields: name, description, gift, style, effect_type,\n"
     "             action_category, tier, intensity, control, anima_cost)\n"
+    "    (put name= / description= LAST — they consume the rest of the line)\n"
     "  technique restrict add|remove <name>\n"
     "  technique grant add capability=<n> base=<n> mult=<f>\n"
     "  technique grant remove <row-id>\n"
