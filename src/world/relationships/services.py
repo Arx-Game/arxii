@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
@@ -375,7 +375,12 @@ def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
         raise AlreadyCommendedError
 
     with transaction.atomic():
-        kudos = WriteupKudos.objects.create(account=giver_account, **{field: writeup})
+        try:
+            kudos = WriteupKudos.objects.create(account=giver_account, **{field: writeup})
+        except IntegrityError:
+            # Race: two concurrent commends from the same account both passed the
+            # exists() pre-check; the second hits the DB unique constraint.
+            raise AlreadyCommendedError from None
         if author_account:
             try:
                 category = KudosSourceCategory.objects.get(name=RELATIONSHIP_WRITEUP_KUDOS_CATEGORY)
@@ -385,12 +390,15 @@ def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
                     RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
                 )
             else:
+                # Award anonymously — do NOT pass awarded_by=giver_account.
+                # The commender is the writeup's subject; surfacing their account username
+                # to the author would link an IC character to its OOC player account,
+                # violating player-behind-character privacy (ADR-0033).
                 award_kudos(
                     author_account,
                     WRITEUP_KUDOS_AMOUNT,
                     category,
                     "Relationship writeup commended",
-                    awarded_by=giver_account,
                 )
     return kudos
 

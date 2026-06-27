@@ -7,7 +7,7 @@ import logging
 from django.test import TestCase
 
 from world.progression.factories import KudosSourceCategoryFactory
-from world.progression.models import KudosPointsData
+from world.progression.models import KudosPointsData, KudosTransaction
 from world.relationships.constants import (
     RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
     WRITEUP_KUDOS_AMOUNT,
@@ -94,6 +94,12 @@ class GiveWriteupKudosTest(TestCase):
         other_account = _make_linked_account(other_rel.source)
         with self.assertRaises(NotWriteupSubjectError):
             give_writeup_kudos(giver_account=other_account, writeup=self.update)
+
+    def test_give_kudos_awarded_anonymously(self):
+        """awarded_by must be None — subject identity must not leak to author (ADR-0033)."""
+        give_writeup_kudos(giver_account=self.subject_account, writeup=self.update)
+        tx = KudosTransaction.objects.get(account=self.author_account)
+        self.assertIsNone(tx.awarded_by, "KudosTransaction.awarded_by must be None")
 
     def test_give_kudos_unseeded_category_warns_skips(self):
         """Absent KudosSourceCategory: WriteupKudos row is created, no award, warning logged."""
