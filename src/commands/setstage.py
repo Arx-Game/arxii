@@ -28,6 +28,10 @@ class CmdSetStage(ArxCommand):
       setstage list                  -- list all position blueprints
       setstage <name|id>             -- instantiate <name|id> into this room
       setstage <name|id> replace     -- replace existing positions
+
+    The words "list" and "replace" are reserved: a blueprint literally named
+    "list" must be invoked by id, and "replace" cannot be used as a blueprint
+    name invoked by name.
     """
 
     key = "setstage"
@@ -74,24 +78,25 @@ class CmdSetStage(ArxCommand):
             self.msg("You are nowhere to stage.")
             return
 
-        positions = Position.objects.filter(room=room).order_by("name")
-        if positions:
-            lines = ["Positions here:"]
-            lines += [f"  {p.name}" for p in positions]
-        else:
-            lines = ["No positions are set in this room yet."]
-        self.msg("\n".join(lines))
-
-        if show_all:
-            blueprints = PositionBlueprint.objects.all().order_by("name")
-            if blueprints:
-                lines = ["Position blueprints:"]
-                lines += [f"  {bp.pk}: {bp.name}" for bp in blueprints]
+        if not show_all:
+            positions = Position.objects.filter(room=room).order_by("name")
+            if positions:
+                lines = ["Positions here:"]
+                lines += [f"  {p.name}" for p in positions]
             else:
-                lines = ["No position blueprints are defined."]
+                lines = ["No positions are set in this room yet."]
             self.msg("\n".join(lines))
+
+            profile = getattr(room, "room_profile", None)  # noqa: GETATTR_LITERAL
+            default = profile.default_blueprint if profile is not None else None
+            if default is not None:
+                self.msg(f"Default blueprint here: {default.name} (pk {default.pk})")
             return
 
-        default = room.room_profile.default_blueprint if room.room_profile else None
-        if default is not None:
-            self.msg(f"Default blueprint here: {default.name} (pk {default.pk})")
+        blueprints = PositionBlueprint.objects.all().order_by("name")
+        if blueprints:
+            lines = ["Position blueprints:"]
+            lines += [f"  {bp.pk}: {bp.name}" for bp in blueprints]
+        else:
+            lines = ["No position blueprints are defined."]
+        self.msg("\n".join(lines))

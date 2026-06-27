@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from commands.exceptions import CommandError
 from commands.setstage import CmdSetStage
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.areas.positioning.factories import PositionBlueprintFactory
 from world.areas.positioning.models import Position
 
@@ -45,16 +45,24 @@ class SetStageParseTests(TestCase):
             self._parse("No Such Blueprint")
 
 
-def _make_staff_character(key: str, room) -> object:
-    """Return an Evennia character connected to a staff account."""
+def _make_character(key: str, room, *, is_staff: bool) -> object:
+    """Return an Evennia character connected to an account."""
     from evennia import create_object
 
     char = create_object("typeclasses.characters.Character", key=key, location=room, nohome=True)
-    account = AccountFactory(username=f"account_{key}", is_staff=True)
-    account.save()
+    account = AccountFactory(username=f"account_{key}", is_staff=is_staff)
     char.db_account = account
-    char.save()
     return char
+
+
+def _make_staff_character(key: str, room) -> object:
+    """Return an Evennia character connected to a staff account."""
+    return _make_character(key, room, is_staff=True)
+
+
+def _make_nonstaff_character(key: str, room) -> object:
+    """Return an Evennia character connected to a non-staff account."""
+    return _make_character(key, room, is_staff=False)
 
 
 def _make_room(key: str = "The Solar") -> object:
@@ -77,7 +85,17 @@ class SetStageHubTests(TestCase):
         room = _make_room()
         caller = _make_staff_character("stagehand", room)
         msgs = self._run("", caller)
-        assert any("No positions" in m or "positions" in m.lower() for m in msgs)
+        self.assertIn("No positions are set in this room yet.", msgs)
+
+    def test_bare_setstage_with_default_blueprint(self) -> None:
+        room = _make_room()
+        blueprint = PositionBlueprintFactory(name="Hall Layout")
+        profile = RoomProfileFactory(objectdb=room)
+        profile.default_blueprint = blueprint
+        profile.save()
+        caller = _make_staff_character("stagehand", room)
+        msgs = self._run("", caller)
+        assert any("Default blueprint here:" in m for m in msgs)
 
     def test_list_lists_blueprints(self) -> None:
         PositionBlueprintFactory(name="Alpha")
@@ -89,6 +107,15 @@ class SetStageHubTests(TestCase):
 
 
 class SetStageRunTests(TestCase):
+    def _run(self, args: str, caller) -> list[str]:
+        cmd = CmdSetStage()
+        cmd.args = args
+        cmd.caller = caller
+        messages: list[str] = []
+        caller.msg = lambda *a, **_k: messages.append(a[0] if a else "")
+        cmd.func()
+        return messages
+
     def test_setstage_name_instantiates_positions(self) -> None:
         room = _make_room()
         caller = _make_staff_character("stager", room)
@@ -98,11 +125,39 @@ class SetStageRunTests(TestCase):
 
         add_blueprint_position(bp, "Center", description="The centre")
 
-        cmd = CmdSetStage()
-        cmd.args = "Lone Dais"
-        cmd.caller = caller
-        messages: list[str] = []
-        caller.msg = lambda *a, **_k: messages.append(a[0] if a else "")
-        cmd.func()
+        self._run("Lone Dais", caller)
 
         assert Position.objects.filter(room=room).count() == 1
+
+    def test_nonstaff_caller_is_blocked_by_staff_only_prerequisite(self) -> None:
+        room = _make_room()
+        caller = _make_nonstaff_character("poser", room)
+        bp = PositionBlueprintFactory(name="Lone Dais")
+        from world.areas.positioning.services import add_blueprint_position
+
+        add_blueprint_position(bp, "Center", description="The centre")
+
+        msgs = self._run("Lone Dais", caller)
+
+        assert any("Staff only." in m for m in msgs)
+        assert Position.objects.filter(room=room).count() == 0
+
+    def test_setstage_replace_replaces_existing_position_grid(self) -> None:
+        room = _make_room()
+        caller = _make_staff_character("replacer", room)
+        from world.areas.positioning.services import add_blueprint_position
+
+        bp_a = PositionBlueprintFactory(name="Lone Dais")
+        add_blueprint_position(bp_a, "Center", description="The centre")
+        bp_b = PositionBlueprintFactory(name="Tight Alley")
+        add_blueprint_position(bp_b, "Alley", description="A narrow passage")
+
+        self._run("Lone Dais", caller)
+        assert Position.objects.filter(room=room).count() == 1
+        assert Position.objects.filter(room=room, name="Center").exists()
+
+        self._run("Tight Alley replace", caller)
+        positions = Position.objects.filter(room=room)
+        assert positions.count() == 1
+        assert positions.first().name == "Alley"
+        assert not Position.objects.filter(room=room, name="Center").exists()
