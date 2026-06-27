@@ -25,7 +25,7 @@ from world.weather.constants import (
     WEATHER_FADE_DAYS,
     WEATHER_SOURCE_PREFIX,
 )
-from world.weather.models import RegionWeatherState, WeatherType
+from world.weather.models import FeastDay, RegionWeatherState, WeatherType
 from world.weather.types import ConditionsSummary
 
 if TYPE_CHECKING:
@@ -269,3 +269,21 @@ def current_conditions(room: DefaultObject) -> ConditionsSummary:
         weather_type=state.weather_type if state is not None else None,
         emit_text=emit.text if emit is not None else None,
     )
+
+
+def special_weather_for_today(*, real_now: datetime | None = None) -> WeatherType | None:
+    """The special weather forced by a feast day on the current IC date, if any (#1522).
+
+    Reads the IC calendar (``game_clock``) and matches an active ``FeastDay`` by recurring
+    ``(ic_month, ic_day)``. Returns its ``WeatherType`` (overriding the normal climate-gated roll
+    world-wide that day) or None on an ordinary day / with no clock.
+    """
+    ic_now = get_ic_now(real_now=real_now)
+    if ic_now is None:
+        return None
+    feast = (
+        FeastDay.objects.filter(ic_month=ic_now.month, ic_day=ic_now.day, is_active=True)
+        .select_related("weather_type")
+        .first()
+    )
+    return feast.weather_type if feast is not None else None

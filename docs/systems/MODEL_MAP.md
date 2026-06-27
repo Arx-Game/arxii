@@ -4384,6 +4384,7 @@
   - exposures <- weather.WeatherTypeExposure
   - emits <- weather.WeatherEmit
   - active_in_regions <- weather.RegionWeatherState
+  - feast_days <- weather.FeastDay
 
 ### WeatherTypeExposure
 **Foreign Keys:**
@@ -4396,6 +4397,10 @@
 ### RegionWeatherState
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
+  - weather_type -> weather.WeatherType [FK]
+
+### FeastDay
+**Foreign Keys:**
   - weather_type -> weather.WeatherType [FK]
 
 ### Service Functions
@@ -4413,3 +4418,4 @@
 - `month_temperature_shift(month: 'int') -> 'int' — The global temperature shift for an IC month (1–12); 0 if out of range.`
 - `roll_region_weather(area: 'Area', *, weather_type: 'WeatherType | None' = None) -> 'RegionWeatherState | None' — Set (or roll) a region's current weather and re-apply its exposure modifiers (#1522).`
 - `select_weather_emit(area: 'Area | None', *, season: 'Season | None' = None, phase: 'TimePhase | None' = None) -> 'WeatherEmit | None' — Pick a weighted-random atmospheric emit for a region's current weather (#1522).`
+- `special_weather_for_today(*, real_now: 'datetime | None' = None) -> 'WeatherType | None' — The special weather forced by a feast day on the current IC date, if any (#1522).`

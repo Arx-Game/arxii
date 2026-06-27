@@ -107,9 +107,11 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   source-tagged WET/WIND modifiers over the climate baseline; a `game_clock` cron rolls each
   climate region every 2 real hours (≈6 IC) and echoes one emit to online occupants as an
   ATMOSPHERE narrative (frontend-routable). A `time`/`weather` telnet command + `current_conditions`
-  read surface it. **Remaining:** weather-echo squelch setting; seed the 263-emit Arx-1 corpus +
-  the automated `WeatherType` rows (lore-repo upsert — inert until seeded); React weather widget;
-  special feast-day weather (Moon Madness / Eclipse); wind-as-mechanic.
+  read surface it; echoes are squelchable per-player (`narrative.UserCategoryMute` on the
+  `WEATHER` category). The 7 types + 263 emits are seeded from the Arx-1 corpus. `FeastDay` forces
+  special weather (Eclipse / Moon Madness) world-wide on recurring IC dates — the GM-lever
+  automation. **Remaining:** React weather widget + weather-at-location API; wind-as-mechanic
+  combat consumer (**#1555**, Tehom's domain — the WIND provider side is done).
 - **Later slices:** stackable comfort **decorations** (not `RoomFeatureInstance` — that's OneToOne),
   the comfort-level/effect engine (comfort→AP-regen, comfort→Conditions [Tehom-coordinated]), and
   the inhabitant/owner surfacing.

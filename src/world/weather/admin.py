@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from world.weather.models import (
     Climate,
+    FeastDay,
     RegionWeatherState,
     WeatherEmit,
     WeatherType,
@@ -58,3 +59,10 @@ class RegionWeatherStateAdmin(admin.ModelAdmin):
     list_display = ["area", "weather_type", "changed_at"]
     list_filter = ["weather_type"]
     search_fields = ["area__name"]
+
+
+@admin.register(FeastDay)
+class FeastDayAdmin(admin.ModelAdmin):
+    list_display = ["name", "ic_month", "ic_day", "weather_type", "is_active"]
+    list_filter = ["is_active", "weather_type"]
+    search_fields = ["name"]

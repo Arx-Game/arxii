@@ -15,7 +15,11 @@ from world.areas.models import Area
 from world.areas.services import get_rooms_in_area
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import send_narrative_message
-from world.weather.services import roll_region_weather, select_weather_emit
+from world.weather.services import (
+    roll_region_weather,
+    select_weather_emit,
+    special_weather_for_today,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -58,10 +62,13 @@ def _echo_region_weather(region: Area) -> None:
 def roll_and_echo_weather() -> None:
     """Reroll each climate-bearing region's weather and echo it to online occupants (#1522).
 
-    The 2-real-hour weather tick. Best-effort: a region with no eligible weather or no online
+    The 2-real-hour weather tick. On a **feast day** (Eclipse / Moon Madness), the special
+    weather is forced world-wide, overriding the normal climate-gated roll — the automation that
+    replaces a GM pulling the lever. Best-effort: a region with no eligible weather or no online
     occupants simply emits nothing. Weather attaches to climate-bearing regions; sub-regions
     inherit via the most-specific-wins resolver.
     """
+    special = special_weather_for_today()
     for region in Area.objects.filter(climate__isnull=False):
-        roll_region_weather(region)
+        roll_region_weather(region, weather_type=special)
         _echo_region_weather(region)

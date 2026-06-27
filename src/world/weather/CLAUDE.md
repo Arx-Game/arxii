@@ -91,6 +91,13 @@ Services (`world.weather.services`):
   the room's effective weather + one emit line. Any field is None when its source is absent.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
   `current_conditions` for the caller's room. The React widget renders the same data.
+- **Feast-day special weather** (`FeastDay` + `special_weather_for_today`): an annually-recurring
+  IC date (`ic_month`, `ic_day`) tied to a special `WeatherType` (Eclipse / Moon Madness,
+  `is_automated=False`). On a feast day the tick *forces* that type world-wide, overriding the
+  normal climate-gated roll — the automation that replaces a GM manually pulling the lever. Off
+  a feast day the next tick reverts to the random roll (special types are never randomly rolled).
+  Feast dates are seed data (PLACEHOLDER). Any *mechanical* madness effect on characters is
+  out of scope here (combat/conditions — Tehom's domain).
 
 ## Not yet built (later slices of #1522)
 
@@ -105,8 +112,9 @@ Services (`world.weather.services`):
   rows — the #946 idmapper caveat); not yet built.
 - **React weather widget** — a frontend surface consuming `current_conditions` (needs a
   weather-at-location API endpoint resolving the viewer's active character's room).
-- **Slice 2c** — special feast-day weather (Moon Madness / Eclipse) on its own automated loop;
-  wind as a mechanic (flyers/arrows/gale spells), driven by the active weather's WIND.
+- **Wind as a mechanic** (flyers/arrows/gale spells, driven by the active weather's WIND) —
+  combat/technique consumer, **Tehom's domain**; filed as **#1555** (`needs-design`). The WIND
+  *provider* side is done (`felt_exposure(room, WIND)` / `current_conditions`).
 
 ## Conventions
 

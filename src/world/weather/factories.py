@@ -5,6 +5,7 @@ from world.areas.factories import AreaFactory
 from world.locations.constants import StatKey
 from world.weather.models import (
     Climate,
+    FeastDay,
     RegionWeatherState,
     WeatherEmit,
     WeatherType,
@@ -58,3 +59,14 @@ class RegionWeatherStateFactory(DjangoModelFactory):
 
     area = factory.SubFactory(AreaFactory)
     weather_type = factory.SubFactory(WeatherTypeFactory)
+
+
+class FeastDayFactory(DjangoModelFactory):
+    class Meta:
+        model = FeastDay
+
+    name = factory.Sequence(lambda n: f"feast_{n}")
+    ic_month = 10
+    ic_day = 31
+    weather_type = factory.SubFactory(WeatherTypeFactory, is_automated=False)
+    is_active = True

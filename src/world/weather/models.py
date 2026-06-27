@@ -235,3 +235,36 @@ class RegionWeatherState(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.area.name}: {self.weather_type.name}"
+
+
+class FeastDay(SharedMemoryModel):
+    """An annually-recurring IC date that forces a special weather over the world (#1522).
+
+    The automation behind "spooky things on feast days" (Eclipse of Mirrors, Moon Madness):
+    instead of a GM pulling the lever, the weather tick checks the IC date and — on a feast day —
+    forces this feast's (usually ``is_automated=False``) ``WeatherType`` across every region,
+    overriding the normal climate-gated roll. Recurs every year on ``(ic_month, ic_day)``.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    ic_month = models.PositiveSmallIntegerField(help_text="IC calendar month (1–12).")
+    ic_day = models.PositiveSmallIntegerField(help_text="IC calendar day-of-month (1–31).")
+    weather_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="feast_days",
+        help_text="The special weather forced world-wide on this feast day.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Staff toggle to enable/disable a feast day without deleting it.",
+    )
+
+    class Meta:
+        ordering = ["ic_month", "ic_day"]
+        constraints = [
+            models.UniqueConstraint(fields=["ic_month", "ic_day"], name="unique_feast_day_date"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.ic_month:02d}-{self.ic_day:02d}): {self.weather_type.name}"

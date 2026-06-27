@@ -21,6 +21,7 @@ from world.locations.models import LocationValueModifier
 from world.locations.services import felt_exposure
 from world.weather.factories import (
     ClimateFactory,
+    FeastDayFactory,
     RegionWeatherStateFactory,
     WeatherEmitFactory,
     WeatherTypeExposureFactory,
@@ -33,6 +34,7 @@ from world.weather.services import (
     get_effective_weather,
     roll_region_weather,
     select_weather_emit,
+    special_weather_for_today,
 )
 from world.weather.tasks import roll_and_echo_weather
 
@@ -224,3 +226,44 @@ class WeatherTickTests(TestCase):
     def test_tick_is_safe_with_no_eligible_weather(self) -> None:
         AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())  # no weather types exist
         roll_and_echo_weather()  # must not raise
+
+
+class FeastDayWeatherTests(TestCase):
+    def _clock_on(self, month: int, day: int) -> None:
+        GameClockFactory(anchor_ic_time=datetime(1010, month, day, 12, 0, tzinfo=UTC), paused=True)
+
+    def test_special_weather_matches_feast_date(self) -> None:
+        eclipse = WeatherTypeFactory(name="Eclipse", is_automated=False)
+        FeastDayFactory(name="Mirror Eclipse", ic_month=10, ic_day=31, weather_type=eclipse)
+        self._clock_on(10, 31)
+        assert special_weather_for_today() == eclipse
+
+    def test_no_special_weather_on_an_ordinary_day(self) -> None:
+        eclipse = WeatherTypeFactory(is_automated=False)
+        FeastDayFactory(ic_month=10, ic_day=31, weather_type=eclipse)
+        self._clock_on(11, 1)
+        assert special_weather_for_today() is None
+
+    def test_inactive_feast_day_is_ignored(self) -> None:
+        eclipse = WeatherTypeFactory(is_automated=False)
+        FeastDayFactory(ic_month=10, ic_day=31, weather_type=eclipse, is_active=False)
+        self._clock_on(10, 31)
+        assert special_weather_for_today() is None
+
+    def test_no_clock_means_no_special_weather(self) -> None:
+        eclipse = WeatherTypeFactory(is_automated=False)
+        FeastDayFactory(ic_month=10, ic_day=31, weather_type=eclipse)
+        assert special_weather_for_today() is None
+
+    def test_tick_forces_special_weather_world_wide_on_a_feast_day(self) -> None:
+        # A special (non-automated, normally never-rolled) type is forced over a climate region.
+        madness = WeatherTypeFactory(name="Moon Madness", is_automated=False)
+        WeatherTypeFactory(name="Clear")  # the normal type that would otherwise roll
+        FeastDayFactory(ic_month=10, ic_day=31, weather_type=madness)
+        region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory(temperature=10))
+        self._clock_on(10, 31)
+
+        roll_and_echo_weather()
+        state = get_effective_weather(region)
+        assert state is not None
+        assert state.weather_type == madness
