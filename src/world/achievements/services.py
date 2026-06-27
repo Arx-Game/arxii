@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.achievements.constants import RewardType
 from world.achievements.models import (
     Achievement,
     AchievementRequirement,
     CharacterAchievement,
+    CharacterTitle,
     Discovery,
     StatDefinition,
     StatTracker,
@@ -79,8 +81,9 @@ def grant_achievement(
             if created:
                 newly_earned.append(sheet)
 
-    # Reactivity hook fires per newly-earned sheet. Idempotent — safe on replay.
+    # Apply rewards + fire the reactivity hook per newly-earned sheet (once per earn).
     for sheet in newly_earned:
+        apply_achievement_rewards(sheet, achievement)
         on_achievement_earned(sheet, achievement)
 
     return results
@@ -152,3 +155,76 @@ def _achievement_requirements_met(
         return False
 
     return all(req.is_met(stats_dict.get(req.stat_id, 0)) for req in requirements)
+
+
+def _achievement_reward_source():
+    """The shared ModifierSource for achievement-granted bonus modifiers (get-or-created)."""
+    from world.mechanics.models import ModifierSource  # noqa: PLC0415
+
+    source, _ = ModifierSource.objects.get_or_create(achievement_reward=True)
+    return source
+
+
+def _grant_title(character_sheet: CharacterSheet, reward) -> None:
+    """Record an earned title (idempotent via the unique (sheet, reward) constraint)."""
+    CharacterTitle.objects.get_or_create(character_sheet=character_sheet, reward=reward)
+
+
+def _grant_bonus(character_sheet: CharacterSheet, reward, reward_value: str) -> None:
+    """Materialize a BONUS reward as a CharacterModifier on the reward's target (e.g. +5 allure).
+
+    NOTE: ``get_modifier_total`` currently sums only distinction-sourced modifiers (its
+    amplification/immunity logic dereferences ``distinction_effect``), so this non-distinction
+    bonus is *recorded* but not yet *read* by that path. Counting non-distinction sources is a
+    modifier-system follow-up that lands alongside a live consumer (e.g. allure → attractiveness).
+    """
+    from world.mechanics.models import CharacterModifier  # noqa: PLC0415
+
+    if reward.modifier_target_id is None:
+        return
+    try:
+        value = int(reward_value)
+    except (TypeError, ValueError):
+        return
+    if not value:
+        return
+    CharacterModifier.objects.create(
+        character=character_sheet,
+        source=_achievement_reward_source(),
+        target=reward.modifier_target,
+        value=value,
+    )
+
+
+def _grant_prestige(character_sheet: CharacterSheet, reward_value: str) -> None:
+    """Award flat prestige (to the primary persona) for a PRESTIGE reward."""
+    from world.societies.renown import award_deed_prestige  # noqa: PLC0415
+
+    persona = character_sheet.primary_persona
+    if persona is None:
+        return
+    try:
+        amount = int(reward_value)
+    except (TypeError, ValueError):
+        return
+    award_deed_prestige(persona, amount)
+
+
+def apply_achievement_rewards(character_sheet: CharacterSheet, achievement: Achievement) -> None:
+    """Apply an achievement's rewards to a character — title / bonus / prestige (#1522).
+
+    Called once per newly-earned (sheet, achievement) by ``grant_achievement``. Mechanical rewards
+    attach to the *achievement*, not the title: TITLE records a ``CharacterTitle`` (cosmetic), BONUS
+    materializes a ``CharacterModifier`` on the reward's target, PRESTIGE bumps the persona's
+    deed-prestige. COSMETIC is a no-op until that system lands. Cross-app deps are lazy-imported so
+    ``achievements`` stays low-coupled.
+    """
+    for achievement_reward in achievement.cached_rewards:
+        reward = achievement_reward.reward
+        value = achievement_reward.reward_value
+        if reward.reward_type == RewardType.TITLE:
+            _grant_title(character_sheet, reward)
+        elif reward.reward_type == RewardType.BONUS:
+            _grant_bonus(character_sheet, reward, value)
+        elif reward.reward_type == RewardType.PRESTIGE:
+            _grant_prestige(character_sheet, value)

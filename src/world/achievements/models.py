@@ -311,6 +311,17 @@ class RewardDefinition(SharedMemoryModel):
         blank=True,
         help_text="What this reward is",
     )
+    modifier_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reward_definitions",
+        help_text=(
+            "For BONUS rewards: which stat the bonus modifies (e.g. allure). The amount comes "
+            "from AchievementReward.reward_value."
+        ),
+    )
 
     class Meta:
         ordering = ["reward_type", "key"]
@@ -387,3 +398,37 @@ class ConditionStatRule(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition.name} {self.event_type} → {self.stat.key}"
+
+
+class CharacterTitle(SharedMemoryModel):
+    """A title a character has earned and may display (#1522).
+
+    The cosmetic/display record of an earned title. Mechanical rewards do NOT live here — they
+    attach to the *achievement* and are applied by ``apply_achievement_rewards``; this row just
+    says "this character holds this title." Granted when an achievement carrying a TITLE reward is
+    earned.
+    """
+
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="titles",
+    )
+    reward = models.ForeignKey(
+        RewardDefinition,
+        on_delete=models.CASCADE,
+        related_name="character_titles",
+        help_text="The TITLE-type RewardDefinition this title comes from.",
+    )
+    earned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["character_sheet", "reward"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "reward"], name="unique_character_title"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet}: {self.reward.name}"
