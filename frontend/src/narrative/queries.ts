@@ -6,10 +6,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   acknowledgeDelivery,
   broadcastGemit,
+  getCategoryMutes,
   getGemits,
   getMyMessages,
   getStoryMutes,
+  muteCategory,
   muteStory,
+  unmuteCategory,
   unmuteStory,
 } from './api';
 import { useAppSelector } from '@/store/hooks';
@@ -17,6 +20,7 @@ import type {
   BroadcastGemitBody,
   GemitListParams,
   MyMessagesQueryParams,
+  UserCategoryMuteCreateBody,
   UserStoryMuteCreateBody,
 } from './types';
 
@@ -26,6 +30,7 @@ export const narrativeKeys = {
     [...narrativeKeys.all, 'my-messages', filters] as const,
   gemits: (params?: GemitListParams) => [...narrativeKeys.all, 'gemits', params] as const,
   storyMutes: () => [...narrativeKeys.all, 'story-mutes'] as const,
+  categoryMutes: () => [...narrativeKeys.all, 'category-mutes'] as const,
 };
 
 // Alias for the gemit list root — used by ChatWindow to invalidate on gemit push.
@@ -113,6 +118,38 @@ export function useUnmuteStory() {
     mutationFn: (muteId: number) => unmuteStory(muteId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// UserCategoryMute hooks (#1522) — squelch a whole category (e.g. WEATHER echo)
+// ---------------------------------------------------------------------------
+
+export function useCategoryMutes() {
+  return useQuery({
+    queryKey: narrativeKeys.categoryMutes(),
+    queryFn: getCategoryMutes,
+    throwOnError: true,
+  });
+}
+
+export function useMuteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UserCategoryMuteCreateBody) => muteCategory(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.categoryMutes() }).catch(() => {});
+    },
+  });
+}
+
+export function useUnmuteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (muteId: number) => unmuteCategory(muteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: narrativeKeys.categoryMutes() }).catch(() => {});
     },
   });
 }

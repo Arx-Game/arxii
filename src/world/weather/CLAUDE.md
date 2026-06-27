@@ -86,7 +86,9 @@ Services (`world.weather.services`):
   precisely; offline players skip it — no stale catch-up flood).
 - **Squelch** — `narrative.UserCategoryMute` (mirrors `UserStoryMute`: suppress the live push,
   keep it readable in the tab). `narrative.services.set_category_mute` / `is_category_muted`;
-  `time` command exposes `weather squelch` / `weather unsquelch` on the WEATHER category.
+  `time` command exposes `weather squelch` / `weather unsquelch` on the WEATHER category. The
+  **web face** is `narrative.UserCategoryMuteViewSet` (`/api/narrative/category-mutes/`) →
+  `CategoryMuteToggles` Switch on the frontend `MuteSettingsPage` (#1522).
 - **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
   the room's effective weather + one emit line. Any field is None when its source is absent.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of

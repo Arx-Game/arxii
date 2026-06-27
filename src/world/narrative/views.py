@@ -10,16 +10,29 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.narrative.constants import GemitReach
-from world.narrative.filters import GemitFilter, NarrativeMessageDeliveryFilter, UserStoryMuteFilter
-from world.narrative.models import Gemit, NarrativeMessageDelivery, UserStoryMute
+from world.narrative.filters import (
+    GemitFilter,
+    NarrativeMessageDeliveryFilter,
+    UserCategoryMuteFilter,
+    UserStoryMuteFilter,
+)
+from world.narrative.models import (
+    Gemit,
+    NarrativeMessageDelivery,
+    UserCategoryMute,
+    UserStoryMute,
+)
 from world.narrative.permissions import (
     IsDeliveryRecipientOrStaff,
+    IsOwnCategoryMuteOrStaff,
     IsOwnStoryMuteOrStaff,
 )
 from world.narrative.serializers import (
     GemitCreateSerializer,
     GemitSerializer,
     NarrativeMessageDeliverySerializer,
+    UserCategoryMuteCreateSerializer,
+    UserCategoryMuteSerializer,
     UserStoryMuteCreateSerializer,
     UserStoryMuteSerializer,
 )
@@ -191,6 +204,58 @@ class UserStoryMuteViewSet(
 
     def destroy(self, request: "Request", *args: Any, **kwargs: Any) -> Response:
         """Delete the mute. IsOwnStoryMuteOrStaff enforces ownership via get_object()."""
+        mute = self.get_object()
+        mute.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# UserCategoryMute ViewSet (#1522 — squelch a whole narrative category, e.g. WEATHER echoes)
+# ---------------------------------------------------------------------------
+
+
+class UserCategoryMuteViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Manage the requesting user's UserCategoryMutes — suppress a whole category's live push.
+
+    The category-level analogue of the story-mute ViewSet (e.g. squelch the WEATHER echo). Muting
+    does NOT gate read access; muted messages still create delivery rows and stay readable in the
+    category's tab. Only the live push is skipped.
+
+    GET    /api/narrative/category-mutes/      — list my category mutes
+    POST   /api/narrative/category-mutes/      — mute a category
+    DELETE /api/narrative/category-mutes/{id}/ — unmute
+    """
+
+    filterset_class = UserCategoryMuteFilter
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    permission_classes = [IsAuthenticated, IsOwnCategoryMuteOrStaff]
+
+    def get_queryset(self) -> "QuerySet[UserCategoryMute]":
+        """Scope to the requesting user's mutes."""
+        return UserCategoryMute.objects.filter(account=self.request.user).order_by("-muted_at")
+
+    def get_serializer_class(self) -> "type[BaseSerializer]":
+        if self.action == "create":
+            return UserCategoryMuteCreateSerializer
+        return UserCategoryMuteSerializer
+
+    def create(self, request: "Request", *args: Any, **kwargs: Any) -> Response:
+        """Create the mute and return a UserCategoryMuteSerializer response."""
+        serializer = UserCategoryMuteCreateSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        mute = serializer.save(account=request.user)
+        return Response(UserCategoryMuteSerializer(mute).data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request: "Request", *args: Any, **kwargs: Any) -> Response:
+        """Delete the mute. IsOwnCategoryMuteOrStaff enforces ownership via get_object()."""
         mute = self.get_object()
         mute.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

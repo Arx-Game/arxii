@@ -26,6 +26,12 @@ Implemented in Phase 4 Wave 1.
 - `muteStory(storyId)` — `POST /api/narrative/story-mutes/` (idempotent)
 - `unmuteStory(storyId)` — `DELETE /api/narrative/story-mutes/{id}/`
 
+**#1522 — category mute (squelch a whole category, e.g. WEATHER):**
+
+- `getCategoryMutes()` — `GET /api/narrative/category-mutes/` (current user's category mutes)
+- `muteCategory({ category })` — `POST /api/narrative/category-mutes/`
+- `unmuteCategory(muteId)` — `DELETE /api/narrative/category-mutes/{id}/`
+
 ### `queries.ts`
 
 React Query hooks:
@@ -47,6 +53,11 @@ React Query hooks:
 - `useStoryMutes()` — current user's mute list
 - `useIsStoryMuted(storyId)` — derived hook returning `boolean`
 - `useMuteStory()` / `useUnmuteStory()` — toggle mutations; invalidate `storyMutes` cache
+
+**#1522 — category mute:**
+
+- `useCategoryMutes()` — current user's category mutes (`throwOnError: true`)
+- `useMuteCategory()` / `useUnmuteCategory()` — toggle mutations; invalidate `categoryMutes` cache
 
 ### `types.ts`
 
@@ -80,6 +91,12 @@ Re-exports from `@/generated/api`:
 | `SendStoryOOCDialog.tsx`  | Lead GM/staff dialog: compose OOC notice → fans out to all story participants              |
 | `MuteStoryToggle.tsx`     | Bell icon button on `StoryDetailPage` — mutes/unmutes real-time narrative push for a story |
 
+**#1522 — category mute:**
+
+| File                      | Purpose                                                                                                                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CategoryMuteToggles.tsx` | Switch per squelchable ambient category (currently WEATHER) on `MuteSettingsPage` — ON = muted (push suppressed, still readable in-tab); the web face of the telnet `weather squelch` toggle. `SQUELCHABLE_CATEGORIES` is the extensible list. |
+
 ### `pages/`
 
 **Phase 4:** The narrative app owned no top-level page. Its UI surfaced through three
@@ -98,8 +115,9 @@ integration points:
 | ---------------------- | -------------------------- | -------------- |
 | `MuteSettingsPage.tsx` | `/narrative/mute-settings` | ProtectedRoute |
 
-`MuteSettingsPage` lists all stories the current user has muted, with per-row
-Unmute button and a "Manage muted stories" link surfaced in `MessagesSection`.
+`MuteSettingsPage` has two sections: **Ambient Categories** (`CategoryMuteToggles` — squelch the
+weather echo, #1522) and **Muted Stories** (per-row Unmute button). A "Manage muted stories" link
+is surfaced in `MessagesSection`.
 
 ## Data Flow
 
