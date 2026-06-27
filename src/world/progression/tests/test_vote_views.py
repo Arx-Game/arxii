@@ -122,8 +122,8 @@ class CastVoteViewTests(VoteViewTestCase):
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_cast_vote_nonexistent_target_returns_404(self) -> None:
-        """Non-existent target_id returns 404."""
+    def test_cast_vote_nonexistent_target_returns_400(self) -> None:
+        """Non-existent target_id returns 400 (author cannot be resolved)."""
         response = self.client.post(
             "/api/progression/votes/",
             {
@@ -132,7 +132,7 @@ class CastVoteViewTests(VoteViewTestCase):
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_cast_vote_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are denied."""

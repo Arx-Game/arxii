@@ -11,7 +11,6 @@ read-only dashboard endpoint.
 from http import HTTPMethod
 from typing import Any, cast
 
-from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status, viewsets
@@ -29,9 +28,7 @@ from actions.types import ActionRef
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
 from world.game_clock.week_services import get_current_game_week
-from world.journals.models import JournalEntry
 from world.magic.services.threads import near_xp_lock_threads
-from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
@@ -68,13 +65,12 @@ from world.progression.services.random_scene import (
 from world.progression.services.spends import get_available_unlocks_for_character
 from world.progression.services.voting import (
     cast_vote,
+    get_author_account_for_target,
     get_or_create_vote_budget,
     get_votes_by_voter,
     remove_vote,
 )
 from world.progression.types import ProgressionError
-from world.roster.selectors import get_account_for_character
-from world.scenes.models import Interaction, SceneParticipation
 from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
@@ -212,27 +208,6 @@ class ClaimKudosView(APIView):
 # --- Voting views ---
 
 
-def _get_author_account_for_target(
-    target_type: str,
-    target_id: int,
-) -> AccountDB | None:
-    """Derive the author account from a vote target.
-
-    Follows the FK chain from the target object to the account that authored it.
-    Returns None if the chain is broken (e.g. no roster entry or no active tenure).
-    """
-    if target_type == VoteTargetType.INTERACTION:
-        interaction = get_object_or_404(Interaction, pk=target_id)
-        return get_account_for_character(interaction.persona.character_sheet.character)
-    if target_type == VoteTargetType.SCENE_PARTICIPATION:
-        participation = get_object_or_404(SceneParticipation, pk=target_id)
-        return participation.account
-    if target_type == VoteTargetType.JOURNAL:
-        journal = get_object_or_404(JournalEntry, pk=target_id)
-        return get_account_for_character(journal.author.character)
-    return None
-
-
 class VoteViewSet(
     mixins.ListModelMixin,
     mixins.DestroyModelMixin,
@@ -262,7 +237,7 @@ class VoteViewSet(
         target_id = serializer.validated_data["target_id"]
         voter = cast(AccountDB, request.user)
 
-        author_account = _get_author_account_for_target(target_type, target_id)
+        author_account = get_author_account_for_target(target_type, target_id)
         if author_account is None:
             return Response(
                 {"detail": "Could not determine author for the specified target."},
