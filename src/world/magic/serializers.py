@@ -3037,25 +3037,23 @@ class TechniqueDesignSerializer(serializers.Serializer):
     applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
 
     def validate(self, attrs):
-        from world.magic.services.technique_builder import PlayerPolicy  # noqa: PLC0415
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.services.technique_builder import (  # noqa: PLC0415
+            validate_design_for_character,
+        )
 
         policy = self.context["policy"]
         character = self.context.get("character")
 
-        gift = Gift.objects.filter(pk=attrs["gift_id"]).first()
-        if gift is None:
-            raise serializers.ValidationError({"gift_id": "Unknown gift."})
-
-        # Player must own the gift; staff may use any gift.
-        if isinstance(policy, PlayerPolicy):
-            if (
-                character is None
-                or not CharacterGift.objects.filter(character=character, gift=gift).exists()
-            ):
-                raise serializers.ValidationError({"gift_id": "You do not know that gift."})
-
-        attrs["_gift"] = gift
         attrs["_design"] = self._to_design(attrs)
+
+        # Delegate the player gate (gift existence + ownership) to the shared
+        # validate_design_for_character so both telnet and web enforce the same rule.
+        try:
+            validate_design_for_character(attrs["_design"], policy, character)
+        except MagicError as exc:
+            raise serializers.ValidationError({"gift_id": exc.user_message}) from exc
+
         return attrs
 
     def _to_design(self, attrs):
