@@ -449,17 +449,27 @@ def _dissolution_recovery_fraction(tier: OutcomeTier) -> Decimal:
 
 
 def _retire_sanctum_threads(sanctum: SanctumDetails) -> None:
-    """Mass-retire (soft-delete) every SANCTUM-target Thread bound to this Sanctum."""
+    """Soft-retire active SANCTUM threads, then hard-delete all of them.
+
+    Two-phase teardown:
+    1. Stamp ``retired_at`` on threads that were still active, so the history
+       row carries the dissolution timestamp before being removed.
+    2. Hard-delete ALL threads targeting this Sanctum (active + already-retired).
+       This clears the ``Thread.target_sanctum_details`` PROTECT FK so the
+       caller can subsequently delete the ``RoomFeatureInstance`` via cascade
+       without hitting a ``ProtectedError``.
+    """
     from django.utils import timezone  # noqa: PLC0415
 
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models import Thread  # noqa: PLC0415
 
-    Thread.objects.filter(
+    qs = Thread.objects.filter(
         target_sanctum_details=sanctum,
         target_kind=TargetKind.SANCTUM,
-        retired_at__isnull=True,
-    ).update(retired_at=timezone.now())
+    )
+    qs.filter(retired_at__isnull=True).update(retired_at=timezone.now())
+    qs.delete()
 
 
 def _delete_homecoming_lvm_rows(sanctum: SanctumDetails) -> None:
