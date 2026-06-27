@@ -3323,6 +3323,9 @@
   - track -> relationships.RelationshipTrack [FK]
   - linked_scene -> scenes.Scene [FK] (nullable)
   - linked_interaction -> scenes.Interaction [FK] (nullable)
+**Pointed to by:**
+  - writeupkudos_set <- relationships.WriteupKudos
+  - writeupcomplaint_set <- relationships.WriteupComplaint
 
 ### RelationshipDevelopment
 **Foreign Keys:**
@@ -3330,6 +3333,9 @@
   - author -> character_sheets.CharacterSheet [FK]
   - track -> relationships.RelationshipTrack [FK]
   - linked_scene -> scenes.Scene [FK] (nullable)
+**Pointed to by:**
+  - writeupkudos_set <- relationships.WriteupKudos
+  - writeupcomplaint_set <- relationships.WriteupComplaint
 
 ### RelationshipCapstone
 **Foreign Keys:**
@@ -3340,6 +3346,8 @@
   - ritual -> magic.Ritual [FK] (nullable)
 **Pointed to by:**
   - anchored_threads <- magic.Thread
+  - writeupkudos_set <- relationships.WriteupKudos
+  - writeupcomplaint_set <- relationships.WriteupComplaint
 
 ### RelationshipChange
 **Foreign Keys:**
@@ -3348,12 +3356,29 @@
   - source_track -> relationships.RelationshipTrack [FK]
   - target_track -> relationships.RelationshipTrack [FK]
 
+### WriteupKudos
+**Foreign Keys:**
+  - update -> relationships.RelationshipUpdate [FK] (nullable)
+  - development -> relationships.RelationshipDevelopment [FK] (nullable)
+  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
+  - account -> accounts.AccountDB [FK]
+
+### WriteupComplaint
+**Foreign Keys:**
+  - update -> relationships.RelationshipUpdate [FK] (nullable)
+  - development -> relationships.RelationshipDevelopment [FK] (nullable)
+  - capstone -> relationships.RelationshipCapstone [FK] (nullable)
+  - complainant -> accounts.AccountDB [FK]
+
 ### Service Functions
+- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' — Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' — Add permanent (developed) points to a track, up to capacity.`
 - `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' — Create a pending relationship with an initial update and track progress.`
+- `file_writeup_complaint(*, complainant_account: 'AccountDB', writeup, reason: 'str') -> 'WriteupComplaint' — File a bad-faith-RP complaint against a writeup for staff triage.`
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' — Get the account currently playing this character via roster tenure.`
+- `give_writeup_kudos(*, giver_account: 'AccountDB', writeup) -> 'WriteupKudos' — Award a non-revocable commendation to the writeup author on behalf of the subject.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`

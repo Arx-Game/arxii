@@ -60,6 +60,11 @@ _EFFORT_PREFIX = "effort="
 _SECONDARY_KEYWORD = "secondary"
 # Keyword prefix used to parse strain=<n> from clash command args.
 _STRAIN_PREFIX = "strain="
+# Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
+# Values are single tokens (a FuryTier name or depth, and the anchor character's
+# key); both must be free of spaces.
+_FURY_PREFIX = "fury="
+_ANCHOR_PREFIX = "anchor="
 # Usage hint for the clash command (shared across three error sites in _parse_args).
 _CLASH_USAGE = (
     "Usage: clash <opponent> with <technique> [strain=<n>]"
@@ -139,12 +144,13 @@ class _CombatCommandMixin:
         """Return True when *tok* marks the start of a non-pull keyword boundary.
 
         Stops on any ``pull_keys``-prefixed token (``pull=``, ``resonance=``,
-        ``tier=``) and on ``effort=`` / ``secondary`` (handled elsewhere).
+        ``tier=``), on ``effort=`` / ``secondary``, and on ``fury=`` / ``anchor=``
+        (all handled elsewhere) so a greedy pull value never swallows them.
         """
         lower = tok.lower()
         return (
             any(lower.startswith(k + "=") for k in pull_keys)
-            or lower.startswith(_EFFORT_PREFIX)
+            or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _ANCHOR_PREFIX))
             or lower == _SECONDARY_KEYWORD
         )
 
@@ -337,6 +343,9 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _pull_thread_str: str | None = None
     _pull_resonance_str: str | None = None
     _pull_tier: int = 1
+    # Fury-related parsed state (None means no fury declared).
+    _fury_str: str | None = None
+    _anchor_str: str | None = None
 
     # --------------------------------------------------------------------------
 
@@ -366,6 +375,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # would be silently discarded.)
         # _extract_pull_keywords also validates tier range and pull+resonance pairing.
         raw, pull_thread_str, resonance_str, pull_tier = self._extract_pull_keywords(raw)
+
+        # Strip fury=<tier> and anchor=<name> if present (single-token values).
+        # Done before effort=/secondary/at parsing so the keywords are fully
+        # order-independent and never swallowed into the technique/target name.
+        raw, fury_str, anchor_str = self._extract_fury_keywords(raw)
 
         # Strip off effort=<level> if present.  After pull keywords are removed,
         # only effort= and positional tokens remain, so a simple split is safe.
@@ -413,7 +427,84 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._pull_thread_str = pull_thread_str
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
+        self._fury_str = fury_str
+        self._anchor_str = anchor_str
         self._parsed = True
+
+    @staticmethod
+    def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
+        """Strip ``fury=<tier>`` and ``anchor=<name>`` tokens from *raw*.
+
+        Both values are single tokens (no spaces): ``fury=`` names a FuryTier by
+        name or depth; ``anchor=`` names the bonded character whose harm the rage
+        answers to. Returns ``(remainder, fury_val, anchor_val)`` with both
+        keywords removed; either value is ``None`` when its keyword is absent.
+        """
+        fury_val: str | None = None
+        anchor_val: str | None = None
+        kept: list[str] = []
+        for token in raw.split():
+            lower = token.lower()
+            if lower.startswith(_FURY_PREFIX):
+                fury_val = token[len(_FURY_PREFIX) :] or None
+            elif lower.startswith(_ANCHOR_PREFIX):
+                anchor_val = token[len(_ANCHOR_PREFIX) :] or None
+            else:
+                kept.append(token)
+        return " ".join(kept), fury_val, anchor_val
+
+    def _resolve_fury_commitment_id(self) -> int | None:
+        """Return the pk of the FuryTier named by ``fury=`` (by name or depth).
+
+        Returns ``None`` when no ``fury=`` was declared.
+
+        Raises:
+            CommandError: If a fury tier was named but no matching tier exists.
+        """
+        if not self._fury_str:
+            return None
+
+        from world.magic.models import FuryTier  # noqa: PLC0415
+
+        value = self._fury_str
+        qs = FuryTier.objects.filter(name__iexact=value)
+        tier = qs.first()
+        if tier is None and value.isdigit():
+            tier = FuryTier.objects.filter(depth=int(value)).first()
+        if tier is None:
+            msg = f"No fury tier called '{value}'."
+            raise CommandError(msg)
+        return tier.pk
+
+    def _inject_fury_kwargs(self, kwargs: dict[str, Any]) -> None:
+        """Add ``fury_commitment_id`` / ``fury_anchor_id`` to *kwargs* when declared."""
+        fury_commitment_id = self._resolve_fury_commitment_id()
+        if fury_commitment_id is not None:
+            kwargs["fury_commitment_id"] = fury_commitment_id
+        fury_anchor_id = self._resolve_fury_anchor_id()
+        if fury_anchor_id is not None:
+            kwargs["fury_anchor_id"] = fury_anchor_id
+
+    def _resolve_fury_anchor_id(self) -> int | None:
+        """Return the CharacterSheet pk named by ``anchor=`` (bonded character key).
+
+        Returns ``None`` when no ``anchor=`` was declared.
+
+        Raises:
+            CommandError: If an anchor name was given but no matching character
+                sheet exists.
+        """
+        if not self._anchor_str:
+            return None
+
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        name = self._anchor_str
+        sheet = CharacterSheet.objects.filter(character__db_key__iexact=name).first()
+        if sheet is None:
+            msg = f"No character named '{name}' to anchor your fury to."
+            raise CommandError(msg)
+        return sheet.pk
 
     # -- Resolution helpers ----------------------------------------------------
 
@@ -640,6 +731,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         cast_pull = self._cast_pull()
         if cast_pull is not None:
             kwargs["cast_pull"] = cast_pull
+
+        # Resolve an optional fury commitment (tier + bonded anchor). Fury is a
+        # combat/clash lever; round_declaration forwards these into the
+        # CombatRoundAction, where resolve_combat_technique consumes them.
+        self._inject_fury_kwargs(kwargs)
 
         if not self._target_name:
             return kwargs

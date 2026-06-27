@@ -105,10 +105,21 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.progression_rewards import (
+    CastVoteAction,
+    ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
+    RemoveVoteAction,
+    RerollRandomSceneAction,
+    SetPathIntentAction,
+)
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
     CreateFirstImpressionAction,
+    FileWriteupComplaintAction,
+    GiveWriteupKudosAction,
     RedistributePointsAction,
 )
 from actions.definitions.ritual import PerformRitualAction
@@ -120,6 +131,11 @@ from actions.definitions.rounds import (
     PassRoundAction,
     SetRoundModeAction,
     StartRoundAction,
+)
+from actions.definitions.scene_reactions import (
+    ReactToWindowAction,
+    ToggleFavoriteAction,
+    ToggleReactionAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
@@ -218,6 +234,9 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ToggleFavoriteAction(),
+    ToggleReactionAction(),
+    ReactToWindowAction(),
     CreateFirstImpressionAction(),
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
@@ -227,8 +246,17 @@ _ALL_ACTIONS: list[Action] = [
     EditJournalEntryAction(),
     SetCharacterGoalsAction(),
     LogGoalProgressAction(),
+    GiveWriteupKudosAction(),
+    FileWriteupComplaintAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
+    ClaimKudosAction(),
+    CastVoteAction(),
+    RemoveVoteAction(),
+    ClaimRandomSceneAction(),
+    RerollRandomSceneAction(),
+    SetPathIntentAction(),
+    ClearPathIntentAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

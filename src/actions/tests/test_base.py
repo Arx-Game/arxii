@@ -229,6 +229,9 @@ class ActionRegistryTests(TestCase):
             "mark_beat",
             "manage_training",
             "purchase_unlock",
+            "toggle_interaction_favorite",
+            "toggle_interaction_reaction",
+            "react_to_window",
             "npc_start",
             "npc_resolve",
             "npc_end",
@@ -249,6 +252,15 @@ class ActionRegistryTests(TestCase):
             "edit_journal_entry",
             "set_character_goals",
             "log_goal_progress",
+            "claim_kudos",
+            "cast_vote",
+            "remove_vote",
+            "claim_random_scene",
+            "reroll_random_scene",
+            "set_path_intent",
+            "clear_path_intent",
+            "give_writeup_kudos",
+            "file_writeup_complaint",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

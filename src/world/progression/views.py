@@ -11,9 +11,9 @@ read-only dashboard endpoint.
 from http import HTTPMethod
 from typing import Any, cast
 
-from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import BaseFilterBackend
@@ -24,14 +24,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from actions.constants import ActionBackend
+from actions.definitions.progression_rewards import (
+    CastVoteAction,
+    ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
+    RemoveVoteAction,
+    RerollRandomSceneAction,
+    SetPathIntentAction,
+)
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
 from world.game_clock.week_services import get_current_game_week
-from world.journals.models import JournalEntry
 from world.magic.services.threads import near_xp_lock_threads
-from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
@@ -60,21 +67,12 @@ from world.progression.serializers.unlocks import (
     PurchaseUnlockResponseSerializer,
     PurchaseUnlockSerializer,
 )
-from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
-from world.progression.services.random_scene import (
-    claim_random_scene,
-    reroll_random_scene_target,
-)
 from world.progression.services.spends import get_available_unlocks_for_character
 from world.progression.services.voting import (
-    cast_vote,
     get_or_create_vote_budget,
     get_votes_by_voter,
-    remove_vote,
 )
-from world.progression.types import ProgressionError
-from world.roster.selectors import get_account_for_character
-from world.scenes.models import Interaction, SceneParticipation
+from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
@@ -127,6 +125,17 @@ def _build_progression_response(request: Request) -> Response:
 
     serializer = AccountProgressionSerializer(data)
     return Response(serializer.data)
+
+
+def _actor_for_account(account: AccountDB) -> ObjectDB | None:
+    """Resolve a representative actor character for an account-level reward action.
+
+    The action resolves the account straight back via get_account_for_character,
+    so any of the account's active characters yields the same account. Returns
+    None when the account has no active character.
+    """
+    entry = RosterEntry.objects.for_account(account).first()
+    return entry.character_sheet.character if entry else None
 
 
 class AccountProgressionView(APIView):
@@ -189,48 +198,22 @@ class ClaimKudosView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            claim_kudos_for_xp(
-                account=cast(AccountDB, request.user),
-                amount=amount,
-                claim_category=claim_category,
-            )
-        except InsufficientKudosError:
+        account = cast(AccountDB, request.user)
+        actor = _actor_for_account(account)
+        if actor is None:
             return Response(
-                {"detail": "Insufficient kudos for this conversion."},
+                {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except ValueError:
-            return Response(
-                {"detail": "Invalid amount for this conversion rate."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        result = ClaimKudosAction().run(
+            actor=actor, claim_category_id=claim_category.pk, amount=amount
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return _build_progression_response(request)
 
 
 # --- Voting views ---
-
-
-def _get_author_account_for_target(
-    target_type: str,
-    target_id: int,
-) -> AccountDB | None:
-    """Derive the author account from a vote target.
-
-    Follows the FK chain from the target object to the account that authored it.
-    Returns None if the chain is broken (e.g. no roster entry or no active tenure).
-    """
-    if target_type == VoteTargetType.INTERACTION:
-        interaction = get_object_or_404(Interaction, pk=target_id)
-        return get_account_for_character(interaction.persona.character_sheet.character)
-    if target_type == VoteTargetType.SCENE_PARTICIPATION:
-        participation = get_object_or_404(SceneParticipation, pk=target_id)
-        return participation.account
-    if target_type == VoteTargetType.JOURNAL:
-        journal = get_object_or_404(JournalEntry, pk=target_id)
-        return get_account_for_character(journal.author.character)
-    return None
 
 
 class VoteViewSet(
@@ -262,26 +245,24 @@ class VoteViewSet(
         target_id = serializer.validated_data["target_id"]
         voter = cast(AccountDB, request.user)
 
-        author_account = _get_author_account_for_target(target_type, target_id)
-        if author_account is None:
+        actor = _actor_for_account(voter)
+        if actor is None:
             return Response(
-                {"detail": "Could not determine author for the specified target."},
+                {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            vote = cast_vote(
-                voter_account=voter,
-                target_type=target_type,
-                target_id=target_id,
-                author_account=author_account,
-            )
-        except ProgressionError as exc:
-            return Response(
-                {"detail": exc.user_message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        result = CastVoteAction().run(actor=actor, target_type=target_type, target_id=target_id)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
+        WeeklyVote.flush_instance_cache()
+        vote = WeeklyVote.objects.get(
+            voter=voter,
+            game_week=get_current_game_week(),
+            target_type=target_type,
+            target_id=target_id,
+        )
         WeeklyVoteBudget.flush_instance_cache()
         budget = get_or_create_vote_budget(voter)
         response_serializer = CastVoteResponseSerializer(
@@ -289,28 +270,23 @@ class VoteViewSet(
         )
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
-    def perform_destroy(self, instance: WeeklyVote) -> None:
-        """Remove vote via the remove_vote service function."""
-        voter = cast(AccountDB, self.request.user)
-        try:
-            remove_vote(
-                voter_account=voter,
-                target_type=instance.target_type,
-                target_id=instance.target_id,
-            )
-        except ProgressionError as exc:
-            raise ProgressionError(exc.user_message) from exc
-
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Remove (unvote) an existing vote by ID."""
         instance = self.get_object()
-        try:
-            self.perform_destroy(instance)
-        except ProgressionError as exc:
+        voter = cast(AccountDB, request.user)
+        actor = _actor_for_account(voter)
+        if actor is None:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        result = RemoveVoteAction().run(
+            actor=actor,
+            target_type=instance.target_type,
+            target_id=instance.target_id,
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=[HTTPMethod.GET])
@@ -354,14 +330,17 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def claim(self, request: Request, pk: Any = None) -> Response:
         """Claim a random scene target, awarding XP."""
         account = cast(AccountDB, request.user)
-        try:
-            target = claim_random_scene(account=account, target_id=pk)
-        except ProgressionError as exc:
+        actor = _actor_for_account(account)
+        if actor is None:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        result = ClaimRandomSceneAction().run(actor=actor, target_id=pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         RandomSceneTarget.flush_instance_cache()
+        target = RandomSceneTarget.objects.select_related("target_persona").get(pk=pk)
         serializer = RandomSceneTargetSerializer(target)
         return Response(serializer.data)
 
@@ -371,7 +350,7 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         account = cast(AccountDB, request.user)
         game_week = get_current_game_week()
 
-        # Look up the target to get the slot_number
+        # Pre-check for 404: the target must belong to this account/week.
         target = RandomSceneTarget.objects.filter(
             pk=pk,
             account=account,
@@ -383,18 +362,18 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        try:
-            updated_target = reroll_random_scene_target(
-                account=account,
-                slot_number=target.slot_number,
-                game_week=game_week,
-            )
-        except ProgressionError as exc:
+        actor = _actor_for_account(account)
+        if actor is None:
             return Response(
-                {"detail": exc.user_message},
+                {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        result = RerollRandomSceneAction().run(actor=actor, target_id=pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         RandomSceneTarget.flush_instance_cache()
+        updated_target = RandomSceneTarget.objects.select_related("target_persona").get(pk=pk)
         serializer = RandomSceneTargetSerializer(updated_target)
         return Response(serializer.data)
 
@@ -466,8 +445,8 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
 
     def update(self, request: Request, pk: Any = None) -> Response:
         """PUT — declare or replace the intent for this character."""
-        sheet = self._get_sheet(request)
-        if sheet is None:
+        character = self._get_character(request)
+        if character is None:
             return Response(
                 {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
             )
@@ -476,25 +455,25 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         path = serializer.validated_path
 
-        intent, _ = PathIntent.objects.update_or_create(
-            character_sheet=sheet,
-            defaults={"intended_path": path},
-        )
+        result = SetPathIntentAction().run(actor=character, path_id=path.pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         PathIntent.flush_instance_cache()
-        intent_data = PathIntentSerializer(
-            PathIntent.objects.select_related("intended_path").get(pk=intent.pk)
-        ).data
-        return Response({"intent": intent_data})
+        sheet = character.sheet_data
+        intent = PathIntent.objects.select_related("intended_path").get(character_sheet=sheet)
+        return Response({"intent": PathIntentSerializer(intent).data})
 
     def destroy(self, request: Request, pk: Any = None) -> Response:
         """DELETE — clear the intent (idempotent)."""
-        sheet = self._get_sheet(request)
-        if sheet is None:
+        character = self._get_character(request)
+        if character is None:
             return Response(
                 {"detail": NO_CHARACTER_FOUND_MESSAGE}, status=status.HTTP_404_NOT_FOUND
             )
 
-        PathIntent.objects.filter(character_sheet=sheet).delete()
+        result = ClearPathIntentAction().run(actor=character)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         PathIntent.flush_instance_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

@@ -599,6 +599,23 @@ def sync_building_style_modifiers(building: Building) -> None:
         )
 
 
+def _recompute_room_comfort_effect(room_profile) -> None:
+    """A room's comfort changed → recompute its residents' AP-regen modifiers (#1514)."""
+    from world.locations.comfort_effect import (  # noqa: PLC0415
+        recompute_room_residents_comfort,
+    )
+
+    recompute_room_residents_comfort(room_profile.objectdb)
+
+
+def _recompute_building_comfort_effect(building: Building) -> None:
+    """Every room in the building had its comfort change → recompute their residents (#1514)."""
+    from world.areas.services import get_rooms_in_area  # noqa: PLC0415
+
+    for profile in get_rooms_in_area(building.area):
+        _recompute_room_comfort_effect(profile)
+
+
 @transaction.atomic
 def set_building_style(building: Building, style: ArchitecturalStyle | None) -> Building:
     """Assign (or clear) a building's architectural style and re-sync its climate modifiers.
@@ -609,6 +626,7 @@ def set_building_style(building: Building, style: ArchitecturalStyle | None) -> 
     building.architectural_style = style
     building.save(update_fields=["architectural_style"])
     sync_building_style_modifiers(building)
+    _recompute_building_comfort_effect(building)  # style shifted room comfort → AP regen (#1514)
     return building
 
 
@@ -659,14 +677,17 @@ def place_decoration(room_profile, kind: DecorationKind) -> RoomDecoration:
     """
     decoration = RoomDecoration.objects.create(room_profile=room_profile, kind=kind)
     _materialize_decoration(decoration)
+    _recompute_room_comfort_effect(room_profile)  # decor shifted room comfort → AP regen (#1514)
     return decoration
 
 
 @transaction.atomic
 def remove_decoration(decoration: RoomDecoration) -> None:
     """Remove a placed decoration and delete its comfort modifiers (#1514)."""
+    room_profile = decoration.room_profile
     LocationValueModifier.objects.filter(
         source=_decoration_modifier_source(decoration),
-        room_profile=decoration.room_profile,
+        room_profile=room_profile,
     ).delete()
     decoration.delete()
+    _recompute_room_comfort_effect(room_profile)  # decor removed → AP regen recompute (#1514)

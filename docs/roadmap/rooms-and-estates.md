@@ -92,9 +92,15 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
 - **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
   with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
   cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`.
-- **Later slices:** stackable comfort **decorations** (not `RoomFeatureInstance` — that's OneToOne),
-  the comfort-level/effect engine (comfort→AP-regen, comfort→Conditions [Tehom-coordinated]), the
-  weather source (#1522), and the inhabitant/owner surfacing.
+- **Decorations + comfort-level engine + in-room readout (done):** stackable `DecorationKind`/
+  `RoomDecoration` (mitigation + amenity), `comfort_level` (1–10 from a wide points pool), the
+  `comfort` command.
+- **Residence + comfort→AP-regen (done):** primary residence reuses Evennia `home` (`home/set`,
+  auto-default on first rent/acquire); `world.locations.comfort_effect` materializes
+  `comfort_level − 5` as a flat `CharacterModifier` on the ap-regen targets, recomputed only on
+  comfort-change events (home / style / decoration) and read for free by the regen cron.
+- **Later slices:** the **weather source** (#1522 — the dynamic driver), comfort→**Conditions**
+  ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`), and the web owner **build-HUD**.
 
 ## What's Needed for MVP
 

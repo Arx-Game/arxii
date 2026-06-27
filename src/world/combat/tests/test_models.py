@@ -636,3 +636,16 @@ class CombatOpponentCurrentPositionTests(EvenniaTestCase):
             objectdb_is_ephemeral=False,
         )
         self.assertIsNone(opponent_no_obj.current_position)
+
+
+class CombatRoundActionCommitmentTests(TestCase):
+    """Tests that CombatRoundAction carries commitment and soulfray-accept fields."""
+
+    def test_combat_round_action_carries_commitment_fields(self) -> None:
+        from world.combat.factories import CombatRoundActionFactory
+
+        action = CombatRoundActionFactory()
+        self.assertFalse(action.confirm_soulfray_risk)
+        self.assertIsNone(action.fury_commitment)
+        self.assertIsNone(action.fury_anchor)
+        self.assertEqual(action.strain_commitment, 0)

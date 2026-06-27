@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
 from world.progression.constants import FIRST_IMPRESSION_AUTHOR_XP, FIRST_IMPRESSION_TARGET_XP
+from world.progression.models import KudosSourceCategory
 from world.progression.services.awards import award_xp
+from world.progression.services.kudos import award_kudos
 from world.progression.types import ProgressionReason
 from world.relationships.constants import (
     MAX_DEVELOPMENTS_PER_WEEK,
+    RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
+    WRITEUP_KUDOS_AMOUNT,
     TrackSign,
     UpdateVisibility,
+)
+from world.relationships.exceptions import (
+    AlreadyCommendedError,
+    CannotCommendOwnWriteupError,
+    NotWriteupSubjectError,
+    WriteupNotSharedError,
+    WriteupNotVisibleError,
 )
 from world.relationships.models import (
     CharacterRelationship,
@@ -24,14 +36,20 @@ from world.relationships.models import (
     RelationshipDevelopment,
     RelationshipTrackProgress,
     RelationshipUpdate,
+    WriteupComplaint,
+    WriteupKudos,
 )
 from world.roster.selectors import get_account_for_character
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.relationships.constants import FirstImpressionColoring
     from world.relationships.models import GrievanceOption, RelationshipTrack
     from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 
 def create_first_impression(  # noqa: PLR0913
@@ -283,6 +301,131 @@ def create_capstone(  # noqa: PLR0913
             visibility=visibility,
             linked_scene=linked_scene,
         )
+
+
+def _writeup_field_name(writeup) -> str:
+    """Return the FK field name on WriteupFeedbackBase for this writeup type.
+
+    Returns "update", "development", or "capstone" depending on which concrete
+    writeup model the object is an instance of.
+    """
+    if isinstance(writeup, RelationshipUpdate):
+        return "update"  # noqa: STRING_LITERAL
+    if isinstance(writeup, RelationshipDevelopment):
+        return "development"  # noqa: STRING_LITERAL
+    if isinstance(writeup, RelationshipCapstone):
+        return "capstone"  # noqa: STRING_LITERAL
+    msg = f"Unknown writeup type: {type(writeup)!r}"
+    raise TypeError(msg)
+
+
+def _can_view_writeup(account: AccountDB, writeup) -> bool:
+    """Return True if account may view this writeup.
+
+    SHARED, GOSSIP, and PUBLIC writeups are visible to any account.
+    PRIVATE writeups are visible only to the author's account or the subject's account.
+
+    No existing visibility predicate was found in views.py, selectors.py, or
+    serializers.py (grep confirmed only the ``visibility`` *field* appears there),
+    so this minimal helper is authoritative.
+    """
+    if writeup.visibility != UpdateVisibility.PRIVATE:
+        return True
+    author_account = get_account_for_character(writeup.author.character)
+    subject_account = get_account_for_character(writeup.relationship.target.character)
+    viewable_pks = {a.pk for a in [author_account, subject_account] if a is not None}
+    return account.pk in viewable_pks
+
+
+def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
+    """Award a non-revocable commendation to the writeup author on behalf of the subject.
+
+    Only the subject of the writeup (relationship.target's controlling account) may
+    commend. The author cannot self-commend. The writeup must not be PRIVATE.
+    Each (account, writeup) pair is unique; a second attempt raises AlreadyCommendedError.
+
+    When the ``KudosSourceCategory`` for ``RELATIONSHIP_WRITEUP_KUDOS_CATEGORY`` is
+    absent (pre-seeded state), logs a warning and still records the WriteupKudos row
+    without awarding kudos — mirroring the pattern in
+    ``world.progression.services.engagement.grant_social_engagement_kudos``.
+
+    Returns:
+        The newly created WriteupKudos instance.
+
+    Raises:
+        WriteupNotSharedError: writeup.visibility is PRIVATE.
+        CannotCommendOwnWriteupError: giver is the author of the writeup.
+        NotWriteupSubjectError: giver is not the subject (relationship.target) of the writeup.
+        AlreadyCommendedError: this account has already commended this writeup.
+    """
+    if writeup.visibility == UpdateVisibility.PRIVATE:
+        raise WriteupNotSharedError
+
+    # Author check before subject check so "I wrote this" surfaces before "you're not the subject".
+    author_account = get_account_for_character(writeup.author.character)
+    if author_account and author_account.pk == giver_account.pk:
+        raise CannotCommendOwnWriteupError
+
+    subject_account = get_account_for_character(writeup.relationship.target.character)
+    if subject_account is None or giver_account.pk != subject_account.pk:
+        raise NotWriteupSubjectError
+
+    field = _writeup_field_name(writeup)
+    if WriteupKudos.objects.filter(account=giver_account, **{field: writeup}).exists():
+        raise AlreadyCommendedError
+
+    with transaction.atomic():
+        try:
+            kudos = WriteupKudos.objects.create(account=giver_account, **{field: writeup})
+        except IntegrityError:
+            # Race: two concurrent commends from the same account both passed the
+            # exists() pre-check; the second hits the DB unique constraint.
+            raise AlreadyCommendedError from None
+        if author_account:
+            try:
+                category = KudosSourceCategory.objects.get(name=RELATIONSHIP_WRITEUP_KUDOS_CATEGORY)
+            except KudosSourceCategory.DoesNotExist:
+                logger.warning(
+                    "give_writeup_kudos: KudosSourceCategory %r not seeded; skipping award.",
+                    RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
+                )
+            else:
+                # Award anonymously — do NOT pass awarded_by=giver_account.
+                # The commender is the writeup's subject; surfacing their account username
+                # to the author would link an IC character to its OOC player account,
+                # violating player-behind-character privacy (ADR-0033).
+                award_kudos(
+                    author_account,
+                    WRITEUP_KUDOS_AMOUNT,
+                    category,
+                    "Relationship writeup commended",
+                )
+    return kudos
+
+
+def file_writeup_complaint(
+    *, complainant_account: AccountDB, writeup, reason: str
+) -> WriteupComplaint:
+    """File a bad-faith-RP complaint against a writeup for staff triage.
+
+    Any account that can view the writeup may file a complaint. No player-facing
+    signal is generated; complaints are staff-internal (admin-only surface).
+
+    Returns:
+        The newly created WriteupComplaint instance (resolved=False).
+
+    Raises:
+        WriteupNotVisibleError: the complainant's account cannot view the writeup.
+    """
+    if not _can_view_writeup(complainant_account, writeup):
+        raise WriteupNotVisibleError
+
+    field = _writeup_field_name(writeup)
+    return WriteupComplaint.objects.create(
+        complainant=complainant_account,
+        **{field: writeup},
+        reason=reason,
+    )
 
 
 def register_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinct grievance field

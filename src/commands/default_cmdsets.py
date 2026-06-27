@@ -71,11 +71,14 @@ from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.journals import CmdJournal
 from commands.locations import CmdManageRoom
+from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
+from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
@@ -156,6 +159,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLock,
             CmdUnlock,
             CmdRitual,
+            # #1349 — telnet face of the mission play services (resolve/abandon/group pick+vote).
+            CmdMission,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
@@ -164,6 +169,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdFlourish,
             CmdEndorse,
             CmdPoses,
+            CmdReact,
             CmdJudgePresentation,
             CmdIntimidate,
             CmdAccept,
@@ -242,6 +248,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRelationship,
             # #1511 — organization membership lifecycle.
             CmdOrg,
+            # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
+            CmdKudos,
+            CmdVote,
+            CmdRandomScene,
+            CmdPathIntent,
         )
         for command_cls in command_classes:
             self.add(command_cls())
