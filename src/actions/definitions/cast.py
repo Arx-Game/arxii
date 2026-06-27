@@ -146,7 +146,7 @@ class CastTechniqueAction(Action):
         *,
         technique_id: int | None = None,
         **kwargs: Any,
-    ) -> tuple[Any, dict[str, Any]] | None:
+    ) -> tuple[Any, dict[str, Any]] | ActionResult | None:
         """Declare into a COMBAT round when inside a CombatRoundContext, else None.
 
         When a ``cast_pull`` (a ``CastPullDeclaration``) is present and the context is
@@ -163,6 +163,13 @@ class CastTechniqueAction(Action):
         ``cast_pull`` is intentionally NOT forwarded into ``decl_kwargs`` — combat pulls
         come from the ``CombatPull`` read-path, not from the declaration kwargs, to avoid
         double-charging.
+
+        **Soulfray gate:** when the caster has an active Soulfray stage and
+        ``confirm_soulfray_risk`` is falsy, a ``PendingCast`` carrying all the combat
+        declaration kwargs is registered and an ``ActionResult(success=False)`` is
+        returned so the dispatcher short-circuits without recording a declaration or
+        charging the pull.  Accepting the offer re-dispatches with
+        ``confirm_soulfray_risk=True``, which skips this gate and proceeds normally.
         """
         from actions.constants import ActionBackend, CombatActionSlot  # noqa: PLC0415
         from actions.types import ActionRef, PlayerAction  # noqa: PLC0415
@@ -170,6 +177,12 @@ class CastTechniqueAction(Action):
 
         if not isinstance(ctx, CombatRoundContext) or technique_id is None:
             return None
+
+        # Soulfray gate — BEFORE committing the cast pull so no resonance/anima is
+        # charged for a declaration the player then declines.
+        gate = self._combat_soulfray_gate(ctx, technique_id, kwargs)
+        if gate is not None:
+            return gate
 
         # Commit an optional thread pull at declaration time.
         # resolve_pull_from_kwargs normalises both the telnet path (pre-built
@@ -201,9 +214,71 @@ class CastTechniqueAction(Action):
         focused_ally_id = kwargs.get("focused_ally_target_id")
         if focused_ally_id is not None:
             decl_kwargs["focused_ally_target_id"] = focused_ally_id
+        if kwargs.get("confirm_soulfray_risk"):
+            decl_kwargs["confirm_soulfray_risk"] = True
+        fury_commitment_id = kwargs.get("fury_commitment_id")
+        if fury_commitment_id is not None:
+            decl_kwargs["fury_commitment_id"] = fury_commitment_id
+        fury_anchor_id = kwargs.get("fury_anchor_id")
+        if fury_anchor_id is not None:
+            decl_kwargs["fury_anchor_id"] = fury_anchor_id
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _combat_soulfray_gate(
+        ctx: Any,
+        technique_id: int,
+        kwargs: dict[str, Any],
+    ) -> ActionResult | None:
+        """Return an ActionResult (prompt) and register a PendingCast when the soulfray gate fires.
+
+        Returns ``None`` when the gate does not fire (no warning, or already confirmed).
+        Must be called BEFORE committing any cast pull so no currency is charged for a
+        declaration the player then declines.
+        """
+        if kwargs.get("confirm_soulfray_risk"):
+            return None
+
+        from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+
+        character = ctx.participant.character_sheet.character
+        warning = get_soulfray_warning(character)
+        if warning is None:
+            return None
+
+        from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415
+
+        pending_kwargs: dict[str, Any] = {
+            "effort_level": kwargs.get("effort_level", "medium"),
+        }
+        for _key in (
+            "focused_opponent_target_id",
+            "focused_ally_target_id",
+            "action_slot",
+            "fury_commitment_id",
+            "fury_anchor_id",
+        ):
+            _value = kwargs.get(_key)
+            if _value is not None:
+                pending_kwargs[_key] = _value
+
+        register_pending(
+            ctx.participant.character_sheet.pk,
+            PendingCast(
+                technique_id=technique_id,
+                target_persona_id=None,  # combat uses focused_*_target_id
+                kwargs=pending_kwargs,
+            ),
+        )
+        return ActionResult(
+            success=False,
+            message=(
+                f"{warning.stage_description} "
+                "Use |waccept soulfray|n to proceed or |wdecline soulfray|n to abort."
+            ),
+        )
 
     @staticmethod
     def _commit_combat_pull(

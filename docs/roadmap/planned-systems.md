@@ -58,7 +58,13 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - **Shapeshift (voluntary + rage) + combat profiles** — #1111 (spec:approved, unbuilt). Note: a
   `forms` shapeshift/appearance engine exists at the service layer but is NO-SURFACE (see audit).
 - **Combo mechanics — fuller rules** — combos exist (upgrade/revert); the exact rules need design. `partial`, `unrecorded`.
-- **Soulfray-risk accept + fury commit** — player-chosen combat risk decisions. #1454, `partial`.
+- **Soulfray-risk accept + fury commit** — player-chosen combat risk decisions. #1454, **DONE**:
+  party-combat casts carry the player's `confirm_soulfray_risk` + fury (`fury_commitment` tier +
+  `fury_anchor`) on the `CombatRoundAction` declaration; `resolve_combat_technique` honors them
+  (soulfray gate no longer hardcoded; fury via the shared `run_fury_for_action` consumer → control
+  penalty + intensity bonus, Berserk on lost control, `Interaction.fury_committed` audit). Telnet
+  `cast … fury=<tier> anchor=<name>` reaches the same dispatch seam the web uses; declining a risky
+  cast is free re-declare.
 - **Duels** — non-lethal PvP + lethal PC-vs-significant-NPC. Milestone #8; NPC-tier lethality gap M#10
   (ADR-0023/0038/0040). (The duel *Actions* exist and are web-dispatchable — see the audit's WEB-ONLY row.)
 

@@ -85,7 +85,7 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]] [fury=<tier> anchor=<name>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
@@ -100,6 +100,15 @@ actions, backends, and service functions.
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).
+
+    **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
+    names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
+    rage answers to (resolved to a `CharacterSheet` by character key). They inject
+    `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
+    forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them (control
+    penalty + intensity bonus, Berserk on lost control). A soulfray-risky cast is asked at
+    declaration via the `accept soulfray` / `decline soulfray` offer flow (decline = free
+    re-declare); no special cast syntax triggers it.
 
     **Target resolution** (`at <name>`) branches on context and on the technique's authored
     `derive_target_relationship`:

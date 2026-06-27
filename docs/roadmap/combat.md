@@ -976,8 +976,17 @@ integration test suite.
   effect-tested, and **live-dispatchable** on the scene consent path (#1172): accepting the
   request fires its `RemoveConditionOnCheckConfig`, removing the target ally's Berserk
   condition end-to-end.
+- **Fury + soulfray-accept in party combat** — **DONE** (#1454): the party-combat round path
+  now consumes both as player decisions. `CombatRoundAction` adopts the `CommittingDeclaration`
+  mixin (`fury_commitment` / `fury_anchor`) plus a `confirm_soulfray_risk` bool;
+  `resolve_combat_technique` reads them instead of hardcoding `confirm_soulfray_risk=True`, calls
+  the shared `run_fury_for_action`, threads `control_penalty` + `power_intensity_bonus` into
+  `use_technique`, and records `Interaction.fury_committed`. The soulfray decision is asked at
+  declaration via the existing `accept soulfray` / `decline soulfray` offer flow (declining is
+  free re-declare; an unconfirmed risky cast is a clean no-op — AFK-safe, ADR-0004). Telnet
+  `cast … fury=<tier> anchor=<name>` parses through to the same dispatch seam the web uses.
 - **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
-  clash visibility UI is a follow-up.
+  clash visibility UI is a follow-up (incl. the combat-panel soulfray-accept + fury controls).
 
 ### Shared Future Work (combat-adjacent)
 - **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder

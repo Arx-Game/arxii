@@ -47,6 +47,7 @@ from actions.registry import get_action
 from actions.round_context import RoundContext, get_active_round_context
 from actions.types import (
     ActionRef,
+    ActionResult,
     DispatchResult,
     PlayerAction,
     StrainAvailability,
@@ -228,6 +229,11 @@ def _dispatch_scene_adaptive(
 
     if ctx is not None:
         decl = action_obj.round_declaration(ctx, **run_kwargs)
+        if isinstance(decl, ActionResult):
+            # Soulfray gate (or similar short-circuit): the action registered a pending
+            # cast and returned a prompt message.  Do NOT record a declaration or run
+            # execute() — return the message as a non-deferred result.
+            return DispatchResult(backend=ActionBackend.SCENE_ADAPTIVE, deferred=False, detail=decl)
         if ctx.is_declaration_open and decl is not None:
             player_action, decl_kwargs = decl
             ctx.record_declaration(sheet, player_action, decl_kwargs)  # type: ignore[arg-type]

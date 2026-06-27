@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import Technique, TechniqueDamageProfile
+    from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -763,6 +763,7 @@ def _build_affected_targets(
 def _build_combat_result(
     technique_use_result: TechniqueUseResult,
     resolver: CombatTechniqueResolver,  # noqa: ARG001 - kept for future extensibility
+    fury_committed: FuryTier | None = None,
 ) -> CombatTechniqueResult:
     """Translate use_technique's outcome into the adapter's return shape."""
     if not technique_use_result.confirmed:
@@ -770,6 +771,7 @@ def _build_combat_result(
             damage_results=[],
             applied_conditions=[],
             technique_use_result=technique_use_result,
+            fury_committed=fury_committed,
         )
 
     resolution = technique_use_result.resolution_result
@@ -784,6 +786,7 @@ def _build_combat_result(
         applied_conditions=list(resolution.applied_conditions),
         technique_use_result=technique_use_result,
         power_ledger=resolution.power_ledger,
+        fury_committed=fury_committed,
     )
 
 
@@ -816,6 +819,7 @@ def resolve_combat_technique(
     - VITAL_BONUS: already wired through recompute_max_health_with_threads
     """
     from world.magic.services import use_technique  # noqa: PLC0415
+    from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
     encounter = participant.encounter
     pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
@@ -831,16 +835,27 @@ def resolve_combat_technique(
 
     targets = _build_affected_targets(participant, action)
 
+    fury_res = run_fury_for_action(
+        character=participant.character_sheet.character,
+        fury_commitment=action.fury_commitment,
+        fury_anchor=action.fury_anchor,
+        source_technique=action.focused_action,
+    )
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
         resolve_fn=resolver,
-        confirm_soulfray_risk=True,
+        confirm_soulfray_risk=action.confirm_soulfray_risk,
         targets=targets,
         lethal=encounter.is_lethal,
+        control_penalty=fury_res.control_penalty if fury_res else 0,
+        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
     )
 
-    return _build_combat_result(technique_use_result, resolver)
+    return _build_combat_result(
+        technique_use_result, resolver, fury_committed=fury_res.realized_tier if fury_res else None
+    )
 
 
 def _ensure_combat_engagement(participant: CombatParticipant) -> None:
@@ -1681,6 +1696,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     physical_passive: Technique | None = None,
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
+    confirm_soulfray_risk: bool = False,
+    fury_commitment: FuryTier | None = None,
+    fury_anchor: CharacterSheet | None = None,
 ) -> CombatRoundAction:
     """Declare a PC's action for the current round.
 
@@ -1787,6 +1805,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "maneuver": None,  # Reset maneuver on re-declaration
             "combo_upgrade": None,  # Reset combo on re-declaration
             "is_ready": False,  # Reset ready on re-declaration
+            "confirm_soulfray_risk": confirm_soulfray_risk,
+            "fury_commitment": fury_commitment,
+            "fury_anchor": fury_anchor,
         },
     )
     return action
@@ -3247,10 +3268,16 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
+    # Only the attack path returns a CombatTechniqueResult (which carries fury);
+    # the non-attack path returns a CombatTechniqueResolution with no fury field.
+    fury_committed = (
+        combat_result.fury_committed if isinstance(combat_result, CombatTechniqueResult) else None
+    )
     interaction = create_action_interaction(
         participant=participant,
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
+        fury_committed=fury_committed,
     )
     if interaction is not None:
         action.interaction = interaction

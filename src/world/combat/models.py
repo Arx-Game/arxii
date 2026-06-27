@@ -733,9 +733,13 @@ class CombatParticipant(SharedMemoryModel):
         return f"{self.character_sheet}"
 
 
-class CombatRoundAction(SharedMemoryModel):
+class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
     """A PC's declared actions for a round."""
 
+    confirm_soulfray_risk = models.BooleanField(
+        default=False,
+        help_text="Player accepted the soulfray risk for this declared cast.",
+    )
     participant = models.ForeignKey(
         CombatParticipant,
         on_delete=models.CASCADE,
