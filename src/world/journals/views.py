@@ -206,8 +206,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        sheet = self._get_character_sheet(request)
-        if not sheet:
+        try:
+            sheet = character.sheet_data
+        except CharacterSheet.DoesNotExist:
             return Response(
                 {"detail": "No character found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -226,7 +227,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
         result = get_action("edit_journal_entry").run(
             actor=character,
-            entry_id=entry.pk,
+            entry=entry,
             title=serializer.validated_data.get("title"),
             body=serializer.validated_data.get("body"),
         )
@@ -250,6 +251,14 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             )
 
         try:
+            character.sheet_data  # noqa: B018
+        except CharacterSheet.DoesNotExist:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
             parent = JournalEntry.objects.select_related("author").get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response(
@@ -262,7 +271,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
         result = get_action("respond_to_journal").run(
             actor=character,
-            parent_id=parent.pk,
+            parent=parent,
             response_type=serializer.validated_data["response_type"],
             title=serializer.validated_data["title"],
             body=serializer.validated_data["body"],

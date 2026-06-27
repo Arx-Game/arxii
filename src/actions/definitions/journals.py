@@ -115,14 +115,18 @@ class RespondToJournalAction(_BaseJournalAction):
         if sheet is None:
             return ActionResult(success=False, message="No active character.")
 
+        parent = kwargs.get("parent")
         parent_id = kwargs.get("parent_id")
         response_type = kwargs.get("response_type")
-        if parent_id is None:
+        if isinstance(parent, JournalEntry):
+            pass
+        elif parent_id is not None:
+            try:
+                parent = JournalEntry.objects.get(pk=parent_id)
+            except JournalEntry.DoesNotExist:
+                return ActionResult(success=False, message="That journal entry was not found.")
+        else:
             return ActionResult(success=False, message="No journal entry selected.")
-        try:
-            parent = JournalEntry.objects.get(pk=parent_id)
-        except JournalEntry.DoesNotExist:
-            return ActionResult(success=False, message="That journal entry was not found.")
         if response_type not in ResponseType.values:
             return ActionResult(
                 success=False,
@@ -170,13 +174,18 @@ class EditJournalEntryAction(_BaseJournalAction):
         if sheet is None:
             return ActionResult(success=False, message="No active character.")
 
+        entry = kwargs.get("entry")
         entry_id = kwargs.get("entry_id")
-        if entry_id is None:
+        if isinstance(entry, JournalEntry):
+            if entry.author_id != sheet.pk:
+                return ActionResult(success=False, message="That journal entry was not found.")
+        elif entry_id is not None:
+            try:
+                entry = JournalEntry.objects.get(pk=entry_id, author_id=sheet.pk)
+            except JournalEntry.DoesNotExist:
+                return ActionResult(success=False, message="That journal entry was not found.")
+        else:
             return ActionResult(success=False, message="No journal entry selected.")
-        try:
-            entry = JournalEntry.objects.get(pk=entry_id, author_id=sheet.pk)
-        except JournalEntry.DoesNotExist:
-            return ActionResult(success=False, message="That journal entry was not found.")
 
         try:
             updated = edit_journal_entry(
