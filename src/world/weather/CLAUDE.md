@@ -81,8 +81,12 @@ Services (`world.weather.services`):
 
 - **Cron** (`world.weather.tasks.roll_and_echo_weather`, registered in `game_clock` at
   `timedelta(hours=2)` REAL ≈ 6 IC hours): rerolls each climate-bearing region's weather, then
-  echoes one emit to the **online** occupants of its rooms as a `NarrativeCategory.ATMOSPHERE`
-  message (frontend routes it to a tab; offline players skip it — no stale catch-up flood).
+  echoes one emit to the **online** occupants of its rooms as a `NarrativeCategory.WEATHER`
+  message (its own category, so the frontend routes it to a weather tab and players squelch it
+  precisely; offline players skip it — no stale catch-up flood).
+- **Squelch** — `narrative.UserCategoryMute` (mirrors `UserStoryMute`: suppress the live push,
+  keep it readable in the tab). `narrative.services.set_category_mute` / `is_category_muted`;
+  `time` command exposes `weather squelch` / `weather unsquelch` on the WEATHER category.
 - **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
   the room's effective weather + one emit line. Any field is None when its source is absent.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
@@ -90,13 +94,15 @@ Services (`world.weather.services`):
 
 ## Not yet built (later slices of #1522)
 
-- **Squelch** — `TenureDisplaySettings` has no category mute yet; mirror `narrative.UserStoryMute`
-  semantics (suppress the live push, keep it readable in the atmosphere tab) so players can opt
-  out of the weather echo. (`[BUILT, NOT WIRED]`.)
-- **Corpus seeding** — the 263-emit Arx-1 corpus + the ~5 automated `WeatherType` rows
-  (+ exposures + temp bands) are *data*, seeded via an upsert path from the lore repo (fixtures
-  are gitignored; no management commands). Until seeded, `roll_region_weather` returns None and
-  weather is simply inert — the mechanism is complete, the data isn't shipped here.
+- **Corpus seeding (done — data lives in the seed-data store, not this repo):** Django fixtures
+  for 7 `WeatherType` rows (Clear/Stormy/Snowy/Windy/Foggy automated; Eclipse of Mirrors / Moon
+  Madness special) + their exposures + 263 `WeatherEmit` rows were generated from the Arx-1
+  corpus. `WeatherType` carries a **name natural key** so the exposure/emit fixtures reference it
+  by name. Load order: `weather_types` → `weather_type_exposures` → `weather_emits` (via
+  `loaddata`). Exposure magnitudes, temperature bands, and selection weights are PLACEHOLDER.
+  Weather is inert in any DB until these are loaded (`roll_region_weather` returns None with no
+  types). **Re-seeding edited emits needs an upsert path** (loaddata duplicates the keyless emit
+  rows — the #946 idmapper caveat); not yet built.
 - **React weather widget** — a frontend surface consuming `current_conditions` (needs a
   weather-at-location API endpoint resolving the viewer's active character's room).
 - **Slice 2c** — special feast-day weather (Moon Madness / Eclipse) on its own automated loop;

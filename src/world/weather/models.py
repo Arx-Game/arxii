@@ -19,6 +19,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.locations.constants import StatKey
 
 _CODEX_SUBJECT_FK = "codex.CodexSubject"
@@ -71,14 +72,14 @@ class Climate(SharedMemoryModel):
         return self.name
 
 
-class WeatherType(SharedMemoryModel):
+class WeatherType(NaturalKeyMixin, SharedMemoryModel):
     """A kind of transient weather that can hold over a region (#1522).
 
     The *current* weather of a region (``RegionWeatherState``) is one of these. Unlike the flat
     ``Climate`` baseline, weather is transient — the roll service rewrites its decaying exposure
     modifiers over the baseline. There is **no** Arx-1-style intensity scalar: the type *is* the
     intensity (Stormy carries more WET/WIND than Drizzle via its ``exposures``). Lore lives in the
-    linked ``CodexSubject``.
+    linked ``CodexSubject``. Carries a name natural key so seed fixtures reference it by name.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -122,6 +123,11 @@ class WeatherType(SharedMemoryModel):
         default=True,
         help_text="Whether this weather type is currently in rotation.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]

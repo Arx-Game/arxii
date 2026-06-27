@@ -2923,12 +2923,18 @@
   - account -> accounts.AccountDB [FK]
   - story -> stories.Story [FK]
 
+### UserCategoryMute
+**Foreign Keys:**
+  - account -> accounts.AccountDB [FK]
+
 ### Service Functions
 - `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', reach: 'str' = GemitReach.GAME_WIDE, societies: 'Iterable[Society] | None' = None, organizations: 'Iterable[Organization] | None' = None, related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push it to its ``reach`` audience in green (#1450).`
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
 - `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' — Send a source-ambiguous ambient line to a room's bystanders (#885).`
+- `is_category_muted(*, account: 'AccountDB', category: 'str') -> 'bool' — Whether an account has muted a narrative category's live push.`
 - `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
+- `set_category_mute(*, account: 'AccountDB', category: 'str', muted: 'bool') -> 'None' — Mute or unmute a narrative category's real-time push for an account (#1522).`
 
 
 ## world.npc_services

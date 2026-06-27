@@ -50,7 +50,7 @@ def _echo_region_weather(region: Area) -> None:
     send_narrative_message(
         recipients=recipients,
         body=emit.text,
-        category=NarrativeCategory.ATMOSPHERE,
+        category=NarrativeCategory.WEATHER,
         ooc_note="Weather echo (#1522).",
     )
 

@@ -17,6 +17,8 @@ class CmdTime(ArxCommand):
     Usage:
       time
       weather
+      weather squelch     - stop the periodic weather echo (still readable in its tab)
+      weather unsquelch   - resume the periodic weather echo
     """
 
     key = "time"
@@ -24,9 +26,21 @@ class CmdTime(ArxCommand):
     locks = "cmd:all()"
     help_category = "General"
     action = None
+    SQUELCH = "squelch"
+    UNSQUELCH = "unsquelch"
 
     def func(self) -> None:
+        from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+        from world.narrative.services import is_category_muted, set_category_mute  # noqa: PLC0415
         from world.weather.services import current_conditions  # noqa: PLC0415
+
+        arg = self.args.strip().lower()
+        account = self.account
+        if arg in (self.SQUELCH, self.UNSQUELCH) and account is not None:
+            muted = arg == self.SQUELCH
+            set_category_mute(account=account, category=NarrativeCategory.WEATHER, muted=muted)
+            self.msg("Weather echoes squelched." if muted else "Weather echoes restored.")
+            return
 
         room = self.caller.location
         if room is None:
@@ -50,5 +64,10 @@ class CmdTime(ArxCommand):
                 lines.append(f"  |x{conditions.emit_text}|n")
         else:
             lines.append("|xThe weather here is unremarkable.|n")
+
+        if account is not None and is_category_muted(
+            account=account, category=NarrativeCategory.WEATHER
+        ):
+            lines.append("|x(weather echoes squelched — `weather unsquelch` to resume)|n")
 
         self.msg("\n".join(lines))

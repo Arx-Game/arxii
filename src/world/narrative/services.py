@@ -27,6 +27,7 @@ from world.narrative.models import (
     Gemit,
     NarrativeMessage,
     NarrativeMessageDelivery,
+    UserCategoryMute,
     UserStoryMute,
 )
 
@@ -79,17 +80,26 @@ def send_narrative_message(  # noqa: PLR0913
         ]
         NarrativeMessageDelivery.objects.bulk_create(deliveries)
 
-    # Resolve muted accounts up front — one query, not per-recipient.
+    # Resolve muted accounts up front — one query each, not per-recipient.
+    recipient_account_ids = [
+        sheet.character.db_account_id
+        for sheet in recipient_list
+        if sheet.character.db_account_id is not None
+    ]
     muted_account_ids: set[int] = set()
     if related_story is not None:
         muted_account_ids = set(
             UserStoryMute.objects.filter(
                 story=related_story,
-                account__in=[
-                    sheet.character.db_account_id
-                    for sheet in recipient_list
-                    if sheet.character.db_account_id is not None
-                ],
+                account_id__in=recipient_account_ids,
+            ).values_list("account_id", flat=True)
+        )
+    # Category-level mutes (e.g. a player squelching the WEATHER echo) — union with story mutes.
+    if recipient_account_ids:
+        muted_account_ids |= set(
+            UserCategoryMute.objects.filter(
+                category=category,
+                account_id__in=recipient_account_ids,
             ).values_list("account_id", flat=True)
         )
 
@@ -104,6 +114,23 @@ def send_narrative_message(  # noqa: PLR0913
         _push_to_online_recipient(delivery)
 
     return msg
+
+
+def set_category_mute(*, account: AccountDB, category: str, muted: bool) -> None:
+    """Mute or unmute a narrative category's real-time push for an account (#1522).
+
+    Muting suppresses only the live ``character.msg()`` push — delivery rows are still created, so
+    the messages stay readable in that category's tab.
+    """
+    if muted:
+        UserCategoryMute.objects.get_or_create(account=account, category=category)
+    else:
+        UserCategoryMute.objects.filter(account=account, category=category).delete()
+
+
+def is_category_muted(*, account: AccountDB, category: str) -> bool:
+    """Whether an account has muted a narrative category's live push."""
+    return UserCategoryMute.objects.filter(account=account, category=category).exists()
 
 
 def send_story_ooc_message(
