@@ -9,15 +9,138 @@ victim/source pair. Two hard rules apply before any risk math:
 
 A non-PC (significant-NPC) source with no death-deferral active on the victim
 is the only configuration that returns True.
+
+Task 7 (#1479) adds the involved-party narrowing helpers used by scene-round
+resolution: ``hostile_drove_round`` (did the encounter that downed the victim act
+this round?), ``potential_rescuer_present`` (could anyone present stabilize them?),
+and the ``mark_abandoned`` / ``clear_abandoned`` markers that stamp/clear
+``ConditionInstance.abandoned_since_round``.
 """
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.objects.models import ObjectDB
 
     from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import ConditionInstance
+    from world.scenes.models import SceneRound
+
+
+def _acute_peril_condition_names() -> list[str]:
+    """The condition names that constitute acute peril (a dying/falling state).
+
+    Mirrors the set ``round_services._danger_persists`` keys a DANGER round on, so
+    "carries an acute danger condition" means the same thing everywhere: Bleeding
+    Out or Plummeting.
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
+
+    return [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+
+
+def acute_peril_instances(victim_sheet: "CharacterSheet") -> "QuerySet[ConditionInstance]":
+    """Return the victim's active acute-peril ConditionInstances (Bleeding Out / Plummeting)."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target_id=victim_sheet.character_id,
+        condition__name__in=_acute_peril_condition_names(),
+    )
+
+
+def _acute_peril_source_ids(victim_sheet: "CharacterSheet") -> set[int]:
+    """ObjectDB ids of the characters who inflicted the victim's acute peril."""
+    return {
+        inst.source_character_id
+        for inst in acute_peril_instances(victim_sheet)
+        if inst.source_character_id is not None
+    }
+
+
+def hostile_drove_round(
+    victim_sheet: "CharacterSheet",
+    scene_round: "SceneRound",
+    declared_ids: set[int],
+) -> bool:
+    """Return True when a hostile party drove THIS round against a downed victim.
+
+    A downed victim's acute peril (e.g. Bleeding Out) advances on the END tick only
+    while "the encounter that downed them is still acting." That is true when the
+    character who inflicted the peril (``ConditionInstance.source_character``) is a
+    participant of this round who declared this round — i.e. their participant pk is
+    in ``declared_ids`` (the snapshot taken before declarations are resolved/deleted).
+
+    ``declared_ids`` is the set of SceneRoundParticipant pks with a deferred
+    declaration this round (``round_services.resolve_scene_round`` builds it).
+    """
+    source_ids = _acute_peril_source_ids(victim_sheet)
+    if not source_ids:
+        return False
+
+    from world.scenes.models import SceneRoundParticipant  # noqa: PLC0415
+
+    source_participant_ids = set(
+        SceneRoundParticipant.objects.filter(
+            scene_round=scene_round,
+            character_sheet__character_id__in=source_ids,
+        ).values_list("pk", flat=True)
+    )
+    return bool(source_participant_ids & declared_ids)
+
+
+def potential_rescuer_present(
+    victim_sheet: "CharacterSheet",
+    room: "ObjectDB",  # noqa: OBJECTDB_PARAM
+) -> bool:
+    """Return True when someone present could plausibly stabilize the downed victim.
+
+    A potential rescuer is any character in ``room`` who is conscious (``can_act``),
+    is NOT the victim, and is NOT the hostile source of the victim's peril (an
+    ally/neutral bystander). The abandonment marker is only stamped when such a
+    rescuer exists — if nobody could help, "abandoned" is not the right framing.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    victim_id = victim_sheet.character_id
+    source_ids = _acute_peril_source_ids(victim_sheet)
+    for obj in room.contents:
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if sheet.character_id == victim_id or sheet.character_id in source_ids:
+            continue
+        if can_act(sheet):
+            return True
+    return False
+
+
+def mark_abandoned(victim_sheet: "CharacterSheet", scene_round: "SceneRound") -> None:
+    """Stamp ``abandoned_since_round`` on the victim's acute-peril instances (once).
+
+    Only stamps when a potential rescuer is present (see ``potential_rescuer_present``)
+    and never overwrites an existing stamp — the marker records the FIRST round the
+    victim was left to hold, not the latest.
+    """
+    room = victim_sheet.character.location
+    if room is None or not potential_rescuer_present(victim_sheet, room):
+        return
+    for inst in acute_peril_instances(victim_sheet).filter(abandoned_since_round__isnull=True):
+        inst.abandoned_since_round = scene_round.round_number
+        inst.save(update_fields=["abandoned_since_round"])
+
+
+def clear_abandoned(victim_sheet: "CharacterSheet") -> None:
+    """Clear ``abandoned_since_round`` — a hostile party is driving the round again."""
+    for inst in acute_peril_instances(victim_sheet).filter(abandoned_since_round__isnull=False):
+        inst.abandoned_since_round = None
+        inst.save(update_fields=["abandoned_since_round"])
 
 
 def is_pc_source(source_character: "ObjectDB | None") -> bool:  # noqa: OBJECTDB_PARAM

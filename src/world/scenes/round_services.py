@@ -336,6 +336,52 @@ def scene_round_is_complete(scene_round: SceneRound) -> bool:
     return declared_present_active >= needed
 
 
+def _resolve_downed_victim_peril(
+    scene_round: SceneRound,
+    present_ids: set[int],
+    declared_ids: set[int],
+) -> tuple[set[int], set[int]]:
+    """Classify each downed victim's acute peril for this round (#1479).
+
+    A downed victim is a present ACTIVE participant who cannot act yet carries an
+    active acute-peril condition (Bleeding Out / Plummeting). For each one this
+    stamps or clears the abandonment marker as a side effect and returns
+    ``(downed_victim_participant_ids, advancing_participant_ids)``:
+
+    - ``downed_victim_participant_ids`` — every downed victim found.
+    - ``advancing_participant_ids`` — the subset whose peril SHOULD advance on the
+      END tick because a hostile party drove this round.
+
+    Called BEFORE ``_resolve_scene_declarations`` deletes the declaration rows, so
+    ``hostile_drove_round`` can read this round's declarations.
+    """
+    from world.vitals.peril_resolution import (  # noqa: PLC0415
+        acute_peril_instances,
+        clear_abandoned,
+        hostile_drove_round,
+        mark_abandoned,
+    )
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    downed_ids: set[int] = set()
+    advancing_ids: set[int] = set()
+    for p in scene_round.participants.filter(
+        status=SceneRoundParticipantStatus.ACTIVE
+    ).select_related("character_sheet__character"):
+        sheet = p.character_sheet
+        if sheet.character_id not in present_ids or can_act(sheet):
+            continue
+        if not acute_peril_instances(sheet).exists():
+            continue
+        downed_ids.add(p.pk)
+        if hostile_drove_round(sheet, scene_round, declared_ids):
+            advancing_ids.add(p.pk)
+            clear_abandoned(sheet)
+        else:
+            mark_abandoned(sheet, scene_round)
+    return downed_ids, advancing_ids
+
+
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
@@ -373,19 +419,32 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     )
     present_ids = {s.character_id for s in _present_character_sheets(rnd.room)}
 
+    # Acute-peril narrowing (#1479): decide each DOWNED victim's fate BEFORE
+    # _resolve_scene_declarations deletes this round's declaration rows, since the
+    # hostile-driver check reads this round's declarations. A downed victim is a
+    # present participant who cannot act yet carries an acute-peril condition (e.g.
+    # Bleeding Out). Their peril advances on the END tick ONLY when a hostile party
+    # drove this round; otherwise it HOLDS and we mark them abandoned (when a rescuer
+    # is present). If a hostile drives again, the marker is cleared.
+    downed_victim_ids, advancing_downed_ids = _resolve_downed_victim_peril(
+        rnd, present_ids, declared_ids
+    )
+
     _resolve_scene_declarations(rnd)
 
-    targets = [
-        p.character_sheet.character
-        for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
-            "character_sheet__character"
-        )
-        if not (
-            p.character_sheet.character_id in present_ids
-            and can_act(p.character_sheet)
-            and p.pk not in declared_ids
-        )
-    ]
+    targets = []
+    for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
+        "character_sheet__character"
+    ):
+        sheet = p.character_sheet
+        # #1480: a present, conscious, undeclared participant's OWN peril does not
+        # advance from a round they didn't engage in (AFK own-peril skip).
+        if sheet.character_id in present_ids and can_act(sheet) and p.pk not in declared_ids:
+            continue
+        # #1479: a downed victim advances only when a hostile party drove the round.
+        if p.pk in downed_victim_ids and p.pk not in advancing_downed_ids:
+            continue
+        targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
 
     rnd.status = RoundStatus.BETWEEN_ROUNDS

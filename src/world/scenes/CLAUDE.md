@@ -84,6 +84,15 @@ Key service functions for scene round lifecycle:
   implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute
   conditions do not advance from a round they didn't engage in (ADR-0004 — an AFK character is not harmed
   while away). Declared, absent, and present-`not can_act` (unconscious) participants tick as before.
+  **Downed-victim narrowing (#1479):** a DOWNED victim (present, `not can_act`, carrying an active
+  acute-peril condition — Bleeding Out / Plummeting) advances on the END tick ONLY when a hostile party
+  drove the round (`world.vitals.peril_resolution.hostile_drove_round` — the peril's `source_character`
+  is a participant who declared this round). Otherwise the peril HOLDS (excluded from the tick) and the
+  victim's acute-peril `ConditionInstance.abandoned_since_round` is stamped (once) when a potential
+  rescuer is present (`potential_rescuer_present`); a later hostile-driven round clears the marker.
+  `_resolve_downed_victim_peril` snapshots these decisions BEFORE `_resolve_scene_declarations` deletes
+  the declaration rows. A consequence: a danger round with an abandoned downed victim resolves (advances)
+  but does NOT auto-complete while the held peril persists.
 - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
   for the character's room (enrolling everyone present). When none is active, creates a STRICT
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller

@@ -155,6 +155,25 @@ class SceneRoundResolutionTests(TestCase):
             is_pass=True,
         )
 
+    def _downed_victim(
+        self, *, source_character=None, abandoned_since_round=None, initiative_order=0
+    ):
+        """A present participant carrying an active Bleeding Out condition (downed).
+
+        Returns (participant, bleed_out_instance). Pair with a patched ``can_act``
+        that returns False for this participant's sheet to make them truly "downed".
+        """
+        from world.conditions.factories import BleedingOutConditionFactory
+
+        participant = self._participant(present=True, initiative_order=initiative_order)
+        inst = ConditionInstanceFactory(
+            target=participant.character_sheet.character,
+            condition=BleedingOutConditionFactory(),
+            source_character=source_character,
+            abandoned_since_round=abandoned_since_round,
+        )
+        return participant, inst
+
     def test_not_complete_when_present_participant_undeclared(self):
         p1 = self._participant(present=True, initiative_order=0)
         self._participant(present=True, initiative_order=1)
@@ -312,6 +331,63 @@ class SceneRoundResolutionTests(TestCase):
         afk_dot.refresh_from_db()
         assert decl_dot.rounds_remaining == 2  # declarer's own condition ticked
         assert afk_dot.rounds_remaining == 3  # AFK (undeclared) own condition skipped
+
+    def test_downed_victim_held_and_marked_when_only_bystander_declares(self):
+        # A downed (unconscious) bleeding victim; the encounter that downed them is NOT
+        # acting this round — only an uninvolved bystander declares. The victim's
+        # bleed-out must NOT advance (excluded from the END tick) and must be marked
+        # abandoned for this round (#1479). tick_round_for_targets is patched so the
+        # selection logic is asserted without traversing the PG-only bleed-out path.
+        from evennia_extensions.factories import ObjectDBFactory
+
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        npc_source = ObjectDBFactory()  # off-screen attacker, not enrolled this round
+        victim_p, bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        bystander = self._participant(present=True, initiative_order=1)  # potential rescuer
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character not in ticked  # peril held, did not advance
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round == 1  # stamped with the resolved round_number
+
+    def test_downed_victim_advances_and_marker_cleared_when_source_declares(self):
+        # The hostile SOURCE that downed the victim declares this round — "the encounter
+        # that downed them is still acting." The victim's bleed-out advances (included in
+        # the END tick) and any prior abandonment marker is cleared (#1479).
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        source_p = self._participant(present=True, initiative_order=0)
+        victim_p, bleed = self._downed_victim(
+            source_character=source_p.character_sheet.character,
+            abandoned_since_round=5,  # stale marker from a prior abandoned round
+            initiative_order=1,
+        )
+        self._declare_pass(source_p)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character in ticked  # peril advances
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round is None  # cleared — hostile drove again
 
 
 class SceneRoundOutcomeBroadcastTests(TestCase):
