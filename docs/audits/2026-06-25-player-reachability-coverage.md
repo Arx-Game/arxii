@@ -203,9 +203,10 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Social structures & collective play
 - TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481); NPC-service
-  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493).
-- WEB-ONLY: events full lifecycle (create/schedule/start/complete/cancel/invite — no Action, no telnet);
-  pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
+  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493);
+  events full lifecycle (create/schedule/start/complete/cancel/invite — `actions.definitions.events` +
+  telnet `event <subverb>`, #1499).
+- WEB-ONLY: pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
   rules + standing whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy
   MVP-gating, ADR-0033); spread-deed / save-deed-story (#745).
 - **NO-SURFACE:** captivity capture/escape/rescue/resolve + **demand_ransom (zero production callers)**
@@ -219,7 +220,7 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   player surface — only a gap if a journey needs direct project interaction.
 - **PLANNED-UNBUILT (→ registry):** tidings **posting/reacting/commenting** (no model); persona
   mint/edit/delete (reserved for future IC flows); roster **release/end-tenure** (end_date set by
-  nothing); events **RSVP-accept** (invitee response unbuilt); projects activation service.
+  nothing); projects activation service.
 
 ---
 

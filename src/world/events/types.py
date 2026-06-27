@@ -15,6 +15,9 @@ _EVENT_ERROR_MESSAGES: dict[str, str] = {
     "INVITE_MODIFY_ACTIVE": "Cannot modify invitations on an active or finished event.",
     "INVITE_DUPLICATE": "This target is already invited.",
     "PRIVATE_IN_PUBLIC_ROOM": "A private event cannot be held in a publicly-listed room.",
+    "RSVP_NOT_PERSONA": "Only persona invitations can be RSVP'd.",
+    "RSVP_NOT_YOURS": "That invitation is not yours to respond to.",
+    "RSVP_CLOSED": "Cannot RSVP to an invitation for an active or finished event.",
 }
 
 
@@ -38,6 +41,9 @@ class EventError(Exception):
     INVITE_MODIFY_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_MODIFY_ACTIVE"]
     INVITE_DUPLICATE = _EVENT_ERROR_MESSAGES["INVITE_DUPLICATE"]
     PRIVATE_IN_PUBLIC_ROOM = _EVENT_ERROR_MESSAGES["PRIVATE_IN_PUBLIC_ROOM"]
+    RSVP_NOT_PERSONA = _EVENT_ERROR_MESSAGES["RSVP_NOT_PERSONA"]
+    RSVP_NOT_YOURS = _EVENT_ERROR_MESSAGES["RSVP_NOT_YOURS"]
+    RSVP_CLOSED = _EVENT_ERROR_MESSAGES["RSVP_CLOSED"]
 
     @property
     def user_message(self) -> str:

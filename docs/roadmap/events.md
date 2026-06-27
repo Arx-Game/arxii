@@ -16,7 +16,10 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
   Extra options expand to room modifications, organization invites, prestige investment
 - **Persona-based identity** — All player-facing references use Persona to preserve IC/OOC boundary.
   Hosts are personas, invitations target personas
-- **No RSVPs** — Low-pressure design. You're invited, show up or don't. Scene tracks who came
+- **Lightweight RSVP** — Persona invitations carry an optional Accept/Decline response (PENDING by
+  default); org/society invitations have no per-member RSVP. Low-pressure: the response is a headcount
+  aid, not a gate — the host sees who's coming, but attendance is still "show up or don't." Scene
+  tracks who actually came (#1499)
 - **Polymorphic invitations** — Invite individual personas, entire organizations, or societies
 - **Room modifications** — Events can temporarily alter room descriptions, and eventually security,
   decor/prestige, access permeability, and interactive objects
@@ -29,9 +32,25 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
   IC time derived then adjustable, TimePhase default DAY), 6-hour same-location gap constraint
 - **EventHost** — multi-host via Persona, one primary host, staff has implicit access
 - **EventInvitation** — polymorphic targets (persona/organization/society), SET_NULL on deletion.
-  Invite/remove actions on EventViewSet
+  Persona invitations carry an `InvitationResponse` (PENDING/ACCEPTED/DECLINED) +
+  `responded_at`; org/society invitations have no per-member RSVP. Invite/remove actions on
+  EventViewSet; invitee RSVP via the `respond` endpoint (#1499)
 - **EventModification** — stub: room_description_overlay applied on start, reverted on complete
 - **Scene.event FK** — nullable FK on existing Scene model
+
+### Action Convergence & Telnet (#1499)
+- The web `EventViewSet` create/schedule/start/complete/cancel/invite `@action`s and the
+  invitee `respond` (RSVP) all run through real `Action`s on `action.run()` (ADR-0001) —
+  `actions/definitions/events.py` (`event_create` / `event_schedule` / `event_start` /
+  `event_complete` / `event_cancel` / `event_invite` / `respond_invitation`), REGISTRY backend.
+- Lifecycle + invite Actions are **account-authorized** (a staffer or scene GM can manage an
+  event with no character): they take an `account` kwarg and pass `actor=None` through
+  `action.run()`; the host/GM/staff gate mirrors the DRF permission classes (`IsEventHostOrStaff` /
+  `IsEventHostGMOrStaff`). `create` and `respond` act *as* a persona (resolved character actor +
+  `HasCharacterSheetPrerequisite`).
+- Telnet: the `event <subverb>` namespace (`commands/events.py`, CmdEvent) routes
+  `create` / `schedule` / `start` / `complete` / `cancel` / `invite` / `rsvp` write verbs plus
+  `list` / `show` read surfaces — converging on the same Actions the web uses.
 
 ### Room Selection
 - `is_public` flag on RoomProfile filters which rooms appear in public listings

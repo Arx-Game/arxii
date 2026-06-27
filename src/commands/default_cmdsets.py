@@ -63,6 +63,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.events import CmdEvent
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
@@ -240,6 +241,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1485 — relationship-building namespace: impression/develop/capstone/
             # redistribute write verbs + list/show read surfaces.
             CmdRelationship,
+            # #1499 — event lifecycle + invitee RSVP namespace: create/schedule/start/
+            # complete/cancel/invite/rsvp verbs + list/show read surfaces.
+            CmdEvent,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.

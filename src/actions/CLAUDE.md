@@ -91,6 +91,15 @@ They do not use the command system, dispatchers, or handlers.
   services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
   and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
   call it). Shared with telnet `CmdReact`.)
+  `events.py` (#1499) — the event lifecycle + invitee RSVP verbs, all REGISTRY backend,
+  `target_type=SELF`: `CreateEventAction` (key `"event_create"`, acts as the caller's active persona),
+  `ScheduleEventAction` / `StartEventAction` / `CompleteEventAction` / `CancelEventAction`
+  (`"event_schedule"` / `"event_start"` / `"event_complete"` / `"event_cancel"`, account-authorized —
+  pass `actor=None` + `account` kwarg; the host/GM/staff gate mirrors the DRF permission classes),
+  `InviteToEventAction` (`"event_invite"`, account-authorized), `RespondInvitationAction`
+  (`"respond_invitation"`, acts as the invitee's active persona). Each wraps its
+  `world.events.services` counterpart; shared by telnet `CmdEvent` (`event <subverb>`) and the web
+  `EventViewSet` / `EventInvitationViewSet`; no consent gate (ADR-0024).
 
 ## SCENE_ADAPTIVE Backend (#1351)
 

@@ -4,7 +4,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.events.constants import EventStatus, InvitationTargetType
+from world.events.constants import EventStatus, InvitationResponse, InvitationTargetType
 from world.game_clock.constants import TimePhase
 
 
@@ -197,6 +197,15 @@ class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="invitations_sent",
     )
+    # RSVP — only meaningful on PERSONA invitations (group invites have no
+    # per-member row). Default PENDING until the invitee responds.
+    response = models.CharField(
+        max_length=10,
+        choices=InvitationResponse.choices,
+        default=InvitationResponse.PENDING,
+        db_index=True,
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
