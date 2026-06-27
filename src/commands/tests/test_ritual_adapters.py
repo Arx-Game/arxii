@@ -238,6 +238,15 @@ class CovenantInductionAdapterJoinTests(TestCase):
         parse = adapter.parse_join(kwargs={"role": "Vanguard"}, caller=None)
         self.assertEqual(parse.participant_kwargs, {})
 
+    def test_multi_word_role_resolves_correctly(self) -> None:
+        """``role=Iron Warden`` (assembled by the fixed _handle_join tokenizer) resolves."""
+        role = CovenantRoleFactory(name="Iron Warden")
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_join(kwargs={"role": "Iron Warden"}, caller=None)
+        self.assertIsInstance(parse, JoinParse)
+        self.assertEqual(len(parse.references), 1)
+        self.assertEqual(parse.references[0].ref_covenant_role, role)
+
 
 class BannerCallAdapterDraftTests(TestCase):
     @classmethod

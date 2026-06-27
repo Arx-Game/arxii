@@ -248,11 +248,29 @@ class CmdRitual(ArxCommand):
         session_id = self._parse_session_id(
             rest, "Usage: ritual join <session_id> [role=sinner|sineater]"
         )
+        # Consume trailing non-key=value tokens into a key's value so that
+        # multi-word names (e.g. ``role=Iron Warden``) are captured in full.
+        # Mirrors ``_tokenize_draft_args`` trailing-value semantics.
         kwargs: dict[str, str] = {}
-        for token in rest.split()[1:]:
+        tokens = rest.split()[1:]
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
             if "=" in token and not token.startswith("="):
                 key, _, val = token.partition("=")
+                j = index + 1
+                trailing: list[str] = []
+                while j < len(tokens) and "=" not in tokens[j]:
+                    trailing.append(tokens[j])
+                    j += 1
+                if trailing:
+                    val = " ".join([val, *trailing]).strip()
+                    index = j
+                else:
+                    index += 1
                 kwargs[key] = val
+            else:
+                index += 1
 
         sheet = self.caller.sheet_data
         participant = (
