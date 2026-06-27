@@ -986,8 +986,11 @@ integration test suite.
   declaration via the existing `accept soulfray` / `decline soulfray` offer flow (declining is
   free re-declare; an unconfirmed risky cast is a clean no-op — AFK-safe, ADR-0004). Telnet
   `cast … fury=<tier> anchor=<name>` parses through to the same dispatch seam the web uses.
-- **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
-  clash visibility UI is a follow-up (incl. the combat-panel soulfray-accept + fury controls).
+- **Combat declaration web panel** — **DONE** (#1543): the `YourTurn` panel surfaces the
+  Soulfray-risk accept gate and Fury tier + bonded-anchor pickers, merging
+  `confirm_soulfray_risk`, `fury_commitment_id`, and `fury_anchor_id` into the existing
+  dispatch kwargs on the shared `ActionRef` seam from #1454; the write path is unchanged
+  (only read-side descriptor enrichment + frontend wiring).
 
 ### Shared Future Work (combat-adjacent)
 - **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder
