@@ -211,10 +211,12 @@ def log_goal_progress(
     content: str,
     is_public: bool = False,
 ) -> "GoalJournal":
-    """Create a goal-progress journal entry, awarding flat 1 XP.
+    """Create a goal-progress journal entry (records 1 XP on the row).
 
-    Mirrors the former inline ``GoalJournalViewSet.create`` /
-    ``GoalJournalCreateSerializer.create``. ``domain`` may be ``None`` for
+    Records ``xp_awarded=1`` on the ``GoalJournal`` row; actually granting the
+    XP to the character's account is a pre-existing TODO (the former inline
+    ``GoalJournalCreateSerializer.create`` had the same gap). Mirrors the
+    former inline ``GoalJournalViewSet.create``. ``domain`` may be ``None`` for
     unattributed reflections.
     """
     from world.goals.models import GoalJournal  # noqa: PLC0415

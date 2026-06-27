@@ -3,7 +3,8 @@
 A single ``ArxCommand`` routes the goal verbs through ``action.run()`` — the
 same seam the web ``CharacterGoalViewSet`` / ``GoalJournalViewSet`` now use.
 
-- ``goal add domain=<id|name> points=<n> [notes=<text>]``  — set/replace one allocation
+- ``goal add domain=<id|name> points=<n> [notes=<text>]``  — revise one allocation
+  (weekly-gated; merges with the rest)
 - ``goal set domain=<id>:points=<n>[,...]``                — bulk replace (weekly revision-gated)
 - ``goal log [domain=<id|name>] title=<text> content=<text> [public]``
 - bare ``goal``                                            — current allocations + remaining points
@@ -110,9 +111,13 @@ class CmdGoal(ArxCommand):
         goal set domain=<id>:points=<n>[,domain=<id>:points=<n>...]
         goal log [domain=<id|name>] title=<text> content=<text> [public]
 
-    Domains resolve by id or name (case-insensitive). ``goal set`` replaces all
-    allocations and is weekly revision-gated; ``goal add`` merges into your
-    existing allocations (replacing the one domain if already set).
+    Domains resolve by id or name (case-insensitive). Both ``goal set`` and
+    ``goal add`` share the weekly revision limit (they route through the same
+    ``set_character_goals`` service the web ``update_all`` uses): the first
+    goal write sets allocations freely, but further writes within a week are
+    rejected until the revision window reopens. ``goal add`` merges the chosen
+    domain into your existing allocations (replacing that one domain if already
+    set); ``goal set`` replaces all allocations at once.
     """
 
     key = "goal"
