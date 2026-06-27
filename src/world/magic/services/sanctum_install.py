@@ -249,6 +249,7 @@ def perform_sanctification(
         and SanctumDetails.objects.filter(
             founder_character_sheet=founder_sheet,
             owner_mode=SanctumOwnerMode.PERSONAL,
+            feature_instance__dissolved_at__isnull=True,
         ).exists()
     ):
         msg = (

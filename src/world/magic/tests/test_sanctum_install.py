@@ -752,3 +752,52 @@ class PerformDissolutionSoftDeleteTests(TestCase):
         ):
             mock_check.return_value = _mock_check_result(success_level=1)
             perform_dissolution(sanctum, leader)
+
+    def test_founder_can_refound_personal_sanctum_in_different_room(self) -> None:
+        """A founder who dissolves their Personal Sanctum can found a new one in a different room.
+
+        Regression: the service pre-check was not excluding dissolved sanctums, so
+        re-founding always raised SanctificationFounderHasPersonalSanctumError regardless
+        of the room.
+        """
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.room_features.seeds import ensure_sanctum_kind
+
+        # Build + dissolve sanctum in room A (founder is the leader).
+        sanctum_a, founder = _build_dissolution_sanctum(leader_is_founder=True)
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            perform_dissolution(sanctum_a, founder)
+
+        # Set up room B owned by the same founder.
+        ensure_sanctum_kind()
+        room_b = RoomProfileFactory()
+        LocationOwnershipFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=room_b,
+            holder_type=HolderType.PERSONA,
+            holder_persona=founder,
+            holder_organization=None,
+        )
+        character = founder.character_sheet.character
+        character.db_location = room_b.objectdb
+        character.save(update_fields=["db_location"])
+
+        # Re-founding in room B must succeed without SanctificationFounderHasPersonalSanctumError.
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = _mock_check_result(success_level=1)
+            result = perform_sanctification(
+                room_b,
+                founder,
+                sanctum_a.resonance_type,
+                owner_mode=SanctumOwnerMode.PERSONAL,
+            )
+
+        self.assertFalse(result.fizzled, "Re-founding after dissolution should succeed")
+        self.assertIsNotNone(result.sanctum_id, "New sanctum_id must be set on success")
+        new_details = SanctumDetails.objects.get(pk=result.sanctum_id)
+        self.assertEqual(new_details.founder_character_sheet, founder.character_sheet)
+        self.assertEqual(new_details.owner_mode, SanctumOwnerMode.PERSONAL)
