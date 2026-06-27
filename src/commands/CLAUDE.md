@@ -276,6 +276,20 @@ actions, backends, and service functions.
   free text (values run to the next `key=`); an active scene in the caller's current room is
   linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
   regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
+- **`events.py`**: `CmdEvent` (`event`, alias `events`, #1499) — the event lifecycle + invitee RSVP
+  namespace. One `ArxCommand` routes a leading subverb and runs the matching event Action via
+  `action.run()` directly — the same seam the web `EventViewSet` / `EventInvitationViewSet` use.
+  `event create name=<text> room=<name|id> when=<datetime> [desc=…] [public=…] [phase=…]` →
+  `CreateEventAction` (acts as the caller's active persona); `event schedule/start/complete/cancel
+  <id>` → the host-lifecycle Actions (account-authorized — staff and scene GMs can manage an event
+  with no character, so they pass `actor=None, account=<caller.account>`); `event invite <id>
+  persona=|org=|society=<name|id> [by=<persona>]` → `InviteToEventAction`; `event rsvp <id>
+  accept|decline` → `RespondInvitationAction` (the invitee acts as their own active persona; only a
+  persona-targeted invitation addressed to them may be RSVP'd). Bare `event` / `event list` shows the
+  caller's visible events; `event show <id>` renders one in detail (telnet-only — the web gets
+  list/detail implicitly from `EventViewSet`). `when=` accepts ISO 8601 or `YYYY-MM-DD HH:MM`
+  (room/when/name/desc values may contain spaces — they run to the next `key=`). No consent gate
+  (ADR-0024 — events are calendaring; an invitation does not compel behavior).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

@@ -261,6 +261,13 @@ class ActionRegistryTests(TestCase):
             "clear_path_intent",
             "give_writeup_kudos",
             "file_writeup_complaint",
+            "event_create",
+            "event_schedule",
+            "event_start",
+            "event_complete",
+            "event_cancel",
+            "event_invite",
+            "respond_invitation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

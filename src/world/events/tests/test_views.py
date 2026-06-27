@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.events.constants import EventStatus, InvitationTargetType
+from world.events.constants import EventStatus, InvitationResponse, InvitationTargetType
 from world.events.factories import EventFactory, EventHostFactory, EventInvitationFactory
 from world.events.models import EventInvitation
 from world.events.services import start_event
@@ -335,6 +335,93 @@ class EventInvitationViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         inv = EventInvitation.objects.get(event=self.event, target_persona=target)
         self.assertEqual(inv.invited_by_id, self.host_persona.id)
+
+    # -- respond (invitee RSVP) ---------------------------------------------
+
+    def _invitee_account_and_persona(self):
+        """An invitee account + their PRIMARY persona (the invitation target).
+
+        The invitee RSVPs as their own active persona, so the invitation must
+        target the account's PRIMARY persona (``_actor_or_400`` resolves the
+        caller's active character → that primary persona). Returns the persona.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        identity = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet=identity,
+            player_data__account=account,
+        )
+        return identity.primary_persona
+
+    def test_respond_accept_flips_invitation_to_accepted(self) -> None:
+        target = self._invitee_account_and_persona()
+        invitation = EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        response = self.client.post(
+            f"/api/events/invitations/{invitation.id}/respond/",
+            {"response": "accept"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.ACCEPTED)
+
+    def test_respond_decline_flips_invitation_to_declined(self) -> None:
+        target = self._invitee_account_and_persona()
+        invitation = EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        response = self.client.post(
+            f"/api/events/invitations/{invitation.id}/respond/",
+            {"response": "decline"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.DECLINED)
+
+    def test_respond_rejects_invalid_choice(self) -> None:
+        target = self._invitee_account_and_persona()
+        invitation = EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        response = self.client.post(
+            f"/api/events/invitations/{invitation.id}/respond/",
+            {"response": "maybe"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.PENDING)
+
+    @suppress_permission_errors
+    def test_respond_by_non_target_returns_400(self) -> None:
+        """An account that is not the invitation's target may not RSVP to it."""
+        target = self._invitee_account_and_persona()
+        invitation = EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        # Re-authenticate as the host (not the invitee): the host's active persona
+        # is not the invitation's target_persona, so the Action rejects the RSVP.
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            f"/api/events/invitations/{invitation.id}/respond/",
+            {"response": "accept"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.response, InvitationResponse.PENDING)
 
 
 class EventDetailQueryCountTestCase(APITestCase):

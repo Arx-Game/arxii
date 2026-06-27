@@ -44,6 +44,15 @@ from actions.definitions.endorsements import (
     SceneEntryEndorseAction,
     StylePresentationEndorseAction,
 )
+from actions.definitions.events import (
+    CancelEventAction,
+    CompleteEventAction,
+    CreateEventAction,
+    InviteToEventAction,
+    RespondInvitationAction,
+    ScheduleEventAction,
+    StartEventAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.gm_combat import (
@@ -248,6 +257,13 @@ _ALL_ACTIONS: list[Action] = [
     LogGoalProgressAction(),
     GiveWriteupKudosAction(),
     FileWriteupComplaintAction(),
+    CreateEventAction(),
+    ScheduleEventAction(),
+    StartEventAction(),
+    CompleteEventAction(),
+    CancelEventAction(),
+    InviteToEventAction(),
+    RespondInvitationAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),

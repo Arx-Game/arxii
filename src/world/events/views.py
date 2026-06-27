@@ -1,6 +1,3 @@
-from collections.abc import Callable
-
-from django.db import IntegrityError
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -14,7 +11,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
-from world.events.constants import EventStatus, InvitationTargetType
+from actions.definitions.events import (
+    CancelEventAction,
+    CompleteEventAction,
+    CreateEventAction,
+    InviteToEventAction,
+    RespondInvitationAction,
+    ScheduleEventAction,
+    StartEventAction,
+)
+from world.events.constants import (
+    RSVP_VERB_TO_RESPONSE,
+    EventStatus,
+    InvitationTargetType,
+)
 from world.events.filters import (
     EventFilter,
     EventInvitationFilter,
@@ -37,17 +47,7 @@ from world.events.serializers import (
     OrganizationSearchSerializer,
     SocietySearchSerializer,
 )
-from world.events.services import (
-    cancel_event,
-    complete_event,
-    create_event,
-    invite_organization,
-    invite_persona,
-    invite_society,
-    schedule_event,
-    start_event,
-    validate_location_gap,
-)
+from world.events.services import validate_location_gap
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.scenes.models import Persona, Scene
@@ -55,7 +55,49 @@ from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
 
 
-class EventViewSet(ModelViewSet):
+class _EventActorMixin:
+    """Resolve the caller's active character ObjectDB for event Actions.
+
+    Shared by ``EventViewSet`` (host actions) and ``EventInvitationViewSet``
+    (the invitee ``respond`` action). The host persona is derived from the
+    requesting account's active primary personas; its character is the
+    ObjectDB handed to the Action as ``actor``.
+    """
+
+    request: Request
+
+    def _active_persona_ids(self) -> list[int]:
+        """PRIMARY persona IDs for the requesting user's active characters.
+
+        Reads ``user.cached_primary_persona_ids`` — a cached_property on
+        the Account typeclass. Evennia's identity map keeps the same
+        Account instance in memory across requests, so this list is
+        computed once per account per process and reused across requests.
+        Invalidation is wired via ``RosterTenure.related_cache_fields``.
+        """
+        user = self.request.user
+        if not user.is_authenticated:
+            return []
+        return user.cached_primary_persona_ids
+
+    def _actor_or_400(self) -> object:
+        """Resolve the caller's active character ObjectDB, or 400 with NO_PERSONA.
+
+        The host persona is derived from the requesting account's active primary
+        personas (``_active_persona_ids``); its ``character_sheet.character`` is
+        the ObjectDB handed to the Action as ``actor``.
+        """
+        persona_ids = self._active_persona_ids()
+        if not persona_ids:
+            raise DRFValidationError(EventError.NO_PERSONA)
+        active_persona = Persona.objects.get(id=persona_ids[0])
+        try:
+            return active_persona.character_sheet.character
+        except (AttributeError, active_persona.character_sheet.character.RelatedObjectDoesNotExist):
+            raise DRFValidationError(EventError.NO_PERSONA) from None
+
+
+class EventViewSet(_EventActorMixin, ModelViewSet):
     """ViewSet for listing, creating, and managing events."""
 
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -113,20 +155,6 @@ class EventViewSet(ModelViewSet):
     def get_queryset(self) -> QuerySet[Event]:
         return self._apply_visibility_filter(self._base_queryset().order_by("scheduled_real_time"))
 
-    def _active_persona_ids(self) -> list[int]:
-        """PRIMARY persona IDs for the requesting user's active characters.
-
-        Reads ``user.cached_primary_persona_ids`` — a cached_property on
-        the Account typeclass. Evennia's identity map keeps the same
-        Account instance in memory across requests, so this list is
-        computed once per account per process and reused across requests.
-        Invalidation is wired via ``RosterTenure.related_cache_fields``.
-        """
-        user = self.request.user
-        if not user.is_authenticated:
-            return []
-        return user.cached_primary_persona_ids
-
     def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
         """Filter queryset to only events visible to the requesting user."""
         # Staff sees everything
@@ -163,27 +191,22 @@ class EventViewSet(ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer: EventCreateSerializer) -> None:
-        """Create event via service function, deriving host from request user."""
-        persona_ids = self._active_persona_ids()
-        if not persona_ids:
-            raise DRFValidationError(EventError.NO_PERSONA)
-        active_persona = Persona.objects.get(id=persona_ids[0])
-
+        """Create an event via ``CreateEventAction`` (ADR-0001 seam)."""
+        actor = self._actor_or_400()
         data = serializer.validated_data
-        try:
-            event = create_event(
-                name=data["name"],
-                description=data.get("description", ""),
-                location_id=data["location"].pk,
-                scheduled_real_time=data["scheduled_real_time"],
-                host_persona=active_persona,
-                is_public=data.get("is_public", True),
-                scheduled_ic_time=data.get("scheduled_ic_time"),
-                time_phase=data.get("time_phase", TimePhase.DAY),
-            )
-        except EventError as e:
-            raise DRFValidationError(e.user_message) from e
-        serializer.instance = event
+        result = CreateEventAction().run(
+            actor=actor,
+            name=data["name"],
+            description=data.get("description", ""),
+            location_id=data["location"].pk,
+            scheduled_real_time=data["scheduled_real_time"],
+            is_public=data.get("is_public", True),
+            scheduled_ic_time=data.get("scheduled_ic_time"),
+            time_phase=data.get("time_phase", TimePhase.DAY),
+        )
+        if not result.success:
+            raise DRFValidationError(result.message or EventError.NO_PERSONA)
+        serializer.instance = Event.objects.get(pk=result.data["event_id"])
 
     def perform_update(self, serializer: EventUpdateSerializer) -> None:
         """Validate schedule changes and restrict updates to DRAFT/SCHEDULED."""
@@ -230,13 +253,19 @@ class EventViewSet(ModelViewSet):
         context["viewer_gm_event_ids"] = self._get_viewer_gm_event_ids()
         return context
 
-    def _lifecycle_action(self, request: Request, service_fn: Callable[[Event], Event]) -> Response:
-        """Execute a lifecycle transition and return the updated event."""
+    def _lifecycle_action(self, request: Request, action_cls: type) -> Response:
+        """Run a host lifecycle transition through its Action and return the event.
+
+        ``get_object()`` enforces the host/GM permission (403 for non-hosts); the
+        Action then runs the service and returns a failure message on bad status.
+        Lifecycle Actions are account-authorized (a staffer or scene GM can act
+        with no character), so the request account — not a resolved actor — is
+        passed through ``action.run()``.
+        """
         event = self.get_object()
-        try:
-            service_fn(event)
-        except EventError as e:
-            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        result = action_cls().run(actor=None, account=request.user, event_id=event.pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         event.flush_from_cache(force=True)
         return Response(
             EventDetailSerializer(
@@ -247,22 +276,28 @@ class EventViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def schedule(self, request: Request, pk: int | None = None) -> Response:
-        return self._lifecycle_action(request, schedule_event)
+        return self._lifecycle_action(request, ScheduleEventAction)
 
     @action(detail=True, methods=["post"])
     def start(self, request: Request, pk: int | None = None) -> Response:
-        return self._lifecycle_action(request, start_event)
+        return self._lifecycle_action(request, StartEventAction)
 
     @action(detail=True, methods=["post"])
     def complete(self, request: Request, pk: int | None = None) -> Response:
-        return self._lifecycle_action(request, complete_event)
+        return self._lifecycle_action(request, CompleteEventAction)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: int | None = None) -> Response:
-        return self._lifecycle_action(request, cancel_event)
+        return self._lifecycle_action(request, CancelEventAction)
 
 
-class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin, GenericViewSet):
+class EventInvitationViewSet(
+    _EventActorMixin,
+    CreateModelMixin,
+    DestroyModelMixin,
+    ListModelMixin,
+    GenericViewSet,
+):
     """ViewSet for managing event invitations."""
 
     serializer_class = EventInvitationSerializer
@@ -273,6 +308,11 @@ class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin
     def get_permissions(self) -> list:
         if self.action == "list":
             return [IsAuthenticatedOrReadOnly()]
+        # ``respond`` is the invitee RSVPing their *own* invitation — the
+        # host-permission class does not apply (the invitee is rarely a host);
+        # object-level "is this your invite" is enforced inside the Action.
+        if self.action == "respond":
+            return [IsAuthenticated()]
         return [IsAuthenticated(), IsInvitationEventHostOrStaff()]
 
     def get_queryset(self) -> QuerySet[EventInvitation]:
@@ -288,12 +328,12 @@ class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin
         return EventInvitationSerializer
 
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Create an invitation for an event."""
+        """Create an invitation via ``InviteToEventAction`` (ADR-0001 seam)."""
         serializer = EventInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         event_id = request.data.get("event")
-        event = get_object_or_404(Event, pk=event_id)
+        event = get_object_or_404(Event, pk=event_id)  # 404 on unknown event
 
         if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
             return Response(
@@ -301,39 +341,59 @@ class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check host permission against the event
+        # Host permission against the event (403 for non-hosts).
         self.check_object_permissions(request, EventInvitation(event=event))
 
-        target_type = serializer.validated_data["target_type"]
-        target_id = serializer.validated_data["target_id"]
-        invited_by_id = serializer.validated_data.get("invited_by_persona")
-        invited_by = get_object_or_404(Persona, pk=invited_by_id) if invited_by_id else None
-
-        target_model = {
-            InvitationTargetType.PERSONA: Persona,
-            InvitationTargetType.ORGANIZATION: Organization,
-            InvitationTargetType.SOCIETY: Society,
-        }[target_type]
-        target = get_object_or_404(target_model, pk=target_id)
-
-        invite_fn = {
-            InvitationTargetType.PERSONA: invite_persona,
-            InvitationTargetType.ORGANIZATION: invite_organization,
-            InvitationTargetType.SOCIETY: invite_society,
-        }[target_type]
-
-        try:
-            invitation = invite_fn(event, target, invited_by=invited_by)
-        except IntegrityError:
-            return Response(
-                {"detail": EventError.INVITE_DUPLICATE},
-                status=status.HTTP_409_CONFLICT,
+        result = InviteToEventAction().run(
+            actor=None,
+            account=request.user,
+            event_id=event.pk,
+            target_type=serializer.validated_data["target_type"],
+            target_id=serializer.validated_data["target_id"],
+            invited_by_persona_id=serializer.validated_data.get("invited_by_persona"),
+        )
+        if not result.success:
+            # Duplicate-target surfaces as 409 (mirrors the prior IntegrityError path);
+            # any other failure (bad target type) is a 400.
+            code = (
+                status.HTTP_409_CONFLICT
+                if result.message == EventError.INVITE_DUPLICATE
+                else status.HTTP_400_BAD_REQUEST
             )
+            return Response({"detail": result.message}, status=code)
 
+        invitation = EventInvitation.objects.select_related(
+            "target_persona", "target_organization", "target_society"
+        ).get(pk=result.data["invitation_id"])
         return Response(
             EventInvitationSerializer(invitation).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=["post"])
+    def respond(self, request: Request, pk: int | None = None) -> Response:
+        """An invitee RSVPs accept/decline to their own persona invitation.
+
+        The invitee (not the host) is the actor here; object-level "is this your
+        invitation" is enforced inside the Action (the persona must be the
+        invitation's ``target_persona``), so the permission class only checks
+        authentication.
+        """
+        response_str = request.data.get("response", "").strip().lower()
+        if response_str not in RSVP_VERB_TO_RESPONSE:
+            return Response(
+                {"detail": "response must be 'accept' or 'decline'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        actor = self._actor_or_400()
+        result = RespondInvitationAction().run(
+            actor=actor,
+            invitation_id=pk,
+            response=RSVP_VERB_TO_RESPONSE[response_str],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": True, "message": result.message}, status=status.HTTP_200_OK)
 
     def perform_destroy(self, instance: EventInvitation) -> None:
         if instance.event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
