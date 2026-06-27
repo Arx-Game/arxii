@@ -28,6 +28,8 @@ from world.magic.models import (
 )
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
+    SOURCE_TYPE_DISTINCTION,
+    SOURCE_TYPE_UNKNOWN,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -67,6 +69,37 @@ def get_aesthetic_config() -> AestheticAxisConfig:
     return config
 
 
+def _flat_source_contributions(
+    other_mods: list, has_immunity: bool
+) -> tuple[list[ModifierSourceDetail], int, int]:
+    """Non-distinction modifiers as flat addends; immunity still blocks their negatives.
+
+    Returns ``(source_details, total_delta, blocked_count)``. These sources are outside the
+    distinction amplification graph — they neither amplify nor get amplified.
+    """
+    sources: list[ModifierSourceDetail] = []
+    total = 0
+    blocked_count = 0
+    for mod in other_mods:
+        base_value = mod.value
+        blocked = has_immunity and base_value < 0
+        if blocked:
+            blocked_count += 1
+        else:
+            total += base_value
+        sources.append(
+            ModifierSourceDetail(
+                source_name=mod.source.source_display,
+                base_value=base_value,
+                amplification=0,
+                final_value=0 if blocked else base_value,
+                is_amplifier=False,
+                blocked_by_immunity=blocked,
+            )
+        )
+    return sources, total, blocked_count
+
+
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
     """
     Get detailed breakdown of all modifiers for a target.
@@ -91,13 +124,19 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
         ).select_related("source__distinction_effect__distinction")
     )
 
-    # Skip orphaned rows whose source has lost its distinction_effect (it is nullable:
-    # SET_NULL when the effect template is deleted, or a future non-distinction source
-    # type). Such a row has no amplifier/immunity/label semantics left, so it contributes
-    # nothing rather than crashing on a None dereference (issue #909).
-    modifiers = [mod for mod in modifiers if mod.source.distinction_effect is not None]
+    # Distinction-sourced rows carry the amplify/immunity semantics (they dereference
+    # ``distinction_effect``); *recognized* non-distinction sources — residence comfort,
+    # achievement rewards, future equipment — contribute a flat value. Rows that are neither
+    # (an UNKNOWN source: an orphaned distinction whose effect was SET_NULL, or a bare marker-less
+    # source) still contribute nothing, preserving #909 — they're in neither list.
+    distinction_mods = [mod for mod in modifiers if mod.source.distinction_effect is not None]
+    other_mods = [
+        mod
+        for mod in modifiers
+        if mod.source.source_type not in (SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN)
+    ]
 
-    if not modifiers:
+    if not distinction_mods and not other_mods:
         return ModifierBreakdown(
             modifier_target_name=modifier_target.name,
             sources=[],
@@ -106,11 +145,11 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
             negatives_blocked=0,
         )
 
-    # Collect amplifiers and check for immunity
+    # Collect amplifiers and check for immunity (distinction sources only).
     amplifiers: list[tuple[int, int]] = []  # (modifier_id, amplify_bonus)
     has_immunity = False
 
-    for mod in modifiers:
+    for mod in distinction_mods:
         effect = mod.source.distinction_effect
         if effect.amplifies_sources_by:
             amplifiers.append((mod.id, effect.amplifies_sources_by))
@@ -122,7 +161,7 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     total = 0
     negatives_blocked = 0
 
-    for mod in modifiers:
+    for mod in distinction_mods:
         effect = mod.source.distinction_effect
         base_value = mod.value
         is_amplifier = bool(effect.amplifies_sources_by)
@@ -153,6 +192,12 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
                 blocked_by_immunity=blocked,
             )
         )
+
+    # Non-distinction sources are flat addends (outside the amplification graph).
+    flat_sources, flat_total, flat_blocked = _flat_source_contributions(other_mods, has_immunity)
+    sources.extend(flat_sources)
+    total += flat_total
+    negatives_blocked += flat_blocked
 
     return ModifierBreakdown(
         modifier_target_name=modifier_target.name,

@@ -173,10 +173,8 @@ def _grant_title(character_sheet: CharacterSheet, reward) -> None:
 def _grant_bonus(character_sheet: CharacterSheet, reward, reward_value: str) -> None:
     """Materialize a BONUS reward as a CharacterModifier on the reward's target (e.g. +5 allure).
 
-    NOTE: ``get_modifier_total`` currently sums only distinction-sourced modifiers (its
-    amplification/immunity logic dereferences ``distinction_effect``), so this non-distinction
-    bonus is *recorded* but not yet *read* by that path. Counting non-distinction sources is a
-    modifier-system follow-up that lands alongside a live consumer (e.g. allure → attractiveness).
+    Read by ``get_modifier_total`` like any other modifier (the achievement source is a recognised
+    non-distinction source, counted as a flat addend).
     """
     from world.mechanics.models import CharacterModifier  # noqa: PLC0415
 

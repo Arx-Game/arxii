@@ -18,6 +18,7 @@ from world.achievements.services import grant_achievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
+from world.mechanics.services import get_modifier_total
 
 
 class RewardApplicationTests(TestCase):
@@ -37,16 +38,13 @@ class RewardApplicationTests(TestCase):
         grant_achievement(self.achievement, [self.sheet])
         assert CharacterTitle.objects.filter(character_sheet=self.sheet).count() == 1
 
-    def test_bonus_reward_records_a_modifier_on_its_target(self) -> None:
-        # The engine RECORDS the bonus as a CharacterModifier on the target. (Whether
-        # get_modifier_total sums it is a separate read-path concern — it currently only sums
-        # distinction-sourced modifiers; counting non-distinction sources lands with allure's
-        # consumer.)
+    def test_bonus_reward_grants_a_modifier_read_by_get_modifier_total(self) -> None:
         self._add_reward(RewardType.BONUS, value="5", modifier_target=self.allure)
         grant_achievement(self.achievement, [self.sheet])
         mod = CharacterModifier.objects.get(character=self.sheet, target=self.allure)
-        assert mod.value == 5
         assert mod.source.source_type == "achievement_reward"
+        # The achievement-sourced bonus is counted by the standard stat read.
+        assert get_modifier_total(self.sheet, self.allure) == 5
 
     def test_prestige_reward_bumps_persona_prestige(self) -> None:
         self._add_reward(RewardType.PRESTIGE, value="5000")
@@ -61,9 +59,7 @@ class RewardApplicationTests(TestCase):
         self._add_reward(RewardType.PRESTIGE, value="5000")
         grant_achievement(self.achievement, [self.sheet])
         assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
-        assert CharacterModifier.objects.filter(
-            character=self.sheet, target=self.allure, value=5
-        ).exists()
+        assert get_modifier_total(self.sheet, self.allure) == 5
         self.sheet.primary_persona.refresh_from_db()
         assert self.sheet.primary_persona.total_prestige >= 5000
 
@@ -72,7 +68,5 @@ class RewardApplicationTests(TestCase):
         self._add_reward(RewardType.BONUS, value="5", modifier_target=self.allure)
         grant_achievement(self.achievement, [self.sheet])
         grant_achievement(self.achievement, [self.sheet])
-        # One modifier, not two — rewards apply only on the first (newly-earned) grant.
-        assert (
-            CharacterModifier.objects.filter(character=self.sheet, target=self.allure).count() == 1
-        )
+        # +5 once, not +10 — rewards apply only on the first (newly-earned) grant.
+        assert get_modifier_total(self.sheet, self.allure) == 5
