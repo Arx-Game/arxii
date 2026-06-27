@@ -389,6 +389,66 @@ class SceneRoundResolutionTests(TestCase):
         bleed.refresh_from_db()
         assert bleed.abandoned_since_round is None  # cleared — hostile drove again
 
+    def _plummeting_participant(self, *, present: bool, initiative_order=0):
+        """A participant carrying an active Plummeting condition (a faller).
+
+        Returns (participant, plummeting_instance). Falling is environmental, so
+        there is no hostile ``source_character``.
+        """
+        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
+
+        participant = self._participant(present=present, initiative_order=initiative_order)
+        inst = ConditionInstanceFactory(
+            target=participant.character_sheet.character,
+            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+        )
+        return participant, inst
+
+    def test_unconscious_plummeting_victim_not_held_and_not_marked(self):
+        # #1479 plummet: an UNCONSCIOUS faller (not can_act) with only a bystander
+        # declaring is NOT a "downed victim" (PLUMMETING is excluded from the
+        # hold/abandonment classification). Their descent advances (they ARE ticked)
+        # and they are NEVER marked abandoned — gravity does not wait for a rescuer.
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        faller_p, plummet = self._plummeting_participant(present=True, initiative_order=0)
+        bystander = self._participant(present=True, initiative_order=1)
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != faller_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert faller_p.character_sheet.character in ticked  # descent advances, not held
+        plummet.refresh_from_db()
+        assert plummet.abandoned_since_round is None  # never abandonment-marked
+
+    def test_conscious_plummeting_faller_ticks_despite_afk_skip(self):
+        # #1479 plummet: a present, conscious, UNDECLARED faller is normally AFK-skipped
+        # (#1480), but a falling character's descent must advance regardless of whether
+        # they acted this round. The plummeting faller IS ticked; a plain undeclared
+        # participant is NOT.
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.advance_quorum_pct = 60
+        self.rnd.save(update_fields=["mode", "advance_quorum_pct"])
+        decl = self._participant(present=True, initiative_order=0)
+        plain_afk = self._participant(present=True, initiative_order=1)  # never declares
+        faller_p, _plummet = self._plummeting_participant(present=True, initiative_order=2)
+        self._declare_pass(decl)
+
+        with mock.patch("world.scenes.round_services.tick_round_for_targets") as tick:
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert faller_p.character_sheet.character in ticked  # falling advances
+        assert plain_afk.character_sheet.character not in ticked  # ordinary AFK skipped
+
 
 class SceneRoundAbandonmentTests(TestCase):
     """Abandonment resolution (#1479 Task 8): N-beat grace window + solo-immediate.

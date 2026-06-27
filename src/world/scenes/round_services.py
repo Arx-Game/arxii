@@ -260,6 +260,31 @@ def _danger_persists(scene_round: SceneRound) -> bool:
     ).exists()
 
 
+def _plummeting_character_ids(scene_round: SceneRound) -> set[int]:
+    """Character ids of ACTIVE participants currently carrying the Plummeting condition.
+
+    Used by ``resolve_scene_round`` to exempt fallers from the #1480 AFK own-peril
+    skip: a fall is environmental and self-completing, so the descent advances on
+    every END tick regardless of whether the faller declared an action this round.
+    """
+    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    char_ids = list(
+        scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
+            "character_sheet__character_id", flat=True
+        )
+    )
+    if not char_ids:
+        return set()
+    return set(
+        ConditionInstance.objects.filter(
+            target_id__in=char_ids,
+            condition__name=PLUMMETING_CONDITION_NAME,
+        ).values_list("target_id", flat=True)
+    )
+
+
 def _present_character_sheets(room: ObjectDB) -> list[CharacterSheet]:
     """CharacterSheets of characters currently in ``room`` (walks room.contents; no per-object query)."""  # noqa: E501
     present = []
@@ -507,6 +532,13 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
         rnd, present_ids, declared_ids
     )
 
+    # #1479 (plummet): a falling character's descent is ENVIRONMENTAL and
+    # self-completing — it must advance every round regardless of who drove the
+    # round, so it is exempt from the #1480 AFK own-peril skip below (and, via
+    # _acute_peril_condition_names excluding PLUMMETING, from the downed-victim
+    # hold/abandonment). Gravity does not pause for an idle round.
+    plummeting_ids = _plummeting_character_ids(rnd)
+
     _resolve_scene_declarations(rnd)
 
     targets = []
@@ -515,8 +547,14 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     ):
         sheet = p.character_sheet
         # #1480: a present, conscious, undeclared participant's OWN peril does not
-        # advance from a round they didn't engage in (AFK own-peril skip).
-        if sheet.character_id in present_ids and can_act(sheet) and p.pk not in declared_ids:
+        # advance from a round they didn't engage in (AFK own-peril skip) — UNLESS
+        # they are plummeting, whose descent always advances (#1479).
+        if (
+            sheet.character_id in present_ids
+            and can_act(sheet)
+            and p.pk not in declared_ids
+            and sheet.character_id not in plummeting_ids
+        ):
             continue
         # #1479: a downed victim advances only when a hostile party drove the round.
         if p.pk in downed_victim_ids and p.pk not in advancing_downed_ids:

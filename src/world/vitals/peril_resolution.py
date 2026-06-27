@@ -30,20 +30,34 @@ if TYPE_CHECKING:
 
 
 def _acute_peril_condition_names() -> list[str]:
-    """The condition names that constitute acute peril (a dying/falling state).
+    """The condition names subject to the #1479 involved-party HOLD / abandonment.
 
-    Mirrors the set ``round_services._danger_persists`` keys a DANGER round on, so
-    "carries an acute danger condition" means the same thing everywhere: Bleeding
-    Out or Plummeting.
+    This is the HOLD/ABANDONMENT classification — "whose peril depends on who is
+    menacing them and whether anyone will rescue them." That is BLEED_OUT only.
+
+    PLUMMETING is deliberately EXCLUDED: a fall is environmental and
+    self-completing — gravity does not care who is watching, so a plummeting
+    character is never "held" waiting for a hostile/rescuer and is never resolved
+    through an abandonment consequence pool. Their fall always advances to impact
+    (per-round descent while a round ticks, or immediate resolution when no round
+    drives it — see ``world.areas.positioning.plummet``).
+
+    Note this NO LONGER mirrors ``round_services._danger_persists``, which still
+    keys a DANGER round on BLEED_OUT *and* PLUMMETING so the round keeps ticking
+    the descent until impact clears the Plummeting condition. The two sets diverge
+    on purpose: ``_danger_persists`` = "keep the round alive"; this = "hold/abandon
+    a downed victim."
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
 
-    return [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
+    return [BLEED_OUT_CONDITION_NAME]
 
 
 def acute_peril_instances(victim_sheet: "CharacterSheet") -> "QuerySet[ConditionInstance]":
-    """Return the victim's active acute-peril ConditionInstances (Bleeding Out / Plummeting)."""
+    """Return the victim's active hold/abandonment-eligible ConditionInstances (Bleeding Out).
+
+    Plummeting is excluded by ``_acute_peril_condition_names`` — see its docstring.
+    """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
     return ConditionInstance.objects.filter(

@@ -57,6 +57,15 @@ class PlummetDescentTests(TestCase):
         self.faller.db_location = self.room
         self.faller.save(update_fields=["db_location"])
 
+        # A present bystander (a potential catcher) — so begin_plummet rides the
+        # active round (per-round descent) rather than resolving the fall
+        # immediately. An UNATTENDED fall is exercised separately in
+        # test_plummet_immediate.py.
+        bystander_sheet = CharacterSheetFactory()
+        self.bystander = bystander_sheet.character
+        self.bystander.db_location = self.room
+        self.bystander.save(update_fields=["db_location"])
+
         # A three-level vertical stack: top -> mid -> ground (anchor None).
         self.ground = Position.objects.create(
             room=self.room, name="the ground", kind=PositionKind.PRIMARY
