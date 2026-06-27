@@ -3268,7 +3268,11 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
-    fury_committed = combat_result.fury_committed if combat_result is not None else None
+    # Only the attack path returns a CombatTechniqueResult (which carries fury);
+    # the non-attack path returns a CombatTechniqueResolution with no fury field.
+    fury_committed = (
+        combat_result.fury_committed if isinstance(combat_result, CombatTechniqueResult) else None
+    )
     interaction = create_action_interaction(
         participant=participant,
         round_number=action.round_number,
