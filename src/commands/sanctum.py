@@ -116,7 +116,7 @@ class CmdSanctum(DispatchCommand):
     def func(self) -> None:
         """Route the leading subverb; bare ``sanctum``/``sanctum status`` shows the hub."""
         raw = (self.args or "").strip()
-        if not raw or raw == _STATUS_SUBVERB:
+        if not raw or raw.lower() == _STATUS_SUBVERB:
             self._show_status_hub()
             return
         parts = raw.split(maxsplit=1)
@@ -181,7 +181,7 @@ class CmdSanctum(DispatchCommand):
 
     def _args_install(self, parsed: dict[str, str]) -> dict[str, Any]:
         """Resolve install kwargs: room_profile, resonance, owner_mode."""
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from actions.definitions.sanctum import room_profile_for_location  # noqa: PLC0415
 
         resonance = self._require_resonance(parsed.get(_RESONANCE_KWARG, ""))
         owner_raw = parsed.get(_OWNER_KWARG, "").lower()
@@ -192,7 +192,7 @@ class CmdSanctum(DispatchCommand):
         if self.caller.location is None:
             msg = "You are not in a room."
             raise CommandError(msg)
-        room_profile = RoomProfile.objects.filter(objectdb=self.caller.location).first()
+        room_profile = room_profile_for_location(self.caller.location)
         if room_profile is None:
             msg = "This room has no room profile."
             raise CommandError(msg)

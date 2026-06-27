@@ -239,24 +239,27 @@ def perform_sanctification(
         msg = "Sanctification leader must have a CharacterSheet."
         raise SanctificationLeaderNotOwnerError(msg)
 
-    # Service-level pre-check + DB partial UniqueConstraint together
-    # close the race window. Two concurrent Sanctifications by the same
-    # character would both see no row on the pre-check, race the create,
-    # and the loser hits the constraint — caught below and re-raised as
-    # the typed exception.
-    if (
-        owner_mode == SanctumOwnerMode.PERSONAL
-        and SanctumDetails.objects.filter(
+    # Service-layer SELECT FOR UPDATE lock + pre-check (dissolved-excluding)
+    # close the concurrent-founder race window. Two concurrent PERSONAL
+    # sanctifications by the same founder both see no row on the pre-check
+    # without the lock; the SELECT FOR UPDATE serializes them so only one
+    # proceeds past the check. The DB UniqueConstraint was removed (cross-table
+    # partial-unique limitation on dissolved_at); this service-layer lock is
+    # now authoritative.
+    if owner_mode == SanctumOwnerMode.PERSONAL:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        CharacterSheet.objects.select_for_update().get(pk=founder_sheet.pk)
+        if SanctumDetails.objects.filter(
             founder_character_sheet=founder_sheet,
             owner_mode=SanctumOwnerMode.PERSONAL,
             feature_instance__dissolved_at__isnull=True,
-        ).exists()
-    ):
-        msg = (
-            f"Character sheet {founder_sheet.pk} already founded a Personal Sanctum; "
-            "Dissolve it before founding another."
-        )
-        raise SanctificationFounderHasPersonalSanctumError(msg)
+        ).exists():
+            msg = (
+                f"Character sheet {founder_sheet.pk} already founded a Personal Sanctum; "
+                "Dissolve it before founding another."
+            )
+            raise SanctificationFounderHasPersonalSanctumError(msg)
 
     # Roll the ritual check BEFORE creating any rows. Fizzle on fail/botch.
     from world.magic.seeds_sanctum import (  # noqa: PLC0415
@@ -285,30 +288,18 @@ def perform_sanctification(
             fizzled=True,
         )
 
-    from django.db import IntegrityError  # noqa: PLC0415
-
     sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
     instance = RoomFeatureInstance.objects.create(
         room_profile=room_profile,
         feature_kind=sanctum_kind,
         level=1,
     )
-    try:
-        details = SanctumDetails.objects.create(
-            feature_instance=instance,
-            resonance_type=resonance_type,
-            owner_mode=owner_mode,
-            founder_character_sheet=founder_sheet,
-        )
-    except IntegrityError as exc:
-        # Partial UniqueConstraint race loser path — convert the 500 into
-        # a typed 400. The atomic wrapper rolls back the RoomFeatureInstance
-        # create above.
-        msg = (
-            f"Character sheet {founder_sheet.pk} race-lost the partial "
-            "UniqueConstraint for a Personal Sanctum."
-        )
-        raise SanctificationFounderHasPersonalSanctumError(msg) from exc
+    details = SanctumDetails.objects.create(
+        feature_instance=instance,
+        resonance_type=resonance_type,
+        owner_mode=owner_mode,
+        founder_character_sheet=founder_sheet,
+    )
 
     if roll.tier is OutcomeTier.CRIT:
         from world.magic.services.sanctum_lvm import (  # noqa: PLC0415

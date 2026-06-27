@@ -117,10 +117,13 @@ They do not use the command system, dispatchers, or handlers.
   `sanctum.py` (#1497) — 7 REGISTRY actions, all `target_type=SELF`, `category="magic"`,
   wrapping the existing sanctum services. Keys: `sanctum_install`
   (`perform_sanctification` + homecoming-offer link), `sanctum_homecoming`
-  (`absorb_sanctum_pool`), `sanctum_purging` (resonance drain from the weaving well),
+  (`perform_homecoming_ritual` — sacrifice resonance to grow Sanctum's Homecoming pool),
+  `sanctum_purging` (`perform_purging_ritual` — change Sanctum's consecrated resonance type,
+  draining grown resonance as the cost),
   `sanctum_weave` (weave a SANCTUM-anchored thread: `slot=personal|covenant|helper`),
   `sanctum_dissolve` (`perform_dissolution`, soft-delete — see dissolution note below),
-  `sanctum_absorb` (alias path for absorb via actor location), `sanctum_sever` (retire a
+  `sanctum_absorb` (`absorb_sanctum_pool` — drain the weaver's pending weaving/owner-bonus
+  pool into spendable resonance currency), `sanctum_sever` (retire a
   SANCTUM-anchored thread by name or id). Module-level helpers: `sanctum_in_room(location)`
   (returns active `SanctumDetails` for the room, excludes dissolved), `room_profile_for_location`
   (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the

@@ -738,11 +738,15 @@ The sanctum subsystem is a 7-op surface shared by telnet (`CmdSanctum`) and web
 **Actions** (`actions/definitions/sanctum.py`, all REGISTRY, `target_type=SELF`, `category="magic"`):
 - `sanctum_install` — Ritual of Sanctification: validate presence/ownership/founder-cap, create
   `RoomFeatureInstance` + `SanctumDetails`.
-- `sanctum_homecoming` — drain the weaver's `SanctumPendingPayout` well by visiting the room.
-- `sanctum_purging` — spend resonance balance from the weaving well.
+- `sanctum_homecoming` — Ritual of Homecoming: sacrifice resonance to grow the Sanctum's
+  Homecoming reservoir (wraps `perform_homecoming_ritual`).
+- `sanctum_purging` — Ritual of Purging: change the Sanctum's consecrated resonance type,
+  draining grown resonance as the cost (wraps `perform_purging_ritual`).
 - `sanctum_weave` — weave a SANCTUM-anchored `Thread` (`slot=personal|covenant|helper`).
 - `sanctum_dissolve` — soft-delete the sanctum (see dissolution below).
-- `sanctum_absorb` — absorb resonance income via actor location (alias path).
+- `sanctum_absorb` — drain the weaver's pending weaving/owner-bonus pool into spendable
+  resonance currency; physical presence in the Sanctum's room required (wraps
+  `absorb_sanctum_pool`).
 - `sanctum_sever` — soft-retire a SANCTUM-anchored thread by name or id.
 
 Module helpers: `sanctum_in_room(location)` returns the active `SanctumDetails` for the
