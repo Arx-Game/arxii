@@ -953,7 +953,9 @@ registering a service strategy + per-kind details model.
     (PERSONA / ORGANIZATION) may own this kind. Validated at install.
   - `RoomFeatureInstance` — per-(room, kind) decoration. OneToOne to
     `RoomProfile`; `level` field mutable via upgrade projects. One
-    instance per room (unique constraint).
+    instance per room (unique constraint). `dissolved_at` (nullable
+    `DateTimeField`) marks soft-deleted instances; `.active()` queryset
+    excludes them.
   - `RoomFeatureProgressionDetails` — Project per-kind payload for
     `ROOM_FEATURE_PROGRESSION` projects (install + upgrade). Carries the
     `feature_kind` + `target_level` + `existing_instance` (null for
@@ -1014,6 +1016,18 @@ drain the well by physically visiting and performing an absorb action.
   `all(t.owner.is_dormant for t in threads)`. Public
   `world.magic.services.sanctum_state.sanctum_is_dormant(sanctum)`
   for UI / API callers.
+- **Dissolution is a soft-delete** (#1497): `perform_dissolution` sets
+  `RoomFeatureInstance.dissolved_at` (nullable `DateTimeField`) rather than deleting
+  the row. `RoomFeatureInstance.active()` excludes dissolved instances. SANCTUM-anchored
+  threads are soft-retired (`Thread.retired_at`) on dissolution; the
+  `one_personal_per_character_sheet` DB `UniqueConstraint` on `SanctumDetails` was
+  removed — one-personal-per-founder is enforced in the service layer (excluding
+  dissolved). Re-sanctifying the same room is a deferred follow-up.
+- **TELNET+WEB** (#1497): 7 REGISTRY Actions in `actions/definitions/sanctum.py`
+  (keys `sanctum_install` / `sanctum_homecoming` / `sanctum_purging` / `sanctum_weave`
+  / `sanctum_dissolve` / `sanctum_absorb` / `sanctum_sever`). `CmdSanctum`
+  (`commands/sanctum.py`) is the namespaced telnet surface (`sanctum <subverb>`);
+  the web `SanctumViewSet` dispatches the same Actions via `Action().run()`.
 - **API endpoints** (`world.magic.views_sanctum`):
   - `POST /api/magic/sanctums/install/` — `perform_sanctification` wrapper.
   - `POST /api/magic/sanctums/<id>/dissolve/` — `perform_dissolution`.

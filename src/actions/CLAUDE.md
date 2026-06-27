@@ -114,6 +114,26 @@ They do not use the command system, dispatchers, or handlers.
   (`"respond_invitation"`, acts as the invitee's active persona). Each wraps its
   `world.events.services` counterpart; shared by telnet `CmdEvent` (`event <subverb>`) and the web
   `EventViewSet` / `EventInvitationViewSet`; no consent gate (ADR-0024).)
+  `sanctum.py` (#1497) — 7 REGISTRY actions, all `target_type=SELF`, `category="magic"`,
+  wrapping the existing sanctum services. Keys: `sanctum_install`
+  (`perform_sanctification` + homecoming-offer link), `sanctum_homecoming`
+  (`absorb_sanctum_pool`), `sanctum_purging` (resonance drain from the weaving well),
+  `sanctum_weave` (weave a SANCTUM-anchored thread: `slot=personal|covenant|helper`),
+  `sanctum_dissolve` (`perform_dissolution`, soft-delete — see dissolution note below),
+  `sanctum_absorb` (alias path for absorb via actor location), `sanctum_sever` (retire a
+  SANCTUM-anchored thread by name or id). Module-level helpers: `sanctum_in_room(location)`
+  (returns active `SanctumDetails` for the room, excludes dissolved), `room_profile_for_location`
+  (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the
+  web `SanctumViewSet` (`world/magic/views_sanctum.py`), which now dispatches all 7 ops
+  through `Action().run(actor=request.user.puppet, ...)` (#1497).)
+
+  **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
+  (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
+  excludes dissolved instances. SANCTUM-anchored threads are soft-retired (`retired_at`) on
+  dissolution, never deleted. The `one_personal_per_character_sheet` DB UniqueConstraint on
+  `SanctumDetails` was removed (cross-table partial-unique limitation); one-personal-per-founder
+  enforcement now lives in the service layer (excluding dissolved rows). Re-sanctifying the
+  same room after dissolution is a deferred follow-up.
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
