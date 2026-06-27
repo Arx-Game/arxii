@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.constants import ActionBackend
 from commands.combat import _CombatCommandMixin
 from commands.command import DispatchCommand
@@ -133,8 +135,61 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         return combo.pk
 
+    def _render_resource_state(self, participant: Any, action: Any) -> list[str]:
+        """Anima + soulfray (always, if present) + fury/Berserk (active round only).
+
+        Read-only over existing services — no mechanics. ``participant`` is the
+        caller's CombatParticipant or None; ``action`` is this round's
+        CombatRoundAction (or None). Fury/Berserk are suppressed when
+        ``participant`` is None (outside an encounter).
+        """
+        from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+
+        lines: list[str] = []
+        character = self.caller.puppet if hasattr(self.caller, "puppet") else self.caller
+        try:
+            anima = character.anima
+            lines.append(f"Anima: {anima.current}/{anima.maximum}")
+        except (AttributeError, ObjectDoesNotExist):
+            pass  # No anima row yet — omit rather than mislead with 0/0.
+
+        warning = get_soulfray_warning(character)
+        if warning is not None:
+            risk = " — |rdeath risk|n" if warning.has_death_risk else ""
+            lines.append(f"Soulfray: {warning.stage_name}{risk}")
+
+        if participant is not None:
+            berserk = self._berserk_instance(character)
+            control = "lost" if berserk is not None else "retained"
+            if action is not None and action.fury_commitment_id:
+                anchor_name = "unknown"
+                if action.fury_anchor_id and action.fury_anchor is not None:
+                    anchor_char = action.fury_anchor.character
+                    if anchor_char is not None:
+                        anchor_name = anchor_char.db_key
+                lines.append(
+                    f"Fury: committed (depth {action.fury_commitment.depth}, "
+                    f"anchored to {anchor_name}) — control {control}"
+                )
+            if berserk is not None:
+                rounds = ""
+                if berserk.rounds_remaining is not None:
+                    unit = "round" if berserk.rounds_remaining == 1 else "rounds"
+                    rounds = f" ({berserk.rounds_remaining} {unit} left)"
+                lines.append(f"Berserk: active{rounds}")
+        return lines
+
+    def _berserk_instance(self, character: Any) -> Any:
+        """The active Berserk ConditionInstance on *character*, or None."""
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        return ConditionInstance.objects.filter(
+            target=character,
+            condition__name="Berserk",
+        ).first()
+
     def _show_status_hub(self) -> None:
-        """Print the caller's current declared action plus the available subverbs."""
+        """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
             "flee, cover <ally>, interpose [ally], join, leave, ready, "
@@ -142,14 +197,22 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         ]
         participant = self._combat_participant_or_none()
         if participant is None:
+            lines.extend(self._render_resource_state(participant, None))
             lines.append("You are not currently declaring in combat.")
         else:
             from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
-            action = CombatRoundAction.objects.filter(
-                participant=participant,
-                round_number=participant.encounter.round_number,
-            ).first()
+            action = (
+                CombatRoundAction.objects.select_related(
+                    "fury_commitment", "fury_anchor__character"
+                )
+                .filter(
+                    participant=participant,
+                    round_number=participant.encounter.round_number,
+                )
+                .first()
+            )
+            lines.extend(self._render_resource_state(participant, action))
             if action is None:
                 lines.append("You have not declared an action this round.")
             else:
