@@ -6,6 +6,7 @@ services directly. CovenantError → failure ActionResult(exc.user_message)."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +17,20 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+
+
+def _run_service(mutation: Callable[[], None], success_message: str) -> ActionResult:
+    """Run a covenant service mutation, mapping CovenantError → failure result.
+
+    Shared by every covenant Action whose only failure mode is a service-raised
+    ``CovenantError`` (the curated ``user_message`` is surfaced verbatim)."""
+    from world.covenants.exceptions import CovenantError  # noqa: PLC0415
+
+    try:
+        mutation()
+    except CovenantError as exc:
+        return ActionResult(success=False, message=exc.user_message)
+    return ActionResult(success=True, message=success_message)
 
 
 @dataclass
@@ -88,14 +103,12 @@ class LeaveCovenantAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
         from world.covenants.services import leave_covenant  # noqa: PLC0415
 
-        try:
-            leave_covenant(membership=kwargs["membership"])
-        except CovenantError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="You leave the covenant.")
+        return _run_service(
+            lambda: leave_covenant(membership=kwargs["membership"]),
+            "You leave the covenant.",
+        )
 
 
 @dataclass
@@ -114,14 +127,12 @@ class KickCovenantMemberAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
         from world.covenants.services import kick_member  # noqa: PLC0415
 
-        try:
-            kick_member(target=kwargs["target"], actor=kwargs["actor_membership"])
-        except CovenantError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="You remove them from the covenant.")
+        return _run_service(
+            lambda: kick_member(target=kwargs["target"], actor=kwargs["actor_membership"]),
+            "You remove them from the covenant.",
+        )
 
 
 @dataclass
@@ -140,18 +151,16 @@ class AssignCovenantRankAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
         from world.covenants.services import assign_rank  # noqa: PLC0415
 
-        try:
-            assign_rank(
+        return _run_service(
+            lambda: assign_rank(
                 membership=kwargs["membership"],
                 actor=kwargs["actor_membership"],
                 rank=kwargs["rank"],
-            )
-        except CovenantError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="Rank assigned.")
+            ),
+            "Rank assigned.",
+        )
 
 
 @dataclass
@@ -170,18 +179,16 @@ class TransferTopRankAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
         from world.covenants.services import transfer_top  # noqa: PLC0415
 
-        try:
-            transfer_top(
+        return _run_service(
+            lambda: transfer_top(
                 covenant=kwargs["covenant"],
                 actor=kwargs["actor_membership"],
                 new_top_membership=kwargs["new_top_membership"],
-            )
-        except CovenantError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="The top rank passes to them.")
+            ),
+            "The top rank passes to them.",
+        )
 
 
 @dataclass
@@ -200,13 +207,9 @@ class StandDownBattleCovenantAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
         from world.covenants.services import stand_down_battle_covenant  # noqa: PLC0415
 
-        try:
-            stand_down_battle_covenant(covenant=kwargs["covenant"])
-        except CovenantError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(
-            success=True, message="The banners are lowered; the covenant stands down."
+        return _run_service(
+            lambda: stand_down_battle_covenant(covenant=kwargs["covenant"]),
+            "The banners are lowered; the covenant stands down.",
         )

@@ -145,6 +145,26 @@ class SoulTetherAdapter(RitualDraftAdapter):
 _COVENANT_INDUCTION_SERVICE_PATH = "world.covenants.services.induct_member_via_session"
 
 
+def _covenant_session_reference_draft(kwargs: dict[str, str]) -> DraftParse:
+    """Build a session-level COVENANT reference from the ``covenant=`` token.
+
+    Shared by the induction and banner-call draft paths — both attach the same
+    session-level COVENANT reference for their fire handler to read."""
+    from world.covenants.models import Covenant  # noqa: PLC0415
+    from world.magic.constants import ReferenceKind  # noqa: PLC0415
+
+    covenant_name = kwargs.get("covenant", "").strip()
+    covenant = Covenant.objects.filter(name__iexact=covenant_name).first()
+    if covenant is None:
+        msg = f"No covenant named '{covenant_name}'."
+        raise CommandError(msg)
+    return DraftParse(
+        session_references=[
+            RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
+        ],
+    )
+
+
 class CovenantInductionAdapter(RitualDraftAdapter):
     """Adapter for the covenant INDUCTION session ritual.
 
@@ -155,19 +175,7 @@ class CovenantInductionAdapter(RitualDraftAdapter):
 
     def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
         """Resolve ``covenant=`` into a session-level COVENANT reference."""
-        from world.covenants.models import Covenant  # noqa: PLC0415
-        from world.magic.constants import ReferenceKind  # noqa: PLC0415
-
-        covenant_name = kwargs.get("covenant", "").strip()
-        covenant = Covenant.objects.filter(name__iexact=covenant_name).first()
-        if covenant is None:
-            msg = f"No covenant named '{covenant_name}'."
-            raise CommandError(msg)
-        return DraftParse(
-            session_references=[
-                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
-            ],
-        )
+        return _covenant_session_reference_draft(kwargs)
 
     def parse_join(self, *, kwargs: dict[str, str], caller: Any) -> JoinParse:
         """Resolve ``role=`` into a participant-level COVENANT_ROLE reference."""
@@ -205,19 +213,7 @@ class BannerCallAdapter(RitualDraftAdapter):
 
     def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
         """Resolve ``covenant=`` into a session-level COVENANT reference."""
-        from world.covenants.models import Covenant  # noqa: PLC0415
-        from world.magic.constants import ReferenceKind  # noqa: PLC0415
-
-        covenant_name = kwargs.get("covenant", "").strip()
-        covenant = Covenant.objects.filter(name__iexact=covenant_name).first()
-        if covenant is None:
-            msg = f"No covenant named '{covenant_name}'."
-            raise CommandError(msg)
-        return DraftParse(
-            session_references=[
-                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
-            ],
-        )
+        return _covenant_session_reference_draft(kwargs)
 
 
 # ---------------------------------------------------------------------------
