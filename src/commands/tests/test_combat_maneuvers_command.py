@@ -65,8 +65,15 @@ class CmdCombatRoutingTests(TestCase):
 
     def test_bare_combat_shows_status_hub(self) -> None:
         cmd = _make_cmd("")
-        with patch.object(cmd, "_combat_participant_or_none", return_value=None):
+        with (
+            patch.object(cmd, "_combat_participant_or_none", return_value=None) as participant,
+            patch.object(cmd, "_render_resource_state", return_value=[]) as resources,
+        ):
             cmd.func()
+        # Outside combat the hub calls the resource readout collaborator with
+        # no participant/action and still prints the actions header.
+        participant.assert_called_once()
+        resources.assert_called_once_with(None, None)
         cmd.caller.msg.assert_called_once()
         self.assertIn("Combat actions", cmd.caller.msg.call_args.args[0])
 
