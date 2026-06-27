@@ -12,6 +12,7 @@ from world.items.models import (
     FashionPresentation,
     FashionStyle,
     FashionStyleBonus,
+    GarmentMitigation,
     InteractionType,
     ItemFacet,
     ItemInstance,
@@ -465,3 +466,15 @@ class CraftingRecipeConsequenceFactory(factory.django.DjangoModelFactory):
     consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
     weight_override = None
     cost_consumption = CostConsumption.FULL
+
+
+class GarmentMitigationFactory(factory.django.DjangoModelFactory):
+    """Factory for GarmentMitigation. ``stat_key``/``value`` default to a wool-coat-style COLD."""
+
+    class Meta:
+        model = GarmentMitigation
+
+    item_template = factory.SubFactory(ItemTemplateFactory)
+    stat_key = "cold"
+    value = 30
+    resonance = None

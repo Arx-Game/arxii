@@ -230,6 +230,51 @@ COMFORT_LEVEL_LABELS: dict[int, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Per-character comfort readout (#1522/#1514): "how uncomfortable am I, and why".
+# ---------------------------------------------------------------------------
+#
+# A character's *personal* felt discomfort = the room's felt exposure on each axis MINUS what
+# their worn clothing (and resonance-imbued garments) mitigate (floored at 0 per axis), summed,
+# plus an injury penalty. That total resolves to a named band the player sees.
+#
+# COMFORT_BAND_FLOORS: ascending (min discomfort, label); a total resolves to the highest band it
+# meets. PLACEHOLDER thresholds — a tunable author pass; the named tiers are the spec.
+COMFORT_BAND_FLOORS: tuple[tuple[int, str], ...] = (
+    (0, "Comfortable"),
+    (1, "Slightly uncomfortable"),
+    (25, "Moderately uncomfortable"),
+    (60, "Very uncomfortable"),
+    (120, "Extremely uncomfortable"),
+)
+
+# Player-facing word for each exposure axis when it is what's biting (the "why").
+EXPOSURE_REASON_WORDS: dict[StatKey, str] = {
+    StatKey.COLD: "cold",
+    StatKey.HEAT: "heat",
+    StatKey.WET: "wet",
+    StatKey.WIND: "wind",
+    StatKey.DRY: "dryness",
+}
+
+# How much being fully incapacitated (0% health) adds to felt discomfort; scaled by injury.
+# PLACEHOLDER magnitude (author pass).
+INJURY_DISCOMFORT_MAX: int = 40
+
+# Per-axis comfort-mitigation `mechanics.ModifierTarget` names (#1522). A character's "how much do I
+# shrug off this exposure" value is a general per-PC quantity any source can feed: worn clothing
+# (summed directly off `GarmentMitigation`) PLUS spells / conditions / magical wards, which write
+# `CharacterModifier`s to these targets and are read via `get_modifier_total`. Seed the targets so
+# those systems have somewhere to write; the comfort read is graceful (0) when a target is absent.
+COMFORT_MITIGATION_TARGET_NAMES: dict[StatKey, str] = {
+    StatKey.COLD: "cold_mitigation",
+    StatKey.HEAT: "heat_mitigation",
+    StatKey.WET: "wet_mitigation",
+    StatKey.WIND: "wind_mitigation",
+    StatKey.DRY: "dry_mitigation",
+}
+
+
 class HolderType(models.TextChoices):
     """Discriminator for owner/tenant rows: which holder FK is active."""
 

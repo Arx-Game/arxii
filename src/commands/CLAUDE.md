@@ -250,6 +250,10 @@ actions, backends, and service functions.
   `world.scenes.presence.who_listing`: online characters by **active** persona with a **coarse**
   idle marker (active / idle / away — never exact, so identical idle times can't out an account's
   alts). The web game-view "Who" tab + the `/api/areas/presence/` endpoint share the same service.
+- **`comfort.py`**: `CmdComfort` (`comfort`, #1514/#1522) — read-only personal-comfort glance. Leads
+  with *your* comfort band + the biting reasons (`world.locations.character_comfort.character_comfort_summary`
+  — room exposure minus your worn-clothing mitigation, plus injury), then the room's own comfort
+  level. Clothing (esp. resonance-imbued) is what counteracts it. No action.
 - **`weather.py`**: `CmdTime` (`time`, alias `weather`, #1522) — IC time + local-weather glance.
   Thin over `world.weather.services.current_conditions(room)`: shows the IC clock
   (time/phase/season) and the room's effective weather + one season/phase-appropriate emit line

@@ -25,6 +25,7 @@ from world.items.constants import (
     GearArchetype,
     OwnershipEventType,
 )
+from world.locations.constants import StatKey
 
 # Cross-app FK strings used by multiple fields below. Centralized to avoid the
 # duplicated-literal SonarCloud smell (python:S1192).
@@ -34,6 +35,7 @@ _ITEM_INSTANCE_FK = "items.ItemInstance"
 SOCIETY_MODEL = "societies.Society"
 CHECK_TYPE_MODEL = "checks.CheckType"
 FACET_MODEL = "magic.Facet"
+RESONANCE_MODEL = "magic.Resonance"
 
 
 class QualityTier(SharedMemoryModel):
@@ -1454,6 +1456,57 @@ class Trendsetter(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Trendsetter({self.persona_id} for society {self.society_id})"
+
+
+class GarmentMitigation(SharedMemoryModel):
+    """One exposure axis a garment template mitigates while worn (#1522/#1514 comfort).
+
+    ``(item_template, stat_key, resonance) -> value``: a worn garment reduces what its wearer
+    *feels* on that axis (a fur coat → COLD; a sun hat → HEAT), floored at 0 — it never makes the
+    wearer colder or touches another axis. Mirrors the ``(parent, stat_key, value)`` affinity
+    pattern (``buildings.StyleAffinity`` / ``weather.WeatherTypeExposure``), but read **per
+    character** (off the wearer's ``EquippedItem`` rows), not materialized onto a room.
+
+    A ``resonance`` row marks a *magical* mitigation (an imbued/woven garment): authored large, so
+    a scantily-clad but resonance-warded character still shrugs off the cold. Mundane mitigation
+    leaves ``resonance`` null. Magnitudes are a PLACEHOLDER author pass; the deeper
+    imbuing-drives-this integration (per-instance, via the magic Thread/Facet system) is a
+    follow-up — this is the authored-on-the-kind first cut.
+    """
+
+    item_template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="garment_mitigations",
+    )
+    stat_key = models.CharField(max_length=20, choices=StatKey.choices)
+    value = models.PositiveIntegerField(
+        help_text="How much felt exposure this garment removes on the axis while worn.",
+    )
+    resonance = models.ForeignKey(
+        RESONANCE_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="garment_mitigations",
+        help_text=(
+            "Set when this mitigation is magically imbued — a big comfort swing independent of "
+            "coverage. Null = mundane (material/fit). PLACEHOLDER magnitudes."
+        ),
+    )
+
+    class Meta:
+        ordering = ["item_template", "stat_key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_template", "stat_key", "resonance"],
+                name="items_unique_garment_mitigation",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        tag = f" [{self.resonance.name}]" if self.resonance_id else ""
+        return f"{self.item_template.name}: {self.stat_key} -{self.value}{tag}"
 
 
 # ---------------------------------------------------------------------------
