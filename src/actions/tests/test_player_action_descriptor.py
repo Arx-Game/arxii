@@ -3,6 +3,8 @@ from django.test import TestCase
 from actions.constants import ActionBackend, TargetKind
 from actions.types import (
     ActionRef,
+    AnchorOption,
+    FuryTierOption,
     PlayerAction,
     StrainAvailability,
     TargetFilters,
@@ -53,3 +55,42 @@ class PlayerActionDescriptorTests(TestCase):
         )
         self.assertEqual(action.target_spec.kind, TargetKind.PERSONA)
         self.assertEqual(action.strain.cap, 14)
+
+
+def _base_player_action() -> PlayerAction:
+    return PlayerAction(
+        backend=ActionBackend.COMBAT,
+        display_name="Cast",
+        ref=ActionRef(backend=ActionBackend.COMBAT, technique_id=1),
+    )
+
+
+class TestPlayerActionFurySoulfrayDefaults(TestCase):
+    def test_soulfray_warning_defaults_none(self) -> None:
+        assert _base_player_action().soulfray_warning is None
+
+    def test_available_fury_tiers_defaults_empty(self) -> None:
+        assert _base_player_action().available_fury_tiers == ()
+
+    def test_eligible_fury_anchors_defaults_empty(self) -> None:
+        assert _base_player_action().eligible_fury_anchors == ()
+
+    def test_fury_tier_option_is_frozen(self) -> None:
+        opt = FuryTierOption(
+            id=1,
+            name="Unleashed",
+            depth=2,
+            control_penalty=4,
+            intensity_bonus=5,
+            berserk_severity=3,
+        )
+        assert opt.depth == 2
+        try:
+            opt.depth = 9  # type: ignore[misc]
+        except AttributeError:
+            return
+        self.fail("FuryTierOption must be frozen")
+
+    def test_anchor_option_fields(self) -> None:
+        opt = AnchorOption(id=7, name="Rival", provocation_cap=3)
+        assert opt.provocation_cap == 3
