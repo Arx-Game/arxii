@@ -207,6 +207,14 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
+  `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
+  [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same
+  registry Actions the web `JournalEntryViewSet` uses: `CreateJournalEntryAction`,
+  `RespondToJournalAction`, `EditJournalEntryAction`. Bare `journal` / `journal list` lists the
+  caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
+  token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
+  collisions.
 - **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
   namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
   `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching

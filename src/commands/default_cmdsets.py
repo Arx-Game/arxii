@@ -68,6 +68,7 @@ from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
+from commands.journals import CmdJournal
 from commands.locations import CmdManageRoom
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
@@ -231,6 +232,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1350 — journal authoring namespace: write/respond/edit subverbs + list hub.
+            CmdJournal,
             # #1485 — relationship-building namespace: impression/develop/capstone/
             # redistribute write verbs + list/show read surfaces.
             CmdRelationship,
