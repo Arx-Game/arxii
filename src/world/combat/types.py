@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     )
     from world.conditions.models import DamageType
     from world.conditions.types import AppliedConditionResult
-    from world.magic.models import Affinity
+    from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
@@ -167,6 +167,7 @@ class CombatTechniqueResult:
     applied_conditions: list[AppliedConditionResult]
     technique_use_result: TechniqueUseResult
     power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
+    fury_committed: FuryTier | None = None
 
 
 # ---------------------------------------------------------------------------
