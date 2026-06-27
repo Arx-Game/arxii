@@ -45,15 +45,21 @@ gives the regen % adjustment. `AMENITY` (positive comfort) is how you *add* comf
 (luxury/magic), distinct from mitigation (which only cancels discomfort, floored).
 
 **Per-character comfort readout (#1522 — `character_comfort.py`).** "How uncomfortable am *I*, and
-why." `character_comfort_summary(character)` takes each axis's room `felt_exposure`, subtracts what
-the character's **worn clothing** mitigates (`items.GarmentMitigation` off their `EquippedItem`
-rows — a coat warms *you*, not the room; floored per axis), adds an **injury** penalty
+why." `character_comfort_summary(character)` takes each axis's room `felt_exposure`, subtracts the
+character's **`comfort_mitigation`** for that axis (floored, per axis — a coat or ward reduces what
+*you* feel, never makes you colder or touches another axis), adds an **injury** penalty
 (`vitals.health_percentage`), and maps the total to a named band (`COMFORT_BAND_FLOORS`: Comfortable
 → Extremely uncomfortable) with the biting axes as the "why" (`EXPOSURE_REASON_WORDS`).
-**Resonance-imbued garments** (`GarmentMitigation.resonance`) are authored large — a scantily-clad
-but warded character still shrugs off the cold. This is the per-character layer over the room's own
-`comfort_summary`; the `comfort` command leads with it. (Imports `items`/`vitals` lazily to keep the
-dependency one-way.) Magnitudes/bands are PLACEHOLDER.
+
+`comfort_mitigation(character)` is a **general per-PC value any source feeds**: worn clothing summed
+off `items.GarmentMitigation` (`EquippedItem` walk; **resonance-imbued garments** are authored
+large — a scantily-clad but warded character shrugs off the cold) **plus** the `world.mechanics`
+modifier system — spells / conditions / wards write `CharacterModifier`s to the per-axis comfort
+targets (`COMFORT_MITIGATION_TARGET_NAMES`, e.g. `cold_mitigation`), read via `get_modifier_total`
+(graceful 0 when a target isn't seeded). This is the per-character layer over the room's own
+`comfort_summary`; the `comfort` command leads with it. (Imports `items`/`vitals`/`mechanics`
+lazily — one-way dependency.) Magnitudes/bands/targets are PLACEHOLDER (seed the targets for
+spells/conditions to write to).
 
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`

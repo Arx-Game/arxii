@@ -17,6 +17,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.locations.constants import (
     COMFORT_BAND_FLOORS,
+    COMFORT_MITIGATION_TARGET_NAMES,
     EXPOSURE_REASON_WORDS,
     EXPOSURE_STAT_KEYS,
     INJURY_DISCOMFORT_MAX,
@@ -39,8 +40,8 @@ class CharacterComfortSummary(NamedTuple):
     injury: int  # injury's contribution to discomfort
 
 
-def worn_exposure_mitigation(character: DefaultObject) -> dict[StatKey, int]:
-    """Total per-axis exposure a character's worn garments mitigate (#1522).
+def _worn_garment_mitigation(character: DefaultObject) -> dict[StatKey, int]:
+    """Per-axis exposure a character's worn garments mitigate (clothing + resonance) (#1522).
 
     Sums ``GarmentMitigation`` rows (mundane + resonance-imbued) across every currently worn item.
     """
@@ -57,6 +58,40 @@ def worn_exposure_mitigation(character: DefaultObject) -> dict[StatKey, int]:
     for row in GarmentMitigation.objects.filter(item_template_id__in=template_ids):
         key = StatKey(row.stat_key)
         mitigation[key] = mitigation.get(key, 0) + row.value
+    return mitigation
+
+
+def _add_modifier_mitigation(sheet: object, mitigation: dict[StatKey, int]) -> None:
+    """Fold in per-axis comfort mitigation from the mechanics modifier system (#1522).
+
+    Anything other than clothing — spells, conditions, magical wards — contributes by writing
+    ``CharacterModifier``s to the per-axis comfort-mitigation targets, read via
+    ``get_modifier_total`` (which also picks up distinctions). Unseeded targets contribute nothing.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    for axis, target_name in COMFORT_MITIGATION_TARGET_NAMES.items():
+        target = ModifierTarget.objects.filter(name=target_name).first()
+        if target is None:
+            continue
+        total = get_modifier_total(sheet, target)
+        if total:
+            mitigation[axis] = mitigation.get(axis, 0) + total
+
+
+def comfort_mitigation(character: DefaultObject) -> dict[StatKey, int]:
+    """A character's total per-axis comfort mitigation, from ALL sources (#1522).
+
+    The general per-PC "how much do I shrug off this exposure" value: worn clothing
+    (``GarmentMitigation``, including the hefty resonance-imbued swing) PLUS the mechanics modifier
+    system (spells / conditions / wards via ``CharacterModifier`` on the comfort-mitigation
+    targets). The aggregate the room's exposure is measured against.
+    """
+    mitigation = _worn_garment_mitigation(character)
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is not None:
+        _add_modifier_mitigation(sheet, mitigation)
     return mitigation
 
 
@@ -84,16 +119,17 @@ def _band_for(discomfort: int) -> tuple[int, str]:
 def character_comfort_summary(character: DefaultObject) -> CharacterComfortSummary:
     """A character's personal comfort in their current room (#1522).
 
-    Per axis: ``residual = max(0, room felt_exposure − worn mitigation)`` (a coat reduces what *you*
-    feel, floored — never makes you colder or touches another axis). Sums the residuals + an injury
-    penalty, resolves the named band, and reports the biting axes (worst-first) as the "why".
+    Per axis: ``residual = max(0, room felt_exposure − comfort mitigation)`` — a coat (or a warding
+    spell) reduces what *you* feel, floored, never making you colder or touching another axis. Sums
+    the residuals + an injury penalty, resolves the named band, and reports the biting axes
+    (worst-first) as the "why".
     """
     room = character.location
     if room is None:
         index, label = _band_for(0)
         return CharacterComfortSummary(label, index, 0, [], {}, 0)
 
-    mitigation = worn_exposure_mitigation(character)
+    mitigation = comfort_mitigation(character)
     felt: dict[StatKey, int] = {}
     for axis in EXPOSURE_STAT_KEYS:
         residual = max(0, felt_exposure(room, stat_key=axis) - mitigation.get(axis, 0))

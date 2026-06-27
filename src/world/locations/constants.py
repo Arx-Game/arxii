@@ -261,6 +261,19 @@ EXPOSURE_REASON_WORDS: dict[StatKey, str] = {
 # PLACEHOLDER magnitude (author pass).
 INJURY_DISCOMFORT_MAX: int = 40
 
+# Per-axis comfort-mitigation `mechanics.ModifierTarget` names (#1522). A character's "how much do I
+# shrug off this exposure" value is a general per-PC quantity any source can feed: worn clothing
+# (summed directly off `GarmentMitigation`) PLUS spells / conditions / magical wards, which write
+# `CharacterModifier`s to these targets and are read via `get_modifier_total`. Seed the targets so
+# those systems have somewhere to write; the comfort read is graceful (0) when a target is absent.
+COMFORT_MITIGATION_TARGET_NAMES: dict[StatKey, str] = {
+    StatKey.COLD: "cold_mitigation",
+    StatKey.HEAT: "heat_mitigation",
+    StatKey.WET: "wet_mitigation",
+    StatKey.WIND: "wind_mitigation",
+    StatKey.DRY: "dry_mitigation",
+}
+
 
 class HolderType(models.TextChoices):
     """Discriminator for owner/tenant rows: which holder FK is active."""

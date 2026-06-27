@@ -21,6 +21,12 @@ from world.locations.character_comfort import character_comfort_summary
 from world.locations.constants import LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
 from world.magic.factories import ResonanceFactory
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    DistinctionModifierSourceFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
+)
 from world.vitals.factories import CharacterVitalsFactory
 
 
@@ -85,6 +91,32 @@ class CharacterComfortTests(TestCase):
         summary = character_comfort_summary(character)
         assert summary.discomfort == 0
         assert summary.band == "Comfortable"
+
+    def test_a_warding_modifier_mitigates_like_clothing(self) -> None:
+        # Comfort mitigation is general: a spell/ward (a CharacterModifier on the cold_mitigation
+        # target) reduces felt cold exactly like a garment does.
+        sheet, character = self._character_in(self._cold_room(50))
+        target = ModifierTargetFactory(
+            name="cold_mitigation", category=ModifierCategoryFactory(name="comfort_mitigation")
+        )
+        source = DistinctionModifierSourceFactory(distinction_effect__target=target)
+        CharacterModifierFactory(character=sheet, value=30, source=source, target=target)
+        summary = character_comfort_summary(character)
+        assert summary.discomfort == 20  # 50 cold − 30 ward
+        assert summary.band == "Slightly uncomfortable"
+
+    def test_clothing_and_a_ward_stack(self) -> None:
+        sheet, character = self._character_in(self._cold_room(50))
+        coat = ItemTemplateFactory(name="Wool Coat")
+        GarmentMitigationFactory(item_template=coat, stat_key=StatKey.COLD, value=20)
+        self._wear(character, coat)
+        target = ModifierTargetFactory(
+            name="cold_mitigation", category=ModifierCategoryFactory(name="comfort_mitigation")
+        )
+        source = DistinctionModifierSourceFactory(distinction_effect__target=target)
+        CharacterModifierFactory(character=sheet, value=30, source=source, target=target)
+        summary = character_comfort_summary(character)
+        assert summary.discomfort == 0  # 50 − (20 coat + 30 ward), floored
 
     def test_injury_adds_discomfort_and_a_reason(self) -> None:
         sheet, character = self._character_in(self._cold_room(0))  # no environmental exposure
