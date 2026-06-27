@@ -23247,6 +23247,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterVitals'
           description: ''
+  /api/weather/conditions/:
+    get:
+      operationId: weather_conditions_retrieve
+      description: GET /conditions/?room_id=<id> — IC time + the weather holding at
+        a room.
+      parameters:
+      - in: query
+        name: room_id
+        schema:
+          type: integer
+        description: ObjectDB id of the room to read conditions for.
+        required: true
+      tags:
+      - weather
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conditions'
+          description: ''
 components:
   schemas:
     AcceptSoulTetherRequest:
@@ -26886,6 +26909,39 @@ components:
       - observer_description
       - player_description
       - stages
+    Conditions:
+      type: object
+      description: |-
+        Read-only IC time + weather at a location (mirrors ``ConditionsSummary``).
+
+        Every field is nullable — no game clock (time fields) or no weather designated for the
+        location (weather fields). The widget renders whatever is present.
+      properties:
+        ic_time:
+          type: string
+          format: date-time
+          nullable: true
+        phase:
+          type: string
+          nullable: true
+          readOnly: true
+        season:
+          type: string
+          nullable: true
+          readOnly: true
+        weather_type:
+          type: string
+          nullable: true
+          readOnly: true
+        emit_text:
+          type: string
+          nullable: true
+      required:
+      - emit_text
+      - ic_time
+      - phase
+      - season
+      - weather_type
     ConflictModeEnum:
       enum:
       - group_vote
@@ -34616,6 +34672,7 @@ components:
       - system
       - covenant
       - renown
+      - weather
       type: string
       description: |-
         * `story` - Story update
@@ -34625,6 +34682,7 @@ components:
         * `system` - System
         * `covenant` - Covenant
         * `renown` - Renown
+        * `weather` - Weather
     NarrativeMessageDelivery:
       type: object
       properties:

@@ -99,8 +99,28 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   auto-default on first rent/acquire); `world.locations.comfort_effect` materializes
   `comfort_level − 5` as a flat `CharacterModifier` on the ap-regen targets, recomputed only on
   comfort-change events (home / style / decoration) and read for free by the regen cron.
-- **Later slices:** the **weather source** (#1522 — the dynamic driver), comfort→**Conditions**
-  ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`), and the web owner **build-HUD**.
+- **Climate baseline (#1522, done):** `world.weather.Climate` — a per-region signed
+  `temperature`/`moisture` baseline, designated via `Area.climate` and resolved
+  most-specific-wins (`get_effective_climate`, mirrors realm). It decomposes onto the
+  COLD/HEAT/WET/DRY exposure axes and folds into `felt_exposure` *before* the 0-floor (so a
+  cooling fixture fights a desert's heat). A global per-month temperature curve
+  (`MONTH_TEMPERATURE_SHIFT`, read off the IC `game_clock`) rides on top — a temperate region
+  crosses into real winter cold while a tropical region's high baseline keeps "no real winter."
+  Added the `DRY` exposure axis. `WIND` is deliberately *not* climate-driven (transient
+  weather/magic only).
+- **Transient weather (#1522, done — the dynamic driver):** `WeatherType` (climate-temp-band
+  gated, `is_automated`, weighted) + `WeatherTypeExposure` + `WeatherEmit` (season/phase-gated) +
+  `RegionWeatherState` (resolved most-specific-wins). `roll_region_weather` writes decaying
+  source-tagged WET/WIND modifiers over the climate baseline; a `game_clock` cron rolls each
+  climate region every 2 real hours (≈6 IC) and echoes one emit to online occupants as a
+  `NarrativeCategory.WEATHER` message. A `time`/`weather` telnet command, a
+  `GET /api/weather/conditions/` endpoint, and a React `WeatherWidget` in the top bar surface it;
+  echoes are squelchable per-player (`narrative.UserCategoryMute`). The 7 types + 263 emits are
+  seeded from the Arx-1 corpus. `FeastDay` forces special weather (Eclipse / Moon Madness)
+  world-wide on recurring IC dates — the GM-lever automation.
+- **Later slices:** comfort→**Conditions** ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`),
+  the **wind-as-mechanic** combat consumer (**#1555**, Tehom — the WIND provider side is done),
+  re-seed-as-upsert for edited emits, the web owner **build-HUD**, and inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 

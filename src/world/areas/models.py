@@ -25,6 +25,17 @@ class Area(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="areas",
     )
+    climate = models.ForeignKey(
+        "weather.Climate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="areas",
+        help_text=(
+            "Regional climate baseline (#1522). Resolves most-specific-wins down the "
+            "hierarchy (see weather.services.get_effective_climate), like realm."
+        ),
+    )
     dominant_society = models.ForeignKey(
         "societies.Society",
         null=True,

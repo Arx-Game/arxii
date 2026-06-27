@@ -13760,6 +13760,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/weather/conditions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /conditions/?room_id=<id> — IC time + the weather holding at a room. */
+    get: operations['weather_conditions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -15398,6 +15415,20 @@ export interface components {
       /** @description Can other characters see this condition? */
       readonly is_visible_to_others: boolean;
       readonly stages: components['schemas']['ConditionStage'][];
+    };
+    /**
+     * @description Read-only IC time + weather at a location (mirrors ``ConditionsSummary``).
+     *
+     *     Every field is nullable — no game clock (time fields) or no weather designated for the
+     *     location (weather fields). The widget renders whatever is present.
+     */
+    Conditions: {
+      /** Format: date-time */
+      ic_time: string | null;
+      readonly phase: string | null;
+      readonly season: string | null;
+      readonly weather_type: string | null;
+      emit_text: string | null;
     };
     /**
      * @description * `group_vote` - Group Vote
@@ -19160,6 +19191,7 @@ export interface components {
      *     * `system` - System
      *     * `covenant` - Covenant
      *     * `renown` - Renown
+     *     * `weather` - Weather
      * @enum {string}
      */
     NarrativeMessageCategoryEnum:
@@ -19169,7 +19201,8 @@ export interface components {
       | 'happenstance'
       | 'system'
       | 'covenant'
-      | 'renown';
+      | 'renown'
+      | 'weather';
     NarrativeMessageDelivery: {
       readonly id: number;
       readonly message: components['schemas']['NarrativeMessage'];
@@ -45945,6 +45978,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterVitals'];
+        };
+      };
+    };
+  };
+  weather_conditions_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the room to read conditions for. */
+        room_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Conditions'];
         };
       };
     };
