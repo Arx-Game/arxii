@@ -17,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     AcceptSoulTetherRitualFactory,
     AffinityFactory,
+    RenewTheOathRitualFactory,
     ResonanceFactory,
     wire_soul_tether_content,
 )
@@ -75,6 +76,43 @@ class RitualDraftKwargsParseTests(TestCase):
             "SINNER",
         )
         self.assertNotIn("resonance_id", session.session_kwargs)
+
+    def test_draft_without_role_still_drafts(self) -> None:
+        # Missing role= token: initiator gets empty participant kwargs, but resonance=
+        # is still parsed into session-level kwargs.
+        out = self._draft(f"accept_soul_tether invite=DraftPartner resonance={self.resonance.name}")
+        self.assertIn("drafted", out.lower())
+        session = RitualSession.objects.get(ritual=self.ritual)
+        initiator_participant = session.participants.get(character_sheet=self.initiator_sheet)
+        self.assertNotIn("soul_tether_role", initiator_participant.participant_kwargs)
+        self.assertEqual(session.session_kwargs.get("resonance_id"), self.resonance.pk)
+
+
+class NonSoulTetherKwargsTests(TestCase):
+    def setUp(self) -> None:
+        self.ritual = RenewTheOathRitualFactory()
+        self.abyssal = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=self.abyssal)
+        self.initiator = CharacterFactory(db_key="RenewInit")
+        self.initiator_sheet = CharacterSheetFactory(character=self.initiator)
+        self.partner = CharacterFactory(db_key="RenewPartner")
+        self.partner_sheet = CharacterSheetFactory(character=self.partner)
+
+    def test_non_soul_tether_ritual_ignores_kwargs(self) -> None:
+        # Non-soul-tether rituals should not reject drafts just because the caller
+        # passes role=/resonance= tokens; the command passes them through generically.
+        cmd = _run(
+            CmdRitual,
+            self.initiator,
+            f"draft {self.ritual.name} invite=RenewPartner role=sinner "
+            f"resonance={self.resonance.name}",
+        )
+        cmd.caller.search = MagicMock(return_value=self.partner)
+        cmd.func()
+        out = self.initiator.msg.call_args[0][0] if self.initiator.msg.called else ""
+        self.assertIn("drafted", out.lower())
+        session = RitualSession.objects.get(ritual=self.ritual)
+        self.assertIsNotNone(session)
 
 
 class RitualJoinKwargsParseTests(TestCase):
