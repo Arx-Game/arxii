@@ -17,6 +17,7 @@ from typing import Any
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.parsing import parse_kv_and_flags
 
 # Subverbs.
 _SUBVERB_WRITE = "write"
@@ -36,52 +37,6 @@ _MULTIWORD_KEYS = frozenset({_KEY_TITLE, _KEY_BODY})
 
 # Bare-token flags — a multi-word value terminates when one appears.
 _KNOWN_FLAGS = frozenset({_FLAG_PUBLIC})
-
-
-def _parse_kwargs(rest: str) -> tuple[dict[str, str], set[str]]:
-    """Split ``[key=value ...] [flag ...]`` into a kwargs dict + a flags set.
-
-    A multiword key (title/body) consumes tokens until the next ``key=`` token
-    OR a known bare flag (``public``) — so ``body=Hello world public`` yields
-    body="Hello world" and sets the public flag, rather than absorbing the flag
-    into the body. Other bare tokens with no ``=`` are flags.
-    """
-    tokens = rest.split()
-    kwargs: dict[str, str] = {}
-    flags: set[str] = set()
-    key = ""
-    value_parts: list[str] = []
-    for token in tokens:
-        if "=" in token and not token.startswith("="):
-            if key:
-                kwargs[key] = " ".join(value_parts).strip()
-            key, _, value = token.partition("=")
-            value_parts = [value] if value else []
-        elif key and key in _MULTIWORD_KEYS and token in _KNOWN_FLAGS:
-            kwargs[key] = " ".join(value_parts).strip()
-            key = ""
-            value_parts = []
-            flags.add(token)
-        elif key and key in _MULTIWORD_KEYS:
-            value_parts.append(token)
-        elif key:
-            # A bare token after a single-word key — treat as a flag if known.
-            if token in _KNOWN_FLAGS:
-                flags.add(token)
-            else:
-                msg = (
-                    f"Unexpected argument '{token}' after '{key}='. "
-                    "Multi-word values are only allowed for title and body."
-                )
-                raise CommandError(msg)
-        elif token in _KNOWN_FLAGS:
-            flags.add(token)
-        else:
-            msg = f"Unexpected argument '{token}'."
-            raise CommandError(msg)
-    if key:
-        kwargs[key] = " ".join(value_parts).strip()
-    return kwargs, flags
 
 
 def _require(value: str | None, name: str) -> str:
@@ -133,7 +88,9 @@ class CmdJournal(ArxCommand):
     # -- write verbs ----------------------------------------------------------
 
     def _write(self, rest: str) -> None:
-        kwargs, flags = _parse_kwargs(rest)
+        kwargs, flags = parse_kv_and_flags(
+            rest, multiword_keys=_MULTIWORD_KEYS, known_flags=_KNOWN_FLAGS
+        )
         from actions.registry import get_action  # noqa: PLC0415
 
         title = _require(kwargs.get(_KEY_TITLE), _KEY_TITLE)
@@ -221,7 +178,9 @@ class CmdJournal(ArxCommand):
         if not first.isdigit():
             return None, {}
         remaining = tokens[1] if len(tokens) > 1 else ""
-        kwargs, _flags = _parse_kwargs(remaining)
+        kwargs, _flags = parse_kv_and_flags(
+            remaining, multiword_keys=_MULTIWORD_KEYS, known_flags=_KNOWN_FLAGS
+        )
         return int(first), kwargs
 
     @staticmethod

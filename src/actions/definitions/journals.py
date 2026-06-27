@@ -10,10 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from django.core.exceptions import ObjectDoesNotExist
-
 from actions.base import Action
-from actions.prerequisites import Prerequisite
+from actions.prerequisites import HasCharacterSheetPrerequisite, Prerequisite, resolve_actor_sheet
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -23,37 +21,17 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class _HasCharacterSheetPrerequisite(Prerequisite):
-    """Actor must have a CharacterSheet."""
-
-    def is_met(
-        self,
-        actor: ObjectDB,
-        target: ObjectDB | None = None,
-        context: dict | None = None,
-    ) -> tuple[bool, str]:
-        try:
-            actor.sheet_data  # noqa: B018
-        except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
-        return True, ""
-
-
-@dataclass
 class _BaseJournalAction(Action):
     """Shared base: sheet resolution + sheet-required prerequisite."""
 
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [_HasCharacterSheetPrerequisite()]
+        return [HasCharacterSheetPrerequisite()]
 
     @staticmethod
     def _sheet(actor: ObjectDB) -> Any:
-        try:
-            return actor.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            return None
+        return resolve_actor_sheet(actor)
 
 
 @dataclass

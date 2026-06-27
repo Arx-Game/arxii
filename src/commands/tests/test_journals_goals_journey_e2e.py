@@ -13,8 +13,9 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.goals import CmdGoal, _parse_kwargs as parse_goal_kwargs
-from commands.journals import CmdJournal, _parse_kwargs as parse_journal_kwargs
+from commands.goals import CmdGoal
+from commands.journals import CmdJournal
+from commands.parsing import parse_kv_and_flags
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.factories import GoalDomainFactory
@@ -202,19 +203,36 @@ class GoalCommandErrorTests(TestCase):
         self.assertEqual(CharacterGoal.objects.filter(character=self.caller).count(), 2)
 
 
+_JOURNAL_MULTIWORD_KEYS = frozenset({"title", "body"})
+_GOAL_MULTIWORD_KEYS = frozenset({"title", "content", "notes"})
+_KNOWN_PUBLIC_FLAG = frozenset({"public"})
+
+
 class JournalParserTests(TestCase):
     def test_multiword_body_runs_to_next_key(self) -> None:
-        kwargs, flags = parse_journal_kwargs("title=A Title body=Some long body. public")
+        kwargs, flags = parse_kv_and_flags(
+            "title=A Title body=Some long body. public",
+            multiword_keys=_JOURNAL_MULTIWORD_KEYS,
+            known_flags=_KNOWN_PUBLIC_FLAG,
+        )
         self.assertEqual(kwargs["title"], "A Title")
         self.assertEqual(kwargs["body"], "Some long body.")
         self.assertIn("public", flags)
 
     def test_public_flag_parsed(self) -> None:
-        _kw, flags = parse_journal_kwargs("title=x body=y public")
+        _kw, flags = parse_kv_and_flags(
+            "title=x body=y public",
+            multiword_keys=_JOURNAL_MULTIWORD_KEYS,
+            known_flags=_KNOWN_PUBLIC_FLAG,
+        )
         self.assertEqual(flags, {"public"})
 
 
 class GoalParserTests(TestCase):
     def test_notes_multiword(self) -> None:
-        kwargs, _flags = parse_goal_kwargs("domain=1 points=5 notes=A long winded note.")
+        kwargs, _flags = parse_kv_and_flags(
+            "domain=1 points=5 notes=A long winded note.",
+            multiword_keys=_GOAL_MULTIWORD_KEYS,
+            known_flags=_KNOWN_PUBLIC_FLAG,
+        )
         self.assertEqual(kwargs["notes"], "A long winded note.")
