@@ -289,12 +289,16 @@ class CmdRelationship(ArxCommand):
             )
             raise CommandError(msg)
         ref, _, reason = rest.partition("=")
+        reason = reason.strip()
+        if not reason:
+            msg = "A reason is required. Usage: relationship complain <ref>=<reason>"
+            raise CommandError(msg)
         writeup_type, writeup_id = self._parse_writeup_ref(ref.strip())
         result = FileWriteupComplaintAction().run(
             actor=self.caller,
             writeup_type=writeup_type,
             writeup_id=writeup_id,
-            reason=reason.strip(),
+            reason=reason,
         )
         if result.message:
             self.msg(result.message)

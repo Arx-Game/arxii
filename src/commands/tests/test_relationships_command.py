@@ -413,6 +413,18 @@ class CmdRelationshipKudosComplainTests(TestCase):
         text = _capture(self.caller).lower()
         self.assertTrue("invalid" in text or "u<id>" in text or "ref" in text)
 
+    def test_complain_empty_reason_reports_error(self) -> None:
+        """``relationship complain <ref>=`` with empty reason shows a usage error."""
+        _make_cmd(self.caller, f"complain u{self.update.pk}=").func()
+        text = _capture(self.caller).lower()
+        self.assertIn("reason is required", text)
+        # Verify no WriteupComplaint row was created.
+        self.assertFalse(
+            WriteupComplaint.objects.filter(
+                update=self.update, complainant=self.caller_account
+            ).exists()
+        )
+
 
 class CmdRelationshipShowWriteupsTests(TestCase):
     """``relationship show`` includes writeup labels so users know what to pass to kudos/complain.
