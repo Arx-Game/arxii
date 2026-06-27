@@ -108,8 +108,12 @@ Key service functions for scene round lifecycle:
 
 ### `interaction_views.py`
 - **`InteractionViewSet`**: Interaction read + delete + mark_private
-- **`InteractionFavoriteViewSet`**: Toggle favorites
-- **`InteractionReactionViewSet`**: Toggle reactions
+- **`InteractionFavoriteViewSet`**: Toggle favorites — routes through
+  `world.scenes.reaction_toggle_services.toggle_interaction_favorite` (the sole mutator), the same
+  seam telnet `CmdReact` reaches via `ToggleFavoriteAction` (#1341).
+- **`InteractionReactionViewSet`**: Toggle reactions — routes through
+  `world.scenes.reaction_toggle_services.toggle_interaction_reaction` (the sole mutator), the same
+  seam telnet `CmdReact` reaches via `ToggleReactionAction` (#1341).
 
 ### `serializers.py`
 - Scene and persona serialization for API responses

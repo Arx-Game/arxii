@@ -59,6 +59,10 @@ from world.scenes.mute_services import muted_persona_ids_for_viewer
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
+from world.scenes.reaction_toggle_services import (
+    toggle_interaction_favorite,
+    toggle_interaction_reaction,
+)
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -380,20 +384,15 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
             )
         # Use the first roster entry for favorites
         roster_entry = roster_entries[0]
-        deleted, _ = InteractionFavorite.objects.filter(
+        created, favorite = toggle_interaction_favorite(
             interaction=interaction,
             roster_entry=roster_entry,
-        ).delete()
-        if deleted:
+        )
+        if not created:
             return Response(
                 {"detail": "Favorite removed."},
                 status=status.HTTP_200_OK,
             )
-        favorite = InteractionFavorite.objects.create(
-            interaction=interaction,
-            timestamp=interaction.timestamp,
-            roster_entry=roster_entry,
-        )
         return Response(
             InteractionFavoriteSerializer(favorite).data,
             status=status.HTTP_201_CREATED,
@@ -419,20 +418,13 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         interaction = serializer.validated_data["interaction"]
         emoji = serializer.validated_data["emoji"]
-        existing = InteractionReaction.objects.filter(
+        created, reaction = toggle_interaction_reaction(
             interaction=interaction,
-            account=request.user,
-            emoji=emoji,
-        ).first()
-        if existing:
-            existing.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        reaction = InteractionReaction.objects.create(
-            interaction=interaction,
-            timestamp=interaction.timestamp,
-            account=request.user,
+            account=request.user,  # type: ignore[invalid-argument-type]
             emoji=emoji,
         )
+        if not created:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(
             InteractionReactionSerializer(reaction).data,
             status=status.HTTP_201_CREATED,
