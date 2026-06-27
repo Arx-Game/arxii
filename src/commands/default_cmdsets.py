@@ -74,6 +74,7 @@ from commands.organizations import CmdOrg
 from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
+from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
@@ -236,6 +237,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRelationship,
             # #1511 — organization membership lifecycle.
             CmdOrg,
+            # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
+            CmdKudos,
+            CmdVote,
+            CmdRandomScene,
+            CmdPathIntent,
         )
         for command_cls in command_classes:
             self.add(command_cls())
