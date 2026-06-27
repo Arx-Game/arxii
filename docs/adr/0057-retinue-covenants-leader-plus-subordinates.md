@@ -3,7 +3,8 @@
 A powerful character whose strength is partly tied to a covenant **role** but who has no peers can
 still hold one by forming a **Court** — a third covenant type alongside the Covenant of the Durance
 and the Covenant of War, modelling a single powerful leader and the servants/apprentices/acolytes
-sworn to them across a wide power gulf, explicitly **not** a co-adventuring party (e.g. "the Court of
+sworn to them across a wide power gulf — by design at least one power tier (ADR-0046) separates the
+Court leader from their servants — explicitly **not** a co-adventuring party (e.g. "the Court of
 Shadows" serving the Shadowlord; the "henchperson to a remote master" fantasy). We add it as a new
 `CovenantType` value (`COURT`) on the existing `Covenant` model and **reuse** the existing pieces — the
 `CovenantRank` authority ladder already models one leader (founder, tier 1) over Member-tier

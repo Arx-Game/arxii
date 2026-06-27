@@ -1,3 +1,13 @@
+# Combat — Build History (archive)
+
+> **This is the scope-by-scope combat build record (the old `combat.md`).** Forward-looking
+> status, the MVP bar, and the player-capability ledger now live in [`combat.md`](combat.md).
+> Consult this archive before designing anything new, to avoid reinventing shipped surfaces.
+> When this archive and the code disagree, the code wins. Mirrors the
+> [`magic-build-history.md`](magic-build-history.md) pattern.
+
+---
+
 # Combat
 
 **Status:** in-progress
