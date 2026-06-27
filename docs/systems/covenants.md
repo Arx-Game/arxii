@@ -159,6 +159,62 @@ axes are orthogonal — never re-merge them.
   participant is mentor vs. sidekick based on band position, and calls
   `establish_mentor_bond`.
 
+## Telnet Surface
+
+### CmdCovenant (`covenant`, #1346)
+
+`src/commands/covenant.py` — one `ArxCommand` routes a leading subverb to the matching
+covenant Action via `action.run()`, sharing the same service layer as the web viewsets.
+
+| Subverb | Action key | Effect |
+|---|---|---|
+| `covenant [list]` | — | List the caller's memberships (hub) |
+| `covenant engage [<covenant>]` | `engage_covenant_membership` | Engage a role for the current scene |
+| `covenant disengage [<covenant>]` | `disengage_covenant_membership` | Disengage a role |
+| `covenant leave [<covenant>]` | `leave_covenant` | Voluntarily end membership |
+| `covenant kick <char> [in <covenant>]` | `kick_covenant_member` | Rank-gated removal |
+| `covenant rank <char> <rank> [in <covenant>]` | `assign_covenant_rank` | Promote/demote a member |
+| `covenant transfer <char> [in <covenant>]` | `transfer_covenant_top_rank` | Transfer the top rank |
+| `covenant standdown [<covenant>]` | `stand_down_battle_covenant` | Return a risen STANDING Battle covenant to dormancy |
+
+Supply the covenant name when the character belongs to more than one. `standdown` is STANDING
+Battle covenants only; `engage`/`disengage` are gated by the same `can_engage_membership` logic
+the web uses. `CovenantError` subclasses surface as `ActionResult(success=False)` with a
+`user_message`.
+
+### Induction and Banner-Call Rise via CmdRitual
+
+Covenant **induction** (adding a new member) and the **banner-call rise** (raising a dormant
+STANDING Battle covenant) are session-driven ceremonies that go through `CmdRitual` with
+adapter-dispatched token parsing (`src/commands/ritual_adapters.py`):
+
+**Induction:**
+1. Initiator: `ritual draft "Covenant Induction" invite=<char> covenant=<name>` — drafts a
+   session; the `CovenantInductionAdapter` emits a session-level COVENANT reference.
+2. Inductee: `ritual join <id> role=<covenant role name>` — the adapter emits a COVENANT_ROLE
+   reference the induction service reads to assign the role.
+3. Initiator: `ritual fire <id>` — calls `induct_member_via_session`, which creates the
+   `CharacterCovenantRole` row.
+
+**Banner-call rise:**
+1. Initiator: `ritual draft "Call the Banners" invite=<char>[,<char>] covenant=<name>` —
+   `BannerCallAdapter` emits a session-level COVENANT reference; no join tokens are required.
+2. Members: `ritual join <id>` — simply accept (no role kwargs needed).
+3. Initiator: `ritual fire <id>` — calls `rise_battle_covenant_via_session`, which flips the
+   covenant risen and auto-engages all accepted participants.
+
+### Selectors (`world.covenants.selectors`)
+
+`src/world/covenants/selectors.py` — shared read-only lookups used by the covenant viewsets
+and the Actions (one copy, not two):
+
+- `resolve_actor_membership(*, covenant, character_sheets, capability=None) -> CharacterCovenantRole | None`
+  — first active membership in `covenant` among `character_sheets` that carries `capability`
+  (a rank flag such as `can_kick` or `can_manage_ranks`), or any active membership if `None`.
+- `get_active_memberships(*, character_sheet) -> list[CharacterCovenantRole]`
+  — all active (`left_at IS NULL`) memberships for one character sheet, with related covenant,
+  rank, and covenant_role pre-fetched.
+
 ## Induction Round-Trip
 
 The covenant induction flow is wired end-to-end through the UI:
@@ -273,7 +329,16 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - `handlers.py` — `CharacterCovenantRoleHandler`; `currently_engaged_roles()` calls
   `resolve_effective_role` (defined in `services.py`) per row
 - `services.py` — covenant lifecycle + `resolve_effective_role` + `establish_mentor_bond_via_session`
+- `selectors.py` — `resolve_actor_membership` / `get_active_memberships`; shared by viewsets
+  and the covenant Actions
 - `discovery.py` — `fire_subrole_discoveries` (sub-role discovery beat)
 - `mentorship.py` — `effective_combat_level` and Mentor's Vow math
 - `factories.py` — `seed_resonance_subrole_slice`, `SubroleCovenantRoleFactory`
 - `exceptions.py` — all exceptions
+
+`src/actions/definitions/covenants.py` — seven covenant lifecycle REGISTRY Actions
+
+`src/commands/covenant.py` — `CmdCovenant` telnet namespace
+
+`src/commands/ritual_adapters.py` — `SoulTetherAdapter`, `CovenantInductionAdapter`,
+`BannerCallAdapter` + `get_adapter(ritual)` registry lookup

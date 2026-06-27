@@ -35,47 +35,47 @@ from commands.exceptions import CommandError
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
-# Kwargs carried into session/participant dicts for rituals that need setup
-# info (e.g. the soul-tether BILATERAL). Keys match what the ritual's
-# service_function_path reads off RitualSession.session_kwargs /
-# RitualSessionParticipant.participant_kwargs.
-_ROLE_KWARG = "role"
-_RESONANCE_KWARG = "resonance"
-_WRITEUP_KWARG = "writeup"
-_SESSION_RESONANCE_ID_KEY = "resonance_id"
-_SESSION_WRITEUP_KEY = "writeup"
-_PARTICIPANT_ROLE_KEY = "soul_tether_role"
 
 
-def _resolve_soul_tether_role(token: str) -> str:
-    """Map a telnet ``role=`` token to a SoulTetherRole value.
+def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
+    """Parse ``<name> invite=<a>[,<b>] key=value …`` into ``(name, invitee_names, kwargs)``.
 
-    Returns the canonical uppercase enum value (``"SINNER"`` / ``"SINEATER"``)
-    that the fire handler ``accept_soul_tether_via_session`` compares against.
-    Raises ``CommandError`` for unknown roles.
+    Processes tokens left-to-right:
+    - ``invite=<csv>`` is parsed as the invitee list.
+    - ``key=value`` tokens go into *kwargs*; if the next tokens contain no
+      ``=`` they are consumed as the value's remainder — matching
+      ``writeup=``/``declaration=``-style trailing-text behaviour.
+    - All other tokens are accumulated as the ritual name.
     """
-    from world.magic.types.soul_tether import SoulTetherRole  # noqa: PLC0415
-
-    normalized = token.strip().upper()
-    for role in SoulTetherRole:
-        if normalized == role.value:
-            return role.value
-    msg = f"Unknown role '{token}'. Use role=sinner or role=sineater."
-    raise CommandError(msg)
-
-
-def _parse_trailing_kwarg(rest: str, key: str) -> str | None:
-    """Return the value of a ``key=value`` token in *rest*, or None if absent.
-
-    Scans whitespace-delimited tokens for one starting with ``key=`` and
-    returns its value. Used by session subcommands that take a single optional
-    kwarg (e.g. ``join <id> role=sinner``) alongside a positional session id.
-    """
-    prefix = f"{key}="
-    for token in rest.split():
-        if token.startswith(prefix):
-            return token[len(prefix) :]
-    return None
+    tokens = rest.split()
+    name_parts: list[str] = []
+    invite_names: list[str] = []
+    kwargs: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.startswith("invite="):
+            invite_names = [n.strip() for n in token[7:].split(",") if n.strip()]
+            index += 1
+        elif "=" in token and not token.startswith("="):
+            key, _, val = token.partition("=")
+            # Consume any following tokens that are not themselves key=value pairs
+            # (trailing-value semantics: writeup=<narrative> spans remaining tokens).
+            j = index + 1
+            trailing: list[str] = []
+            while j < len(tokens) and "=" not in tokens[j]:
+                trailing.append(tokens[j])
+                j += 1
+            if trailing:
+                val = " ".join([val, *trailing]).strip()
+                index = j
+            else:
+                index += 1
+            kwargs[key] = val
+        else:
+            name_parts.append(token)
+            index += 1
+    return " ".join(name_parts).strip(), invite_names, kwargs
 
 
 class CmdRitual(ArxCommand):
@@ -156,14 +156,13 @@ class CmdRitual(ArxCommand):
             )
         self.caller.msg("\n".join(lines))
 
-    def _handle_draft(  # noqa: C901, PLR0912, PLR0915
-        self, rest: str
-    ) -> None:
+    def _handle_draft(self, rest: str) -> None:
         """Draft a multi-participant session: ``draft <name> invite=<char>[,<char>]``."""
         from datetime import timedelta  # noqa: PLC0415
 
         from django.utils import timezone  # noqa: PLC0415
 
+        from commands.ritual_adapters import get_adapter  # noqa: PLC0415
         from world.magic.constants import (  # noqa: PLC0415
             ParticipationRule,
             RitualExecutionKind,
@@ -173,38 +172,14 @@ class CmdRitual(ArxCommand):
             RitualSessionError,
         )
         from world.magic.models import Ritual  # noqa: PLC0415
-        from world.magic.models.affinity import Resonance  # noqa: PLC0415
         from world.magic.services.sessions import draft_session  # noqa: PLC0415
 
-        # Parse: ``Ritual Name invite=char1[,char2] role=sinner|sineater
-        #         resonance=<name> [writeup=<narrative>]``
-        tokens = rest.split()
-        name_parts: list[str] = []
-        invite_names: list[str] = []
-        role_token = ""
-        resonance_token = ""
-        writeup = ""
-        index = 0
-        while index < len(tokens):
-            token = tokens[index]
-            if token.startswith("invite="):
-                invite_names = [n.strip() for n in token[7:].split(",") if n.strip()]
-            elif token.startswith(f"{_ROLE_KWARG}="):
-                role_token = token[len(_ROLE_KWARG) + 1 :]
-            elif token.startswith(f"{_RESONANCE_KWARG}="):
-                resonance_token = token[len(_RESONANCE_KWARG) + 1 :]
-            elif token.startswith(f"{_WRITEUP_KWARG}="):
-                writeup = " ".join([token[len(_WRITEUP_KWARG) + 1 :], *tokens[index + 1 :]]).strip()
-                break
-            else:
-                name_parts.append(token)
-            index += 1
+        name, invite_names, kwargs = _tokenize_draft_args(rest)
 
         usage = (
             "Usage: ritual draft <ritual_name> invite=<character>[,<character>]\n"
             "       [role=sinner|sineater resonance=<name> [writeup=<narrative>]]"
         )
-        name = " ".join(name_parts).strip()
         if not name:
             raise CommandError(usage)
         if not invite_names:
@@ -239,34 +214,18 @@ class CmdRitual(ArxCommand):
             invitees.append(invitee_sheet)
 
         initiator_sheet = self.caller.sheet_data
-
-        # Build session-level + initiator-participant kwargs from the parsed tokens.
-        session_kwargs: dict[str, Any] = {}
-        initiator_participant_kwargs: dict[str, Any] = {}
-        if role_token:
-            initiator_participant_kwargs[_PARTICIPANT_ROLE_KEY] = _resolve_soul_tether_role(
-                role_token
-            )
-        if resonance_token:
-            resonance_name = resonance_token.strip()
-            resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
-            if resonance is None:
-                msg = f"No resonance named '{resonance_name}'."
-                raise CommandError(msg)
-            session_kwargs[_SESSION_RESONANCE_ID_KEY] = resonance.pk
-        if writeup:
-            session_kwargs[_SESSION_WRITEUP_KEY] = writeup
+        parse = get_adapter(ritual).parse_draft(kwargs=kwargs, caller=self.caller)
 
         try:
             session = draft_session(
                 ritual=ritual,
                 initiator=initiator_sheet,
                 proposed_terms="",
-                session_kwargs=session_kwargs,
+                session_kwargs=parse.session_kwargs,
                 invitee_sheets=invitees,
-                session_references=[],
-                initiator_participant_kwargs=initiator_participant_kwargs,
-                initiator_references=[],
+                session_references=parse.session_references,
+                initiator_participant_kwargs=parse.initiator_participant_kwargs,
+                initiator_references=parse.initiator_references,
                 expires_at=timezone.now() + timedelta(hours=24),
             )
         except (ParticipantCountError, RitualSessionError) as exc:
@@ -281,6 +240,7 @@ class CmdRitual(ArxCommand):
 
     def _handle_join(self, rest: str) -> None:
         """Accept a session invitation: ``join <id> [role=sinner|sineater]``."""
+        from commands.ritual_adapters import get_adapter  # noqa: PLC0415
         from world.magic.exceptions import SessionNotInPendingError  # noqa: PLC0415
         from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
         from world.magic.services.sessions import accept_session  # noqa: PLC0415
@@ -288,24 +248,50 @@ class CmdRitual(ArxCommand):
         session_id = self._parse_session_id(
             rest, "Usage: ritual join <session_id> [role=sinner|sineater]"
         )
-        participant_kwargs: dict[str, Any] = {}
-        role_token = _parse_trailing_kwarg(rest, _ROLE_KWARG)
-        if role_token is not None:
-            participant_kwargs[_PARTICIPANT_ROLE_KEY] = _resolve_soul_tether_role(role_token)
+        # Consume trailing non-key=value tokens into a key's value so that
+        # multi-word names (e.g. ``role=Iron Warden``) are captured in full.
+        # Mirrors ``_tokenize_draft_args`` trailing-value semantics.
+        kwargs: dict[str, str] = {}
+        tokens = rest.split()[1:]
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if "=" in token and not token.startswith("="):
+                key, _, val = token.partition("=")
+                j = index + 1
+                trailing: list[str] = []
+                while j < len(tokens) and "=" not in tokens[j]:
+                    trailing.append(tokens[j])
+                    j += 1
+                if trailing:
+                    val = " ".join([val, *trailing]).strip()
+                    index = j
+                else:
+                    index += 1
+                kwargs[key] = val
+            else:
+                index += 1
 
         sheet = self.caller.sheet_data
-        participant = RitualSessionParticipant.objects.filter(
-            session_id=session_id,
-            character_sheet=sheet,
-        ).first()
+        participant = (
+            RitualSessionParticipant.objects.filter(
+                session_id=session_id,
+                character_sheet=sheet,
+            )
+            .select_related("session__ritual")
+            .first()
+        )
         if participant is None:
             msg = f"You are not an invited participant of session #{session_id}."
             raise CommandError(msg)
+        parse = get_adapter(participant.session.ritual).parse_join(
+            kwargs=kwargs, caller=self.caller
+        )
         try:
             accept_session(
                 participant=participant,
-                participant_kwargs=participant_kwargs,
-                references=[],
+                participant_kwargs=parse.participant_kwargs,
+                references=parse.references,
             )
         except SessionNotInPendingError:
             msg = f"You have already responded to session #{session_id}."

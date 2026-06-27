@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; Slice E Battle covenants + Durance×Battle combat-precedence shipped; Slice F covenant rites shipped including role-aware level-banded severity-scaling stat packages (#753); per-role powers (#751: tier-0 passive capability application surface + per-(role,resonance) `ThreadPullEffect` catalog) shipped; rite stat-buffs now flow into checks (#783); battle/group-ability/role-power/promotion frontend (#518) shipped; covenant rank passive bonus (#762: authored `CovenantLevelBonus` config, engagement-gated, level-scaled, derive-on-read via `covenant_level_bonus` in the modifier pipeline) shipped; exit lifecycle — voluntary leave + leader-gated kick + below-2 auto-dissolve, soft-only (#519) — shipped; Slice G use-based COVENANT_ROLE anchor cap (#517: additive legend-earned-in-role + time-held-in-role on top of the covenant-level floor, derive-on-read, no migration) shipped; the Slice G use-based weave gate still post-MVP; rank ladder — `CovenantRank` per-covenant authority tier, two-axis `CovenantRole`/`CovenantRank` model, rank management services, `CovenantRankViewSet` API, rank-ladder UI (#1027) — shipped; covenant-role armor-soak gate — compatible→additive, incompatible→`max(physical, resonant pool)`, level-scaled; #1174 — shipped; resonance sub-role runtime resolution (derive-on-read via `resolve_effective_role` + `fire_subrole_discoveries` discovery beat; `discovery_achievement`/`codex_entry` FKs on sub-role `CovenantRole`; `anchor_role` API field; #1277) — shipped; telnet membership lifecycle — `CmdCovenant` (`covenant engage/disengage/leave/kick/rank/transfer/standdown`), seven `action.run()` REGISTRY Actions in `actions/definitions/covenants.py`, `world.covenants.selectors` shared by Actions + viewsets, covenant induction + banner-call rise via `CmdRitual` adapter registry (`commands/ritual_adapters.py` — `CovenantInductionAdapter` + `BannerCallAdapter`) (#1346) — shipped)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -327,6 +327,45 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
     - `POST /ranks/reorder/` — bulk tier reorder.
     - `POST /ranks/{pk}/assign-member/` — assign a member to this rank.
     - `POST /ranks/{pk}/transfer-top/` — move the top rank to a member.
+
+- **Selectors** (`world.covenants.selectors`):
+  - `resolve_actor_membership(*, covenant, character_sheets, capability=None)` — first
+    active membership in `covenant` among `character_sheets` carrying `capability` (a rank
+    flag: `can_kick` or `can_manage_ranks`), or any active membership when `None`. Shared by
+    the covenant viewsets and the Actions (one copy, not two).
+  - `get_active_memberships(*, character_sheet)` — all active (`left_at IS NULL`) memberships
+    with `covenant`, `rank`, and `covenant_role` pre-fetched.
+
+- **Telnet Actions** (`actions/definitions/covenants.py`, #1346) — seven REGISTRY Actions,
+  all `target_type=SELF`, thin wrappers over `world.covenants.services`. `CovenantError`
+  subclasses surface as `ActionResult(success=False, message=exc.user_message)`:
+  | Class | Key |
+  |---|---|
+  | `EngageCovenantMembershipAction` | `engage_covenant_membership` |
+  | `DisengageCovenantMembershipAction` | `disengage_covenant_membership` |
+  | `LeaveCovenantAction` | `leave_covenant` |
+  | `KickCovenantMemberAction` | `kick_covenant_member` |
+  | `AssignCovenantRankAction` | `assign_covenant_rank` |
+  | `TransferTopRankAction` | `transfer_covenant_top_rank` |
+  | `StandDownBattleCovenantAction` | `stand_down_battle_covenant` |
+
+- **Telnet Command** (`commands/covenant.py`, #1346) — `CmdCovenant` (`covenant`) routes a
+  leading subverb to the Action above via `action.run()`. Namespaced to avoid bare-key
+  collisions (mirrors `CmdCombat`/`CmdDuel`). Bare `covenant`/`covenant list` renders the
+  caller's memberships.
+
+- **Ritual adapters** (`commands/ritual_adapters.py`, #1346) — per-ritual draft/join adapter
+  registry keyed on `ritual.service_function_path`. Adapters translate flat `key=value` tokens
+  from `CmdRitual._handle_draft`/`_handle_join` into typed `DraftParse`/`JoinParse` structures:
+  - `CovenantInductionAdapter` — `covenant=<name>` on draft → COVENANT session reference;
+    `role=<name>` on join → COVENANT_ROLE participant reference. Wired to
+    `"world.covenants.services.induct_member_via_session"`.
+  - `BannerCallAdapter` — `covenant=<name>` on draft → COVENANT session reference; no join
+    tokens. Wired to `"world.covenants.services.rise_battle_covenant_via_session"`.
+  - `SoulTetherAdapter` (pre-existing, moved here from inline CmdRitual) — `role=` /
+    `resonance=` / `writeup=`.
+  - `RitualDraftAdapter` (base no-op) — returned for unregistered rituals; preserves
+    prior behavior for plain SINGLE_ACTOR rituals.
 
 - **Tests** (`world/covenants/tests/`): exceptions, handler caching,
   models (incl. `Covenant` model + constraint + clean tests),
