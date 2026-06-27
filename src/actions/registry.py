@@ -62,6 +62,7 @@ from actions.definitions.gm_stories import (
     PromoteEpisodeAction,
     ResolveEpisodeAction,
 )
+from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -224,6 +225,8 @@ _ALL_ACTIONS: list[Action] = [
     CreateJournalEntryAction(),
     RespondToJournalAction(),
     EditJournalEntryAction(),
+    SetCharacterGoalsAction(),
+    LogGoalProgressAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     start_npc_interaction,

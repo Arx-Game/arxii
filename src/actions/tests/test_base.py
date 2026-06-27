@@ -247,6 +247,8 @@ class ActionRegistryTests(TestCase):
             "create_journal_entry",
             "respond_to_journal",
             "edit_journal_entry",
+            "set_character_goals",
+            "log_goal_progress",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
