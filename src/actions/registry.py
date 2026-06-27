@@ -150,6 +150,15 @@ from actions.definitions.rounds import (
     SetRoundModeAction,
     StartRoundAction,
 )
+from actions.definitions.sanctum import (
+    SanctumAbsorbAction,
+    SanctumDissolveAction,
+    SanctumHomecomingAction,
+    SanctumInstallAction,
+    SanctumPurgingAction,
+    SanctumSeverAction,
+    SanctumWeaveAction,
+)
 from actions.definitions.scene_reactions import (
     ReactToWindowAction,
     ToggleFavoriteAction,
@@ -308,6 +317,13 @@ _ALL_ACTIONS: list[Action] = [
     restore_sense,
     resolve_entry_flourish,
     treat_condition,
+    SanctumInstallAction(),
+    SanctumHomecomingAction(),
+    SanctumPurgingAction(),
+    SanctumWeaveAction(),
+    SanctumDissolveAction(),
+    SanctumAbsorbAction(),
+    SanctumSeverAction(),
 ]
 
 # Lookup by key
