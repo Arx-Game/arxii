@@ -4622,7 +4622,7 @@ export interface paths {
     /** @description ViewSet for managing event invitations. */
     get: operations['events_invitations_list'];
     put?: never;
-    /** @description Create an invitation for an event. */
+    /** @description Create an invitation via ``InviteToEventAction`` (ADR-0001 seam). */
     post: operations['events_invitations_create'];
     delete?: never;
     options?: never;
@@ -4642,6 +4642,30 @@ export interface paths {
     post?: never;
     /** @description ViewSet for managing event invitations. */
     delete: operations['events_invitations_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/invitations/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description An invitee RSVPs accept/decline to their own persona invitation.
+     *
+     *     The invitee (not the host) is the actor here; object-level "is this your
+     *     invitation" is enforced inside the Action (the persona must be the
+     *     invitation's ``target_persona``), so the permission class only checks
+     *     authentication.
+     */
+    post: operations['events_invitations_respond_create'];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -16682,6 +16706,9 @@ export interface components {
       target_society?: number | null;
       readonly target_name: string | null;
       can_bring_guests?: boolean;
+      readonly response: components['schemas']['ResponseEnum'];
+      /** Format: date-time */
+      readonly responded_at: string | null;
       /** Format: date-time */
       readonly invited_at: string;
     };
@@ -23431,6 +23458,13 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     * @enum {string}
+     */
+    ResponseEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -32289,6 +32323,32 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  events_invitations_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event invitation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventInvitationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventInvitation'];
+        };
       };
     };
   };

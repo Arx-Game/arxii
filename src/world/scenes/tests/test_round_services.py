@@ -155,6 +155,25 @@ class SceneRoundResolutionTests(TestCase):
             is_pass=True,
         )
 
+    def _downed_victim(
+        self, *, source_character=None, abandoned_since_round=None, initiative_order=0
+    ):
+        """A present participant carrying an active Bleeding Out condition (downed).
+
+        Returns (participant, bleed_out_instance). Pair with a patched ``can_act``
+        that returns False for this participant's sheet to make them truly "downed".
+        """
+        from world.conditions.factories import BleedingOutConditionFactory
+
+        participant = self._participant(present=True, initiative_order=initiative_order)
+        inst = ConditionInstanceFactory(
+            target=participant.character_sheet.character,
+            condition=BleedingOutConditionFactory(),
+            source_character=source_character,
+            abandoned_since_round=abandoned_since_round,
+        )
+        return participant, inst
+
     def test_not_complete_when_present_participant_undeclared(self):
         p1 = self._participant(present=True, initiative_order=0)
         self._participant(present=True, initiative_order=1)
@@ -312,6 +331,422 @@ class SceneRoundResolutionTests(TestCase):
         afk_dot.refresh_from_db()
         assert decl_dot.rounds_remaining == 2  # declarer's own condition ticked
         assert afk_dot.rounds_remaining == 3  # AFK (undeclared) own condition skipped
+
+    def test_downed_victim_held_and_marked_when_only_bystander_declares(self):
+        # A downed (unconscious) bleeding victim; the encounter that downed them is NOT
+        # acting this round — only an uninvolved bystander declares. The victim's
+        # bleed-out must NOT advance (excluded from the END tick) and must be marked
+        # abandoned for this round (#1479). tick_round_for_targets is patched so the
+        # selection logic is asserted without traversing the PG-only bleed-out path.
+        from evennia_extensions.factories import ObjectDBFactory
+
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        npc_source = ObjectDBFactory()  # off-screen attacker, not enrolled this round
+        victim_p, bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        bystander = self._participant(present=True, initiative_order=1)  # potential rescuer
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character not in ticked  # peril held, did not advance
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round == 1  # stamped with the resolved round_number
+
+    def test_downed_victim_advances_and_marker_cleared_when_source_declares(self):
+        # The hostile SOURCE that downed the victim declares this round — "the encounter
+        # that downed them is still acting." The victim's bleed-out advances (included in
+        # the END tick) and any prior abandonment marker is cleared (#1479).
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        source_p = self._participant(present=True, initiative_order=0)
+        victim_p, bleed = self._downed_victim(
+            source_character=source_p.character_sheet.character,
+            abandoned_since_round=5,  # stale marker from a prior abandoned round
+            initiative_order=1,
+        )
+        self._declare_pass(source_p)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character in ticked  # peril advances
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round is None  # cleared — hostile drove again
+
+    def _plummeting_participant(self, *, present: bool, initiative_order=0):
+        """A participant carrying an active Plummeting condition (a faller).
+
+        Returns (participant, plummeting_instance). Falling is environmental, so
+        there is no hostile ``source_character``.
+        """
+        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
+
+        participant = self._participant(present=present, initiative_order=initiative_order)
+        inst = ConditionInstanceFactory(
+            target=participant.character_sheet.character,
+            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+        )
+        return participant, inst
+
+    def test_unconscious_plummeting_victim_not_held_and_not_marked(self):
+        # #1479 plummet: an UNCONSCIOUS faller (not can_act) with only a bystander
+        # declaring is NOT a "downed victim" (PLUMMETING is excluded from the
+        # hold/abandonment classification). Their descent advances (they ARE ticked)
+        # and they are NEVER marked abandoned — gravity does not wait for a rescuer.
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+        faller_p, plummet = self._plummeting_participant(present=True, initiative_order=0)
+        bystander = self._participant(present=True, initiative_order=1)
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != faller_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+        ):
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert faller_p.character_sheet.character in ticked  # descent advances, not held
+        plummet.refresh_from_db()
+        assert plummet.abandoned_since_round is None  # never abandonment-marked
+
+    def test_conscious_plummeting_faller_ticks_despite_afk_skip(self):
+        # #1479 plummet: a present, conscious, UNDECLARED faller is normally AFK-skipped
+        # (#1480), but a falling character's descent must advance regardless of whether
+        # they acted this round. The plummeting faller IS ticked; a plain undeclared
+        # participant is NOT.
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.advance_quorum_pct = 60
+        self.rnd.save(update_fields=["mode", "advance_quorum_pct"])
+        decl = self._participant(present=True, initiative_order=0)
+        plain_afk = self._participant(present=True, initiative_order=1)  # never declares
+        faller_p, _plummet = self._plummeting_participant(present=True, initiative_order=2)
+        self._declare_pass(decl)
+
+        with mock.patch("world.scenes.round_services.tick_round_for_targets") as tick:
+            resolve_scene_round(self.rnd)
+
+        ticked = set(tick.call_args.args[0])
+        assert faller_p.character_sheet.character in ticked  # falling advances
+        assert plain_afk.character_sheet.character not in ticked  # ordinary AFK skipped
+
+    def test_held_bleedout_and_plummeting_plummet_advances_bleedout_held(self):
+        # A victim carrying BOTH a held Bleeding-Out AND a Plummeting condition.
+        # The bleed-out source is off-screen (does not declare this round), so the
+        # bleed-out is held. The plummet must STILL advance — gravity doesn't wait.
+        # tick_round_for_targets is patched: the victim must NOT appear (bleed-out held).
+        # advance_plummet is patched: the victim MUST appear (descent advances, #1479).
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
+
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+
+        npc_source = ObjectDBFactory()  # off-screen attacker, not enrolled this round
+        victim_p, bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        # Add a Plummeting condition to the same victim.
+        ConditionInstanceFactory(
+            target=victim_p.character_sheet.character,
+            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+        )
+        bystander = self._participant(present=True, initiative_order=1)
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+            mock.patch("world.areas.positioning.plummet.advance_plummet") as adv_plummet,
+        ):
+            resolve_scene_round(self.rnd)
+
+        # Bleed-out is held: victim excluded from the main END-tick.
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character not in ticked
+        # Abandonment marker is stamped (bleed-out still held).
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round == 1
+        # Plummet advances via the separate advance_plummet call.
+        adv_plummet.assert_called_once()
+        plummet_targets = list(adv_plummet.call_args.args[0])
+        assert victim_p.character_sheet.character in plummet_targets
+
+
+class SceneRoundAbandonmentTests(TestCase):
+    """Abandonment resolution (#1479 Task 8): N-beat grace window + solo-immediate.
+
+    An abandoned downed victim (held, marked) resolves through the
+    source-appropriate abandonment pool once they have waited
+    ``abandonment_grace_rounds`` beats; a departure that removes the last
+    potential rescuer resolves a still-downed victim immediately.
+    """
+
+    def setUp(self):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import BleedingOutConditionFactory, ConditionStageFactory
+        from world.scenes.models import get_scene_round_defaults_config
+        from world.traits.factories import CheckOutcomeFactory
+        from world.vitals.factories import create_abandonment_pools
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.rnd = SceneRoundFactory(
+            room=self.room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            mode=SceneRoundMode.STRICT,
+            start_reason=SceneRoundStartReason.OPT_IN,
+        )
+        self.check_type = CheckTypeFactory()
+        self.bleed_out = BleedingOutConditionFactory()
+        self.stage = ConditionStageFactory(
+            condition=self.bleed_out,
+            stage_order=1,
+            name="Dying",
+            resist_check_type=self.check_type,
+            resist_difficulty=40,
+            rounds_to_next=None,
+        )
+        create_abandonment_pools()
+        self.failure_outcome = CheckOutcomeFactory(name="Failure", success_level=-1)
+        cfg = get_scene_round_defaults_config()
+        cfg.abandonment_grace_rounds = 2
+        cfg.save(update_fields=["abandonment_grace_rounds"])
+
+    def _present(self, *, initiative_order=0):
+        sheet = CharacterSheetFactory()
+        sheet.character.db_location = self.room
+        sheet.character.save(update_fields=["db_location"])
+        return SceneRoundParticipantFactory(
+            scene_round=self.rnd, character_sheet=sheet, initiative_order=initiative_order
+        )
+
+    def _downed_victim(self, *, source_character, abandoned_since_round=None, initiative_order=0):
+        from world.vitals.constants import CharacterLifeState
+        from world.vitals.factories import CharacterVitalsFactory
+
+        p = self._present(initiative_order=initiative_order)
+        CharacterVitalsFactory(
+            character_sheet=p.character_sheet,
+            life_state=CharacterLifeState.ALIVE,
+            health=-5,
+            max_health=100,
+        )
+        inst = ConditionInstanceFactory(
+            target=p.character_sheet.character,
+            condition=self.bleed_out,
+            current_stage=self.stage,
+            source_character=source_character,
+            abandoned_since_round=abandoned_since_round,
+        )
+        return p, inst
+
+    def _declare_pass(self, participant):
+        return SceneActionDeclaration.objects.create(
+            scene_round=self.rnd,
+            round_number=self.rnd.round_number,
+            participant=participant,
+            is_pass=True,
+        )
+
+    def _set_round_number(self, n):
+        self.rnd.round_number = n
+        self.rnd.save(update_fields=["round_number"])
+
+    @staticmethod
+    def _fake_can_act_for(victim_p):
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        return fake_can_act
+
+    def test_abandoned_victim_resolves_after_grace(self):
+        # Held + marked at round 1; resolving round 3 → delta 2 >= grace 2 → fate resolves.
+        from evennia_extensions.factories import CharacterFactory
+
+        npc_source = CharacterFactory()  # off-screen NPC: not enrolled, never drives
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)  # potential rescuer present
+        self._set_round_number(3)
+        self._declare_pass(bystander)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        from world.vitals.constants import CharacterLifeState
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+    def test_abandoned_victim_below_grace_not_resolved(self):
+        from evennia_extensions.factories import CharacterFactory
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        self._set_round_number(2)  # delta 1 < grace 2 → not yet
+        self._declare_pass(bystander)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.ALIVE
+        from world.conditions.models import ConditionInstance
+
+        assert ConditionInstance.objects.filter(
+            target=victim_p.character_sheet.character, condition=self.bleed_out
+        ).exists()
+
+    def test_rescue_before_grace_no_resolution(self):
+        # The bleed-out is cleared before the grace window elapses → no roll, victim saved.
+        from evennia_extensions.factories import CharacterFactory
+        from world.conditions.services import remove_condition
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        self._set_round_number(3)  # grace would be met
+        self._declare_pass(bystander)
+
+        remove_condition(victim_p.character_sheet.character, self.bleed_out)  # rescue
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.ALIVE
+
+    def test_solo_last_rescuer_leaves_resolves_immediately(self):
+        from evennia_extensions.factories import CharacterFactory
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()  # off-screen
+        victim_p, _bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        rescuer = self._present(initiative_order=1)
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            self._force_failure(),
+        ):
+            # The last conscious other character leaves the room.
+            self.room.at_object_leave(rescuer.character_sheet.character, None)
+
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+    def test_abandonment_death_auto_ends_danger_round(self):
+        """Regression: abandonment death must clear the acute-peril condition so
+        _danger_persists returns False and the DANGER round auto-ends (COMPLETED)
+        instead of cycling forever with a dead victim still carrying bleed-out (#1479).
+
+        Before the fix, _resolve_peril_via_pool cleared the condition only on
+        SURVIVAL, leaving it on dead characters → _danger_persists True → the
+        DANGER round never auto-ended.
+        """
+        from evennia_extensions.factories import CharacterFactory
+        from world.conditions.models import ConditionInstance
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()  # NPC source permits death
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        # round_number=3, grace=2 → 3-1=2 >= 2 → abandonment fires this resolve.
+        self._set_round_number(3)
+        self._declare_pass(bystander)
+
+        # Change the round to DANGER so the auto-end logic fires.
+        self.rnd.start_reason = SceneRoundStartReason.DANGER
+        self.rnd.save(update_fields=["start_reason"])
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        # Victim died.
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+        # Critical regression assertion: the acute-peril condition must be cleared on
+        # death so _danger_persists returns False.
+        assert not ConditionInstance.objects.filter(
+            target=victim_p.character_sheet.character, condition=self.bleed_out
+        ).exists(), (
+            "Acute-peril condition must be cleared on death; "
+            "if it persists _danger_persists stays True and the DANGER round freezes"
+        )
+
+        # The DANGER round must auto-end (COMPLETED) because _danger_persists is False.
+        self.rnd.refresh_from_db()
+        assert self.rnd.status == RoundStatus.COMPLETED, (
+            f"DANGER round must auto-end after peril clears; got {self.rnd.status!r}"
+        )
+
+    def _force_failure(self):
+        from world.checks.test_helpers import force_check_outcome
+
+        return force_check_outcome(self.failure_outcome)
 
 
 class SceneRoundOutcomeBroadcastTests(TestCase):

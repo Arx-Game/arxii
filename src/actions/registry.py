@@ -44,6 +44,15 @@ from actions.definitions.endorsements import (
     SceneEntryEndorseAction,
     StylePresentationEndorseAction,
 )
+from actions.definitions.events import (
+    CancelEventAction,
+    CompleteEventAction,
+    CreateEventAction,
+    InviteToEventAction,
+    RespondInvitationAction,
+    ScheduleEventAction,
+    StartEventAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.gm_combat import (
@@ -62,6 +71,7 @@ from actions.definitions.gm_stories import (
     PromoteEpisodeAction,
     ResolveEpisodeAction,
 )
+from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -71,6 +81,11 @@ from actions.definitions.items import (
     TakeOutAction,
     UnequipAction,
     UseItemAction,
+)
+from actions.definitions.journals import (
+    CreateJournalEntryAction,
+    EditJournalEntryAction,
+    RespondToJournalAction,
 )
 from actions.definitions.locations import RoomEditAction
 from actions.definitions.movement import (
@@ -237,8 +252,20 @@ _ALL_ACTIONS: list[Action] = [
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    CreateJournalEntryAction(),
+    RespondToJournalAction(),
+    EditJournalEntryAction(),
+    SetCharacterGoalsAction(),
+    LogGoalProgressAction(),
     GiveWriteupKudosAction(),
     FileWriteupComplaintAction(),
+    CreateEventAction(),
+    ScheduleEventAction(),
+    StartEventAction(),
+    CompleteEventAction(),
+    CancelEventAction(),
+    InviteToEventAction(),
+    RespondInvitationAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),

@@ -7187,7 +7187,7 @@ paths:
           description: ''
     post:
       operationId: events_invitations_create
-      description: Create an invitation for an event.
+      description: Create an invitation via ``InviteToEventAction`` (ADR-0001 seam).
       tags:
       - events
       requestBody:
@@ -7223,6 +7223,40 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/events/invitations/{id}/respond/:
+    post:
+      operationId: events_invitations_respond_create
+      description: |-
+        An invitee RSVPs accept/decline to their own persona invitation.
+
+        The invitee (not the host) is the actor here; object-level "is this your
+        invitation" is enforced inside the Action (the persona must be the
+        invitation's ``target_persona``), so the permission class only checks
+        authentication.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this event invitation.
+        required: true
+      tags:
+      - events
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventInvitationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventInvitation'
+          description: ''
   /api/events/organizations/:
     get:
       operationId: events_organizations_list
@@ -29620,6 +29654,15 @@ components:
           readOnly: true
         can_bring_guests:
           type: boolean
+        response:
+          allOf:
+          - $ref: '#/components/schemas/ResponseEnum'
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         invited_at:
           type: string
           format: date-time
@@ -29627,6 +29670,8 @@ components:
       required:
       - id
       - invited_at
+      - responded_at
+      - response
       - target_name
       - target_type
     EventInvitationRequest:
@@ -42267,6 +42312,16 @@ components:
       - source_room_profile
       - source_scene_entry_endorsement
       - source_staff_account
+    ResponseEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
     Restriction:
       type: object
       description: Serializer for Restriction lookup records.

@@ -14,6 +14,11 @@ and advances the bleed-out when a present bystander declares.
 AFK-safety guarantees (Task 5):
 - An unconscious present victim must NOT deadlock the round (``can_act`` implicit-pass).
 - A lone AFK victim with no conscious bystander does NOT advance the peril.
+
+#1479 layering: a *downed* victim's peril advances on resolution only when a hostile
+party drove the round; otherwise it holds and the victim is marked abandoned. So an
+unconscious, abandoned victim resolves the round (no deadlock) but the danger round
+persists rather than auto-completing, because the held peril has not cleared.
 """
 
 from django.test import TestCase
@@ -148,10 +153,18 @@ class DangerRoundAfkSafetyTest(TestCase):
 
     def test_unconscious_present_victim_does_not_deadlock(self):
         """An unconscious *present* victim is an implicit pass (``can_act`` False), so a
-        conscious bystander's declaration alone drives resolution — no deadlock."""
+        conscious bystander's declaration alone drives resolution — no deadlock.
+
+        #1479: the unconscious victim is a *downed* victim. No hostile party drove this
+        round (the bleed-out has no acting source), so the peril HOLDS instead of
+        advancing and the victim is marked abandoned (a potential rescuer — the
+        bystander — is present). Resolution still fires (the round advances to the next
+        round rather than hanging), but the danger round does NOT auto-complete because
+        the held peril persists.
+        """
         victim = _char_in_room(self.room)
         bystander = _char_in_room(self.room)
-        _give_bleed_out(victim, rounds_remaining=1)
+        bleed = _give_bleed_out(victim, rounds_remaining=1)
         # Seed AWARENESS; an Unconscious condition zeroes it -> can_act(victim) is False.
         awareness = CapabilityTypeFactory(name=FoundationalCapability.AWARENESS, innate_baseline=1)
         unconscious_template = ConditionTemplateFactory(
@@ -165,14 +178,20 @@ class DangerRoundAfkSafetyTest(TestCase):
 
         rnd = ensure_round_for_acute_condition(victim)
         assert rnd is not None
+        resolved_round_number = rnd.round_number
 
         # Only the conscious bystander declares; the unconscious victim never will.
         _declare_pass(rnd, _participant(rnd, bystander))
         maybe_resolve_scene_round(rnd)
 
         rnd.refresh_from_db()
-        # Resolution happened despite the victim having no declaration -> auto-ended.
-        assert rnd.status == RoundStatus.COMPLETED
+        # No deadlock: resolution fired and the round advanced to the next round.
+        assert rnd.status == RoundStatus.DECLARING
+        assert rnd.round_number == resolved_round_number + 1
+        # #1479: the abandoned victim's peril held (did not advance) and was marked.
+        bleed.refresh_from_db()
+        assert bleed.rounds_remaining == 1
+        assert bleed.abandoned_since_round == resolved_round_number
 
 
 class CombatEndHandOffTest(TestCase):

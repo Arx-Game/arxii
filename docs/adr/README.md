@@ -101,3 +101,4 @@ treat those names as hints to confirm, not gospel.
 - [0046 — Power-tier breakthroughs gate at fixed path thresholds](0046-power-tier-breakthroughs-gate-at-fixed-thresholds.md)
 - [0047 — STRICT rounds resolve on a quorum; an AFK participant's own peril is skipped on the END tick](0047-quorum-resolution-for-strict-rounds-afk-own-peril-skip.md)
 - [0048 — Custom action resolvers for non-template consent actions](0048-custom-action-resolvers-for-non-template-consent-actions.md)
+- [0049 — Acute peril resolves through a guarded consequence pool, never unconditional death](0049-acute-peril-resolves-through-guarded-consequence-pool.md)

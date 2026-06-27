@@ -202,6 +202,13 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
+  `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
+  `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
+  blueprint, `setstage list` lists all blueprints by pk, `setstage <name|id>` instantiates one,
+  `setstage <name|id> replace` replaces the room's existing position grid. Thin `ArxCommand` over
+  `action.run()` (same seam as the web quick-action `_set_the_stage_actions`); staff-gated by
+  `StaffOnlyPrerequisite`. No business logic in the command.
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
   personas or switch the active one. Bare `persona`/`persona list` renders all the
   caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
@@ -239,6 +246,23 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
+  `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
+  [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same
+  registry Actions the web `JournalEntryViewSet` uses: `CreateJournalEntryAction`,
+  `RespondToJournalAction`, `EditJournalEntryAction`. Bare `journal` / `journal list` lists the
+  caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
+  token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
+  collisions.
+- **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
+  routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` (shares the
+  same weekly revision limit as `set`) / `set domain=<id>:points=<n>[,...]` / `log
+  [domain=<id|name>] title=<text> content=<text> [public]`) to the same registry Actions the
+  web `CharacterGoalViewSet` / `GoalJournalViewSet` use: `SetCharacterGoalsAction` and
+  `LogGoalProgressAction`. Bare `goal` / `goal list` shows current point allocations and points
+  remaining. Domains resolve by id or name (iexact); `title`/`content`/`notes` are free text
+  (values run to the next `key=` or the bare `public` flag); `public` is a bare flag. Namespaced
+  to avoid top-level key collisions.
 - **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene`
   (`randomscene`, alias `rscene`) / `CmdPathIntent` (`pathintent`) (#1348) — telnet faces of the
   7 progression-reward Actions. `kudos [claim <category_id> <amount>]` dispatches
@@ -259,6 +283,20 @@ actions, backends, and service functions.
   free text (values run to the next `key=`); an active scene in the caller's current room is
   linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
   regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
+- **`events.py`**: `CmdEvent` (`event`, alias `events`, #1499) — the event lifecycle + invitee RSVP
+  namespace. One `ArxCommand` routes a leading subverb and runs the matching event Action via
+  `action.run()` directly — the same seam the web `EventViewSet` / `EventInvitationViewSet` use.
+  `event create name=<text> room=<name|id> when=<datetime> [desc=…] [public=…] [phase=…]` →
+  `CreateEventAction` (acts as the caller's active persona); `event schedule/start/complete/cancel
+  <id>` → the host-lifecycle Actions (account-authorized — staff and scene GMs can manage an event
+  with no character, so they pass `actor=None, account=<caller.account>`); `event invite <id>
+  persona=|org=|society=<name|id> [by=<persona>]` → `InviteToEventAction`; `event rsvp <id>
+  accept|decline` → `RespondInvitationAction` (the invitee acts as their own active persona; only a
+  persona-targeted invitation addressed to them may be RSVP'd). Bare `event` / `event list` shows the
+  caller's visible events; `event show <id>` renders one in detail (telnet-only — the web gets
+  list/detail implicitly from `EventViewSet`). `when=` accepts ISO 8601 or `YYYY-MM-DD HH:MM`
+  (room/when/name/desc values may contain spaces — they run to the next `key=`). No consent gate
+  (ADR-0024 — events are calendaring; an invitation does not compel behavior).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
