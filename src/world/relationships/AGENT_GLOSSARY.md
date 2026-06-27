@@ -27,3 +27,11 @@ _Avoid_: conflating the two; "edit", "change" (Change is its own model that redi
 **RelationshipCapstone**:
 A monumental, never-gated moment that adds both permanent points and capacity at once; the anchor that future magical-tether power is built around.
 _Avoid_: milestone, climax, peak event.
+
+**WriteupKudos** (writeup commendation):
+A one-way, non-revocable commendation that the subject of a SHARED/PUBLIC writeup gives to its author; awards the author a small kudos grant via the existing progression kudos path. One commendation per (subject account, writeup). Only the subject may commend; the author cannot commend their own writeup.
+_Avoid_: like, upvote, endorsement, approval.
+
+**WriteupComplaint**:
+A bad-faith-RP flag that any viewer of a SHARED/PUBLIC writeup files for staff triage. The model carries a free-text reason and a `resolved` staff flag. Zero player-facing signal — complainants do not learn the outcome and the flag is never shown to the writeup author.
+_Avoid_: report, abuse report, flag (when used without qualification — "WriteupComplaint" is the canonical term).

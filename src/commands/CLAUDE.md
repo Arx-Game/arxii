@@ -85,7 +85,7 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]] [fury=<tier> anchor=<name>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
@@ -100,6 +100,15 @@ actions, backends, and service functions.
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).
+
+    **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
+    names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
+    rage answers to (resolved to a `CharacterSheet` by character key). They inject
+    `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
+    forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them (control
+    penalty + intensity bonus, Berserk on lost control). A soulfray-risky cast is asked at
+    declaration via the `accept soulfray` / `decline soulfray` offer flow (decline = free
+    re-declare); no special cast syntax triggers it.
 
     **Target resolution** (`at <name>`) branches on context and on the technique's authored
     `derive_target_relationship`:
@@ -172,6 +181,15 @@ actions, backends, and service functions.
   approach — no `approach=` token). Instances are participant-scoped (a non-participant gets the
   same "not part of that mission" message whether or not the id exists). Namespaced subverbs to
   avoid bare-key collisions. No business logic in the command.
+- **`react.py`**: `CmdReact` (`react`, #1341) — the reaction/favorite namespace. One command routes
+  a leading subverb: `react favorite <char> #N` → `ToggleFavoriteAction`;
+  `react emoji <char> #N <emoji>` → `ToggleReactionAction`; `react <kind> <char> #N [<choice>]`
+  (the subverb IS the kind: `react kudos <char> #1`, `react entrance <char> #1 <resonance>`) →
+  `ReactToWindowAction`; bare `react` lists open reactable events in the current scene. Pose
+  targeting reuses `get_endorseable_poses_in_scene` (`<char> #N`, the same scheme as `endorse`);
+  the active scene derives from the caller's room via `_get_active_scene`. The entrance resonance
+  name is resolved to `str(pk)` here (mirrors `CmdEndorse._resolve_resonance`) — the Action stays a
+  thin slug-taking wrapper. Shared by telnet + the web viewsets; no business logic in the command.
 - **`gemit.py`**: `CmdGemit` (`gemit`, staff-only `perm(Admin)`, #1450) — the *push* face of the
   public-reaction center. Thin over `world.narrative.services.broadcast_gemit` (the same service the
   web gemit endpoint calls). Broadcasts a **hand-authored, verbatim** message (colour codes and all)

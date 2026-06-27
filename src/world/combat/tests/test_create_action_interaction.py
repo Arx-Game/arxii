@@ -18,7 +18,7 @@ from world.combat.interaction_services import (
     render_clash_contribution_label,
 )
 from world.combat.models import ClashContribution
-from world.magic.factories import TechniqueFactory
+from world.magic.factories import FuryTierFactory, TechniqueFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory
 
@@ -146,3 +146,47 @@ class CreateActionInteractionLegacyTests(TestCase):
             summary_label="Cast",
         )
         self.assertIsNone(result)
+
+
+class CreateActionInteractionFuryAuditTests(TestCase):
+    """create_action_interaction forwards fury_committed to the Interaction row."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.scene = SceneFactory()
+        self.encounter = CombatEncounterFactory(scene=self.scene)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+
+    def test_fury_committed_recorded_on_interaction(self) -> None:
+        """fury_committed is stored on the resulting Interaction.fury_committed FK."""
+        fury_tier = FuryTierFactory()
+
+        interaction = create_action_interaction(
+            participant=self.participant,
+            round_number=1,
+            summary_label="Fury Strike",
+            fury_committed=fury_tier,
+        )
+
+        self.assertIsNotNone(interaction)
+        interaction.refresh_from_db()
+        self.assertEqual(
+            interaction.fury_committed_id,
+            fury_tier.pk,
+            "Interaction.fury_committed must be the passed FuryTier.",
+        )
+
+    def test_fury_committed_none_by_default(self) -> None:
+        """fury_committed defaults to None — existing callers unaffected."""
+        interaction = create_action_interaction(
+            participant=self.participant,
+            round_number=1,
+            summary_label="Normal Strike",
+        )
+
+        self.assertIsNotNone(interaction)
+        interaction.refresh_from_db()
+        self.assertIsNone(
+            interaction.fury_committed_id,
+            "Interaction.fury_committed must be None when not passed.",
+        )

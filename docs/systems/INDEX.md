@@ -1318,7 +1318,9 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE),
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE; plus the
+  player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
+  `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
 - **Key Services (`world/combat/services.py`):**
@@ -1368,30 +1370,45 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/combat-conditions.md`
 
 ### Relationships
-Track-based character-to-character regard, conditions, and situational modifier gating.
+Track-based character-to-character regard, conditions, situational modifier gating, and
+writeup kudos/complaint feedback.
 
 - **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
   `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
-  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429)
+  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429);
+  **writeup feedback (#1537):** `WriteupKudos` (subject's non-revocable commendation;
+  awards kudos to the author), `WriteupComplaint` (bad-faith-RP flag for staff triage;
+  `resolved` bool; zero player signal)
 - **Key Fields:** `CharacterRelationship.affection` (signed sum), track
   `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
 - **Services:** `create_first_impression`, `create_development`, `create_capstone`,
-  `redistribute_points` (`services.py`) — the four positive relationship-building verbs
-- **Player surface (#1485):** all four verbs are reachable from both web and
-  telnet — the web `RelationshipUpdateViewSet` POST endpoints (`first_impression` /
-  `develop` / `capstone` / `redistribute`) and the telnet `relationship <subverb>`
-  namespace both dispatch the Actions in `actions/definitions/relationships.py` via
-  `action.run()` (the shared seam). Telnet adds `relationship list` / `relationship
-  show <name|#>` read surfaces (the web provides these implicitly via
-  `CharacterRelationshipViewSet`). No consent gate — these describe the caller's
-  regard, they do not compel the target's behavior (ADR-0024); kudos/complaint
-  feedback for shared/public writeups is a follow-up (#1328).
+  `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `give_writeup_kudos(*, giver_account, writeup)` — commend a writeup, awards kudos to
+  author (warn-skips when `"relationship_writeup"` `KudosSourceCategory` not seeded);
+  `file_writeup_complaint(*, complainant_account, writeup, reason)` — file a bad-faith-RP
+  complaint for staff triage
+- **Exceptions:** `WriteupFeedbackError` base + `WriteupNotSharedError`,
+  `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`,
+  `WriteupNotVisibleError` — each with `user_message` for 400 API responses
+- **Player surface (#1485, #1537):** all four verbs plus kudos/complaint are reachable
+  from both web and telnet — the web `RelationshipUpdateViewSet` POST endpoints
+  (`first_impression` / `develop` / `capstone` / `redistribute` / `kudos` / `complaint`)
+  and the telnet `relationship <subverb>` namespace both dispatch the Actions via
+  `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
+  on every writeup row. No consent gate — these describe the caller's regard, they do not
+  compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
+  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+- **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
+- **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
+  `FileWriteupComplaintAction` (key `"file_writeup_complaint"`)
+  (`actions/definitions/relationships.py`)
 - **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
-  scenes (optional `linked_scene` defaults to the caller's active scene), progression (XP)
+  scenes (optional `linked_scene` defaults to the caller's active scene), progression
+  (XP + `award_kudos`)
 - **Source:** `src/world/relationships/`
 
 ---
@@ -1404,7 +1421,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
