@@ -387,11 +387,45 @@ transactions = award_scene_development_points(scene, participants, awards)
 }
 ```
 
+### Path Intent (`services.path_intent` — #1348)
+
+```python
+from world.progression.services.path_intent import set_path_intent, clear_path_intent
+
+# Declare or replace the character's intended next path (re-declaring overwrites).
+intent = set_path_intent(sheet, path)   # -> PathIntent
+
+# Clear the declared intent (idempotent — no error if absent).
+clear_path_intent(sheet)
+```
+
+These are the single mutation seam shared by the web `PathIntentViewSet` (`PUT` / `DELETE`) and
+the telnet `CmdPathIntent` via `SetPathIntentAction` / `ClearPathIntentAction`.
+
+---
+
+## Actions (#1348)
+
+Seven REGISTRY, `target_type=SELF` actions in `actions/definitions/progression_rewards.py`
+close the ADR-0001 "web bypasses actions" gap — web views and telnet commands now converge
+on the same `action.run()` seam:
+
+| Action key | Class | Wraps |
+|---|---|---|
+| `claim_kudos` | `ClaimKudosAction` | `claim_kudos_for_xp` |
+| `cast_vote` | `CastVoteAction` | `services.voting.cast_vote` |
+| `remove_vote` | `RemoveVoteAction` | `services.voting.remove_vote` |
+| `claim_random_scene` | `ClaimRandomSceneAction` | `services.random_scene.claim_random_scene` |
+| `reroll_random_scene` | `RerollRandomSceneAction` | `services.random_scene.reroll_random_scene_target` |
+| `set_path_intent` | `SetPathIntentAction` | `services.path_intent.set_path_intent` |
+| `clear_path_intent` | `ClearPathIntentAction` | `services.path_intent.clear_path_intent` |
+
 ---
 
 ## Telnet Commands
 
-Defined in `commands/progression.py`; both are namespaced subverb commands to avoid
+Defined in `commands/progression.py` (training/unlock) and `commands/progression_rewards.py`
+(#1348, kudos/vote/random-scene/path-intent); all use namespaced subverb commands to avoid
 one-word key collisions.
 
 ### `training` — Manage weekly skill-training allocations
@@ -419,6 +453,51 @@ progression unlock thread=<id> level=<n>
 `progression unlocks` reads the same service functions as `GET /api/progression/unlocks/`.
 `progression unlock` dispatches `PurchaseUnlockAction`
 (`registry_key="purchase_unlock"`).
+
+### `kudos` — Claim kudos for XP (#1348)
+
+```
+kudos                          — show kudos balance and claim categories
+kudos claim <category_id> <n> — claim <n> kudos via category for XP
+```
+
+Dispatches `ClaimKudosAction` (`registry_key="claim_kudos"`); mirrors the web
+`ClaimKudosView`.
+
+### `vote` — Cast weekly votes on other players' content (#1348)
+
+```
+vote                               — list current votes and remaining budget
+vote <interaction|participation|journal> <id>   — cast a vote
+vote remove <interaction|participation|journal> <id>   — remove a vote
+```
+
+Dispatches `CastVoteAction` / `RemoveVoteAction` (`registry_key="cast_vote"` /
+`"remove_vote"`); mirrors the web `VoteViewSet`.
+
+### `randomscene` / `rscene` — Weekly random-scene bounties (#1348)
+
+```
+randomscene                — list weekly targets
+randomscene claim <id>     — claim a target (must share a scene with them)
+randomscene reroll <id>    — reroll a target slot (once per week)
+```
+
+Dispatches `ClaimRandomSceneAction` / `RerollRandomSceneAction`
+(`registry_key="claim_random_scene"` / `"reroll_random_scene"`); mirrors the web
+`RandomSceneViewSet`.
+
+### `pathintent` — Declare preferred next path for Audere Majora (#1348)
+
+```
+pathintent              — show current path and available next-path options
+pathintent <path_id>    — declare your intended next path
+pathintent clear        — clear the declared intent
+```
+
+Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
+(`registry_key="set_path_intent"` / `"clear_path_intent"`); mirrors the web
+`PathIntentViewSet` (`PUT` / `DELETE`).
 
 ---
 

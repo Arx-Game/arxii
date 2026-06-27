@@ -103,6 +103,13 @@ The central spine connecting every system in the game. Characters develop throug
 - Random Scene bounties: 5 weekly targets (strangers + relationships), auto-validated claims
   (5+5 XP, first-time bonus +10), one reroll per week, weekly cron generation
 - Scene completion → vote budget: participants get +1 bonus vote when a scene finishes
+- **Telnet surface for progression rewards (#1348) — BUILT.** Seven REGISTRY / `target_type=SELF`
+  Actions in `actions/definitions/progression_rewards.py` + four telnet commands
+  (`kudos`, `vote`, `randomscene`/`rscene`, `pathintent`) in `commands/progression_rewards.py`
+  now share the same `action.run()` seam as the web views; closes the ADR-0001 "web bypasses
+  actions" gap for kudos-claim, vote, random-scene, and path-intent capabilities. New service
+  module: `world.progression.services.path_intent` (`set_path_intent` / `clear_path_intent`);
+  `get_author_account_for_target` promoted from views to `world.progression.services.voting`.
 
 **Done (fatigue/effort system):**
 - 12 stats in 4 categories: Physical (str/agi/sta), Social (cha/pre/com), Mental (int/wit/stb), Meta (lck/per/wil)

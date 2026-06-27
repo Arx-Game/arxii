@@ -210,6 +210,18 @@ class ClaimRandomSceneTests(RandomSceneViewTestCase):
         response = self.client.post(f"/api/progression/random-scenes/{self.target.pk}/claim/")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_claim_no_active_character_returns_400(self) -> None:
+        """Returns 400 when the account has no active roster character."""
+        no_char_user = AccountDB.objects.create_user(
+            username="no_char_rs_claim",
+            email="no_char_rs_claim@test.com",
+            password="testpass123",
+        )
+        self.client.force_authenticate(user=no_char_user)
+        response = self.client.post(f"/api/progression/random-scenes/{self.target.pk}/claim/")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "No active character to act as."
+
 
 class RerollRandomSceneTests(RandomSceneViewTestCase):
     """Tests for POST /api/progression/random-scenes/<id>/reroll/."""

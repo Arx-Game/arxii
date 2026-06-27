@@ -99,6 +99,15 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.progression_rewards import (
+    CastVoteAction,
+    ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
+    RemoveVoteAction,
+    RerollRandomSceneAction,
+    SetPathIntentAction,
+)
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -230,6 +239,13 @@ _ALL_ACTIONS: list[Action] = [
     FileWriteupComplaintAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
+    ClaimKudosAction(),
+    CastVoteAction(),
+    RemoveVoteAction(),
+    ClaimRandomSceneAction(),
+    RerollRandomSceneAction(),
+    SetPathIntentAction(),
+    ClearPathIntentAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

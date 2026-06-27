@@ -12,6 +12,8 @@ from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.voting import cast_vote
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.roster.models import RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -19,6 +21,7 @@ def _flush_caches() -> None:
     """Flush SharedMemoryModel caches for voting models."""
     WeeklyVote.flush_instance_cache()
     WeeklyVoteBudget.flush_instance_cache()
+    RosterEntry.flush_instance_cache()
 
 
 class VoteViewTestCase(TestCase):
@@ -37,6 +40,10 @@ class VoteViewTestCase(TestCase):
             scene=cls.scene,
             account=cls.author,
         )
+        # Views now dispatch through CastVoteAction / RemoveVoteAction which require
+        # an actor; create a roster entry so _actor_for_account(cls.voter) resolves.
+        pd = PlayerDataFactory(account=cls.voter)
+        RosterTenureFactory(player_data=pd)
 
     def setUp(self) -> None:
         self.client = APIClient()
@@ -122,8 +129,8 @@ class CastVoteViewTests(VoteViewTestCase):
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_cast_vote_nonexistent_target_returns_404(self) -> None:
-        """Non-existent target_id returns 404."""
+    def test_cast_vote_nonexistent_target_returns_400(self) -> None:
+        """Non-existent target_id returns 400 (author resolution fails in CastVoteAction)."""
         response = self.client.post(
             "/api/progression/votes/",
             {
@@ -132,7 +139,7 @@ class CastVoteViewTests(VoteViewTestCase):
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_cast_vote_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are denied."""
@@ -146,6 +153,25 @@ class CastVoteViewTests(VoteViewTestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_cast_vote_no_active_character_returns_400(self) -> None:
+        """Returns 400 when the account has no active roster character."""
+        no_char_user = AccountDB.objects.create_user(
+            username="no_char_voter",
+            email="no_char_voter@test.com",
+            password="testpass123",
+        )
+        self.client.force_authenticate(user=no_char_user)
+        response = self.client.post(
+            "/api/progression/votes/",
+            {
+                "target_type": VoteTargetType.SCENE_PARTICIPATION,
+                "target_id": self.participation.pk,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "No active character to act as."
 
 
 class UnvoteViewTests(VoteViewTestCase):

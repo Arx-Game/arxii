@@ -247,6 +247,13 @@ class ActionRegistryTests(TestCase):
             "create_development",
             "create_capstone",
             "redistribute_points",
+            "claim_kudos",
+            "cast_vote",
+            "remove_vote",
+            "claim_random_scene",
+            "reroll_random_scene",
+            "set_path_intent",
+            "clear_path_intent",
             "give_writeup_kudos",
             "file_writeup_complaint",
         }
