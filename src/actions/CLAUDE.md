@@ -68,7 +68,20 @@ They do not use the command system, dispatchers, or handlers.
   `world.relationships.services` counterpart; `linked_scene` defaults to the caller's active scene
   when the target is co-located. Shared `BaseRelationshipAction` + `HasCharacterSheetPrerequisite`.
   Shared by telnet `CmdRelationship` (`relationship <subverb>`) and the web
-  `RelationshipUpdateViewSet`; no consent gate (ADR-0024).)
+  `RelationshipUpdateViewSet`; no consent gate (ADR-0024);
+  `progression_rewards.py` (#1348) — the 7 progression-reward verbs, all REGISTRY backend,
+  `target_type=SELF`: `ClaimKudosAction` (key `"claim_kudos"`; wraps `claim_kudos_for_xp`),
+  `CastVoteAction` / `RemoveVoteAction` (keys `"cast_vote"` / `"remove_vote"`; wrap
+  `cast_vote` / `remove_vote` in `services.voting`),
+  `ClaimRandomSceneAction` / `RerollRandomSceneAction` (keys `"claim_random_scene"` /
+  `"reroll_random_scene"`; wrap `claim_random_scene` / `reroll_random_scene_target` in
+  `services.random_scene`), `SetPathIntentAction` / `ClearPathIntentAction` (keys
+  `"set_path_intent"` / `"clear_path_intent"`; wrap `set_path_intent` / `clear_path_intent`
+  in the new `world.progression.services.path_intent` module). Shared by telnet
+  `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene` (`randomscene`, alias `rscene`) /
+  `CmdPathIntent` (`pathintent`) and the web `ClaimKudosView` / `VoteViewSet` /
+  `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses actions" gap
+  for these reward capabilities.)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 

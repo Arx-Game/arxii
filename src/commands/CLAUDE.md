@@ -208,6 +208,15 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene`
+  (`randomscene`, alias `rscene`) / `CmdPathIntent` (`pathintent`) (#1348) — telnet faces of the
+  7 progression-reward Actions. `kudos [claim <category_id> <amount>]` dispatches
+  `ClaimKudosAction`. `vote [remove] <interaction|participation|journal> <id>` dispatches
+  `CastVoteAction` / `RemoveVoteAction`. `randomscene [claim|reroll] <id>` dispatches
+  `ClaimRandomSceneAction` / `RerollRandomSceneAction`. `pathintent [<path_id>|clear]` dispatches
+  `SetPathIntentAction` / `ClearPathIntentAction`. All are thin REGISTRY `ArxCommand` subclasses;
+  no business logic — behavior lives in `actions/definitions/progression_rewards.py` and
+  `world/progression/services/`.
 - **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
   namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
   `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
