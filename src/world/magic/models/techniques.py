@@ -442,20 +442,13 @@ class Technique(SharedMemoryModel):
         return self.condition_applications.filter(condition__is_clash_lock=True).exists()
 
 
-class TechniqueCapabilityGrant(SharedMemoryModel):
-    """
-    A Capability granted by a Technique, with value derived from intensity.
+class AbstractCapabilityGrant(SharedMemoryModel):
+    """Abstract base holding the shared data columns for capability-grant payload rows.
 
-    effective_value = base_value + (intensity_multiplier * technique.intensity)
-
-    A single Technique typically grants 2-4 Capabilities.
+    Concrete subclasses (TechniqueCapabilityGrant and the forthcoming TechniqueDraftCapabilityGrant)
+    each add their own owner FK, prerequisite FK, and any UniqueConstraints.
     """
 
-    technique = models.ForeignKey(
-        Technique,
-        on_delete=models.CASCADE,
-        related_name="capability_grants",
-    )
     capability = models.ForeignKey(
         "conditions.CapabilityType",
         on_delete=models.CASCADE,
@@ -470,6 +463,123 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
         decimal_places=2,
         default=0,
         help_text="Multiplied by the Technique's current intensity.",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class AbstractAppliedCondition(SharedMemoryModel):
+    """Abstract base holding the shared data columns for applied-condition payload rows.
+
+    Concrete subclasses add their own owner FK, UniqueConstraints, and compute methods.
+    """
+
+    condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="applied_by_techniques",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ENEMY,
+    )
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum success level required to apply this condition.",
+    )
+
+    base_severity = models.PositiveIntegerField(
+        default=1,
+        help_text="Flat base severity applied when the condition triggers.",
+    )
+    severity_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by effective_power and added to severity.",
+    )
+    severity_per_extra_sl = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra severity added per success level above the minimum.",
+    )
+
+    base_duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Base duration in rounds. When null, falls back to condition.default_duration_value."
+        ),
+    )
+    duration_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by effective_power and added to duration.",
+    )
+    duration_per_extra_sl = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra duration rounds added per success level above the minimum.",
+    )
+
+    stack_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Number of condition stacks applied when triggered.",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class AbstractDamageProfile(SharedMemoryModel):
+    """Abstract base holding the shared data columns for damage-profile payload rows.
+
+    Concrete subclasses add their own owner FK, UniqueConstraints, and compute methods.
+    """
+
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="technique_damage_profiles",
+        help_text="Damage type for resistance lookup. Null = untyped damage.",
+    )
+    minimum_success_level = models.PositiveIntegerField(default=1)
+
+    base_damage = models.PositiveIntegerField(default=0)
+    damage_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+    )
+    damage_per_extra_sl = models.PositiveIntegerField(default=0)
+    uses_equipped_weapon = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, the wielder's equipped-weapon effective damage is added "
+            "to this profile's budget and its damage_type fills in when null."
+        ),
+    )
+
+    class Meta:
+        abstract = True
+
+
+class TechniqueCapabilityGrant(AbstractCapabilityGrant):
+    """
+    A Capability granted by a Technique, with value derived from intensity.
+
+    effective_value = base_value + (intensity_multiplier * technique.intensity)
+
+    A single Technique typically grants 2-4 Capabilities.
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
     )
     prerequisite = models.ForeignKey(
         "mechanics.Prerequisite",
@@ -614,7 +724,7 @@ def _scale_by_power_and_sl(  # noqa: PLR0913
     return base + power_contribution + per_extra_sl * sl_above
 
 
-class TechniqueAppliedCondition(SharedMemoryModel):
+class TechniqueAppliedCondition(AbstractAppliedCondition):
     """Authored row binding a Technique to a ConditionTemplate with formula-based
     severity / duration scaling. One Technique may have many of these.
 
@@ -632,58 +742,6 @@ class TechniqueAppliedCondition(SharedMemoryModel):
         Technique,
         on_delete=models.CASCADE,
         related_name="condition_applications",
-    )
-    condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
-        on_delete=models.PROTECT,
-        related_name="applied_by_techniques",
-    )
-    target_kind = models.CharField(
-        max_length=16,
-        choices=ConditionTargetKind.choices,
-        default=ConditionTargetKind.ENEMY,
-    )
-    minimum_success_level = models.PositiveIntegerField(
-        default=1,
-        help_text="Minimum success level required to apply this condition.",
-    )
-
-    base_severity = models.PositiveIntegerField(
-        default=1,
-        help_text="Flat base severity applied when the condition triggers.",
-    )
-    severity_intensity_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal(0),
-        help_text="Multiplied by effective_power and added to severity.",
-    )
-    severity_per_extra_sl = models.PositiveIntegerField(
-        default=0,
-        help_text="Extra severity added per success level above the minimum.",
-    )
-
-    base_duration_rounds = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Base duration in rounds. When null, falls back to condition.default_duration_value."
-        ),
-    )
-    duration_intensity_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal(0),
-        help_text="Multiplied by effective_power and added to duration.",
-    )
-    duration_per_extra_sl = models.PositiveIntegerField(
-        default=0,
-        help_text="Extra duration rounds added per success level above the minimum.",
-    )
-
-    stack_count = models.PositiveIntegerField(
-        default=1,
-        help_text="Number of condition stacks applied when triggered.",
     )
 
     class Meta:
@@ -735,7 +793,7 @@ class TechniqueAppliedCondition(SharedMemoryModel):
         )
 
 
-class TechniqueDamageProfile(SharedMemoryModel):
+class TechniqueDamageProfile(AbstractDamageProfile):
     """One damage component a technique deals when used in combat.
 
     A technique can have multiple rows for multi-component damage
@@ -748,30 +806,6 @@ class TechniqueDamageProfile(SharedMemoryModel):
         Technique,
         on_delete=models.CASCADE,
         related_name="damage_profiles",
-    )
-    damage_type = models.ForeignKey(
-        "conditions.DamageType",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="technique_damage_profiles",
-        help_text="Damage type for resistance lookup. Null = untyped damage.",
-    )
-    minimum_success_level = models.PositiveIntegerField(default=1)
-
-    base_damage = models.PositiveIntegerField(default=0)
-    damage_intensity_multiplier = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=Decimal(0),
-    )
-    damage_per_extra_sl = models.PositiveIntegerField(default=0)
-    uses_equipped_weapon = models.BooleanField(
-        default=False,
-        help_text=(
-            "When True, the wielder's equipped-weapon effective damage is added "
-            "to this profile's budget and its damage_type fills in when null."
-        ),
     )
 
     class Meta:
