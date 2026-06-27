@@ -244,6 +244,9 @@ class ActionRegistryTests(TestCase):
             "create_development",
             "create_capstone",
             "redistribute_points",
+            "create_journal_entry",
+            "respond_to_journal",
+            "edit_journal_entry",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -72,6 +72,11 @@ from actions.definitions.items import (
     UnequipAction,
     UseItemAction,
 )
+from actions.definitions.journals import (
+    CreateJournalEntryAction,
+    EditJournalEntryAction,
+    RespondToJournalAction,
+)
 from actions.definitions.locations import RoomEditAction
 from actions.definitions.movement import (
     DropAction,
@@ -216,6 +221,9 @@ _ALL_ACTIONS: list[Action] = [
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    CreateJournalEntryAction(),
+    RespondToJournalAction(),
+    EditJournalEntryAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     start_npc_interaction,
