@@ -39,6 +39,12 @@ def _seed_consent() -> None:
     seed_social_consent_categories()
 
 
+def _seed_character_creation() -> None:
+    from world.seeds.character_creation import seed_character_creation_dev  # noqa: PLC0415
+
+    seed_character_creation_dev()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -49,15 +55,31 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "combat": _seed_combat,
     # Consent: seeds default SocialConsentCategory rows; tags ActionTemplates if present.
     "consent": _seed_consent,
+    # Character-creation "world" content (Realm/StartingArea/Beginnings/Species/
+    # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
+    # finalize_character picks the magic-seeded cantrip + resonance. (#1333)
+    "character_creation": _seed_character_creation,
 }
 
 
 def seeded_models() -> list[type[Model]]:
     """Representative content models per cluster for row-count progress tracking."""
+    from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
 
-    return [Affinity, Resonance, ItemTemplate, CheckType, ResultChart, SocialConsentCategory]
+    return [
+        Affinity,
+        Resonance,
+        ItemTemplate,
+        CheckType,
+        ResultChart,
+        SocialConsentCategory,
+        StartingArea,
+        Beginnings,
+        Species,
+    ]
