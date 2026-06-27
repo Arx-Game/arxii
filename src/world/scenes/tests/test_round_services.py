@@ -449,6 +449,49 @@ class SceneRoundResolutionTests(TestCase):
         assert faller_p.character_sheet.character in ticked  # falling advances
         assert plain_afk.character_sheet.character not in ticked  # ordinary AFK skipped
 
+    def test_held_bleedout_and_plummeting_plummet_advances_bleedout_held(self):
+        # A victim carrying BOTH a held Bleeding-Out AND a Plummeting condition.
+        # The bleed-out source is off-screen (does not declare this round), so the
+        # bleed-out is held. The plummet must STILL advance — gravity doesn't wait.
+        # tick_round_for_targets is patched: the victim must NOT appear (bleed-out held).
+        # advance_plummet is patched: the victim MUST appear (descent advances, #1479).
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME
+
+        self.rnd.mode = SceneRoundMode.STRICT
+        self.rnd.save(update_fields=["mode"])
+
+        npc_source = ObjectDBFactory()  # off-screen attacker, not enrolled this round
+        victim_p, bleed = self._downed_victim(source_character=npc_source, initiative_order=0)
+        # Add a Plummeting condition to the same victim.
+        ConditionInstanceFactory(
+            target=victim_p.character_sheet.character,
+            condition=ConditionTemplateFactory(name=PLUMMETING_CONDITION_NAME),
+        )
+        bystander = self._participant(present=True, initiative_order=1)
+        self._declare_pass(bystander)
+
+        def fake_can_act(sheet):
+            return sheet is None or sheet.character_id != victim_p.character_sheet.character_id
+
+        with (
+            mock.patch("world.vitals.services.can_act", side_effect=fake_can_act),
+            mock.patch("world.scenes.round_services.tick_round_for_targets") as tick,
+            mock.patch("world.areas.positioning.plummet.advance_plummet") as adv_plummet,
+        ):
+            resolve_scene_round(self.rnd)
+
+        # Bleed-out is held: victim excluded from the main END-tick.
+        ticked = set(tick.call_args.args[0])
+        assert victim_p.character_sheet.character not in ticked
+        # Abandonment marker is stamped (bleed-out still held).
+        bleed.refresh_from_db()
+        assert bleed.abandoned_since_round == 1
+        # Plummet advances via the separate advance_plummet call.
+        adv_plummet.assert_called_once()
+        plummet_targets = list(adv_plummet.call_args.args[0])
+        assert victim_p.character_sheet.character in plummet_targets
+
 
 class SceneRoundAbandonmentTests(TestCase):
     """Abandonment resolution (#1479 Task 8): N-beat grace window + solo-immediate.

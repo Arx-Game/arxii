@@ -99,9 +99,9 @@ Involved-party classification and death-permission helpers used by both `service
 | Pool name | Outcomes | PC-source death gate |
 |-----------|----------|---------------------|
 | `bleed_out_terminal` | recover / stay_incapacitated / die | `die` excluded for PC source |
-| `abandonment_enemy` | recover / captured_alive / die | `die` excluded for PC source |
-| `abandonment_pvp` | recover / captured_alive | `die` always excluded (PC source) |
-| `abandonment_environmental` | recover / die | `die` excluded for PC source |
+| `abandonment_enemy` | recover / stay_incapacitated / die / captured_alive | `die` excluded for PC source |
+| `abandonment_pvp` | recover / stay_incapacitated / die | `die` always excluded (PC source) |
+| `abandonment_environmental` | recover / stay_incapacitated / die | `die` excluded for PC source |
 
 ---
 

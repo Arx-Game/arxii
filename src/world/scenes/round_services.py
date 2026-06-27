@@ -542,6 +542,9 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     _resolve_scene_declarations(rnd)
 
     targets = []
+    # Held-bleed-out+plummeting victims are excluded from the main tick (to keep their
+    # bleed-out held) but must still have their plummet advanced this round.
+    held_plummet_targets = []
     for p in rnd.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).select_related(
         "character_sheet__character"
     ):
@@ -557,10 +560,25 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
         ):
             continue
         # #1479: a downed victim advances only when a hostile party drove the round.
+        # Plummet exemption: gravity descends every round even when the bleed-out is
+        # held — collect held+plummeting victims separately for a direct advance_plummet
+        # call that does NOT also call advance_bleed_out (#1479 final-review).
         if p.pk in downed_victim_ids and p.pk not in advancing_downed_ids:
+            if sheet.character_id in plummeting_ids:
+                held_plummet_targets.append(sheet.character)
             continue
         targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
+
+    # Advance plummet for victims whose bleed-out is held but who are also falling.
+    # They were excluded from the main tick above to keep their bleed-out held, but
+    # gravity does not pause for an abandoned round — their descent must still advance
+    # (#1479 final-review). advance_plummet is called directly (not tick_round_for_targets)
+    # so advance_bleed_out is NOT triggered for these victims.
+    if held_plummet_targets:
+        from world.areas.positioning.plummet import advance_plummet  # noqa: PLC0415
+
+        advance_plummet(held_plummet_targets)
 
     # #1479 Task 8: a held (abandoned, non-advancing) downed victim who has waited
     # out the abandonment grace window resolves via the source-appropriate
