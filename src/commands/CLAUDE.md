@@ -202,6 +202,13 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
+  `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
+  `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
+  blueprint, `setstage list` lists all blueprints by pk, `setstage <name|id>` instantiates one,
+  `setstage <name|id> replace` replaces the room's existing position grid. Thin `ArxCommand` over
+  `action.run()` (same seam as the web quick-action `_set_the_stage_actions`); staff-gated by
+  `StaffOnlyPrerequisite`. No business logic in the command.
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
   personas or switch the active one. Bare `persona`/`persona list` renders all the
   caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
