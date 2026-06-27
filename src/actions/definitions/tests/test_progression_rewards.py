@@ -10,16 +10,19 @@ from actions.definitions.progression_rewards import (
     ClaimRandomSceneAction,
     ClearPathIntentAction,
     RemoveVoteAction,
+    RerollRandomSceneAction,
     SetPathIntentAction,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.factories import (
     KudosClaimCategoryFactory,
     KudosPointsDataFactory,
     RandomSceneTargetFactory,
 )
+from world.progression.models import RandomSceneTarget
 from world.progression.models.path_intent import PathIntent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import InteractionFactory, PersonaFactory
@@ -100,6 +103,9 @@ class VoteActionTests(TestCase):
 
 
 class RandomSceneActionTests(TestCase):
+    def setUp(self) -> None:
+        RandomSceneTarget.flush_instance_cache()
+
     @patch("world.progression.services.random_scene.validate_random_scene_claim", return_value=True)
     def test_claim_success(self, mock_validate) -> None:
         claimer, account = _actor_with_account()
@@ -111,6 +117,50 @@ class RandomSceneActionTests(TestCase):
         self.assertTrue(result.success)
         target.refresh_from_db()
         self.assertTrue(target.claimed)
+
+    def test_reroll_target_not_found(self) -> None:
+        """Rerolling a target owned by a different account returns failure (account-scoping)."""
+        claimer, _claimer_account = _actor_with_account()
+        # Create a target owned by a DIFFERENT account — claimer must not be able to reroll it.
+        _other_actor, other_account = _actor_with_account()
+        other_target = RandomSceneTargetFactory(account=other_account, slot_number=1)
+        result = RerollRandomSceneAction().run(actor=claimer, target_id=other_target.pk)
+        self.assertFalse(result.success)
+
+    def test_reroll_success(self) -> None:
+        """Rerolling an unclaimed, un-rerolled target succeeds when a candidate is available."""
+        claimer, account = _actor_with_account()
+        game_week = get_current_game_week()
+
+        # Create the original target persona — an active character with a roster tenure.
+        original_sheet = CharacterSheetFactory()
+        original_entry = RosterEntryFactory(character_sheet=original_sheet)
+        RosterTenureFactory(roster_entry=original_entry)
+        original_persona = original_sheet.primary_persona
+
+        # Create a candidate persona — active, not owned by claimer, not in current targets.
+        # _get_active_persona_ids() requires an active tenure (end_date=None) + PRIMARY persona.
+        candidate_sheet = CharacterSheetFactory()
+        candidate_entry = RosterEntryFactory(character_sheet=candidate_sheet)
+        RosterTenureFactory(roster_entry=candidate_entry)
+
+        target = RandomSceneTargetFactory(
+            account=account,
+            target_persona=original_persona,
+            game_week=game_week,
+            slot_number=1,
+            claimed=False,
+            rerolled=False,
+        )
+
+        result = RerollRandomSceneAction().run(actor=claimer, target_id=target.pk)
+
+        self.assertTrue(result.success)
+        target.refresh_from_db()
+        self.assertTrue(target.rerolled)
+        # The original persona is excluded from the candidate pool (it's a current target),
+        # so the reroll must have picked the candidate persona.
+        self.assertNotEqual(target.target_persona_id, original_persona.pk)
 
 
 class PathIntentActionTests(TestCase):
