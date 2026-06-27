@@ -579,3 +579,15 @@ def register_all_tasks() -> None:
             description="Weekly rollover: advance GameWeek and process all weekly systems.",
         )
     )
+    # Lazy import: weather depends on game_clock.services, so import the callable here rather
+    # than at module top to avoid an import cycle at registration time.
+    from world.weather.tasks import roll_and_echo_weather
+
+    register_task(
+        CronDefinition(
+            task_key="weather.roll",
+            callable=roll_and_echo_weather,
+            interval=timedelta(hours=2),
+            description="Roll regional weather (every 2 real hrs ≈ 6 IC hrs) and echo to rooms.",
+        )
+    )

@@ -3,6 +3,7 @@ import { setActiveSession, startSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
+import { WeatherWidget } from '@/weather/components/WeatherWidget';
 
 import { PersonaSwitcher } from './PersonaSwitcher';
 
@@ -109,11 +110,14 @@ export function GameTopBar({ characters }: GameTopBarProps) {
           </button>
         ))}
 
-      <div className="ml-auto flex items-center gap-2">
-        <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-        <span className="text-xs text-muted-foreground">
-          {isConnected ? 'Connected' : 'Disconnected'}
-        </span>
+      <div className="ml-auto flex items-center gap-3">
+        <WeatherWidget />
+        <div className="flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className="text-xs text-muted-foreground">
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
       </div>
     </div>
   );
