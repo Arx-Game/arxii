@@ -1279,6 +1279,19 @@ These two axes are orthogonal — never re-merge them.
   `CannotTransferToDepartedMemberError` (rank management, #1027),
   `NotAuthorizedToInviteError` (induction draft gate, #1231),
   `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate)
+- **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
+  `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
+  `transfer_covenant_top_rank`, `stand_down_battle_covenant`
+  (`actions/definitions/covenants.py`, #1346)
+- **Telnet:** `covenant <subverb>` command (`commands/covenant.py`, #1346) for
+  engage/disengage/leave/kick/rank/transfer/standdown; covenant induction via
+  `ritual draft ... covenant=<name>` / `ritual join <id> role=<role>` / `ritual fire <id>`,
+  banner-call rise via `ritual draft ... covenant=<name>` / `ritual join <id>` /
+  `ritual fire <id>` — both adapter-dispatched from `CmdRitual` via
+  `commands/ritual_adapters.py`.
+- **Selectors (`world.covenants.selectors`):**
+  `resolve_actor_membership(*, covenant, character_sheets, capability=None)`,
+  `get_active_memberships(*, character_sheet)` — shared by viewsets and the covenant Actions.
 - **API Endpoints:**
   - `GET /api/covenants/gear-compatibilities/` — read-only authored content
   - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own

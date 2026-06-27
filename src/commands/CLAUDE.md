@@ -64,14 +64,37 @@ actions, backends, and service functions.
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
     immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
   - `ritual sessions` — list pending sessions
-  - `ritual draft <name> invite=<char>[,<char>] [role=sinner|sineater resonance=<name> [writeup=...]]`
-    — draft a session (setup-info rituals, e.g. soul-tether BILATERAL)
-  - `ritual join <id> [role=sinner|sineater]` — accept your invitation
+  - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
+    — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):
+    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [writeup=...]`
+    - covenant induction: `covenant=<name>` (the covenant to induct into)
+    - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
+  - `ritual join <id> [<extra k=v ...>]` — accept your invitation; adapter-specific join
+    kwargs:
+    - soul-tether: `role=sinner|sineater`
+    - covenant induction: `role=<covenant role name>` (inductee picks their role)
+    - banner-call: no extra tokens (members simply accept)
   - `ritual decline <id>` — decline your invitation
   - `ritual fire <id>` — fire the session (initiator only)
   - `ritual cancel <id>` — cancel a pending session (initiator only)
 
-  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` / `cancel_session` directly.
+  `_handle_draft` / `_handle_join` are generic — they call `get_adapter(ritual)` from
+  `ritual_adapters.py` to translate flat `key=value` tokens into the typed structures the
+  session services expect. Session subcommands call `draft_session` / `accept_session` /
+  `decline_session` / `fire_session` / `cancel_session` directly.
+- **`ritual_adapters.py`**: per-ritual draft/join adapter registry, keyed on
+  `ritual.service_function_path`. Adapters translate the flat `key=value` tokens that
+  `CmdRitual._handle_draft`/`_handle_join` parse into `DraftParse`/`JoinParse` dataclasses
+  the session services accept. Three concrete adapters:
+  - `SoulTetherAdapter` — `role=` / `resonance=` / `writeup=` for the soul-tether BILATERAL
+    session.
+  - `CovenantInductionAdapter` — `covenant=<name>` on draft (emits a session-level COVENANT
+    reference); `role=<covenant role name>` on join (emits a COVENANT_ROLE reference the
+    induction service reads).
+  - `BannerCallAdapter` — `covenant=<name>` on draft; no join tokens (members simply accept
+    the rise).
+  Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
+  before adapters were introduced). `get_adapter(ritual)` is the public entry point.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
@@ -259,6 +282,17 @@ actions, backends, and service functions.
   free text (values run to the next `key=`); an active scene in the caller's current room is
   linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
   regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
+- **`covenant.py`**: `CmdCovenant` (`covenant`, #1346) — covenant membership lifecycle namespace.
+  One `ArxCommand` routes a leading subverb to the matching covenant Action via `action.run()` —
+  the same seam the web covenant viewsets use (both converge on `world.covenants.services`).
+  Subverbs: `covenant [list]` (membership hub), `covenant engage [<covenant>]`,
+  `covenant disengage [<covenant>]`, `covenant leave [<covenant>]`,
+  `covenant kick <char> [in <covenant>]`, `covenant rank <char> <rank> [in <covenant>]`,
+  `covenant transfer <char> [in <covenant>]`, `covenant standdown [<covenant>]`.
+  Supply the covenant name when the character belongs to more than one. Namespaced — not bare
+  top-level keys — to avoid exit/channel/alias collisions; mirrors `CmdCombat`/`CmdDuel`.
+  No business logic in the command. Covenant induction and banner-call rise are session-driven via
+  `CmdRitual` + `CovenantInductionAdapter`/`BannerCallAdapter` (see `ritual_adapters.py`).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

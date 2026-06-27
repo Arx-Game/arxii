@@ -90,7 +90,21 @@ They do not use the command system, dispatchers, or handlers.
   picking the lazy-open path for `lazy_open` kinds). The two toggle viewsets call the toggle
   services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
   and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
-  call it). Shared with telnet `CmdReact`.)
+  call it). Shared with telnet `CmdReact`.
+  `covenants.py` (#1346) — seven REGISTRY actions, all `target_type=SELF`, thin wrappers over
+  `world.covenants.services`; `CovenantError` → failure `ActionResult(exc.user_message)`:
+  `EngageCovenantMembershipAction` (key `"engage_covenant_membership"`),
+  `DisengageCovenantMembershipAction` (`"disengage_covenant_membership"`),
+  `LeaveCovenantAction` (`"leave_covenant"`), `KickCovenantMemberAction` (`"kick_covenant_member"`),
+  `AssignCovenantRankAction` (`"assign_covenant_rank"`),
+  `TransferTopRankAction` (`"transfer_covenant_top_rank"`),
+  `StandDownBattleCovenantAction` (`"stand_down_battle_covenant"`).
+  Shared by telnet `CmdCovenant` (`covenant <subverb>`) and the web covenant viewsets (both
+  converge on the same service layer). Covenant induction and banner-call rise reach their services
+  through the `RitualSession` seam (`CmdRitual` + the adapter registry in
+  `commands/ritual_adapters.py`) rather than direct Actions — the adapters translate telnet tokens
+  into the typed `DraftParse`/`JoinParse` structures and the existing session services handle
+  the rest.)
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
