@@ -197,7 +197,7 @@ class CmdRitual(ArxCommand):
             index += 1
 
         usage = (
-            "Usage: ritual draft <ritual_name> invite=<character>[,<character>\n"
+            "Usage: ritual draft <ritual_name> invite=<character>[,<character>]\n"
             "       [role=sinner|sineater resonance=<name> [writeup=<narrative>]]"
         )
         name = " ".join(name_parts).strip()

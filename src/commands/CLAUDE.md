@@ -64,8 +64,9 @@ actions, backends, and service functions.
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
     immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
   - `ritual sessions` — list pending sessions
-  - `ritual draft <name> invite=<char>[,<char>]` — draft a session
-  - `ritual join <id>` — accept your invitation
+  - `ritual draft <name> invite=<char>[,<char>] [role=sinner|sineater resonance=<name> [writeup=...]]`
+    — draft a session (setup-info rituals, e.g. soul-tether BILATERAL)
+  - `ritual join <id> [role=sinner|sineater]` — accept your invitation
   - `ritual decline <id>` — decline your invitation
   - `ritual fire <id>` — fire the session (initiator only)
 
