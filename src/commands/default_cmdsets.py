@@ -83,6 +83,7 @@ from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
+from commands.setstage import CmdSetStage
 from commands.social.blocking import (
     CmdBlock,
     CmdBlockList,
@@ -233,6 +234,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
+            # #1498 — staff set-the-stage: apply a position blueprint to the room.
+            CmdSetStage,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
             CmdComfort,
             # #1347 — list faces + wear-face active persona switch.
