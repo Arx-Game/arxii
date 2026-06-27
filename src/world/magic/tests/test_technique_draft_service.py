@@ -12,11 +12,16 @@ Covers:
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.conditions.factories import CapabilityTypeFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionTemplateFactory,
+    DamageTypeFactory,
+)
 from world.magic.exceptions import (
+    GiftNotOwned,
     NoActiveTechniqueDraft,
-    TechniqueAuthoringNotPermitted,
     TechniqueDraftIncomplete,
+    UnknownGift,
 )
 from world.magic.factories import (
     CharacterGiftFactory,
@@ -290,6 +295,66 @@ class DraftToDesignTests(TestCase):
 
 
 # =============================================================================
+# draft_to_design payload read paths
+# =============================================================================
+
+
+class DraftToDesignPayloadTests(TestCase):
+    """Verify that draft_to_design carries restriction_ids, capability_grants,
+    damage_profiles, and applied_conditions into the resulting TechniqueDesignInput."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.gift = GiftFactory(creator=cls.sheet)
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.restriction = RestrictionFactory()
+        cls.cap = CapabilityTypeFactory()
+        cls.damage_type = DamageTypeFactory()
+        cls.condition = ConditionTemplateFactory()
+
+    def test_payload_fields_carried_through(self) -> None:
+        draft = start_technique_draft(self.sheet, name="Payload Test")
+        set_draft_fields(
+            draft,
+            description="Test payload.",
+            gift=self.gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            action_category="physical",
+            tier=1,
+            intensity=2,
+            control=1,
+            anima_cost=1,
+        )
+        add_draft_restriction(draft, self.restriction)
+        grant_row = add_draft_capability_grant(
+            draft, capability=self.cap, base_value=3, intensity_multiplier=0.5
+        )
+        damage_row = add_draft_damage_profile(
+            draft, damage_type=self.damage_type, base_damage=4, damage_intensity_multiplier=1.0
+        )
+        condition_row = add_draft_applied_condition(
+            draft, condition=self.condition, base_severity=2, base_duration_rounds=3
+        )
+
+        design = draft_to_design(draft)
+
+        assert self.restriction.pk in design.restriction_ids
+        assert len(design.capability_grants) == 1
+        assert design.capability_grants[0].capability_id == grant_row.capability_id
+        assert design.capability_grants[0].base_value == 3
+        assert len(design.damage_profiles) == 1
+        assert design.damage_profiles[0].damage_type_id == damage_row.damage_type_id
+        assert design.damage_profiles[0].base_damage == 4
+        assert len(design.applied_conditions) == 1
+        assert design.applied_conditions[0].condition_id == condition_row.condition_id
+        assert design.applied_conditions[0].base_severity == 2
+        assert design.applied_conditions[0].base_duration_rounds == 3
+
+
+# =============================================================================
 # validate_design_for_character
 # =============================================================================
 
@@ -304,7 +369,7 @@ class ValidateDesignForCharacterTests(TestCase):
 
     def test_player_policy_raises_for_unowned_gift(self) -> None:
         design = _minimal_design(gift_id=self.other_gift.pk)
-        with self.assertRaises(TechniqueAuthoringNotPermitted):
+        with self.assertRaises(GiftNotOwned):
             validate_design_for_character(design, PlayerPolicy(), self.sheet)
 
     def test_player_policy_passes_for_owned_gift(self) -> None:
@@ -319,7 +384,7 @@ class ValidateDesignForCharacterTests(TestCase):
 
     def test_player_policy_raises_for_nonexistent_gift(self) -> None:
         design = _minimal_design(gift_id=999999)
-        with self.assertRaises(TechniqueAuthoringNotPermitted):
+        with self.assertRaises(UnknownGift):
             validate_design_for_character(design, PlayerPolicy(), self.sheet)
 
 

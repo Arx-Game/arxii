@@ -406,3 +406,13 @@ class TechniqueDraftIncomplete(MagicError):
 
 class UnknownTechniqueVocab(MagicError):
     user_message = "Unknown technique vocabulary term (gift, style, effect type, or restriction)."
+
+
+class UnknownGift(UnknownTechniqueVocab):
+    """Raised when a gift_id does not resolve to a known Gift."""
+
+    user_message = "Unknown gift."
+
+
+class GiftNotOwned(MagicError):
+    user_message = "You do not know that gift."
