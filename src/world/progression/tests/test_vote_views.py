@@ -12,6 +12,8 @@ from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.voting import cast_vote
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.roster.models import RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -19,6 +21,7 @@ def _flush_caches() -> None:
     """Flush SharedMemoryModel caches for voting models."""
     WeeklyVote.flush_instance_cache()
     WeeklyVoteBudget.flush_instance_cache()
+    RosterEntry.flush_instance_cache()
 
 
 class VoteViewTestCase(TestCase):
@@ -37,6 +40,10 @@ class VoteViewTestCase(TestCase):
             scene=cls.scene,
             account=cls.author,
         )
+        # Views now dispatch through CastVoteAction / RemoveVoteAction which require
+        # an actor; create a roster entry so _actor_for_account(cls.voter) resolves.
+        pd = PlayerDataFactory(account=cls.voter)
+        RosterTenureFactory(player_data=pd)
 
     def setUp(self) -> None:
         self.client = APIClient()
