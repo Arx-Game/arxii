@@ -137,6 +137,9 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
         try:
             return obj.kudos_count  # set by viewset annotation
         except AttributeError:
+            # Fallback for un-annotated single-object reads only. Any viewset
+            # serving this serializer in a list/nested context must annotate
+            # kudos_count via Count() to avoid per-row N+1 queries.
             return obj.writeupkudos_set.count()
 
     def get_viewer_has_kudosed(self, obj: RelationshipUpdate) -> bool:
@@ -148,6 +151,9 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is None or not request.user.pk:
             return False
+        # Fallback for un-annotated single-object reads only. Any viewset
+        # serving this serializer in a list/nested context must annotate
+        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
         return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
 
 
@@ -184,6 +190,9 @@ class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
         try:
             return obj.kudos_count  # set by viewset annotation
         except AttributeError:
+            # Fallback for un-annotated single-object reads only. Any viewset
+            # serving this serializer in a list/nested context must annotate
+            # kudos_count via Count() to avoid per-row N+1 queries.
             return obj.writeupkudos_set.count()
 
     def get_viewer_has_kudosed(self, obj: RelationshipDevelopment) -> bool:
@@ -195,6 +204,9 @@ class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is None or not request.user.pk:
             return False
+        # Fallback for un-annotated single-object reads only. Any viewset
+        # serving this serializer in a list/nested context must annotate
+        # viewer_has_kudosed via Exists() to avoid per-row N+1 queries.
         return obj.writeupkudos_set.filter(account_id=request.user.pk).exists()
 
 
@@ -422,4 +434,4 @@ class WriteupComplaintWriteSerializer(serializers.Serializer):
 
     writeup_type = serializers.ChoiceField(choices=WRITEUP_TYPE_CHOICES)
     writeup_id = serializers.IntegerField()
-    reason = serializers.CharField()
+    reason = serializers.CharField(allow_blank=False)
