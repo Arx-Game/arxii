@@ -1596,6 +1596,7 @@
   - instances <- items.ItemInstance
   - interaction_bindings <- items.TemplateInteraction
   - check_modifiers <- items.ItemCheckModifier
+  - garment_mitigations <- items.GarmentMitigation
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
 
@@ -1742,6 +1743,11 @@
   - society -> societies.Society [FK]
   - persona -> scenes.Persona [FK]
   - fashion_style -> items.FashionStyle [FK]
+
+### GarmentMitigation
+**Foreign Keys:**
+  - item_template -> items.ItemTemplate [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
 
 ### CraftingRecipe
 **Foreign Keys:**
@@ -1924,6 +1930,7 @@
   - corruption_condition_templates <- conditions.ConditionTemplate
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
+  - garment_mitigations <- items.GarmentMitigation
   - covenant_subroles <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull

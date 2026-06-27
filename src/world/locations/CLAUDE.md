@@ -42,9 +42,18 @@ to ±10k ends); `comfort_offset` is the occupant's per-character contribution (c
 buffs — wounds, fatigue, chilled, protection magic — supplied by the consumer, e.g. the AP-regen
 hook, since the room sets the base and the character's conditions adjust it). `ap_regen_multiplier_pct(level)`
 gives the regen % adjustment. `AMENITY` (positive comfort) is how you *add* comfort toward 6–10
-(luxury/magic), distinct from mitigation (which only cancels discomfort, floored). The comfort→effect
-wiring (AP regen, the Conditions `comfort_penalty` field), comfort **decorations**, and the
-weather source (#1522) are remaining slices of #1514.
+(luxury/magic), distinct from mitigation (which only cancels discomfort, floored).
+
+**Per-character comfort readout (#1522 — `character_comfort.py`).** "How uncomfortable am *I*, and
+why." `character_comfort_summary(character)` takes each axis's room `felt_exposure`, subtracts what
+the character's **worn clothing** mitigates (`items.GarmentMitigation` off their `EquippedItem`
+rows — a coat warms *you*, not the room; floored per axis), adds an **injury** penalty
+(`vitals.health_percentage`), and maps the total to a named band (`COMFORT_BAND_FLOORS`: Comfortable
+→ Extremely uncomfortable) with the biting axes as the "why" (`EXPOSURE_REASON_WORDS`).
+**Resonance-imbued garments** (`GarmentMitigation.resonance`) are authored large — a scantily-clad
+but warded character still shrugs off the cold. This is the per-character layer over the room's own
+`comfort_summary`; the `comfort` command leads with it. (Imports `items`/`vitals` lazily to keep the
+dependency one-way.) Magnitudes/bands are PLACEHOLDER.
 
 See `docs/plans/2026-05-09-location-stats-design.md` for the original
 cascade design and `docs/plans/2026-05-14-room-cascade-resonance-unification.md`

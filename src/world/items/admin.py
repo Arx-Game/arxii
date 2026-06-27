@@ -7,6 +7,7 @@ from world.items.models import (
     EquippedItem,
     FashionStyle,
     FashionStyleBonus,
+    GarmentMitigation,
     InteractionType,
     ItemInstance,
     ItemStyle,
@@ -48,6 +49,12 @@ class TemplateInteractionInline(admin.TabularInline):
     extra = 1
 
 
+class GarmentMitigationInline(admin.TabularInline):
+    model = GarmentMitigation
+    extra = 1
+    raw_id_fields = ["resonance"]
+
+
 @admin.register(ItemTemplate)
 class ItemTemplateAdmin(admin.ModelAdmin):
     list_display = [
@@ -70,7 +77,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     list_select_related = ["minimum_quality_tier", "image"]
     raw_id_fields = ["image", "weapon_damage_type"]
-    inlines = [TemplateSlotInline, TemplateInteractionInline]
+    inlines = [TemplateSlotInline, TemplateInteractionInline, GarmentMitigationInline]
 
 
 class ItemStyleInline(admin.TabularInline):

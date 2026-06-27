@@ -1,12 +1,13 @@
-"""Telnet ``comfort`` command (#1514) — the in-room comfort/weather readout.
+"""Telnet ``comfort`` command (#1514/#1522) — how comfortable *you* are, and why.
 
-The subtle *mechanical* surface for the climate→comfort loop: a player can glance at how
-liveable the room they're standing in actually is — its 1–10 comfort level and which exposures
-(cold, heat, wet, wind) are biting after the building's enclosure, style, and decorations.
+Leads with the player's **personal** comfort: the room's exposure (climate + weather + style)
+after their worn clothing mitigates it — a named band (Comfortable → Extremely uncomfortable)
+with the biting reasons (cold, heat, wet, injured…). Clothing — especially resonance-imbued
+clothing — is what counteracts it, so a well-dressed character is comfortable where a scantily
+clad one isn't. The room's own comfort level follows as context.
 
 This is deliberately separate from the room's *description*: the desc is the player's trusted
-flavour, the comfort readout is the mechanical arbiter (you can't write away the cold). A web
-build-HUD + the comfort→AP-regen effect are follow-ups; this is the always-available glance.
+flavour, the comfort readout is the mechanical arbiter (you can't write away the cold).
 """
 
 from __future__ import annotations
@@ -15,10 +16,10 @@ from commands.command import ArxCommand
 
 
 class CmdComfort(ArxCommand):
-    """Check how comfortable the room you're in is.
+    """Check how comfortable you are where you're standing.
 
-    Shows the room's comfort level (1–10) and any environmental exposures still biting after
-    its construction and furnishings.
+    Shows your personal comfort band and what's biting (after your clothing), then the room's own
+    comfort level.
 
     Usage:
       comfort
@@ -30,7 +31,8 @@ class CmdComfort(ArxCommand):
     action = None
 
     def func(self) -> None:
-        from world.locations.constants import COMFORT_LEVEL_LABELS, StatKey  # noqa: PLC0415
+        from world.locations.character_comfort import character_comfort_summary  # noqa: PLC0415
+        from world.locations.constants import COMFORT_LEVEL_LABELS  # noqa: PLC0415
         from world.locations.services import comfort_summary  # noqa: PLC0415
 
         room = self.caller.location
@@ -38,15 +40,12 @@ class CmdComfort(ArxCommand):
             self.msg("You aren't anywhere in particular.")
             return
 
-        summary = comfort_summary(room)
-        label = COMFORT_LEVEL_LABELS.get(summary.level, "")
-        lines = [f"|wComfort here:|n {label} ({summary.level}/10)"]
-        if summary.felt_exposures:
-            biting = ", ".join(
-                f"{StatKey(key).label.split()[0].lower()} {value}"
-                for key, value in summary.felt_exposures.items()
-            )
-            lines.append(f"  |xBiting:|n {biting}")
-        if summary.amenity:
-            lines.append(f"  |xComforts:|n {summary.amenity}")
+        me = character_comfort_summary(self.caller)
+        lines = [f"|wYou feel {me.band.lower()}.|n"]
+        if me.reasons:
+            lines.append(f"  |x({', '.join(me.reasons)})|n")
+
+        room_summary = comfort_summary(room)
+        room_label = COMFORT_LEVEL_LABELS.get(room_summary.level, "")
+        lines.append(f"|xThe room itself:|n {room_label} ({room_summary.level}/10)")
         self.msg("\n".join(lines))

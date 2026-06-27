@@ -230,6 +230,38 @@ COMFORT_LEVEL_LABELS: dict[int, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Per-character comfort readout (#1522/#1514): "how uncomfortable am I, and why".
+# ---------------------------------------------------------------------------
+#
+# A character's *personal* felt discomfort = the room's felt exposure on each axis MINUS what
+# their worn clothing (and resonance-imbued garments) mitigate (floored at 0 per axis), summed,
+# plus an injury penalty. That total resolves to a named band the player sees.
+#
+# COMFORT_BAND_FLOORS: ascending (min discomfort, label); a total resolves to the highest band it
+# meets. PLACEHOLDER thresholds — a tunable author pass; the named tiers are the spec.
+COMFORT_BAND_FLOORS: tuple[tuple[int, str], ...] = (
+    (0, "Comfortable"),
+    (1, "Slightly uncomfortable"),
+    (25, "Moderately uncomfortable"),
+    (60, "Very uncomfortable"),
+    (120, "Extremely uncomfortable"),
+)
+
+# Player-facing word for each exposure axis when it is what's biting (the "why").
+EXPOSURE_REASON_WORDS: dict[StatKey, str] = {
+    StatKey.COLD: "cold",
+    StatKey.HEAT: "heat",
+    StatKey.WET: "wet",
+    StatKey.WIND: "wind",
+    StatKey.DRY: "dryness",
+}
+
+# How much being fully incapacitated (0% health) adds to felt discomfort; scaled by injury.
+# PLACEHOLDER magnitude (author pass).
+INJURY_DISCOMFORT_MAX: int = 40
+
+
 class HolderType(models.TextChoices):
     """Discriminator for owner/tenant rows: which holder FK is active."""
 
