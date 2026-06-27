@@ -12,30 +12,13 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from actions.base import Action
-from actions.prerequisites import Prerequisite
+from actions.prerequisites import HasCharacterSheetPrerequisite, Prerequisite, resolve_actor_sheet
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-
-
-@dataclass
-class HasCharacterSheetPrerequisite(Prerequisite):
-    """Actor must have a CharacterSheet."""
-
-    def is_met(
-        self,
-        actor: ObjectDB,
-        target: ObjectDB | None = None,
-        context: dict | None = None,
-    ) -> tuple[bool, str]:
-        try:
-            actor.sheet_data  # noqa: B018
-        except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
-        return True, ""
 
 
 @dataclass
@@ -48,12 +31,7 @@ class BaseRelationshipAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def _sheet(self, actor: ObjectDB) -> Any:
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        try:
-            return actor.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            return None
+        return resolve_actor_sheet(actor)
 
     def _active_scene_for(self, actor: ObjectDB, target_sheet: Any) -> Any:
         from world.scenes.models import Scene  # noqa: PLC0415

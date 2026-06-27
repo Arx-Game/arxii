@@ -247,6 +247,11 @@ class ActionRegistryTests(TestCase):
             "create_development",
             "create_capstone",
             "redistribute_points",
+            "create_journal_entry",
+            "respond_to_journal",
+            "edit_journal_entry",
+            "set_character_goals",
+            "log_goal_progress",
             "claim_kudos",
             "cast_vote",
             "remove_vote",
@@ -263,6 +268,13 @@ class ActionRegistryTests(TestCase):
             "assign_covenant_rank",
             "transfer_covenant_top_rank",
             "stand_down_battle_covenant",
+            "event_create",
+            "event_schedule",
+            "event_start",
+            "event_complete",
+            "event_cancel",
+            "event_invite",
+            "respond_invitation",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

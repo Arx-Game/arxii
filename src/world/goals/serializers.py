@@ -3,11 +3,9 @@
 from rest_framework import serializers
 
 from world.goals.models import OPTIONAL_GOAL_DOMAINS, CharacterGoal, GoalJournal, GoalRevision
+from world.goals.services import MAX_GOAL_POINTS
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
-
-# Maximum total points a character can allocate across all goals
-MAX_GOAL_POINTS = 30
 
 
 def get_goal_domains_queryset():

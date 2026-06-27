@@ -77,12 +77,55 @@ def _create_catch_challenge_for(faller: ObjectDB, position: Position) -> None:  
     )
 
 
+def _potential_catcher_present(
+    faller: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    exclude_id: int | None = None,
+) -> bool:
+    """True if anyone other than *faller* is present and conscious enough to catch.
+
+    A fall only justifies a multi-round catch window when someone is actually
+    there to attempt the catch. With nobody present (or only the departing mover),
+    the fall is unattended and resolves immediately instead of freezing mid-air.
+    ``exclude_id`` omits one further character (the departing mover, who is still
+    in ``room.contents`` when ``Room.at_object_leave`` fires).
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    room = faller.location
+    if room is None:
+        return False
+    for obj in room.contents:
+        if obj.id == faller.id or (exclude_id is not None and obj.id == exclude_id):
+            continue
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if can_act(sheet):
+            return True
+    return False
+
+
 def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECTDB_PARAM
     """Begin a plummet for *faller* who has entered CHASM *position*.
 
-    Ensures an AFK-safe STRICT scene round (enrolling present characters) that ticks
-    the peril, applies the seeded Plummeting condition, and instantiates the catch
-    challenge bound to the faller. Idempotent — no-op if the faller is already plummeting.
+    Falling is environmental and self-completing — a faller is NEVER paused mid-air.
+    Two paths, by whether anyone is present to catch:
+
+    - **A potential catcher is present:** apply the seeded Plummeting condition,
+      instantiate the catch challenge bound to the faller, and ensure an AFK-safe
+      STRICT scene round (enrolling present characters). The descent then advances
+      one elevation level per round resolution (``advance_plummet`` via the END
+      tick, exempt from the AFK/hold skips), keeping the catch window open until
+      impact or a successful catch.
+    - **Nobody present to catch:** there is no scene to drive a per-round descent,
+      so the fall resolves to the floor + impact synchronously in this call rather
+      than freezing in a round nothing will drive (ADR-0004: action-driven tempo).
+
+    Idempotent — no-op if the faller is already plummeting.
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
@@ -93,10 +136,17 @@ def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECT
     if _faller_is_plummeting(faller):
         return
 
-    sheet = faller.sheet_data
-    ensure_round_for_acute_condition(sheet)
     apply_condition(faller, ConditionTemplate.get_by_name(PLUMMETING_CONDITION_NAME))
-    _create_catch_challenge_for(faller, position)
+
+    if _potential_catcher_present(faller):
+        _create_catch_challenge_for(faller, position)
+        ensure_round_for_acute_condition(faller.sheet_data)
+        return
+
+    # Unattended fall — resolve to the floor + impact now (never frozen mid-air).
+    instance = _plummeting_instance(faller)
+    if instance is not None:
+        _descend_to_floor(faller, instance)
 
 
 def begin_plummet_handler(*, payload: object) -> None:
@@ -207,41 +257,110 @@ def _narrate_plummet_end(faller: ObjectDB, *, caught: bool) -> None:  # noqa: OB
     location.msg_contents(message)
 
 
-def advance_plummet(targets: Iterable[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM
-    """Walk each plummeting target one elevation level down; impact at the floor.
+def _descend_one_level(target: ObjectDB, instance: ConditionInstance) -> bool:  # noqa: OBJECTDB_PARAM
+    """Walk *target* down one ``elevation_anchor`` level; return True iff it impacted.
 
-    For every target carrying the Plummeting condition: move down one
-    ``elevation_anchor`` level and accumulate the depth (severity += 1). The round
-    the target lands on solid ground (the new position's ``elevation_anchor`` is
-    None) fall impact fires through ``_apply_fall_impact``. A target already on the
-    floor while still carrying the condition (safety) impacts immediately.
-
-    AFK-safe by construction: empty/None targets are skipped, so a faller with no
-    round participants driving the tick never descends.
+    Moves down one level and accumulates depth (severity += 1). When the target is
+    already on solid ground (no ``elevation_anchor``), or lands on it this step,
+    fall impact fires through ``_apply_fall_impact`` (which removes the Plummeting
+    condition + clears the catch challenge) and the function returns True (done).
     """
     from world.areas.positioning.services import (  # noqa: PLC0415
         force_move_to_position,
         position_of,
     )
 
+    cur = position_of(target)
+    below = cur.elevation_anchor if cur is not None else None
+    if below is None:
+        # Already on the floor with the condition still on — impact now.
+        _apply_fall_impact(target, instance)
+        return True
+    force_move_to_position(target, below)
+    instance.severity += 1
+    instance.save(update_fields=["severity"])
+    if below.elevation_anchor is None:
+        # Landed on solid ground this step — impact fires now.
+        _apply_fall_impact(target, instance)
+        return True
+    return False
+
+
+def _descend_to_floor(target: ObjectDB, instance: ConditionInstance) -> None:  # noqa: OBJECTDB_PARAM
+    """Resolve *target*'s fall all the way to the floor + impact in one call.
+
+    Used for an unattended fall (no one present to catch): walks down level by level
+    until impact. Bounded by the number of Position rows in the room (+1) so a cyclic
+    ``elevation_anchor`` chain can never spin forever; the bound is generous because
+    a vertical stack can only be as deep as the room has positions.
+    """
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    room = target.location
+    max_steps = (Position.objects.filter(room=room).count() + 1) if room is not None else 100
+    for _ in range(max_steps):
+        if _descend_one_level(target, instance):
+            return
+    # Safety net: a malformed (cyclic) elevation chain never reached the floor —
+    # force impact rather than leave the faller suspended.
+    _apply_fall_impact(target, instance)
+
+
+def advance_plummet(targets: Iterable[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM
+    """Walk each plummeting target one elevation level down; impact at the floor.
+
+    The per-round descent seam: each END-of-round tick moves a plummeting target one
+    ``elevation_anchor`` level toward the ground and fires impact when it lands (see
+    ``_descend_one_level``).
+
+    AFK-safe by construction: empty/None targets are skipped, so a faller with no
+    round participants driving the tick never descends here — an unattended fall is
+    instead resolved immediately by ``begin_plummet`` / ``resolve_unattended_plummets``.
+    """
     for target in targets:
         if target is None:
             continue
         instance = _plummeting_instance(target)
         if instance is None:
             continue
-        cur = position_of(target)
-        below = cur.elevation_anchor if cur is not None else None
-        if below is None:
-            # Already on the floor with the condition still on — impact now.
-            _apply_fall_impact(target, instance)
+        _descend_one_level(target, instance)
+
+
+def resolve_unattended_plummets(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    departing: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Resolve any plummeting faller in *room* left with no one present to catch them.
+
+    Called from ``Room.at_object_leave``: when a departure removes the last person who
+    could catch a faller, the fall completes immediately (descend to floor + impact)
+    rather than freezing mid-air in a round nothing will drive. ``at_object_leave``
+    fires while *departing* is still in ``room.contents``, so it is excluded from the
+    catcher check. A single cheap room-bound query short-circuits ordinary rooms.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    if room is None:
+        return
+    objs = list(room.contents)
+    plummeting_ids = set(
+        ConditionInstance.objects.filter(
+            target_id__in=[o.id for o in objs],
+            condition__name=PLUMMETING_CONDITION_NAME,
+        ).values_list("target_id", flat=True)
+    )
+    if not plummeting_ids:
+        return
+    departing_id = departing.id if departing is not None else None
+    for obj in objs:
+        if obj.id not in plummeting_ids or obj.id == departing_id:
             continue
-        force_move_to_position(target, below)
-        instance.severity += 1
-        instance.save(update_fields=["severity"])
-        if below.elevation_anchor is None:
-            # Landed on solid ground this round — impact fires now.
-            _apply_fall_impact(target, instance)
+        if _potential_catcher_present(obj, exclude_id=departing_id):
+            continue
+        instance = _plummeting_instance(obj)
+        if instance is not None:
+            _descend_to_floor(obj, instance)
 
 
 def _safe_position_for(catcher: ObjectDB) -> Position | None:  # noqa: OBJECTDB_PARAM

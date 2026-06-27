@@ -42,7 +42,9 @@ the unified Persona identity system, and non-combat scene rounds.
   per room (UniqueConstraint on non-COMPLETED status).
 - **`SceneRoundDefaultsConfig`** (singleton pk=1): staff-tunable defaults for new scene rounds. Fields:
   `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
-  `anti_spam_seconds`. Retrieved via `get_scene_round_defaults_config()` (get-or-create pattern).
+  `anti_spam_seconds`, `abandonment_grace_rounds` (#1479: N action-driven beats an abandoned
+  downed victim waits for rescue before their fate resolves; default 2). Retrieved via
+  `get_scene_round_defaults_config()` (get-or-create pattern).
 - **`SceneActionDeclaration`**: Per-round ledger of participant actions. `is_immediate=True` for
   OPEN/POSE_ORDER resolved actions; `is_immediate=False` for deferred STRICT declarations. Carries
   `target_persona` FK and `is_pass` bool. No unique-per-round constraint — multiple actions per round
@@ -84,6 +86,29 @@ Key service functions for scene round lifecycle:
   implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute
   conditions do not advance from a round they didn't engage in (ADR-0004 — an AFK character is not harmed
   while away). Declared, absent, and present-`not can_act` (unconscious) participants tick as before.
+  **Downed-victim narrowing (#1479):** a DOWNED victim (present, `not can_act`, carrying an active
+  acute-peril condition — Bleeding Out / Plummeting) advances on the END tick ONLY when a hostile party
+  drove the round (`world.vitals.peril_resolution.hostile_drove_round` — the peril's `source_character`
+  is a participant who declared this round). Otherwise the peril HOLDS (excluded from the tick) and the
+  victim's acute-peril `ConditionInstance.abandoned_since_round` is stamped (once) when a potential
+  rescuer is present (`potential_rescuer_present`); a later hostile-driven round clears the marker.
+  `_resolve_downed_victim_peril` snapshots these decisions BEFORE `_resolve_scene_declarations` deletes
+  the declaration rows. A consequence: a danger round with an abandoned downed victim resolves (advances)
+  but does NOT auto-complete while the held peril persists.
+  **Abandonment resolution (#1479 Task 8):** after the END tick, `_resolve_abandonment_grace` resolves
+  any held (abandoned, non-advancing) downed victim who has waited out the grace window
+  (`round_number - abandoned_since_round >= SceneRoundDefaultsConfig.abandonment_grace_rounds`) via the
+  source-appropriate abandonment pool (`world.vitals.services.resolve_abandonment` →
+  `select_abandonment_pool` → the shared death-gated `_resolve_peril_via_pool` core). Done before the
+  auto-end check so a resolved peril lets the danger round complete instead of freezing in limbo.
+- `resolve_solo_abandoned_victims(room, *, departing=None)`: **solo-case (#1479 Task 8)** — when a
+  departure (wired into `typeclasses.rooms.Room.at_object_leave`) removes the LAST potential rescuer
+  from a room, any still-downed victim there has their fate resolved IMMEDIATELY via the same
+  `resolve_abandonment` path. `at_object_leave` fires before the mover leaves `room.contents`, so
+  `departing` is excluded from the rescuer check (`potential_rescuer_present(..., exclude_character_id=)`).
+  A single cheap room-bound query short-circuits ordinary rooms. Rescue (the bleed-out cleared via
+  `remove_condition`/`perform_treatment`) before either trigger leaves no acute-peril instance, so
+  `resolve_abandonment` no-ops — rescue beats the check.
 - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
   for the character's room (enrolling everyone present). When none is active, creates a STRICT
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller

@@ -64,11 +64,14 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.events import CmdEvent
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.gemit import CmdGemit
+from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
+from commands.journals import CmdJournal
 from commands.locations import CmdManageRoom
 from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
@@ -81,6 +84,7 @@ from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.scene import CmdScene
+from commands.setstage import CmdSetStage
 from commands.social.blocking import (
     CmdBlock,
     CmdBlockList,
@@ -231,6 +235,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStory,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
+            # #1498 — staff set-the-stage: apply a position blueprint to the room.
+            CmdSetStage,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
             CmdComfort,
             # #1347 — list faces + wear-face active persona switch.
@@ -238,9 +244,16 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #1350 — journal authoring namespace: write/respond/edit subverbs + list hub.
+            CmdJournal,
+            # #1350 — goal authoring namespace.
+            CmdGoal,
             # #1485 — relationship-building namespace: impression/develop/capstone/
             # redistribute write verbs + list/show read surfaces.
             CmdRelationship,
+            # #1499 — event lifecycle + invitee RSVP namespace: create/schedule/start/
+            # complete/cancel/invite/rsvp verbs + list/show read surfaces.
+            CmdEvent,
             # #1511 — organization membership lifecycle.
             CmdOrg,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.

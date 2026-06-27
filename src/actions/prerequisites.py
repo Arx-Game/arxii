@@ -7,13 +7,23 @@ Prerequisites are thin wrappers around existing system queries. They answer
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 CANNOT_BE_USED_MESSAGE = "That can't be used."
 CANNOT_SEE_MESSAGE = "You can't see that."
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+
+def resolve_actor_sheet(actor: ObjectDB) -> Any:
+    """Return the actor's ``CharacterSheet``, or ``None`` if they have none."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return actor.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None
 
 
 @dataclass
@@ -31,6 +41,25 @@ class Prerequisite:
         context: dict | None = None,
     ) -> tuple[bool, str]:
         raise NotImplementedError
+
+
+@dataclass
+class HasCharacterSheetPrerequisite(Prerequisite):
+    """Actor must have a CharacterSheet."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        try:
+            actor.sheet_data  # noqa: B018
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "No active character."
+        return True, ""
 
 
 @dataclass
