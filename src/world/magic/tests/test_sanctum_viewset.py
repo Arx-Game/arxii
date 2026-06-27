@@ -14,7 +14,7 @@ the Action class — those paths are exercised by ``test_sanctum_*.py`` and
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -304,6 +304,35 @@ class InstallEndpointTests(SanctumViewSetTestBase):
         super().setUp()
         self.room_profile = RoomProfileFactory()
 
+        # Build a real AccountDB + RosterTenure chain so ``SanctumDetailsSerializer``
+        # resolves ``_viewer_character_sheet`` via
+        # ``RosterEntry.objects.for_account(request.user)`` without being patched.
+        # The other tests still use SimpleNamespace users (fizzle / failure / no-puppet
+        # all return early before the serializer runs, so no roster lookup fires).
+        from evennia_extensions.factories import AccountFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        self.account = AccountFactory()
+        # Link the existing character to the real account so ``_resolve_actor``
+        # passes its ``sheet.character.db_account_id == request.user.pk`` guard.
+        self.character.db_account_id = self.account.pk
+        self.character.save(update_fields=["db_account_id"])
+        # Tenure chain: account → PlayerData → RosterTenure → RosterEntry → sheet.
+        player_data = PlayerDataFactory(account=self.account)
+        roster_entry = RosterEntryFactory(character_sheet=self.sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        # ``puppet`` is a read-only Evennia property; mock it for the duration of
+        # this test so ``_resolve_actor`` sees our character as the active puppet.
+        puppet_patcher = patch.object(
+            type(self.account), "puppet", new_callable=PropertyMock, return_value=self.character
+        )
+        puppet_patcher.start()
+        self.addCleanup(puppet_patcher.stop)
+
     def _post_install(self, puppet, owner_mode="PERSONAL"):
         return self._list_post(
             "install",
@@ -315,31 +344,37 @@ class InstallEndpointTests(SanctumViewSetTestBase):
             },
         )
 
-    def test_install_success_returns_201_with_sanctum_and_meta_keys(self) -> None:
-        # Patch both the Action and the serializer (the serializer tries to call
-        # RosterEntry.objects.for_account on our fake SimpleNamespace user, which
-        # is only safe with a real Django account; mocking keeps this a unit test).
-        fake_sanctum_data = {"feature_instance_id": self.sanctum.pk, "level": 1}
-        with (
-            patch(f"{_VIEWS}.SanctumInstallAction") as mock_cls,
-            patch(f"{_VIEWS}.SanctumDetailsSerializer") as mock_ser,
-        ):
+    def test_install_success_returns_201_with_full_serializer_body(self) -> None:
+        """Install success: ``SanctumDetailsSerializer`` runs un-patched.
+
+        Uses a real account + RosterTenure fixture so the serializer can
+        resolve ``_viewer_character_sheet`` from ``for_account``. Asserts all
+        13 ``SanctumDetailsSerializer.Meta.fields`` are present in the merged
+        response — the riskiest contract point in the #1497 refactor.
+        """
+        with patch(f"{_VIEWS}.SanctumInstallAction") as mock_cls:
             mock_cls.return_value.run.return_value = self._ok_action_result(
                 {
                     "sanctum_id": self.sanctum.pk,
                     "fizzled": False,
                     "success_level": 1,
-                    "tier": 1,
+                    "tier": "success",
                 }
             )
-            mock_ser.return_value.data = fake_sanctum_data
-            resp = self._post_install(_actor_user(self.character))
+            resp = self._post_install(self.account)
 
         self.assertEqual(resp.status_code, 201)
-        self.assertIn("feature_instance_id", resp.data)
         self.assertEqual(resp.data["fizzled"], False)
         self.assertIn("success_level", resp.data)
         self.assertIn("tier", resp.data)
+        # Every field declared in SanctumDetailsSerializer.Meta.fields must appear —
+        # this proves the serializer ran for real and the full contract is intact.
+        from world.magic.serializers_sanctum import (
+            SanctumDetailsSerializer as _Ser,
+        )
+
+        for key in _Ser.Meta.fields:
+            self.assertIn(key, resp.data, msg=f"Missing SanctumDetailsSerializer field: {key}")
 
     def test_install_fizzle_returns_200_with_fizzle_body(self) -> None:
         with patch(f"{_VIEWS}.SanctumInstallAction") as mock_cls:
