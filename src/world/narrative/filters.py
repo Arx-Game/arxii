@@ -1,7 +1,12 @@
 import django_filters
 
 from world.narrative.constants import NarrativeCategory
-from world.narrative.models import Gemit, NarrativeMessageDelivery, UserStoryMute
+from world.narrative.models import (
+    Gemit,
+    NarrativeMessageDelivery,
+    UserCategoryMute,
+    UserStoryMute,
+)
 
 
 class NarrativeMessageDeliveryFilter(django_filters.FilterSet):
@@ -42,3 +47,13 @@ class UserStoryMuteFilter(django_filters.FilterSet):
     class Meta:
         model = UserStoryMute
         fields = ["story"]
+
+
+class UserCategoryMuteFilter(django_filters.FilterSet):
+    """Filter UserCategoryMutes by category (account is always scoped to request.user in view)."""
+
+    category = django_filters.ChoiceFilter(choices=NarrativeCategory.choices)
+
+    class Meta:
+        model = UserCategoryMute
+        fields = ["category"]

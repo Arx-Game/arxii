@@ -15568,6 +15568,81 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/narrative/category-mutes/:
+    get:
+      operationId: narrative_category_mutes_list
+      description: |-
+        Manage the requesting user's UserCategoryMutes — suppress a whole category's live push.
+
+        The category-level analogue of the story-mute ViewSet (e.g. squelch the WEATHER echo). Muting
+        does NOT gate read access; muted messages still create delivery rows and stay readable in the
+        category's tab. Only the live push is skipped.
+
+        GET    /api/narrative/category-mutes/      — list my category mutes
+        POST   /api/narrative/category-mutes/      — mute a category
+        DELETE /api/narrative/category-mutes/{id}/ — unmute
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - narrative
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserCategoryMuteList'
+          description: ''
+    post:
+      operationId: narrative_category_mutes_create
+      description: Create the mute and return a UserCategoryMuteSerializer response.
+      tags:
+      - narrative
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCategoryMuteCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCategoryMuteCreate'
+          description: ''
+  /api/narrative/category-mutes/{id}/:
+    delete:
+      operationId: narrative_category_mutes_destroy
+      description: Delete the mute. IsOwnCategoryMuteOrStaff enforces ownership via
+        get_object().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - narrative
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/narrative/deliveries/{id}/acknowledge/:
     post:
       operationId: narrative_deliveries_acknowledge_create
@@ -24903,6 +24978,26 @@ components:
       - target_spec
       - target_type
       - tier
+    CategoryF17Enum:
+      enum:
+      - story
+      - atmosphere
+      - visions
+      - happenstance
+      - system
+      - covenant
+      - renown
+      - weather
+      type: string
+      description: |-
+        * `story` - Story update
+        * `atmosphere` - Atmosphere
+        * `visions` - Visions
+        * `happenstance` - Happenstance
+        * `system` - System
+        * `covenant` - Covenant
+        * `renown` - Renown
+        * `weather` - Weather
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -34690,7 +34785,7 @@ components:
           description: IC content shown to recipients.
         category:
           allOf:
-          - $ref: '#/components/schemas/NarrativeMessageCategoryEnum'
+          - $ref: '#/components/schemas/CategoryF17Enum'
           readOnly: true
         sender_account:
           type: integer
@@ -34722,26 +34817,6 @@ components:
       - related_story
       - sender_account
       - sent_at
-    NarrativeMessageCategoryEnum:
-      enum:
-      - story
-      - atmosphere
-      - visions
-      - happenstance
-      - system
-      - covenant
-      - renown
-      - weather
-      type: string
-      description: |-
-        * `story` - Story update
-        * `atmosphere` - Atmosphere
-        * `visions` - Visions
-        * `happenstance` - Happenstance
-        * `system` - System
-        * `covenant` - Covenant
-        * `renown` - Renown
-        * `weather` - Weather
     NarrativeMessageDelivery:
       type: object
       properties:
@@ -38144,6 +38219,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TransitionRequiredOutcome'
+    PaginatedUserCategoryMuteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserCategoryMute'
     PaginatedUserStoryMuteList:
       type: object
       required:
@@ -47301,6 +47399,39 @@ components:
       - charges_remaining
       - destroyed
       - soft_deleted
+    UserCategoryMute:
+      type: object
+      description: Full UserCategoryMute representation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          $ref: '#/components/schemas/CategoryF17Enum'
+        muted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category
+      - id
+      - muted_at
+    UserCategoryMuteCreate:
+      type: object
+      description: Input serializer for POST /api/narrative/category-mutes/.
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryF17Enum'
+      required:
+      - category
+    UserCategoryMuteCreateRequest:
+      type: object
+      description: Input serializer for POST /api/narrative/category-mutes/.
+      properties:
+        category:
+          $ref: '#/components/schemas/CategoryF17Enum'
+      required:
+      - category
     UserStoryMute:
       type: object
       description: Full UserStoryMute representation.

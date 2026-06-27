@@ -9588,6 +9588,51 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/narrative/category-mutes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Manage the requesting user's UserCategoryMutes — suppress a whole category's live push.
+     *
+     *     The category-level analogue of the story-mute ViewSet (e.g. squelch the WEATHER echo). Muting
+     *     does NOT gate read access; muted messages still create delivery rows and stay readable in the
+     *     category's tab. Only the live push is skipped.
+     *
+     *     GET    /api/narrative/category-mutes/      — list my category mutes
+     *     POST   /api/narrative/category-mutes/      — mute a category
+     *     DELETE /api/narrative/category-mutes/{id}/ — unmute
+     */
+    get: operations['narrative_category_mutes_list'];
+    put?: never;
+    /** @description Create the mute and return a UserCategoryMuteSerializer response. */
+    post: operations['narrative_category_mutes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/category-mutes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Delete the mute. IsOwnCategoryMuteOrStaff enforces ownership via get_object(). */
+    delete: operations['narrative_category_mutes_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/narrative/deliveries/{id}/acknowledge/': {
     parameters: {
       query?: never;
@@ -14582,6 +14627,26 @@ export interface components {
         [key: string]: unknown;
       } | null;
     };
+    /**
+     * @description * `story` - Story update
+     *     * `atmosphere` - Atmosphere
+     *     * `visions` - Visions
+     *     * `happenstance` - Happenstance
+     *     * `system` - System
+     *     * `covenant` - Covenant
+     *     * `renown` - Renown
+     *     * `weather` - Weather
+     * @enum {string}
+     */
+    CategoryF17Enum:
+      | 'story'
+      | 'atmosphere'
+      | 'visions'
+      | 'happenstance'
+      | 'system'
+      | 'covenant'
+      | 'renown'
+      | 'weather';
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -19202,7 +19267,7 @@ export interface components {
       readonly id: number;
       /** @description IC content shown to recipients. */
       readonly body: string;
-      readonly category: components['schemas']['NarrativeMessageCategoryEnum'];
+      readonly category: components['schemas']['CategoryF17Enum'];
       /** @description Null = automated/system-sourced. */
       readonly sender_account: number | null;
       readonly related_story: number | null;
@@ -19211,26 +19276,6 @@ export interface components {
       /** Format: date-time */
       readonly sent_at: string;
     };
-    /**
-     * @description * `story` - Story update
-     *     * `atmosphere` - Atmosphere
-     *     * `visions` - Visions
-     *     * `happenstance` - Happenstance
-     *     * `system` - System
-     *     * `covenant` - Covenant
-     *     * `renown` - Renown
-     *     * `weather` - Weather
-     * @enum {string}
-     */
-    NarrativeMessageCategoryEnum:
-      | 'story'
-      | 'atmosphere'
-      | 'visions'
-      | 'happenstance'
-      | 'system'
-      | 'covenant'
-      | 'renown'
-      | 'weather';
     NarrativeMessageDelivery: {
       readonly id: number;
       readonly message: components['schemas']['NarrativeMessage'];
@@ -21271,6 +21316,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['TransitionRequiredOutcome'][];
+    };
+    PaginatedUserCategoryMuteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['UserCategoryMute'][];
     };
     PaginatedUserStoryMuteList: {
       /** @example 123 */
@@ -25932,6 +25992,21 @@ export interface components {
       destroyed: boolean;
       soft_deleted: boolean;
       applied_effect_count: number;
+    };
+    /** @description Full UserCategoryMute representation. */
+    UserCategoryMute: {
+      readonly id: number;
+      category: components['schemas']['CategoryF17Enum'];
+      /** Format: date-time */
+      readonly muted_at: string;
+    };
+    /** @description Input serializer for POST /api/narrative/category-mutes/. */
+    UserCategoryMuteCreate: {
+      category: components['schemas']['CategoryF17Enum'];
+    };
+    /** @description Input serializer for POST /api/narrative/category-mutes/. */
+    UserCategoryMuteCreateRequest: {
+      category: components['schemas']['CategoryF17Enum'];
     };
     /** @description Full UserStoryMute representation. */
     UserStoryMute: {
@@ -39412,6 +39487,73 @@ export interface operations {
     };
   };
   mutes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  narrative_category_mutes_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedUserCategoryMuteList'];
+        };
+      };
+    };
+  };
+  narrative_category_mutes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserCategoryMuteCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UserCategoryMuteCreate'];
+        };
+      };
+    };
+  };
+  narrative_category_mutes_destroy: {
     parameters: {
       query?: never;
       header?: never;

@@ -80,3 +80,21 @@ export interface PaginatedMutes {
   previous: string | null;
   results: UserStoryMute[];
 }
+
+// ---------------------------------------------------------------------------
+// UserCategoryMute (#1522) — squelch a whole narrative category's live push
+// (e.g. the WEATHER echo). Generated from UserCategoryMuteSerializer.
+// ---------------------------------------------------------------------------
+
+export type UserCategoryMute = components['schemas']['UserCategoryMute'];
+
+export interface UserCategoryMuteCreateBody {
+  category: NarrativeCategory;
+}
+
+export interface PaginatedCategoryMutes {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: UserCategoryMute[];
+}

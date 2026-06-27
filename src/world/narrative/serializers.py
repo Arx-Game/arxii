@@ -1,7 +1,13 @@
 from rest_framework import serializers
 
 from world.narrative.constants import GemitReach
-from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
+from world.narrative.models import (
+    Gemit,
+    NarrativeMessage,
+    NarrativeMessageDelivery,
+    UserCategoryMute,
+    UserStoryMute,
+)
 
 
 class NarrativeMessageSerializer(serializers.ModelSerializer):
@@ -149,4 +155,35 @@ class UserStoryMuteCreateSerializer(serializers.ModelSerializer):
         if UserStoryMute.objects.filter(account=request.user, story=story).exists():
             msg = "You have already muted this story."
             raise serializers.ValidationError({"story": msg})
+        return attrs
+
+
+# ---------------------------------------------------------------------------
+# UserCategoryMute serializers (#1522 — squelch a whole narrative category, e.g. WEATHER)
+# ---------------------------------------------------------------------------
+
+
+class UserCategoryMuteSerializer(serializers.ModelSerializer):
+    """Full UserCategoryMute representation."""
+
+    class Meta:
+        model = UserCategoryMute
+        fields = ["id", "category", "muted_at"]
+        read_only_fields = ["id", "muted_at"]
+
+
+class UserCategoryMuteCreateSerializer(serializers.ModelSerializer):
+    """Input serializer for POST /api/narrative/category-mutes/."""
+
+    class Meta:
+        model = UserCategoryMute
+        fields = ["category"]
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject if this account already has a mute for this category."""
+        request = self.context["request"]
+        category = attrs["category"]
+        if UserCategoryMute.objects.filter(account=request.user, category=category).exists():
+            msg = "You have already muted this category."
+            raise serializers.ValidationError({"category": msg})
         return attrs
