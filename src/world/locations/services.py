@@ -1070,7 +1070,10 @@ def set_residence(*, character: DefaultObject, room: DefaultObject) -> None:
     current room is destroyed — which is the intended dual meaning for a residence. Permission
     gating (the character has owner/tenant standing in ``room``) is the caller's concern.
     """
+    from world.locations.comfort_effect import recompute_comfort_regen_modifier  # noqa: PLC0415
+
     character.home = room
+    recompute_comfort_regen_modifier(character)  # home comfort → AP-regen modifier (#1514)
 
 
 def _has_chosen_residence(character: DefaultObject) -> bool:

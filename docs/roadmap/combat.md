@@ -611,7 +611,8 @@ The old model stored incapacitation and dying as enum values in `CharacterVitals
 - **`can_act` service** — coarse round-participation gate: `not dead AND awareness > 0`. An Unconscious PC has awareness zeroed → can_act False. A dying-but-conscious PC keeps awareness → can_act True. Degrades gracefully if awareness capability is not seeded.
 - **Unconscious condition** — non-progressive `ConditionTemplate` (name=`"Unconscious"`) with a `ConditionCapabilityEffect` that zeroes the `AWARENESS` foundational capability. Applied by `process_damage_consequences` on a failed knockout check. SQLite-compatible (no DISTINCT ON).
 - **Bleeding-Out condition** — progressive `ConditionTemplate` (name=`"Bleeding Out"`, `has_progression=True`) applied by `process_damage_consequences` on a failed death check. Does NOT impair awareness — dying characters remain conscious and can act.
-- **`advance_bleed_out`** — called once per round from `resolve_round` for every participant with an active Bleeding-Out condition. Each round the character rolls a stage resist check; failure advances the stage. Failure at the terminal stage calls `_mark_dead`, writing `life_state=DEAD`.
+- **`advance_bleed_out`** — called once per round from `resolve_round` for every participant with an active Bleeding-Out condition. Non-terminal stages roll a stage resist check; failure advances the stage. The terminal stage resolves through the guarded `bleed_out_terminal` consequence pool (`_resolve_terminal_bleed_out`) using the stage's authored `resist_check_type` + `resist_difficulty`: a `die` (character_loss) outcome calls `_mark_dead` (still the single death writer) — but only when `death_is_permitted` (the `die` candidate is excluded before selection for a PC source, a `death_deferred` victim, or an absent source per ADR-0023/#1479); a `recover` / `stay_incapacitated` outcome removes the Bleeding-Out condition so the victim stops dying (stays ALIVE; wounds remain). The death-gated roll + outcome dispatch is the shared `_resolve_peril_via_pool(character_sheet, instance, pool)` core (#1479 Task 8) — reused by both `_resolve_terminal_bleed_out` and the abandonment path so there is no parallel implementation.
+- **Abandonment resolution (`resolve_abandonment`, #1479 Task 8)** — an abandoned downed victim (left to die without a hostile party finishing them) resolves their fate through the source-appropriate abandonment pool (`select_abandonment_pool(source)` → `abandonment_enemy` / `abandonment_pvp` / `abandonment_environmental`) via the same `_resolve_peril_via_pool` core. Two triggers, both in `world.scenes.round_services`: the **N-beat grace window** (`_resolve_abandonment_grace` in `resolve_scene_round`, after the END tick — fires once `round_number - ConditionInstance.abandoned_since_round >= SceneRoundDefaultsConfig.abandonment_grace_rounds`) and the **solo-immediate case** (`resolve_solo_abandoned_victims`, wired into `Room.at_object_leave` — when a departure removes the last potential rescuer). A rescue (the bleed-out cleared via `remove_condition`/`perform_treatment`) before either trigger leaves no acute-peril instance, so `resolve_abandonment` no-ops — rescue beats the check.
 - **`FoundationalCapability` constants and `CapabilityType.innate_baseline`** — `conditions.constants` defines `FoundationalCapability.AWARENESS` (and stubs for MOBILITY / COGNITION). `CapabilityType.innate_baseline` is the per-type default value when no explicit derivation row exists. `get_effective_capability_value` sums innate_baseline + derivation rows + active condition effects.
 - **`TechniqueCapabilityRequirement` + `technique_performable`** — per-technique capability requirements (`Technique` FK + `CapabilityType` FK + `minimum_value`). `technique_performable(character, technique)` returns False when any requirement is unmet. `declare_action` and `_get_performable_techniques` gate on this.
 - **Combat eligibility rewired** — `declare_action` raises if `can_act` is False. `_get_combat_participants_who_can_act` filters to participants where can_act is True. `_check_encounter_completion` uses can_act (not status) to determine whether all PCs are down.
@@ -976,8 +977,17 @@ integration test suite.
   effect-tested, and **live-dispatchable** on the scene consent path (#1172): accepting the
   request fires its `RemoveConditionOnCheckConfig`, removing the target ally's Berserk
   condition end-to-end.
+- **Fury + soulfray-accept in party combat** — **DONE** (#1454): the party-combat round path
+  now consumes both as player decisions. `CombatRoundAction` adopts the `CommittingDeclaration`
+  mixin (`fury_commitment` / `fury_anchor`) plus a `confirm_soulfray_risk` bool;
+  `resolve_combat_technique` reads them instead of hardcoding `confirm_soulfray_risk=True`, calls
+  the shared `run_fury_for_action`, threads `control_penalty` + `power_intensity_bonus` into
+  `use_technique`, and records `Interaction.fury_committed`. The soulfray decision is asked at
+  declaration via the existing `accept soulfray` / `decline soulfray` offer flow (declining is
+  free re-declare; an unconfirmed risky cast is a clean no-op — AFK-safe, ADR-0004). Telnet
+  `cast … fury=<tier> anchor=<name>` parses through to the same dispatch seam the web uses.
 - **Frontend / web UI** — the backend is complete; the declaration panel and round-by-round
-  clash visibility UI is a follow-up.
+  clash visibility UI is a follow-up (incl. the combat-panel soulfray-accept + fury controls).
 
 ### Shared Future Work (combat-adjacent)
 - **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder

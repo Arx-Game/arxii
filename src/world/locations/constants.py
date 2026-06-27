@@ -206,6 +206,14 @@ AP_REGEN_MULTIPLIER_PCT: dict[int, int] = {
     10: 100,
 }
 
+# The mechanics ModifierCategory + AP-regen ModifierTargets the comfort→AP effect writes (#1514).
+# get_or_create'd by world.locations.comfort_effect (otherwise only seeded in tests). The comfort
+# delta (comfort_level − COMFORT_LEVEL_NEUTRAL) is a flat additive on these targets; the regen
+# cron sums it for free, and its own max(0, …) floors regen — comfort can't drive it negative.
+AP_MODIFIER_CATEGORY = "action_points"
+AP_REGEN_TARGET_NAMES: tuple[str, ...] = ("ap_daily_regen", "ap_weekly_regen")
+
+
 # Player-facing word per comfort level for the in-room readout (#1514). PLACEHOLDER — these
 # are flavour the author pass will revise; the level numbers + multiplier are the real spec.
 COMFORT_LEVEL_LABELS: dict[int, str] = {

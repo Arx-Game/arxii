@@ -51,6 +51,23 @@ Three ways to add points:
 - **RelationshipCapstone** — Adds both permanent points and capacity. Monumental moments.
 - **RelationshipChange** — Redistributes existing developed points between tracks.
 
+### Writeup Feedback (#1537)
+Abstract base and two concrete models; FK direction follows ADR-0010 (specific→general) and
+ADR-0015 (no polymorphism).
+
+- **WriteupFeedbackBase** (abstract) — Links feedback to exactly one of
+  `RelationshipUpdate` / `RelationshipDevelopment` / `RelationshipCapstone` via nullable FKs
+  with a DB `CheckConstraint` ensuring exactly one is set. Derived props `writeup`,
+  `author_sheet`, `subject_sheet`.
+- **WriteupKudos** [BUILT & WIRED] — The subject's one-way, non-revocable commendation of a
+  writeup about them. `account` FK (the commender). Awards `WRITEUP_KUDOS_AMOUNT` kudos to
+  the *author* via the existing `award_kudos` path. One commendation per (account, writeup),
+  enforced by conditional `UniqueConstraint`s. Awards only fire when the
+  `KudosSourceCategory(name="relationship_writeup")` row is DB-seeded.
+- **WriteupComplaint** [BUILT & WIRED] — A bad-faith-RP flag filed by any viewer who can see
+  a SHARED/PUBLIC writeup. `complainant` FK + `reason` TextField + `resolved` bool. Staff-triage
+  only; zero player-facing signal.
+
 ## Lifecycle
 1. **First Impression** — Unilateral, creates pending relationship with update + capacity
 2. **Reciprocation** — Other player's first impression activates both sides
@@ -76,22 +93,45 @@ Three ways to add points:
   (`services.py`) — the four positive relationship-building verbs. Each is wrapped by a
   corresponding Action in `actions/definitions/relationships.py` and reachable from both surfaces
   below.
+- **`give_writeup_kudos(*, giver_account, writeup) -> WriteupKudos`** (#1537) — the subject
+  commends a writeup about them; raises `WriteupFeedbackError` subclasses (`WriteupNotSharedError`,
+  `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`) each with a
+  `user_message`. Awards `WRITEUP_KUDOS_AMOUNT` kudos to the author when the
+  `"relationship_writeup"` `KudosSourceCategory` is seeded; logs a warning and still records the
+  row when it is absent.
+- **`file_writeup_complaint(*, complainant_account, writeup, reason) -> WriteupComplaint`**
+  (#1537) — any viewer of a SHARED/PUBLIC writeup files a bad-faith-RP complaint for staff
+  triage. Raises `WriteupNotVisibleError` when the complainant cannot see the writeup.
 
-## Player Surface (#1485)
+## Player Surface (#1485, #1537)
 
 The positive relationship-building loop is reachable from both web and telnet:
 
 - **Web** — `RelationshipUpdateViewSet` exposes four POST endpoints (`first_impression` /
   `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`. List/
-  detail reads live on `CharacterRelationshipViewSet` (read-only).
+  detail reads live on `CharacterRelationshipViewSet` (read-only). Read serializers expose
+  `kudos_count` and `viewer_has_kudosed` on every writeup row (annotated via `Count`/`Exists`
+  to avoid N+1). Complaints never appear in any player-facing serializer.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).
 
 `linked_scene` defaults to the caller's active scene in the current room when the target is
 co-located. **No consent gate** — these describe the caller's regard for another character; they do
-not compel or provoke the target's behavior (ADR-0024). The Golden Rule covers bad-faith writeups;
-a positive kudos / complaint feedback layer for shared/public writeups is a follow-up (#1328).
+not compel or provoke the target's behavior (ADR-0024).
+
+### Writeup feedback (#1537) [BUILT & WIRED]
+- **Web** — `RelationshipUpdateViewSet` POST `kudos` endpoint dispatches
+  `GiveWriteupKudosAction`; POST `complaint` endpoint dispatches `FileWriteupComplaintAction`.
+  Both run through `action.run()` (ADR-0001).
+- **Telnet** — `CmdRelationship` adds `relationship kudos <ref>` and
+  `relationship complain <ref>=<reason>`, where `<ref>` is `u<pk>` / `d<pk>` / `c<pk>` as shown
+  by `relationship show`.
+- **Admin** — `WriteupComplaint` is registered in Django admin (django-unfold style) for staff
+  triage. No player-facing complaint surface.
+- **FK direction** — feedback models live in `relationships`; the kudos primitive (`KudosPointsData`
+  etc.) is not polluted with FK back-pointers (ADR-0010). No denormalized kudos count column —
+  derived at read time (ADR-0014).
 
 ## Integration
 - Achievement stats fired via `world.achievements.services.increment_stat()`

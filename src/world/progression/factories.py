@@ -21,6 +21,8 @@ from world.progression.models import (
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    PathIntent,
+    RandomSceneTarget,
     WeeklySkillUsage,
     WeeklySocialEngagement,
     XPTransaction,
@@ -245,6 +247,35 @@ class WeeklySocialEngagementFactory(factory_django.DjangoModelFactory):
     )
     pending_points = Decimal(0)
     granted = False
+
+
+class RandomSceneTargetFactory(factory_django.DjangoModelFactory):
+    """Factory for RandomSceneTarget."""
+
+    class Meta:
+        model = RandomSceneTarget
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    target_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    game_week = factory.LazyFunction(
+        lambda: __import__(
+            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+        ).get_current_game_week()
+    )
+    slot_number = 1
+    claimed = False
+    first_time = True
+    rerolled = False
+
+
+class PathIntentFactory(factory_django.DjangoModelFactory):
+    """Factory for PathIntent."""
+
+    class Meta:
+        model = PathIntent
+
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    intended_path = factory.SubFactory("world.classes.factories.PathFactory")
 
 
 def seed_kudos_difficulty_weights() -> None:

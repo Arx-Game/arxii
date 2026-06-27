@@ -95,8 +95,16 @@ class Action:
         """
         return []
 
-    def round_declaration(self, ctx: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]] | None:
-        """Return (PlayerAction, dispatch_kwargs) to defer to a round, or None for immediate."""
+    def round_declaration(
+        self, ctx: Any, **kwargs: Any
+    ) -> tuple[Any, dict[str, Any]] | ActionResult | None:
+        """Return (PlayerAction, dispatch_kwargs) to defer, ActionResult to short-circuit, or None.
+
+        - ``tuple[PlayerAction, dict]``: record the declaration and return deferred=True.
+        - ``ActionResult``: short-circuit (e.g. soulfray gate) — return the result message,
+          do NOT record a declaration or call execute().
+        - ``None``: fall through to immediate execute().
+        """
         return None
 
     def execute(
@@ -196,7 +204,7 @@ class Action:
 
     def run(
         self,
-        actor: ObjectDB,
+        actor: ObjectDB | None,
         enhancements: list[ActionEnhancement] | None = None,
         **kwargs: Any,
     ) -> ActionResult:
@@ -205,8 +213,18 @@ class Action:
         This is the primary entry point. Both commands (telnet) and the
         web action dispatcher call this method.
 
+        ``actor`` is the character performing the action and may be ``None``
+        for **account-authorized** actions that need no character context —
+        e.g. a staffer or scene-GM managing an event they do not own (the
+        host/GM/staff gate is account-based, mirroring the DRF permission
+        classes). When ``actor`` is ``None`` the character-scoped machinery
+        (scene-state init, involuntary enhancements) is skipped: those are
+        character-scoped and have nothing to apply to an account-only caller.
+        Character-acting actions (create/respond) always supply an actor.
+
         Args:
-            actor: The character performing the action.
+            actor: The character performing the action, or ``None`` for
+                account-authorized actions with no character context.
             enhancements: Voluntary enhancements chosen by the player.
             **kwargs: Action-specific parameters (target, text, etc.).
 
@@ -218,7 +236,8 @@ class Action:
 
         # Build context
         sdm = SceneDataManager()
-        sdm.initialize_state_for_object(actor)
+        if actor is not None:
+            sdm.initialize_state_for_object(actor)
         context = ActionContext(
             action=self,
             actor=actor,
@@ -231,30 +250,38 @@ class Action:
         for enh in enhancements or []:
             enh.apply(context)
 
-        # Query and apply involuntary enhancements
-        for enh in get_involuntary_enhancements(self.key, actor):
-            enh.apply(context)
+        # Query and apply involuntary enhancements (character-scoped — none to
+        # apply when there is no actor, e.g. an account-authorized event action).
+        if actor is not None:
+            for enh in get_involuntary_enhancements(self.key, actor):
+                enh.apply(context)
 
         # TODO: emit intent event and check for trigger interruption
 
         # Enforce prerequisites against the final (post-enhancement) kwargs.
         # run() is the single telnet+web chokepoint; prerequisites read kwargs
-        # via the context dict (so they can see a second target).
-        availability = self.check_availability(
-            actor,
-            target=context.kwargs.get("target"),
-            context={"kwargs": context.kwargs, "scene_data": sdm},
-        )
-        if not availability.available:
-            return ActionResult(
-                success=False,
-                message="; ".join(availability.reasons) or "You can't do that right now.",
+        # via the context dict (so they can see a second target). Account-
+        # authorized actions (actor is None) have no character-scoped
+        # prerequisites, so skip the gate for them.
+        if actor is not None:
+            availability = self.check_availability(
+                actor,
+                target=context.kwargs.get("target"),
+                context={"kwargs": context.kwargs, "scene_data": sdm},
             )
+            if not availability.available:
+                return ActionResult(
+                    success=False,
+                    message="; ".join(availability.reasons) or "You can't do that right now.",
+                )
 
         # Charge the action's declarative AP + fatigue cost before executing (#1154).
-        cost_failure = self._charge_costs(actor)
-        if cost_failure is not None:
-            return cost_failure
+        # Account-authorized actions have no AP/fatigue cost and no actor to
+        # charge against; skip for them.
+        if actor is not None:
+            cost_failure = self._charge_costs(actor)
+            if cost_failure is not None:
+                return cost_failure
 
         # Execute with potentially modified kwargs
         context.result = self.execute(actor, context=context, **context.kwargs)

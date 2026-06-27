@@ -44,6 +44,15 @@ from actions.definitions.endorsements import (
     SceneEntryEndorseAction,
     StylePresentationEndorseAction,
 )
+from actions.definitions.events import (
+    CancelEventAction,
+    CompleteEventAction,
+    CreateEventAction,
+    InviteToEventAction,
+    RespondInvitationAction,
+    ScheduleEventAction,
+    StartEventAction,
+)
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.gm_combat import (
@@ -62,6 +71,7 @@ from actions.definitions.gm_stories import (
     PromoteEpisodeAction,
     ResolveEpisodeAction,
 )
+from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
@@ -71,6 +81,11 @@ from actions.definitions.items import (
     TakeOutAction,
     UnequipAction,
     UseItemAction,
+)
+from actions.definitions.journals import (
+    CreateJournalEntryAction,
+    EditJournalEntryAction,
+    RespondToJournalAction,
 )
 from actions.definitions.locations import RoomEditAction
 from actions.definitions.movement import (
@@ -99,10 +114,21 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.progression_rewards import (
+    CastVoteAction,
+    ClaimKudosAction,
+    ClaimRandomSceneAction,
+    ClearPathIntentAction,
+    RemoveVoteAction,
+    RerollRandomSceneAction,
+    SetPathIntentAction,
+)
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
     CreateFirstImpressionAction,
+    FileWriteupComplaintAction,
+    GiveWriteupKudosAction,
     RedistributePointsAction,
 )
 from actions.definitions.ritual import PerformRitualAction
@@ -114,6 +140,11 @@ from actions.definitions.rounds import (
     PassRoundAction,
     SetRoundModeAction,
     StartRoundAction,
+)
+from actions.definitions.scene_reactions import (
+    ReactToWindowAction,
+    ToggleFavoriteAction,
+    ToggleReactionAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
 from actions.definitions.social import (
@@ -212,12 +243,36 @@ _ALL_ACTIONS: list[Action] = [
     MarkBeatAction(),
     ResolveAlterationAction(),
     RestAction(),
+    ToggleFavoriteAction(),
+    ToggleReactionAction(),
+    ReactToWindowAction(),
     CreateFirstImpressionAction(),
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    CreateJournalEntryAction(),
+    RespondToJournalAction(),
+    EditJournalEntryAction(),
+    SetCharacterGoalsAction(),
+    LogGoalProgressAction(),
+    GiveWriteupKudosAction(),
+    FileWriteupComplaintAction(),
+    CreateEventAction(),
+    ScheduleEventAction(),
+    StartEventAction(),
+    CompleteEventAction(),
+    CancelEventAction(),
+    InviteToEventAction(),
+    RespondInvitationAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
+    ClaimKudosAction(),
+    CastVoteAction(),
+    RemoveVoteAction(),
+    ClaimRandomSceneAction(),
+    RerollRandomSceneAction(),
+    SetPathIntentAction(),
+    ClearPathIntentAction(),
     start_npc_interaction,
     resolve_npc_offer,
     end_npc_interaction,

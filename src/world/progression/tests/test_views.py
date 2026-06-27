@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from world.progression.factories import KudosClaimCategoryFactory, KudosSourceCategoryFactory
 from world.progression.services import award_kudos
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 
 
 class ProgressionViewTestCase(TestCase):
@@ -38,11 +39,13 @@ class ProgressionViewTestCase(TestCase):
             KudosTransaction,
             XPTransaction,
         )
+        from world.roster.models import RosterEntry
 
         KudosPointsData.flush_instance_cache()
         ExperiencePointsData.flush_instance_cache()
         KudosTransaction.flush_instance_cache()
         XPTransaction.flush_instance_cache()
+        RosterEntry.flush_instance_cache()
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
@@ -75,6 +78,10 @@ class ClaimKudosViewTests(ProgressionViewTestCase):
         cls.claim_category = KudosClaimCategoryFactory(
             name="xp_convert", kudos_cost=1, reward_amount=1
         )
+        # Views now dispatch through ClaimKudosAction which requires an actor;
+        # create a roster entry so _actor_for_account(cls.user) resolves a character.
+        pd = PlayerDataFactory(account=cls.user)
+        RosterTenureFactory(player_data=pd)
 
     def _seed_kudos(self, amount: int) -> None:
         award_kudos(
@@ -157,3 +164,22 @@ class ClaimKudosViewTests(ProgressionViewTestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_no_active_character_returns_400(self):
+        """Returns 400 when the account has no active roster character."""
+        from evennia.accounts.models import AccountDB
+
+        no_char_user = AccountDB.objects.create_user(
+            username="no_char_kudos",
+            email="no_char_kudos@test.com",
+            password="testpass123",
+        )
+        self.client.force_authenticate(user=no_char_user)
+        self._seed_kudos(10)
+        response = self.client.post(
+            "/api/progression/claim-kudos/",
+            {"claim_category_id": self.claim_category.id, "amount": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "No active character to act as.")

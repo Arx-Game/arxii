@@ -92,7 +92,14 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
 - **`ArchitecturalStyle` (done):** `ArchitecturalStyle` + `StyleAffinity` rows on `world.buildings`,
   with a `Building.architectural_style` FK and `set_building_style` materializing the affinities as
   cascade modifiers on the building's Area. Lore lives in a linked `CodexSubject`.
-- **Climate baseline (#1522, slice 1 done):** `world.weather.Climate` — a per-region signed
+- **Decorations + comfort-level engine + in-room readout (done):** stackable `DecorationKind`/
+  `RoomDecoration` (mitigation + amenity), `comfort_level` (1–10 from a wide points pool), the
+  `comfort` command.
+- **Residence + comfort→AP-regen (done):** primary residence reuses Evennia `home` (`home/set`,
+  auto-default on first rent/acquire); `world.locations.comfort_effect` materializes
+  `comfort_level − 5` as a flat `CharacterModifier` on the ap-regen targets, recomputed only on
+  comfort-change events (home / style / decoration) and read for free by the regen cron.
+- **Climate baseline (#1522, done):** `world.weather.Climate` — a per-region signed
   `temperature`/`moisture` baseline, designated via `Area.climate` and resolved
   most-specific-wins (`get_effective_climate`, mirrors realm). It decomposes onto the
   COLD/HEAT/WET/DRY exposure axes and folds into `felt_exposure` *before* the 0-floor (so a
@@ -101,20 +108,19 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   crosses into real winter cold while a tropical region's high baseline keeps "no real winter."
   Added the `DRY` exposure axis. `WIND` is deliberately *not* climate-driven (transient
   weather/magic only).
-- **Transient weather (#1522, slices 2a–2b done):** `WeatherType` (climate-temp-band gated,
-  `is_automated`, weighted) + `WeatherTypeExposure` + `WeatherEmit` (season/phase-gated) +
+- **Transient weather (#1522, done — the dynamic driver):** `WeatherType` (climate-temp-band
+  gated, `is_automated`, weighted) + `WeatherTypeExposure` + `WeatherEmit` (season/phase-gated) +
   `RegionWeatherState` (resolved most-specific-wins). `roll_region_weather` writes decaying
   source-tagged WET/WIND modifiers over the climate baseline; a `game_clock` cron rolls each
-  climate region every 2 real hours (≈6 IC) and echoes one emit to online occupants as an
-  ATMOSPHERE narrative (frontend-routable). A `time`/`weather` telnet command, a `GET /api/weather/conditions/` endpoint, and a React
-  `WeatherWidget` in the top bar surface it; echoes are squelchable per-player
-  (`narrative.UserCategoryMute` on the `WEATHER` category). The 7 types + 263 emits are seeded
-  from the Arx-1 corpus. `FeastDay` forces special weather (Eclipse / Moon Madness) world-wide on
-  recurring IC dates — the GM-lever automation. **Remaining:** wind-as-mechanic combat consumer
-  (**#1555**, Tehom's domain — the WIND provider side is done); re-seed-as-upsert for edited emits.
-- **Later slices:** stackable comfort **decorations** (not `RoomFeatureInstance` — that's OneToOne),
-  the comfort-level/effect engine (comfort→AP-regen, comfort→Conditions [Tehom-coordinated]), and
-  the inhabitant/owner surfacing.
+  climate region every 2 real hours (≈6 IC) and echoes one emit to online occupants as a
+  `NarrativeCategory.WEATHER` message. A `time`/`weather` telnet command, a
+  `GET /api/weather/conditions/` endpoint, and a React `WeatherWidget` in the top bar surface it;
+  echoes are squelchable per-player (`narrative.UserCategoryMute`). The 7 types + 263 emits are
+  seeded from the Arx-1 corpus. `FeastDay` forces special weather (Eclipse / Moon Madness)
+  world-wide on recurring IC dates — the GM-lever automation.
+- **Later slices:** comfort→**Conditions** ("Chilled/Soaked", Tehom-coordinated `comfort_penalty`),
+  the **wind-as-mechanic** combat consumer (**#1555**, Tehom — the WIND provider side is done),
+  re-seed-as-upsert for edited emits, the web owner **build-HUD**, and inhabitant/owner surfacing.
 
 ## What's Needed for MVP
 

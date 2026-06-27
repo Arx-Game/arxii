@@ -4622,7 +4622,7 @@ export interface paths {
     /** @description ViewSet for managing event invitations. */
     get: operations['events_invitations_list'];
     put?: never;
-    /** @description Create an invitation for an event. */
+    /** @description Create an invitation via ``InviteToEventAction`` (ADR-0001 seam). */
     post: operations['events_invitations_create'];
     delete?: never;
     options?: never;
@@ -4642,6 +4642,30 @@ export interface paths {
     post?: never;
     /** @description ViewSet for managing event invitations. */
     delete: operations['events_invitations_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/invitations/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description An invitee RSVPs accept/decline to their own persona invitation.
+     *
+     *     The invitee (not the host) is the actor here; object-level "is this your
+     *     invitation" is enforced inside the Action (the persona must be the
+     *     invitation's ``target_persona``), so the permission class only checks
+     *     authentication.
+     */
+    post: operations['events_invitations_respond_create'];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -11105,6 +11129,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/complaint/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description File a bad-faith-RP complaint against a writeup for staff triage. */
+    post: operations['relationships_relationship_updates_complaint_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationship-updates/develop/': {
     parameters: {
       query?: never;
@@ -11133,6 +11174,23 @@ export interface paths {
     put?: never;
     /** @description Record a first impression toward another character. */
     post: operations['relationships_relationship_updates_first_impression_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-updates/kudos/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Commend a shared relationship writeup on behalf of its subject. */
+    post: operations['relationships_relationship_updates_kudos_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -16673,6 +16731,9 @@ export interface components {
       target_society?: number | null;
       readonly target_name: string | null;
       can_bring_guests?: boolean;
+      readonly response: components['schemas']['ResponseEnum'];
+      /** Format: date-time */
+      readonly responded_at: string | null;
       /** Format: date-time */
       readonly invited_at: string;
     };
@@ -23231,6 +23292,10 @@ export interface components {
        * @description When this capstone was recorded
        */
       readonly created_at: string;
+      /** @description Return pre-annotated kudos count, or fall back to a query. */
+      readonly kudos_count: number;
+      /** @description Return True if the request user has kudosed this capstone. */
+      readonly viewer_has_kudosed: boolean;
     };
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
@@ -23420,6 +23485,13 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     * @enum {string}
+     */
+    ResponseEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -25909,6 +25981,57 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /**
+     * @description Validate input for the complaint endpoint.
+     *
+     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+     *     Permissions (visibility check) are enforced inside the action / service.
+     */
+    WriteupComplaintWrite: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+      reason: string;
+    };
+    /**
+     * @description Validate input for the complaint endpoint.
+     *
+     *     Same shape as WriteupKudosWriteSerializer plus a mandatory ``reason`` field.
+     *     Permissions (visibility check) are enforced inside the action / service.
+     */
+    WriteupComplaintWriteRequest: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+      reason: string;
+    };
+    /**
+     * @description Validate input for the kudos endpoint.
+     *
+     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
+     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
+     */
+    WriteupKudosWrite: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+    };
+    /**
+     * @description Validate input for the kudos endpoint.
+     *
+     *     ``writeup_type`` selects which of the three writeup models the ID refers to.
+     *     ``writeup_id`` is the pk of that writeup. Existence is validated inside the
+     *     action (raises WriteupFeedbackError → mapped to a 400 response body).
+     */
+    WriteupKudosWriteRequest: {
+      writeup_type: components['schemas']['WriteupTypeEnum'];
+      writeup_id: number;
+    };
+    /**
+     * @description * `update` - update
+     *     * `development` - development
+     *     * `capstone` - capstone
+     * @enum {string}
+     */
+    WriteupTypeEnum: 'update' | 'development' | 'capstone';
     /**
      * @description * `fresh` - Fresh
      *     * `strained` - Strained
@@ -32227,6 +32350,32 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  events_invitations_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event invitation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventInvitationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventInvitation'];
+        };
       };
     };
   };
@@ -42025,6 +42174,29 @@ export interface operations {
       };
     };
   };
+  relationships_relationship_updates_complaint_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WriteupComplaintWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WriteupComplaintWrite'];
+        };
+      };
+    };
+  };
   relationships_relationship_updates_develop_create: {
     parameters: {
       query?: never;
@@ -42067,6 +42239,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FirstImpressionWrite'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_kudos_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WriteupKudosWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WriteupKudosWrite'];
         };
       };
     };

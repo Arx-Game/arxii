@@ -485,9 +485,19 @@ Goal domain allocation and journal-based XP progression.
 - **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
-- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget)
+- **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `set_character_goals` / `log_goal_progress` Actions wrap the services; web `CharacterGoalViewSet`/`GoalJournalViewSet` + telnet `CmdGoal` converge on `action.run()`
+- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget), actions (write paths Action-backed)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
+### Journals
+Character journal entries (public/private), praises, retorts, freeform tags, weekly XP.
+
+- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
+- **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
+- **Source:** `src/world/journals/`
 ### Action Points
 Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
@@ -648,7 +658,13 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `POST /api/progression/unlocks/purchase/` — buy a `class_level` or `thread_xp_lock` unlock with XP; dispatches `PurchaseUnlockAction`
 - **Actions:**
   - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
-- **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`)
+  - `ClaimKudosAction` (`registry_key="claim_kudos"`) — kudos→XP conversion; shared by web and telnet (#1348)
+  - `CastVoteAction` / `RemoveVoteAction` (`"cast_vote"` / `"remove_vote"`) — weekly vote budget management (#1348)
+  - `ClaimRandomSceneAction` / `RerollRandomSceneAction` (`"claim_random_scene"` / `"reroll_random_scene"`) — weekly random-scene bounty claims/rerolls (#1348)
+  - `SetPathIntentAction` / `ClearPathIntentAction` (`"set_path_intent"` / `"clear_path_intent"`) — declare/clear preferred next path for Audere Majora (#1348)
+- **New service module (#1348):** `world.progression.services.path_intent` — `set_path_intent(sheet, path)` / `clear_path_intent(sheet)`; single seam for `PathIntentViewSet` + `CmdPathIntent`
+- **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
+  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
@@ -697,7 +713,9 @@ action consent flow, and a three-mode non-combat round framework.
   `mode`/`start_reason` orthogonal — danger rounds are STRICT, ensured via
   `ensure_round_for_acute_condition`, #1466), `SceneRoundDefaultsConfig` (singleton pk=1 — staff-tunable
   defaults: `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
-  `anti_spam_seconds`; accessed via `get_scene_round_defaults_config()`), `SceneActionDeclaration`
+  `anti_spam_seconds`, `abandonment_grace_rounds` (#1479: N action-driven beats an abandoned downed
+  victim waits before fate resolves; default 2); accessed via `get_scene_round_defaults_config()`),
+  `SceneActionDeclaration`
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
   `max_actions_per_round`), `SceneRoundParticipant`
@@ -726,7 +744,20 @@ action consent flow, and a three-mode non-combat round framework.
     - `record_pose_order_action(scene_round, participant, target_persona=None)` — write an `is_immediate=True` ledger row.
     - `advance_pose_order_round_if_quorum(scene_round) -> SceneRound` — advance `round_number` when quorum met (round stays DECLARING).
     - `scene_round_is_complete(scene_round) -> bool` — quorum-gated (#1480): True when ≥ `ceil(advance_quorum_pct / 100 × present_active_count)` present ACTIVE `can_act` participants have a deferred (`is_immediate=False`) declaration; at 100 reduces to unanimity. Absent and present-`not can_act` participants are implicit passes.
-    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared present `can_act` participant is excluded from the END-tick target set so their own acute conditions don't advance (ADR-0004); declared/absent/unconscious participants tick as before.
+    - `resolve_scene_round(scene_round)` — social-only resolver: runs CHALLENGE declarations in
+      initiative order, fires end tick, advances round. **AFK own-peril skip (#1480):** an undeclared
+      present `can_act` participant is excluded from the END-tick target set so their own acute
+      conditions don't advance (ADR-0004). **Downed-victim narrowing (#1479):** a DOWNED victim's
+      acute peril (Bleeding Out) advances on the END tick only when the peril's `source_character`
+      declared this round (`hostile_drove_round`); otherwise the peril HOLDS and
+      `ConditionInstance.abandoned_since_round` is stamped (`mark_abandoned`) when a potential
+      rescuer is present. After the END tick, `_resolve_abandonment_grace` resolves any victim whose
+      `round_number − abandoned_since_round ≥ SceneRoundDefaultsConfig.abandonment_grace_rounds` via
+      `world.vitals.services.resolve_abandonment`; a resolved peril lets the danger round auto-end.
+    - `resolve_solo_abandoned_victims(room, *, departing=None)` (#1479 Task 8) — when a departure
+      removes the last potential rescuer, any still-downed victim's fate resolves immediately via
+      `resolve_abandonment`; wired into `typeclasses.rooms.Room.at_object_leave`. `departing` is
+      excluded from the rescuer check so the mover is not counted as a remaining rescuer.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
@@ -1333,7 +1364,9 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE),
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE; plus the
+  player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
+  `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
 - **Key Services (`world/combat/services.py`):**
@@ -1382,31 +1415,88 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/damage-scaling.md`,
   `docs/architecture/combat-conditions.md`
 
+### Vitals
+Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
+combat, poison, spells, exhaustion, and any damage source.
+
+- **Models:** `CharacterVitals` (OneToOne on CharacterSheet; fields: `life_state`
+  (`CharacterLifeState`: ALIVE/DEAD — the binary mortality axis), `health`, `max_health`,
+  `base_max_health` — null = derive from level/stamina/role; `died_at`),
+  `VitalsConsequenceConfig` (singleton pk=1; tunable difficulty scaling + pool FKs:
+  `knockout_pool`, `default_wound_pool`, `default_death_pool`)
+- **Key Services (`world/vitals/services.py`):**
+  - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
+  - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.
+  - `process_damage_consequences(character_sheet, damage, ...)` — full survivability pipeline:
+    knockout check → death check → permanent wound check; each tier rolls the configured pool.
+  - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
+    `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
+  - `_resolve_peril_via_pool(sheet, instance, pool) -> bool` — shared death-gated core for ALL
+    acute-peril resolution: excludes `character_loss` candidates when `death_is_permitted` returns
+    False; clears the condition on both death and survival; single `_mark_dead` writer.
+  - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
+    appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
+- **Key Services (`world/vitals/peril_resolution.py`, #1479):**
+  - `is_pc_source(source_character) -> bool` — PC-detection via `db_account` presence.
+  - `death_is_permitted(*, victim_sheet, source_character) -> bool` — False for PC sources
+    (ADR-0023), None sources, and `death_deferred` victims; True for NPC sources only.
+  - `select_abandonment_pool(source_character) -> ConsequencePool` — routes to
+    `abandonment_pvp` / `abandonment_enemy` / `abandonment_environmental` by source kind.
+  - `hostile_drove_round(victim_sheet, scene_round, declared_ids) -> bool` — True when the peril's
+    source declared this round; drives the hold/advance decision in `resolve_scene_round`.
+  - `potential_rescuer_present(victim_sheet, room, *, exclude_character_id=None) -> bool` — True
+    when any conscious non-hostile non-victim is in the room.
+  - `mark_abandoned(victim_sheet, scene_round)`, `clear_abandoned(victim_sheet)` — stamp/clear
+    `ConditionInstance.abandoned_since_round`.
+- **Pool constants (`world/vitals/constants.py`):** `POOL_BLEED_OUT_TERMINAL`,
+  `POOL_ABANDONMENT_ENEMY`, `POOL_ABANDONMENT_PVP`, `POOL_ABANDONMENT_ENVIRONMENTAL` (seeded via
+  `world.vitals.factories`; `abandonment_enemy` includes a `captured_alive` CAPTURE outcome).
+- **Design invariants:** ADR-0049 (guarded pool, no unconditional death); ADR-0023 extended to the
+  death layer (PC source can never produce death); ADR-0004 extended to dying state (grace window
+  counts round_number beats, not wall-clock); plummet exempt from hold/abandonment.
+- **Source:** `src/world/vitals/`
+- **Details:** `src/world/vitals/CLAUDE.md` · `docs/roadmap/combat.md` (§Phase 8, Phase 9)
+
 ### Relationships
-Track-based character-to-character regard, conditions, and situational modifier gating.
+Track-based character-to-character regard, conditions, situational modifier gating, and
+writeup kudos/complaint feedback.
 
 - **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
   `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
-  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429)
+  `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429);
+  **writeup feedback (#1537):** `WriteupKudos` (subject's non-revocable commendation;
+  awards kudos to the author), `WriteupComplaint` (bad-faith-RP flag for staff triage;
+  `resolved` bool; zero player signal)
 - **Key Fields:** `CharacterRelationship.affection` (signed sum), track
   `capacity` / `developed_points`; `UpdateVisibility` (private/shared/gossip/public)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
 - **Services:** `create_first_impression`, `create_development`, `create_capstone`,
-  `redistribute_points` (`services.py`) — the four positive relationship-building verbs
-- **Player surface (#1485):** all four verbs are reachable from both web and
-  telnet — the web `RelationshipUpdateViewSet` POST endpoints (`first_impression` /
-  `develop` / `capstone` / `redistribute`) and the telnet `relationship <subverb>`
-  namespace both dispatch the Actions in `actions/definitions/relationships.py` via
-  `action.run()` (the shared seam). Telnet adds `relationship list` / `relationship
-  show <name|#>` read surfaces (the web provides these implicitly via
-  `CharacterRelationshipViewSet`). No consent gate — these describe the caller's
-  regard, they do not compel the target's behavior (ADR-0024); kudos/complaint
-  feedback for shared/public writeups is a follow-up (#1328).
+  `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `give_writeup_kudos(*, giver_account, writeup)` — commend a writeup, awards kudos to
+  author (warn-skips when `"relationship_writeup"` `KudosSourceCategory` not seeded);
+  `file_writeup_complaint(*, complainant_account, writeup, reason)` — file a bad-faith-RP
+  complaint for staff triage
+- **Exceptions:** `WriteupFeedbackError` base + `WriteupNotSharedError`,
+  `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`,
+  `WriteupNotVisibleError` — each with `user_message` for 400 API responses
+- **Player surface (#1485, #1537):** all four verbs plus kudos/complaint are reachable
+  from both web and telnet — the web `RelationshipUpdateViewSet` POST endpoints
+  (`first_impression` / `develop` / `capstone` / `redistribute` / `kudos` / `complaint`)
+  and the telnet `relationship <subverb>` namespace both dispatch the Actions via
+  `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
+  on every writeup row. No consent gate — these describe the caller's regard, they do not
+  compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
+  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+- **Admin:** `WriteupComplaint` registered for staff triage (no player-facing complaint UI)
+- **Actions:** `GiveWriteupKudosAction` (key `"give_writeup_kudos"`),
+  `FileWriteupComplaintAction` (key `"file_writeup_complaint"`)
+  (`actions/definitions/relationships.py`)
 - **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK),
-  scenes (optional `linked_scene` defaults to the caller's active scene), progression (XP)
+  scenes (optional `linked_scene` defaults to the caller's active scene), progression
+  (XP + `award_kudos`)
 - **Source:** `src/world/relationships/`
 
 ---
@@ -1419,7 +1509,7 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)

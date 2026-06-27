@@ -242,9 +242,20 @@ class BleedOutProgressionTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.fail_outcome = CheckOutcomeFactory(name="bleed-fail", success_level=-1)
+        from world.vitals.factories import create_bleed_out_terminal_pool
+
+        create_bleed_out_terminal_pool()
+        # Use the same "Failure" outcome name that the pool seeds so that
+        # force_check_outcome selects the pool's "die" consequence tier.
+        cls.fail_outcome = CheckOutcomeFactory(name="Failure", success_level=-1)
         cls.pass_outcome = CheckOutcomeFactory(name="bleed-pass", success_level=1)
         cls.resist_check = CheckTypeFactory(name="bleed-resist")
+
+    def setUp(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        # A bare ObjectDB has db_account=None → classified as NPC → death_is_permitted True.
+        self.npc = ObjectDB.objects.create(db_key="BleedOutTestNPC")
 
     def _build_terminal_bleed_out(self) -> world.conditions.models.ConditionTemplate:  # type: ignore[name-defined]
         """Create a Bleeding-Out template with exactly one stage (terminal by definition)."""
@@ -266,7 +277,10 @@ class BleedOutProgressionTests(TestCase):
         vitals = _make_alive_vitals(sheet)
 
         bleed_out = self._build_terminal_bleed_out()
-        apply_result = apply_condition(target=character, condition=bleed_out)
+        # NPC source so death_is_permitted=True; pool seeded in setUpTestData.
+        apply_result = apply_condition(
+            target=character, condition=bleed_out, source_character=self.npc
+        )
         self.assertTrue(apply_result.success)
 
         with force_check_outcome(self.fail_outcome):
@@ -288,7 +302,8 @@ class BleedOutProgressionTests(TestCase):
         _seed_awareness_capability()
 
         bleed_out = self._build_terminal_bleed_out()
-        apply_condition(target=character, condition=bleed_out)
+        # NPC source so death_is_permitted=True; pool must be seeded (done in setUpTestData).
+        apply_condition(target=character, condition=bleed_out, source_character=self.npc)
 
         with force_check_outcome(self.fail_outcome):
             advance_bleed_out(character.sheet_data)

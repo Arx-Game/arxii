@@ -167,6 +167,49 @@ class RitualSessionTelnetE2ETests(TestCase):
         output = self.participant.msg.call_args[0][0]
         self.assertIn("not found or you are not its initiator", output.lower())
 
+    # ------------------------------------------------------------------
+    # cancel
+    # ------------------------------------------------------------------
+
+    def test_cancel_happy_path(self) -> None:
+        """draft → cancel → session deleted + initiator confirmation."""
+        session_pk = self._draft()
+
+        cmd = _run(CmdRitual, self.initiator, f"cancel {session_pk}")
+        cmd.func()
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+        output = self.initiator.msg.call_args[0][0]
+        self.assertIn("cancelled", output.lower())
+        self.assertIn(str(session_pk), output)
+
+    def test_cancel_by_non_initiator_sends_error(self) -> None:
+        """A non-initiator cancelling → error; session survives."""
+        session_pk = self._draft()
+
+        cmd = _run(CmdRitual, self.participant, f"cancel {session_pk}")
+        cmd.func()
+        output = self.participant.msg.call_args[0][0]
+        self.assertIn("not found or you are not its initiator", output.lower())
+        self.assertTrue(RitualSession.objects.filter(pk=session_pk).exists())
+
+    def test_cancel_nonexistent_session_sends_error(self) -> None:
+        """Cancelling a non-existent id → error message, no crash."""
+        cmd = _run(CmdRitual, self.initiator, "cancel 99999")
+        cmd.func()
+        output = self.initiator.msg.call_args[0][0]
+        self.assertIn("not found or you are not its initiator", output.lower())
+
+    def test_cancel_after_participant_joined(self) -> None:
+        """Cancel is unconditional for the initiator — works after a join."""
+        session_pk = self._draft()
+
+        cmd = _run(CmdRitual, self.participant, f"join {session_pk}")
+        cmd.func()
+
+        cmd = _run(CmdRitual, self.initiator, f"cancel {session_pk}")
+        cmd.func()
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+
     def test_draft_unknown_ritual_sends_error(self) -> None:
         """Drafting a non-existent ritual → error."""
         cmd = _run(CmdRitual, self.initiator, "draft Rite of Nonexistent invite=Participant")

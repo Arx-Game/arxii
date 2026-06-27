@@ -141,11 +141,13 @@ Replace the hardcoded `vitals.status` gates (`combat/services.py:565, 794-801,
   capability — granularly removing only the techniques that need them.
 - **Bleeding Out (Dying)** = a **staged** `ConditionTemplate`; `ConditionStage`
   per-stage `resist_check_type` + `resist_difficulty` give worsening
-  stabilization odds; terminal stage sets `life_state = DEAD`. Does **not**
+  stabilization odds; the terminal stage resolves through the guarded
+  `bleed_out_terminal` consequence pool (recover / stay_incapacitated / die),
+  where death is reachable only when `death_is_permitted` (#1479). Does **not**
   impair `awareness` — dying characters stay able to act. Stabilization =
   curing the condition. Combat round resolution advances active bleed-out
-  conditions (resist per stage; fail advances; terminal → dead). Non-combat
-  progression deferred (#523).
+  conditions (resist per stage; fail advances; terminal → gated pool resolution).
+  Non-combat progression deferred (#523).
 
 These `ConditionTemplate`s + foundational `CapabilityType`s are authored content
 (admin/seed); this PR provides the **mechanism** + factory-built rows for tests.

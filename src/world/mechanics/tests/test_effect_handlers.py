@@ -14,7 +14,8 @@ from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
-from world.conditions.factories import DamageTypeFactory
+from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
+from world.conditions.models import ConditionInstance
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
 from world.missions.constants import OptionKind, OptionSource
 from world.missions.factories import (
@@ -474,3 +475,48 @@ class RescueCaptiveHandlerTests(TestCase):
 
         assert result.applied is False
         assert result.skip_reason is not None
+
+
+class ApplyConditionSourceCharacterTests(TestCase):
+    """source_character on ResolutionContext is forwarded to ConditionInstance (#1479 Task 1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.victim = CharacterFactory(db_key="condition_victim")
+        cls.attacker = CharacterFactory(db_key="condition_attacker")
+        cls.condition_template = ConditionTemplateFactory()
+        cls.effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=cls.condition_template,
+        )
+
+    def test_source_character_is_stored_on_condition_instance(self) -> None:
+        """When context.source_character is set, the created ConditionInstance carries it."""
+        context = ResolutionContext(
+            character=self.victim,
+            source_character=self.attacker,
+        )
+
+        result = apply_effect(self.effect, context)
+
+        assert result.applied is True
+        instance = ConditionInstance.objects.get(
+            target=self.victim,
+            condition=self.condition_template,
+        )
+        assert instance.source_character == self.attacker
+
+    def test_source_character_none_when_not_provided(self) -> None:
+        """When context.source_character is None, ConditionInstance.source_character is None."""
+        context = ResolutionContext(character=self.victim)
+
+        result = apply_effect(self.effect, context)
+
+        assert result.applied is True
+        instance = ConditionInstance.objects.get(
+            target=self.victim,
+            condition=self.condition_template,
+        )
+        assert instance.source_character is None

@@ -1820,6 +1820,22 @@ def get_aggro_priority(character_sheet: "CharacterSheet") -> int:
     return result["total"]
 
 
+def has_death_deferred(character: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """Return True if the character has any active condition granting death_deferred.
+
+    Single source of truth for the death-deferred query, shared by combat
+    services and the vitals peril-resolution gate (world.vitals.peril_resolution).
+    Supersedes the private ``_character_has_death_deferred`` in
+    ``world.combat.services``, which now delegates here.
+    """
+    return ConditionInstance.objects.filter(
+        target=character,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+        condition__properties__name="death_deferred",
+    ).exists()
+
+
 # =============================================================================
 # Percentage Modifier Queries (from Distinctions)
 # =============================================================================

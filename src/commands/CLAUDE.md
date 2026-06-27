@@ -64,12 +64,14 @@ actions, backends, and service functions.
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
     immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
   - `ritual sessions` — list pending sessions
-  - `ritual draft <name> invite=<char>[,<char>]` — draft a session
-  - `ritual join <id>` — accept your invitation
+  - `ritual draft <name> invite=<char>[,<char>] [role=sinner|sineater resonance=<name> [writeup=...]]`
+    — draft a session (setup-info rituals, e.g. soul-tether BILATERAL)
+  - `ritual join <id> [role=sinner|sineater]` — accept your invitation
   - `ritual decline <id>` — decline your invitation
   - `ritual fire <id>` — fire the session (initiator only)
+  - `ritual cancel <id>` — cancel a pending session (initiator only)
 
-  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` directly.
+  Session subcommands call `draft_session` / `accept_session` / `decline_session` / `fire_session` / `cancel_session` directly.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
   parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
   reference grammar; other anchor kinds are extended by the thread-weaving journey
@@ -84,7 +86,7 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]] [fury=<tier> anchor=<name>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
@@ -99,6 +101,15 @@ actions, backends, and service functions.
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).
+
+    **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
+    names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
+    rage answers to (resolved to a `CharacterSheet` by character key). They inject
+    `fury_commitment_id` / `fury_anchor_id` into the dispatch kwargs, which `round_declaration`
+    forwards onto the `CombatRoundAction`; `resolve_combat_technique` consumes them (control
+    penalty + intensity bonus, Berserk on lost control). A soulfray-risky cast is asked at
+    declaration via the `accept soulfray` / `decline soulfray` offer flow (decline = free
+    re-declare); no special cast syntax triggers it.
 
     **Target resolution** (`at <name>`) branches on context and on the technique's authored
     `derive_target_relationship`:
@@ -159,6 +170,27 @@ actions, backends, and service functions.
   `_get_active_scene` (#1340).
 - **`fashion.py`**: `CmdJudgePresentation` (`judge`) — telnet face of
   `JudgePresentationAction`; parses `judge <presentation_id>` (#1340).
+- **`missions.py`**: `CmdMission` (`mission`, #1349) — the mission play namespace. Thin over the
+  mission play services in `world.missions.services.play` (+ `services.journal`) — the *same*
+  functions the web `MissionJournalViewSet` calls; no separate Action (mirrors `CmdRitual`'s
+  service-direct session subcommands). Bare `mission`/`mission list` shows the caller's journal;
+  `mission beat <id>` renders the current beat's numbered options (routing single-vs-group on
+  `node.conflict_mode` + participant count); `mission resolve <id> <n>` / `mission abandon <id>`
+  drive the single-player path; `mission pick <id> <n>` then `mission vote <id> <n>` drive the
+  two-stage group decision. Options are chosen by the small ordinal shown in `mission beat`
+  (the presented list already fans out per `ChallengeApproach`, so the ordinal carries the
+  approach — no `approach=` token). Instances are participant-scoped (a non-participant gets the
+  same "not part of that mission" message whether or not the id exists). Namespaced subverbs to
+  avoid bare-key collisions. No business logic in the command.
+- **`react.py`**: `CmdReact` (`react`, #1341) — the reaction/favorite namespace. One command routes
+  a leading subverb: `react favorite <char> #N` → `ToggleFavoriteAction`;
+  `react emoji <char> #N <emoji>` → `ToggleReactionAction`; `react <kind> <char> #N [<choice>]`
+  (the subverb IS the kind: `react kudos <char> #1`, `react entrance <char> #1 <resonance>`) →
+  `ReactToWindowAction`; bare `react` lists open reactable events in the current scene. Pose
+  targeting reuses `get_endorseable_poses_in_scene` (`<char> #N`, the same scheme as `endorse`);
+  the active scene derives from the caller's room via `_get_active_scene`. The entrance resonance
+  name is resolved to `str(pk)` here (mirrors `CmdEndorse._resolve_resonance`) — the Action stays a
+  thin slug-taking wrapper. Shared by telnet + the web viewsets; no business logic in the command.
 - **`gemit.py`**: `CmdGemit` (`gemit`, staff-only `perm(Admin)`, #1450) — the *push* face of the
   public-reaction center. Thin over `world.narrative.services.broadcast_gemit` (the same service the
   web gemit endpoint calls). Broadcasts a **hand-authored, verbatim** message (colour codes and all)
@@ -170,6 +202,13 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
+  `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
+  `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
+  blueprint, `setstage list` lists all blueprints by pk, `setstage <name|id>` instantiates one,
+  `setstage <name|id> replace` replaces the room's existing position grid. Thin `ArxCommand` over
+  `action.run()` (same seam as the web quick-action `_set_the_stage_actions`); staff-gated by
+  `StaffOnlyPrerequisite`. No business logic in the command.
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
   personas or switch the active one. Bare `persona`/`persona list` renders all the
   caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
@@ -213,6 +252,32 @@ actions, backends, and service functions.
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
   one-word key collisions.
+- **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
+  `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
+  [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same
+  registry Actions the web `JournalEntryViewSet` uses: `CreateJournalEntryAction`,
+  `RespondToJournalAction`, `EditJournalEntryAction`. Bare `journal` / `journal list` lists the
+  caller's recent top-level entries. `title`/`body` are free text (values run to the next `key=`
+  token); `public` is a bare flag; `tags` is comma-separated. Namespaced to avoid top-level key
+  collisions.
+- **`goals.py`**: `CmdGoal` (`goal`, #1350) — the goal authoring namespace. One `ArxCommand`
+  routes a leading subverb (`goal add domain=<id|name> points=<n> [notes=<text>]` (shares the
+  same weekly revision limit as `set`) / `set domain=<id>:points=<n>[,...]` / `log
+  [domain=<id|name>] title=<text> content=<text> [public]`) to the same registry Actions the
+  web `CharacterGoalViewSet` / `GoalJournalViewSet` use: `SetCharacterGoalsAction` and
+  `LogGoalProgressAction`. Bare `goal` / `goal list` shows current point allocations and points
+  remaining. Domains resolve by id or name (iexact); `title`/`content`/`notes` are free text
+  (values run to the next `key=` or the bare `public` flag); `public` is a bare flag. Namespaced
+  to avoid top-level key collisions.
+- **`progression_rewards.py`**: `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene`
+  (`randomscene`, alias `rscene`) / `CmdPathIntent` (`pathintent`) (#1348) — telnet faces of the
+  7 progression-reward Actions. `kudos [claim <category_id> <amount>]` dispatches
+  `ClaimKudosAction`. `vote [remove] <interaction|participation|journal> <id>` dispatches
+  `CastVoteAction` / `RemoveVoteAction`. `randomscene [claim|reroll] <id>` dispatches
+  `ClaimRandomSceneAction` / `RerollRandomSceneAction`. `pathintent [<path_id>|clear]` dispatches
+  `SetPathIntentAction` / `ClearPathIntentAction`. All are thin REGISTRY `ArxCommand` subclasses;
+  no business logic — behavior lives in `actions/definitions/progression_rewards.py` and
+  `world/progression/services/`.
 - **`relationships.py`**: `CmdRelationship` (`relationship`, #1485) — the relationship-building
   namespace. One `ArxCommand` routes a leading subverb (`relationship impression <name> ...` /
   `develop <name> ...` / `capstone <name> ...` / `redistribute <name> ...`) and runs the matching
@@ -224,6 +289,20 @@ actions, backends, and service functions.
   free text (values run to the next `key=`); an active scene in the caller's current room is
   linked automatically when the target is co-located. No consent gate (ADR-0024) — these describe
   regard, they don't compel behavior; kudos/complaint feedback is a follow-up.
+- **`events.py`**: `CmdEvent` (`event`, alias `events`, #1499) — the event lifecycle + invitee RSVP
+  namespace. One `ArxCommand` routes a leading subverb and runs the matching event Action via
+  `action.run()` directly — the same seam the web `EventViewSet` / `EventInvitationViewSet` use.
+  `event create name=<text> room=<name|id> when=<datetime> [desc=…] [public=…] [phase=…]` →
+  `CreateEventAction` (acts as the caller's active persona); `event schedule/start/complete/cancel
+  <id>` → the host-lifecycle Actions (account-authorized — staff and scene GMs can manage an event
+  with no character, so they pass `actor=None, account=<caller.account>`); `event invite <id>
+  persona=|org=|society=<name|id> [by=<persona>]` → `InviteToEventAction`; `event rsvp <id>
+  accept|decline` → `RespondInvitationAction` (the invitee acts as their own active persona; only a
+  persona-targeted invitation addressed to them may be RSVP'd). Bare `event` / `event list` shows the
+  caller's visible events; `event show <id>` renders one in detail (telnet-only — the web gets
+  list/detail implicitly from `EventViewSet`). `when=` accepts ISO 8601 or `YYYY-MM-DD HH:MM`
+  (room/when/name/desc values may contain spaces — they run to the next `key=`). No consent gate
+  (ADR-0024 — events are calendaring; an invitation does not compel behavior).
 - **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)

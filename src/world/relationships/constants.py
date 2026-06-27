@@ -33,6 +33,12 @@ class FirstImpressionColoring(models.TextChoices):
     NEGATIVE = "negative", "Negative"
 
 
+# Per-commendation kudos award (staff-tunable; see KudosSourceCategory "relationship_writeup").
+WRITEUP_KUDOS_AMOUNT: int = 1
+# Natural key of the KudosSourceCategory row that explains writeup-commendation awards.
+RELATIONSHIP_WRITEUP_KUDOS_CATEGORY: str = "relationship_writeup"
+
+
 class ReferenceMode(models.TextChoices):
     """How a relationship update references RP."""
 

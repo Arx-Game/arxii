@@ -316,3 +316,35 @@ def get_visible_events(
     return qs.filter(
         public_q | host_q | direct_invite_q | org_invite_q | society_invite_q
     ).distinct()
+
+
+def respond_to_invitation(
+    invitation: EventInvitation,
+    persona: Persona,
+    *,
+    response: str,
+) -> EventInvitation:
+    """Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.
+
+    Only persona-targeted invitations carry an RSVP — an org/society invitation
+    has no per-member row. The *persona* must be the invitation's
+    ``target_persona`` (the invitee themselves). Setting the response is
+    idempotent: re-responding toggles/overwrites the prior value and refreshes
+    ``responded_at``.
+
+    Raises:
+        EventError: if the invitation is not a persona invite, does not target
+            this persona, or belongs to an ACTIVE/COMPLETED/CANCELLED event.
+    """
+    if invitation.target_type != InvitationTargetType.PERSONA:
+        raise EventError(EventError.RSVP_NOT_PERSONA)
+    if invitation.target_persona_id != persona.pk:
+        raise EventError(EventError.RSVP_NOT_YOURS)
+    # RSVP only while the event is still open (DRAFT/SCHEDULED). Once active or
+    # finished the host has moved past the headcount.
+    if invitation.event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
+        raise EventError(EventError.RSVP_CLOSED)
+    invitation.response = response
+    invitation.responded_at = timezone.now()
+    invitation.save(update_fields=["response", "responded_at"])
+    return invitation

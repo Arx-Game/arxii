@@ -9,11 +9,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from actions.registry import get_action
 from web.api.mixins import CharacterContextMixin
 from world.goals.filters import PublicGoalJournalFilterSet
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 from world.goals.serializers import (
-    MAX_GOAL_POINTS,
     CharacterGoalSerializer,
     CharacterGoalUpdateSerializer,
     GoalDomainSerializer,
@@ -21,6 +21,8 @@ from world.goals.serializers import (
     GoalJournalSerializer,
     get_goal_domains_queryset,
 )
+from world.goals.services import MAX_GOAL_POINTS
+from world.goals.types import GoalError
 
 
 class JournalPagination(PageNumberPagination):
@@ -109,42 +111,23 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         serializer = CharacterGoalUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Check revision limit
-        revision, _created = GoalRevision.objects.get_or_create(character=character)
-        has_existing_goals = CharacterGoal.objects.filter(character=character).exists()
-
-        if has_existing_goals and not revision.can_revise():
-            next_revision = revision.last_revised_at + timedelta(weeks=1)
-            return Response(
-                {
-                    "detail": "Cannot revise goals yet.",
-                    "next_revision_at": next_revision,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Clear existing goals and create new ones
-        CharacterGoal.objects.filter(character=character).delete()
-
-        # Domains are already resolved by PrimaryKeyRelatedField - no extra queries needed
-        for goal_data in serializer.validated_data["goals"]:
-            domain = goal_data["domain"]  # Already a ModifierTarget instance
-            if goal_data.get("points", 0) > 0 or goal_data.get("notes"):
-                CharacterGoal.objects.create(
-                    character=character,
-                    domain=domain,
-                    points=goal_data.get("points", 0),
-                    notes=goal_data.get("notes", ""),
+        result = get_action("set_character_goals").run(
+            actor=character, goals=serializer.validated_data["goals"]
+        )
+        if not result.success:
+            # Preserve the revision-too-soon shape (with next_revision_at) for the web.
+            if result.message == GoalError.REVISION_TOO_SOON:
+                revision, _ = GoalRevision.objects.get_or_create(character=character)
+                next_revision = revision.last_revised_at + timedelta(weeks=1)
+                return Response(
+                    {"detail": "Cannot revise goals yet.", "next_revision_at": next_revision},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Mark as revised
-        if has_existing_goals:
-            revision.mark_revised()
-
-        # Return updated goals
         goals = CharacterGoal.objects.filter(character=character).select_related("domain")
         total_points = sum(g.points for g in goals)
-
+        revision = GoalRevision.objects.get(character=character)
         return Response(
             {
                 "goals": CharacterGoalSerializer(goals, many=True).data,
@@ -207,11 +190,17 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
         serializer = GoalJournalCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        journal = serializer.save(character=character)
+        result = get_action("log_goal_progress").run(
+            actor=character,
+            domain=serializer.validated_data.get("domain"),
+            title=serializer.validated_data["title"],
+            content=serializer.validated_data["content"],
+            is_public=serializer.validated_data.get("is_public", False),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
-        # TODO: Actually award XP to the character
-        # character.award_xp(journal.xp_awarded, reason=f"Journal: {journal.title}")
-
+        journal = GoalJournal.objects.get(pk=result.data["journal_id"])
         return Response(GoalJournalSerializer(journal).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"])

@@ -182,3 +182,29 @@ def get_votes_by_voter(voter_account: AccountDB) -> QuerySet[WeeklyVote]:
         game_week=game_week,
         processed=False,
     )
+
+
+def get_author_account_for_target(target_type: str, target_id: int) -> AccountDB | None:
+    """Derive the author account from a vote target by following its FK chain.
+
+    Returns None if the chain is broken (no roster entry / no active tenure) or
+    the target type is unknown. Shared by ``VoteViewSet`` and ``CastVoteAction``.
+    """
+    from world.journals.models import JournalEntry
+    from world.roster.selectors import get_account_for_character
+    from world.scenes.models import Interaction, SceneParticipation
+
+    if target_type == VoteTargetType.INTERACTION:
+        interaction = Interaction.objects.filter(pk=target_id).first()
+        if interaction is None:
+            return None
+        return get_account_for_character(interaction.persona.character_sheet.character)
+    if target_type == VoteTargetType.SCENE_PARTICIPATION:
+        participation = SceneParticipation.objects.filter(pk=target_id).first()
+        return participation.account if participation else None
+    if target_type == VoteTargetType.JOURNAL:
+        journal = JournalEntry.objects.filter(pk=target_id).first()
+        if journal is None:
+            return None
+        return get_account_for_character(journal.author.character)
+    return None

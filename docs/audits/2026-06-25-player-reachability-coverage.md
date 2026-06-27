@@ -89,8 +89,9 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   transitions, scheduling, assistant-GM claims, story→table offers, Era advance/archive; **GM tables**
   (world/gm) — create/archive/transfer table, seat members, roster invites, GM applications; **mission
   authoring** (templates / assign / nodes / options / rewards).
-- NO-SURFACE: `finalize_gm_character` (GM character/NPC authoring, unwired); `set_the_stage` GM
-  positioning is WEB-ONLY; trap **arming/placement** absent (only disarm exists).
+- NO-SURFACE: `finalize_gm_character` (GM character/NPC authoring, unwired); trap
+  **arming/placement** absent (only disarm exists). `set_the_stage` GM positioning is now
+  TELNET+WEB (telnet `setstage`, #1498 — was WEB-ONLY).
 - **PLANNED-UNBUILT (→ registry):** umpire check-modifier tooling; GM trust→risk leveling; live
   Situation/Encounter session resolvers; cross-table GM availability marketplace.
 
@@ -179,8 +180,9 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 ### Space, movement & building
 - TELNET+WEB: traverse exit; home; get/drop/give; look/inventory; edit owned room (CmdManageRoom +
   RoomEditAction, #1472 — room-editor HAS telnet parity).
-- WEB-ONLY: move_to_position (Places sub-locations, no telnet); set_the_stage (GM); disarm_trap
-  (#1051); activate_permit (raise a building).
+- WEB-ONLY: move_to_position (Places sub-locations, no telnet); disarm_trap
+  (#1051); activate_permit (raise a building). `set_the_stage` (GM) is now TELNET+WEB
+  (telnet `setstage`, #1498).
 - TELNET-ONLY: Dig/Open/Link/Unlink (Evennia builder cmds — room/exit *creation* has no web/Action).
 - **NO-SURFACE:** property **transfer_ownership / grant_tenancy / end_tenancy** (the ownership half of
   property mgmt the room-editor doesn't fill); area/blueprint authoring (reparent_area, create_position,
@@ -203,9 +205,10 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
 
 ### Social structures & collective play
 - TELNET+WEB: tidings **read** (CmdTidings, #1450); persona set-active (#1347/#1481); NPC-service
-  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493).
-- WEB-ONLY: events full lifecycle (create/schedule/start/complete/cancel/invite — no Action, no telnet);
-  pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
+  hire/commission/request (start/resolve/end — `actions.definitions.npc_services`, telnet `hire`, #1493);
+  events full lifecycle (create/schedule/start/complete/cancel/invite — `actions.definitions.events` +
+  telnet `event <subverb>`, #1499).
+- WEB-ONLY: pay-ransom; roster family CRUD / mail / media / profile-picture; consent **master opt-out + per-category
   rules + standing whitelist** (telnet players can *be* targeted but can't opt out / set allowlists — privacy
   MVP-gating, ADR-0033); spread-deed / save-deed-story (#745).
 - **NO-SURFACE:** captivity capture/escape/rescue/resolve + **demand_ransom (zero production callers)**
@@ -219,7 +222,7 @@ re-listing them, so each row maps cleanly to one tracking issue. `tracked` = exi
   player surface — only a gap if a journey needs direct project interaction.
 - **PLANNED-UNBUILT (→ registry):** tidings **posting/reacting/commenting** (no model); persona
   mint/edit/delete (reserved for future IC flows); roster **release/end-tenure** (end_date set by
-  nothing); events **RSVP-accept** (invitee response unbuilt); projects activation service.
+  nothing); projects activation service.
 
 ---
 

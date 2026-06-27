@@ -66,7 +66,8 @@ class ActionContext:
 
     Attributes:
         action: The action being executed.
-        actor: The character performing the action.
+        actor: The character performing the action, or ``None`` for
+            account-authorized actions with no character context.
         target: Optional target of the action.
         kwargs: The action's keyword arguments — enhancements can modify these.
         scene_data: Full scene state access.
@@ -77,7 +78,7 @@ class ActionContext:
     """
 
     action: Action
-    actor: ObjectDB
+    actor: ObjectDB | None
     target: ObjectDB | None
     kwargs: dict[str, Any]
     scene_data: SceneDataManager

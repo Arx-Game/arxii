@@ -66,9 +66,40 @@ They do not use the command system, dispatchers, or handlers.
   (`"create_development"`), `CreateCapstoneAction` (`"create_capstone"`, visibility defaults
   SHARED), `RedistributePointsAction` (`"redistribute_points"`). Each wraps its
   `world.relationships.services` counterpart; `linked_scene` defaults to the caller's active scene
-  when the target is co-located. Shared `BaseRelationshipAction` + `HasCharacterSheetPrerequisite`.
-  Shared by telnet `CmdRelationship` (`relationship <subverb>`) and the web
-  `RelationshipUpdateViewSet`; no consent gate (ADR-0024).)
+  when the target is co-located. Shared `BaseRelationshipAction` reuses
+  `HasCharacterSheetPrerequisite` from `actions.prerequisites`. Shared by telnet `CmdRelationship`
+  (`relationship <subverb>`) and the web `RelationshipUpdateViewSet`; no consent gate (ADR-0024);
+  `progression_rewards.py` (#1348) — the 7 progression-reward verbs, all REGISTRY backend,
+  `target_type=SELF`: `ClaimKudosAction` (key `"claim_kudos"`; wraps `claim_kudos_for_xp`),
+  `CastVoteAction` / `RemoveVoteAction` (keys `"cast_vote"` / `"remove_vote"`; wrap
+  `cast_vote` / `remove_vote` in `services.voting`),
+  `ClaimRandomSceneAction` / `RerollRandomSceneAction` (keys `"claim_random_scene"` /
+  `"reroll_random_scene"`; wrap `claim_random_scene` / `reroll_random_scene_target` in
+  `services.random_scene`), `SetPathIntentAction` / `ClearPathIntentAction` (keys
+  `"set_path_intent"` / `"clear_path_intent"`; wrap `set_path_intent` / `clear_path_intent`
+  in the new `world.progression.services.path_intent` module). Shared by telnet
+  `CmdKudos` (`kudos`) / `CmdVote` (`vote`) / `CmdRandomScene` (`randomscene`, alias `rscene`) /
+  `CmdPathIntent` (`pathintent`) and the web `ClaimKudosView` / `VoteViewSet` /
+  `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses actions" gap
+  for these reward capabilities;
+  `scene_reactions.py` (#1341) — the three "upvote an interaction" REGISTRY actions, all
+  `target_type=SELF`: `ToggleFavoriteAction` (key `"toggle_interaction_favorite"`, wraps
+  `world.scenes.reaction_toggle_services.toggle_interaction_favorite`),
+  `ToggleReactionAction` (`"toggle_interaction_reaction"`, wraps `toggle_interaction_reaction`),
+  `ReactToWindowAction` (`"react_to_window"`, wraps `react_to_window` / `react_to_interaction`,
+  picking the lazy-open path for `lazy_open` kinds). The two toggle viewsets call the toggle
+  services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
+  and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
+  call it). Shared with telnet `CmdReact`.)
+  `events.py` (#1499) — the event lifecycle + invitee RSVP verbs, all REGISTRY backend,
+  `target_type=SELF`: `CreateEventAction` (key `"event_create"`, acts as the caller's active persona),
+  `ScheduleEventAction` / `StartEventAction` / `CompleteEventAction` / `CancelEventAction`
+  (`"event_schedule"` / `"event_start"` / `"event_complete"` / `"event_cancel"`, account-authorized —
+  pass `actor=None` + `account` kwarg; the host/GM/staff gate mirrors the DRF permission classes),
+  `InviteToEventAction` (`"event_invite"`, account-authorized), `RespondInvitationAction`
+  (`"respond_invitation"`, acts as the invitee's active persona). Each wraps its
+  `world.events.services` counterpart; shared by telnet `CmdEvent` (`event <subverb>`) and the web
+  `EventViewSet` / `EventInvitationViewSet`; no consent gate (ADR-0024).
 
 ## SCENE_ADAPTIVE Backend (#1351)
 
@@ -151,6 +182,7 @@ coupled to the action's kwarg names by the base class.
 ### Prerequisite implementations (`prerequisites.py`)
 
 - **`StaffOnlyPrerequisite`** — actor's account must be staff.
+- **`HasCharacterSheetPrerequisite`** — actor has an attached `CharacterSheet`.
 - **`HoldsItemPrerequisite`** — actor holds the `item` kwarg.
 - **`ItemUsablePrerequisite`** — item template has `on_use_pool` (is usable); consumables
   must have charges remaining. Delegates to `ItemTemplate.is_usable`.

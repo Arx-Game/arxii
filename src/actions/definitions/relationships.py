@@ -12,30 +12,13 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from actions.base import Action
-from actions.prerequisites import Prerequisite
+from actions.prerequisites import HasCharacterSheetPrerequisite, Prerequisite, resolve_actor_sheet
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-
-
-@dataclass
-class HasCharacterSheetPrerequisite(Prerequisite):
-    """Actor must have a CharacterSheet."""
-
-    def is_met(
-        self,
-        actor: ObjectDB,
-        target: ObjectDB | None = None,
-        context: dict | None = None,
-    ) -> tuple[bool, str]:
-        try:
-            actor.sheet_data  # noqa: B018
-        except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
-        return True, ""
 
 
 @dataclass
@@ -48,12 +31,7 @@ class BaseRelationshipAction(Action):
         return [HasCharacterSheetPrerequisite()]
 
     def _sheet(self, actor: ObjectDB) -> Any:
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-        try:
-            return actor.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            return None
+        return resolve_actor_sheet(actor)
 
     def _active_scene_for(self, actor: ObjectDB, target_sheet: Any) -> Any:
         from world.scenes.models import Scene  # noqa: PLC0415
@@ -95,6 +73,39 @@ class BaseRelationshipAction(Action):
         if target_sheet is not None and sheet is not None and target_sheet.pk == sheet.pk:
             return "You cannot record a relationship with yourself."
         return ""
+
+    def _resolve_writeup(self, writeup_type: str | None, writeup_id: int | None) -> Any:
+        """Resolve a writeup instance from type and id kwargs.
+
+        ``writeup_type`` must be one of ``"update"``, ``"development"``, or ``"capstone"``.
+        Raises ``WriteupFeedbackError`` (with a ``user_message``) for unknown types or
+        missing rows so callers can convert it to a clean ``ActionResult`` failure.
+        """
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
+        from world.relationships.models import (  # noqa: PLC0415
+            RelationshipCapstone,
+            RelationshipDevelopment,
+            RelationshipUpdate,
+        )
+
+        _TYPE_MAP: dict[str, Any] = {
+            "update": RelationshipUpdate,
+            "development": RelationshipDevelopment,
+            "capstone": RelationshipCapstone,
+        }
+
+        if writeup_type not in _TYPE_MAP:
+            msg = "Invalid writeup type."
+            raise WriteupFeedbackError(msg)
+
+        model = _TYPE_MAP[writeup_type]
+        try:
+            return model.objects.get(pk=writeup_id)
+        except (ObjectDoesNotExist, model.DoesNotExist, ValueError, TypeError):
+            msg = "Writeup not found."
+            raise WriteupFeedbackError(msg) from None
 
     def _preflight_error(self, sheet: Any, target_sheet: Any, **required: Any) -> str:
         """Return the first preflight error for a relationship verb, else "".
@@ -358,4 +369,104 @@ class RedistributePointsAction(BaseRelationshipAction):
                 f"{change.source_track.name} to {change.target_track.name}."
             ),
             data={"change_id": change.pk},
+        )
+
+
+@dataclass
+class GiveWriteupKudosAction(BaseRelationshipAction):
+    """Commend a shared/public relationship writeup on behalf of its subject."""
+
+    key: str = "give_writeup_kudos"
+    name: str = "Commend Writeup"
+    icon: str = "heart"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
+        from world.relationships.services import give_writeup_kudos  # noqa: PLC0415
+        from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+
+        writeup_type = kwargs.get("writeup_type")
+        writeup_id = kwargs.get("writeup_id")
+
+        if not writeup_type or writeup_id is None:
+            return ActionResult(success=False, message="No writeup selected.")
+
+        try:
+            writeup = self._resolve_writeup(writeup_type, writeup_id)
+        except WriteupFeedbackError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        giver_account = get_account_for_character(actor)
+        if giver_account is None:
+            return ActionResult(success=False, message="No account found for your character.")
+
+        try:
+            kudos = give_writeup_kudos(giver_account=giver_account, writeup=writeup)
+        except WriteupFeedbackError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message="You commend the writeup.",
+            data={"kudos_id": kudos.pk},
+        )
+
+
+@dataclass
+class FileWriteupComplaintAction(BaseRelationshipAction):
+    """File a bad-faith-RP complaint against a relationship writeup for staff triage."""
+
+    key: str = "file_writeup_complaint"
+    name: str = "File Writeup Complaint"
+    icon: str = "flag"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import WriteupFeedbackError  # noqa: PLC0415
+        from world.relationships.services import file_writeup_complaint  # noqa: PLC0415
+        from world.roster.selectors import get_account_for_character  # noqa: PLC0415
+
+        writeup_type = kwargs.get("writeup_type")
+        writeup_id = kwargs.get("writeup_id")
+        reason = kwargs.get("reason") or ""
+
+        if not reason:
+            return ActionResult(success=False, message="No reason provided.")
+
+        if not writeup_type or writeup_id is None:
+            return ActionResult(success=False, message="No writeup selected.")
+
+        try:
+            writeup = self._resolve_writeup(writeup_type, writeup_id)
+        except WriteupFeedbackError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        complainant_account = get_account_for_character(actor)
+        if complainant_account is None:
+            return ActionResult(success=False, message="No account found for your character.")
+
+        try:
+            complaint = file_writeup_complaint(
+                complainant_account=complainant_account,
+                writeup=writeup,
+                reason=reason,
+            )
+        except WriteupFeedbackError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message="Your complaint has been filed for staff review.",
+            data={"complaint_id": complaint.pk},
         )

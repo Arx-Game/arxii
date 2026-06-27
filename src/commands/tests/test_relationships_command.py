@@ -23,8 +23,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSign, UpdateVisibility
 from world.relationships.factories import (
     CharacterRelationshipFactory,
+    RelationshipCapstoneFactory,
+    RelationshipDevelopmentFactory,
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
+    RelationshipUpdateFactory,
 )
 from world.relationships.models import (
     CharacterRelationship,
@@ -33,7 +36,10 @@ from world.relationships.models import (
     RelationshipDevelopment,
     RelationshipTrackProgress,
     RelationshipUpdate,
+    WriteupComplaint,
+    WriteupKudos,
 )
+from world.roster.factories import RosterTenureFactory
 
 
 def _make_cmd(caller: Any, args: str = "") -> CmdRelationship:
@@ -318,3 +324,164 @@ class ParseNameAndKwargsTests(TestCase):
 
         with self.assertRaises(CommandError):
             _parse_name_and_kwargs("Alice track=5 strayword points=3")
+
+
+class CmdRelationshipKudosComplainTests(TestCase):
+    """``kudos`` and ``complain`` subverbs create feedback rows and surface errors.
+
+    Setup: caller is the SUBJECT of a SHARED update (relationship.target = caller_sheet).
+    caller has an account via RosterTenureFactory — required by give_writeup_kudos.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        # Author writes the writeup.
+        self.author = CharacterFactory()
+        self.author_sheet = CharacterSheetFactory(character=self.author)
+        # Caller is the subject (relationship.target).
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock(return_value=None)
+        # Link caller to an account so get_account_for_character resolves.
+        tenure = RosterTenureFactory(roster_entry__character_sheet=self.caller_sheet)
+        self.caller_account = tenure.player_data.account
+        # Relationship: author → caller (caller is target/subject).
+        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
+        self.rel = CharacterRelationshipFactory(source=self.author_sheet, target=self.caller_sheet)
+        # A SHARED update authored by the author about the caller.
+        self.update = RelationshipUpdateFactory(
+            relationship=self.rel,
+            author=self.author_sheet,
+            track=self.track,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+    def test_kudos_creates_writeupkudos_row(self) -> None:
+        """``relationship kudos u<pk>`` creates a WriteupKudos row for the update."""
+        _make_cmd(self.caller, f"kudos u{self.update.pk}").func()
+        self.assertTrue(
+            WriteupKudos.objects.filter(update=self.update, account=self.caller_account).exists()
+        )
+
+    def test_kudos_shows_success_message(self) -> None:
+        """``relationship kudos`` surfaces the action's success message."""
+        _make_cmd(self.caller, f"kudos u{self.update.pk}").func()
+        self.assertIn("commend", _capture(self.caller).lower())
+
+    def test_kudos_missing_ref_reports_error(self) -> None:
+        """``relationship kudos`` with no ref shows a usage error."""
+        _make_cmd(self.caller, "kudos").func()
+        self.assertIn("usage", _capture(self.caller).lower())
+
+    def test_kudos_bad_ref_reports_error(self) -> None:
+        """An unrecognised writeup ref (e.g. ``xyz``) shows a clear error."""
+        _make_cmd(self.caller, "kudos xyz").func()
+        text = _capture(self.caller).lower()
+        self.assertTrue("invalid" in text or "u<id>" in text or "ref" in text)
+
+    def test_kudos_nonexistent_writeup_reports_error(self) -> None:
+        """A well-formed ref to a non-existent pk surfaces the action error."""
+        _make_cmd(self.caller, "kudos u99999").func()
+        text = _capture(self.caller).lower()
+        self.assertTrue("not found" in text or "writeup" in text)
+
+    def test_complain_creates_writeupcomplaint_row(self) -> None:
+        """``relationship complain u<pk>=<reason>`` creates a WriteupComplaint row."""
+        _make_cmd(self.caller, f"complain u{self.update.pk}=This RP was in bad faith.").func()
+        self.assertTrue(
+            WriteupComplaint.objects.filter(
+                update=self.update, complainant=self.caller_account
+            ).exists()
+        )
+
+    def test_complain_shows_success_message(self) -> None:
+        """``relationship complain`` surfaces the action's success message."""
+        _make_cmd(self.caller, f"complain u{self.update.pk}=Bad faith.").func()
+        self.assertIn("complaint", _capture(self.caller).lower())
+
+    def test_complain_missing_reason_reports_error(self) -> None:
+        """``relationship complain <ref>`` without ``=<reason>`` shows a usage error."""
+        _make_cmd(self.caller, f"complain u{self.update.pk}").func()
+        self.assertIn("usage", _capture(self.caller).lower())
+
+    def test_complain_bad_ref_reports_error(self) -> None:
+        """An unrecognised writeup ref in complain shows a clear error."""
+        _make_cmd(self.caller, "complain xyz=reason").func()
+        text = _capture(self.caller).lower()
+        self.assertTrue("invalid" in text or "u<id>" in text or "ref" in text)
+
+    def test_complain_empty_reason_reports_error(self) -> None:
+        """``relationship complain <ref>=`` with empty reason shows a usage error."""
+        _make_cmd(self.caller, f"complain u{self.update.pk}=").func()
+        text = _capture(self.caller).lower()
+        self.assertIn("reason is required", text)
+        # Verify no WriteupComplaint row was created.
+        self.assertFalse(
+            WriteupComplaint.objects.filter(
+                update=self.update, complainant=self.caller_account
+            ).exists()
+        )
+
+
+class CmdRelationshipShowWriteupsTests(TestCase):
+    """``relationship show`` includes writeup labels so users know what to pass to kudos/complain.
+
+    Ref notation: ``u<pk>`` = update, ``d<pk>`` = development, ``c<pk>`` = capstone.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock(return_value=None)
+        self.target = CharacterFactory()
+        self.target_sheet = CharacterSheetFactory(character=self.target)
+        self.caller.search.side_effect = _search_returns(self.target)
+        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Friendship")
+        # Relationship source=caller → target.
+        self.rel = CharacterRelationshipFactory(source=self.caller_sheet, target=self.target_sheet)
+        # Seed one update so the writeup list appears.
+        self.update = RelationshipUpdateFactory(
+            relationship=self.rel,
+            author=self.caller_sheet,
+            track=self.track,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+    def test_show_displays_update_writeup_label(self) -> None:
+        """``relationship show <#>`` lists updates with ``[u<pk>]`` labels."""
+        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
+        text = _capture(self.caller)
+        self.assertIn(f"[u{self.update.pk}]", text)
+
+    def test_show_displays_development_writeup_label(self) -> None:
+        """``relationship show <#>`` lists developments with ``[d<pk>]`` labels."""
+        RelationshipTrackProgressFactory(
+            relationship=self.rel, track=self.track, capacity=10, developed_points=0
+        )
+        dev = RelationshipDevelopmentFactory(
+            relationship=self.rel,
+            author=self.caller_sheet,
+            track=self.track,
+            points_earned=3,
+        )
+        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
+        text = _capture(self.caller)
+        self.assertIn(f"[d{dev.pk}]", text)
+
+    def test_show_displays_capstone_writeup_label(self) -> None:
+        """``relationship show <#>`` lists capstones with ``[c<pk>]`` labels."""
+        capstone = RelationshipCapstoneFactory(
+            relationship=self.rel,
+            author=self.caller_sheet,
+            track=self.track,
+        )
+        _make_cmd(self.caller, f"show #{self.rel.pk}").func()
+        text = _capture(self.caller)
+        self.assertIn(f"[c{capstone.pk}]", text)
