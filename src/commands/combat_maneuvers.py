@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.constants import ActionBackend
 from commands.combat import _CombatCommandMixin
 from commands.command import DispatchCommand
@@ -133,8 +135,31 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         return combo.pk
 
+    def _render_resource_state(self, participant: Any) -> list[str]:
+        """Anima + soulfray (always, if present) + fury/Berserk (active round only).
+
+        Read-only over existing services — no mechanics. ``participant`` is the
+        caller's CombatParticipant or None (outside an encounter); fury/Berserk
+        are suppressed when it is None.
+        """
+        from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
+
+        lines: list[str] = []
+        character = self.caller.puppet if hasattr(self.caller, "puppet") else self.caller
+        try:
+            anima = character.anima
+            lines.append(f"Anima: {anima.current}/{anima.maximum}")
+        except (AttributeError, ObjectDoesNotExist):
+            pass  # No anima row yet — omit rather than mislead with 0/0.
+
+        warning = get_soulfray_warning(character)
+        if warning is not None:
+            risk = " — |rdeath risk|n" if warning.has_death_risk else ""
+            lines.append(f"Soulfray: {warning.stage_name}{risk}")
+        return lines
+
     def _show_status_hub(self) -> None:
-        """Print the caller's current declared action plus the available subverbs."""
+        """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
             "flee, cover <ally>, interpose [ally], join, leave, ready, "
@@ -142,6 +167,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         ]
         participant = self._combat_participant_or_none()
         if participant is None:
+            lines.extend(self._render_resource_state(participant))
             lines.append("You are not currently declaring in combat.")
         else:
             from world.combat.models import CombatRoundAction  # noqa: PLC0415
@@ -150,6 +176,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                 participant=participant,
                 round_number=participant.encounter.round_number,
             ).first()
+            lines.extend(self._render_resource_state(participant))
             if action is None:
                 lines.append("You have not declared an action this round.")
             else:

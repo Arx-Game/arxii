@@ -30,6 +30,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from commands.combat import CmdDeclareTechnique
+from commands.combat_maneuvers import CmdCombat
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
@@ -66,6 +67,19 @@ def _make_cmd(caller: ObjectDB, args: str) -> CmdDeclareTechnique:
     cmd.args = args
     cmd.raw_string = f"cast {args}"
     cmd.cmdname = "cast"
+    return cmd
+
+
+def _make_combat_cmd(caller: ObjectDB, args: str) -> CmdCombat:
+    """Build a bare ``combat`` command against *caller* and capture its output."""
+    cmd = CmdCombat()
+    cmd.args = args
+    cmd.raw_string = f"combat {args}".strip()
+    cmd.caller = caller
+    cmd.account = None
+    captured: list[str] = []
+    cmd.msg = lambda msg="", **kwargs: captured.append(str(msg))  # noqa: ARG005
+    cmd._captured = captured  # type: ignore[attr-defined]
     return cmd
 
 
@@ -503,3 +517,29 @@ class CombatCastTelnetE2ETests(TestCase):
             ).exists(),
             "losing control to fury must apply a Berserk condition to the caster",
         )
+
+    def test_combat_hub_shows_anima_and_omits_absent_lines(self) -> None:
+        """Bare ``combat`` shows anima; soulfray/fury/Berserk are absent → omitted."""
+        cmd = _make_combat_cmd(self.character, "")
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            cmd.func()
+        out = "\n".join(cmd._captured)
+        self.assertIn("Anima: 20/20", out)
+        self.assertNotIn("Soulfray:", out)
+        self.assertNotIn("Fury:", out)
+        self.assertNotIn("Berserk:", out)
+
+    def test_combat_hub_shows_soulfray_stage_with_death_risk(self) -> None:
+        """When get_soulfray_warning returns a stage, the hub shows it + death risk."""
+        from world.magic.types.techniques import SoulfrayWarning
+
+        warning = SoulfrayWarning(
+            stage_name="Frayed", stage_description="edges fraying", has_death_risk=True
+        )
+        cmd = _make_combat_cmd(self.character, "")
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=warning):
+            cmd.func()
+        out = "\n".join(cmd._captured)
+        self.assertIn("Anima: 20/20", out)
+        self.assertIn("Soulfray: Frayed", out)
+        self.assertIn("death risk", out)
