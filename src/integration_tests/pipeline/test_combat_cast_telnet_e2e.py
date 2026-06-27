@@ -44,7 +44,7 @@ from world.combat.factories import (
     ThreatPoolFactory,
 )
 from world.combat.models import CombatRoundAction
-from world.combat.services import resolve_round
+from world.combat.services import begin_declaration_phase, resolve_round
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
     BuffPassiveTechniqueFactory,
@@ -568,3 +568,46 @@ class CombatCastTelnetE2ETests(TestCase):
         self.assertIn(anchor_sheet.character.db_key, out)
         self.assertIn("retained", out)  # no Berserk yet → control retained
         self.assertNotIn("Berserk:", out)
+
+    @tag("postgres")
+    def test_combat_hub_shows_berserk_after_lost_control(self) -> None:
+        """After fury loses control, the hub shows Berserk + rounds remaining."""
+        from world.magic.factories import (
+            BerserkConditionTemplateFactory,
+            FuryConfigFactory,
+            FuryTierFactory,
+        )
+
+        FuryConfigFactory()
+        BerserkConditionTemplateFactory()
+        tier = FuryTierFactory()
+        anchor_sheet = CharacterSheetFactory()
+
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            _make_cmd(
+                self.character,
+                f"{self.technique.name} at {self.opponent_name} "
+                f"fury={tier.name} anchor={anchor_sheet.character.db_key}",
+            ).func()
+
+        with (
+            patch("world.combat.services.perform_check") as mock_offense,
+            patch("world.magic.services.fury.get_relationship_tier", return_value=2),
+            patch("world.checks.services.perform_check") as mock_control,
+        ):
+            mock_offense.return_value = MagicMock(success_level=2)
+            # Below lucid_grade_floor → control lost → Berserk applied.
+            mock_control.return_value = MagicMock(success_level=1)
+            resolve_round(self.encounter)
+
+        # The encounter left DECLARING after resolve_round. Open a fresh
+        # DECLARING round so the participant is active again and the hub can
+        # surface the persistent Berserk condition.
+        begin_declaration_phase(self.encounter)
+
+        cmd = _make_combat_cmd(self.character, "")
+        with patch("world.magic.services.soulfray.get_soulfray_warning", return_value=None):
+            cmd.func()
+        out = "\n".join(cmd._captured)
+        self.assertIn("Berserk:", out)
+        self.assertIn("active", out)

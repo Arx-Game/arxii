@@ -158,27 +158,35 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             risk = " — |rdeath risk|n" if warning.has_death_risk else ""
             lines.append(f"Soulfray: {warning.stage_name}{risk}")
 
-        if participant is not None and action is not None and action.fury_commitment_id:
-            anchor_name = "unknown"
-            if action.fury_anchor_id and action.fury_anchor is not None:
-                anchor_char = action.fury_anchor.character
-                if anchor_char is not None:
-                    anchor_name = anchor_char.db_key
-            control = (self._berserk_active(character) and "lost") or "retained"
-            lines.append(
-                f"Fury: committed (depth {action.fury_commitment.depth}, "
-                f"anchored to {anchor_name}) — control {control}"
-            )
+        if participant is not None:
+            berserk = self._berserk_instance(character)
+            control = "lost" if berserk is not None else "retained"
+            if action is not None and action.fury_commitment_id:
+                anchor_name = "unknown"
+                if action.fury_anchor_id and action.fury_anchor is not None:
+                    anchor_char = action.fury_anchor.character
+                    if anchor_char is not None:
+                        anchor_name = anchor_char.db_key
+                lines.append(
+                    f"Fury: committed (depth {action.fury_commitment.depth}, "
+                    f"anchored to {anchor_name}) — control {control}"
+                )
+            if berserk is not None:
+                rounds = ""
+                if berserk.rounds_remaining is not None:
+                    unit = "round" if berserk.rounds_remaining == 1 else "rounds"
+                    rounds = f" ({berserk.rounds_remaining} {unit} left)"
+                lines.append(f"Berserk: active{rounds}")
         return lines
 
-    def _berserk_active(self, character: Any) -> bool:
-        """True when a Berserk ConditionInstance is currently active on *character*."""
+    def _berserk_instance(self, character: Any) -> Any:
+        """The active Berserk ConditionInstance on *character*, or None."""
         from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
         return ConditionInstance.objects.filter(
             target=character,
             condition__name="Berserk",
-        ).exists()
+        ).first()
 
     def _show_status_hub(self) -> None:
         """Print resource/risk state + the declared action + available subverbs."""
