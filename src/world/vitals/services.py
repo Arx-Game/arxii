@@ -640,9 +640,10 @@ def _resolve_peril_via_pool(
     by the gate (it is non-loss → survive). Authored survival effects (e.g.
     ``captured_alive``'s CAPTURE effect) are applied by ``apply_resolution``.
 
-    Returns True iff the character died this call. On survival the instance's
-    acute-peril condition is removed (the victim stops dying; any wounds remain)
-    and False is returned. ``_mark_dead`` stays the single death writer.
+    Returns True iff the character died this call. On BOTH death and survival the
+    instance's acute-peril condition is removed so that ``_danger_persists``
+    returns False and the DANGER round auto-ends (#1479). Any wounds remain on
+    the survivor. ``_mark_dead`` stays the single death writer.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
@@ -676,6 +677,10 @@ def _resolve_peril_via_pool(
     selected = pending.selected_consequence
     if selected.character_loss:
         _mark_dead(character_sheet)
+        # Clear the acute-peril condition on death too, mirroring the survival branch.
+        # This makes _danger_persists return False so the DANGER round auto-ends and
+        # the dead victim is never re-classified or re-resolved (#1479).
+        remove_condition(character, instance.condition)
         return True
 
     # Survived (recover / stay_incapacitated / captured / gated-out failure):

@@ -86,7 +86,12 @@ class ResolveAbandonmentTests(TestCase):
         return sheet
 
     def test_npc_source_failed_can_die(self) -> None:
-        """NPC source + Failure roll → death reachable via abandonment_enemy pool."""
+        """NPC source + Failure roll → death reachable via abandonment_enemy pool.
+
+        Regression for #1479 review finding: the acute-peril condition must ALSO be
+        cleared on death so _danger_persists returns False and the DANGER round
+        auto-ends instead of freezing with a dead victim who still carries bleed-out.
+        """
         sheet = self._dying_victim(source_character=_make_npc_source())
 
         with force_check_outcome(self.failure_outcome):
@@ -95,6 +100,12 @@ class ResolveAbandonmentTests(TestCase):
         self.assertTrue(died)
         sheet.vitals.refresh_from_db()
         self.assertEqual(sheet.vitals.life_state, CharacterLifeState.DEAD)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=sheet.character, condition=self.bleed_out
+            ).exists(),
+            "Bleeding-Out condition must be cleared on death so _danger_persists goes False",
+        )
 
     def test_pc_source_failed_survives(self) -> None:
         """PC source + Failure roll → die filtered (ADR-0023); victim survives, cleared."""

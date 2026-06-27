@@ -230,7 +230,12 @@ class AdvanceBleedOutTerminalPoolTests(TestCase):
         return sheet
 
     def test_npc_source_failed_terminal_can_die(self) -> None:
-        """NPC source + Failure roll → death is reachable (life_state becomes DEAD)."""
+        """NPC source + Failure roll → death is reachable (life_state becomes DEAD).
+
+        Regression for #1479 review finding: the acute-peril condition must ALSO be
+        cleared on death so _danger_persists returns False and the DANGER round
+        auto-ends instead of freezing with a dead victim who still carries bleed-out.
+        """
         sheet = self._dying_victim(source_character=_make_npc_source())
 
         with force_check_outcome(self.failure_outcome):
@@ -240,6 +245,12 @@ class AdvanceBleedOutTerminalPoolTests(TestCase):
         sheet.vitals.refresh_from_db()
         self.assertEqual(sheet.vitals.life_state, CharacterLifeState.DEAD)
         self.assertIsNotNone(sheet.vitals.died_at)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=sheet.character, condition=self.bleed_out
+            ).exists(),
+            "Bleeding-Out condition must be cleared on death so _danger_persists goes False",
+        )
 
     def test_pc_source_failed_terminal_survives(self) -> None:
         """PC source + Failure roll → die filtered; victim survives, Bleeding-Out cleared."""

@@ -585,6 +585,61 @@ class SceneRoundAbandonmentTests(TestCase):
         victim_p.character_sheet.vitals.refresh_from_db()
         assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
 
+    def test_abandonment_death_auto_ends_danger_round(self):
+        """Regression: abandonment death must clear the acute-peril condition so
+        _danger_persists returns False and the DANGER round auto-ends (COMPLETED)
+        instead of cycling forever with a dead victim still carrying bleed-out (#1479).
+
+        Before the fix, _resolve_peril_via_pool cleared the condition only on
+        SURVIVAL, leaving it on dead characters → _danger_persists True → the
+        DANGER round never auto-ended.
+        """
+        from evennia_extensions.factories import CharacterFactory
+        from world.conditions.models import ConditionInstance
+        from world.vitals.constants import CharacterLifeState
+
+        npc_source = CharacterFactory()  # NPC source permits death
+        victim_p, _bleed = self._downed_victim(
+            source_character=npc_source, abandoned_since_round=1, initiative_order=0
+        )
+        bystander = self._present(initiative_order=1)
+        # round_number=3, grace=2 → 3-1=2 >= 2 → abandonment fires this resolve.
+        self._set_round_number(3)
+        self._declare_pass(bystander)
+
+        # Change the round to DANGER so the auto-end logic fires.
+        self.rnd.start_reason = SceneRoundStartReason.DANGER
+        self.rnd.save(update_fields=["start_reason"])
+
+        with (
+            mock.patch(
+                "world.vitals.services.can_act",
+                side_effect=self._fake_can_act_for(victim_p),
+            ),
+            mock.patch("world.scenes.round_services.tick_round_for_targets"),
+            self._force_failure(),
+        ):
+            resolve_scene_round(self.rnd)
+
+        # Victim died.
+        victim_p.character_sheet.vitals.refresh_from_db()
+        assert victim_p.character_sheet.vitals.life_state == CharacterLifeState.DEAD
+
+        # Critical regression assertion: the acute-peril condition must be cleared on
+        # death so _danger_persists returns False.
+        assert not ConditionInstance.objects.filter(
+            target=victim_p.character_sheet.character, condition=self.bleed_out
+        ).exists(), (
+            "Acute-peril condition must be cleared on death; "
+            "if it persists _danger_persists stays True and the DANGER round freezes"
+        )
+
+        # The DANGER round must auto-end (COMPLETED) because _danger_persists is False.
+        self.rnd.refresh_from_db()
+        assert self.rnd.status == RoundStatus.COMPLETED, (
+            f"DANGER round must auto-end after peril clears; got {self.rnd.status!r}"
+        )
+
     def _force_failure(self):
         from world.checks.test_helpers import force_check_outcome
 
