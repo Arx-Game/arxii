@@ -97,7 +97,7 @@ class CastVoteAction(Action):
         author = get_author_account_for_target(target_type, target_id)
         if author is None:
             return ActionResult(
-                success=False, message="Could not determine the author of that content."
+                success=False, message="Could not determine author for the specified target."
             )
         try:
             cast_vote(

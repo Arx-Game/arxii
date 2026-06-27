@@ -130,7 +130,7 @@ class CastVoteViewTests(VoteViewTestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_cast_vote_nonexistent_target_returns_400(self) -> None:
-        """Non-existent target_id returns 400 (author cannot be resolved)."""
+        """Non-existent target_id returns 400 (author resolution fails in CastVoteAction)."""
         response = self.client.post(
             "/api/progression/votes/",
             {
@@ -153,6 +153,25 @@ class CastVoteViewTests(VoteViewTestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_cast_vote_no_active_character_returns_400(self) -> None:
+        """Returns 400 when the account has no active roster character."""
+        no_char_user = AccountDB.objects.create_user(
+            username="no_char_voter",
+            email="no_char_voter@test.com",
+            password="testpass123",
+        )
+        self.client.force_authenticate(user=no_char_user)
+        response = self.client.post(
+            "/api/progression/votes/",
+            {
+                "target_type": VoteTargetType.SCENE_PARTICIPATION,
+                "target_id": self.participation.pk,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "No active character to act as."
 
 
 class UnvoteViewTests(VoteViewTestCase):

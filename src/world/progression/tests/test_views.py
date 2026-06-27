@@ -164,3 +164,22 @@ class ClaimKudosViewTests(ProgressionViewTestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_no_active_character_returns_400(self):
+        """Returns 400 when the account has no active roster character."""
+        from evennia.accounts.models import AccountDB
+
+        no_char_user = AccountDB.objects.create_user(
+            username="no_char_kudos",
+            email="no_char_kudos@test.com",
+            password="testpass123",
+        )
+        self.client.force_authenticate(user=no_char_user)
+        self._seed_kudos(10)
+        response = self.client.post(
+            "/api/progression/claim-kudos/",
+            {"claim_category_id": self.claim_category.id, "amount": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "No active character to act as.")

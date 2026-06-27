@@ -272,6 +272,7 @@ class VoteViewSet(
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Remove (unvote) an existing vote by ID."""
+        instance = self.get_object()
         voter = cast(AccountDB, request.user)
         actor = _actor_for_account(voter)
         if actor is None:
@@ -279,7 +280,6 @@ class VoteViewSet(
                 {"detail": "No active character to act as."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        instance = self.get_object()
         result = RemoveVoteAction().run(
             actor=actor,
             target_type=instance.target_type,
