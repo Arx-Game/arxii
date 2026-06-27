@@ -107,6 +107,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterAchievement'
           description: ''
+  /api/achievements/character-titles/:
+    get:
+      operationId: achievements_character_titles_list
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterTitle'
+          description: ''
+  /api/achievements/character-titles/{id}/:
+    get:
+      operationId: achievements_character_titles_retrieve
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character title.
+        required: true
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterTitle'
+          description: ''
   /api/action-requests/:
     get:
       operationId: action_requests_list
@@ -26231,6 +26283,32 @@ components:
       required:
       - character_sheet
       - resonance
+    CharacterTitle:
+      type: object
+      description: |-
+        Serializer for an earned, displayable character title (#1522).
+
+        Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+        title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        reward_key:
+          type: string
+          readOnly: true
+        earned_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - earned_at
+      - id
+      - reward_key
+      - title
     CharacterVitals:
       type: object
       description: Read-only vitals payload for the character sheet panel (#521).

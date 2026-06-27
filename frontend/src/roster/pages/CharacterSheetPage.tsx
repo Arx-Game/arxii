@@ -15,6 +15,7 @@ import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
+import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -51,6 +52,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="renown">Renown</TabsTrigger>
+          <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
         </TabsList>
 
@@ -99,6 +101,12 @@ export function CharacterSheetPage() {
               viewerPersonaId={viewerPersonaId}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="titles" className="space-y-4">
+          {/* Titles are cosmetic and public — render for any viewer. character.id is the
+              CharacterSheet pk the titles API filters by. */}
+          <TitlesPanel characterSheetId={entry.character.id} />
         </TabsContent>
 
         <TabsContent value="secrets" className="space-y-4">

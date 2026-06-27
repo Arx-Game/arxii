@@ -6,11 +6,17 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from world.achievements.models import Achievement, AchievementReward, CharacterAchievement
+from world.achievements.models import (
+    Achievement,
+    AchievementReward,
+    CharacterAchievement,
+    CharacterTitle,
+)
 from world.achievements.serializers import (
     AchievementListSerializer,
     AchievementSerializer,
     CharacterAchievementSerializer,
+    CharacterTitleSerializer,
 )
 
 
@@ -65,3 +71,20 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
                 to_attr="cached_rewards",
             ),
         )
+
+
+class CharacterTitleViewSet(ReadOnlyModelViewSet):
+    """List a character's earned, displayable titles (#1522).
+
+    Titles are cosmetic and public — a character shows them off — so any authenticated user can
+    read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+    """
+
+    serializer_class = CharacterTitleSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["character_sheet"]
+
+    def get_queryset(self):  # type: ignore[override]
+        """Earned titles with the title's reward prefetched, newest first."""
+        return CharacterTitle.objects.select_related("reward").order_by("-earned_at")
