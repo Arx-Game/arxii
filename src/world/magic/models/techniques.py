@@ -452,7 +452,7 @@ class AbstractCapabilityGrant(SharedMemoryModel):
     capability = models.ForeignKey(
         "conditions.CapabilityType",
         on_delete=models.CASCADE,
-        related_name="technique_grants",
+        related_name="%(class)s_grants",
     )
     base_value = models.IntegerField(
         default=0,
@@ -478,7 +478,7 @@ class AbstractAppliedCondition(SharedMemoryModel):
     condition = models.ForeignKey(
         "conditions.ConditionTemplate",
         on_delete=models.PROTECT,
-        related_name="applied_by_techniques",
+        related_name="%(class)s_applied",
     )
     target_kind = models.CharField(
         max_length=16,
@@ -543,7 +543,7 @@ class AbstractDamageProfile(SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="technique_damage_profiles",
+        related_name="%(class)s_damage_profiles",
         help_text="Damage type for resistance lookup. Null = untyped damage.",
     )
     minimum_success_level = models.PositiveIntegerField(default=1)

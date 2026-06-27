@@ -12,6 +12,8 @@ Submodules (see Scope 6 §4.4):
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueCapabilityRequirement,
   TechniqueDamageProfile, CharacterTechnique, TechniqueOutcomeModifier
+- technique_draft: TechniqueDraft, TechniqueDraftCapabilityGrant,
+  TechniqueDraftDamageProfile, TechniqueDraftAppliedCondition
 - cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier
@@ -137,6 +139,12 @@ from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
+)
+from world.magic.models.technique_draft import (
+    TechniqueDraft,
+    TechniqueDraftAppliedCondition,
+    TechniqueDraftCapabilityGrant,
+    TechniqueDraftDamageProfile,
 )
 from world.magic.models.techniques import (
     CharacterTechnique,
@@ -299,6 +307,11 @@ __all__ = [
     "TechniqueCapabilityGrant",
     "TechniqueCapabilityRequirement",
     "TechniqueDamageProfile",
+    # technique draft authoring state (#1496)
+    "TechniqueDraft",
+    "TechniqueDraftAppliedCondition",
+    "TechniqueDraftCapabilityGrant",
+    "TechniqueDraftDamageProfile",
     "TechniqueOutcomeModifier",
     "TechniqueStyle",
     "TechniqueStyleManager",
