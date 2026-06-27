@@ -11,20 +11,26 @@ from django.test import TestCase
 
 from commands.exceptions import CommandError
 from commands.ritual_adapters import (
+    BannerCallAdapter,
+    CovenantInductionAdapter,
     DraftParse,
     JoinParse,
     RitualDraftAdapter,
     SoulTetherAdapter,
     get_adapter,
 )
-from world.magic.constants import ParticipationRule, RitualExecutionKind
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory
+from world.magic.constants import ParticipationRule, ReferenceKind, RitualExecutionKind
 from world.magic.factories import (
     AcceptSoulTetherRitualFactory,
     AffinityFactory,
+    BattleCovenantRiseRitualFactory,
+    CovenantInductionRitualFactory,
     ResonanceFactory,
     RitualFactory,
     wire_soul_tether_content,
 )
+from world.magic.types.sessions import RitualSessionReferenceSpec
 
 
 class SoulTetherAdapterDraftTests(TestCase):
@@ -155,3 +161,119 @@ class GetAdapterTests(TestCase):
         adapter = get_adapter(self.other_ritual)
         self.assertIsInstance(adapter, RitualDraftAdapter)
         self.assertNotIsInstance(adapter, SoulTetherAdapter)
+
+    def test_induction_ritual_gets_induction_adapter(self) -> None:
+        ritual = CovenantInductionRitualFactory()
+        adapter = get_adapter(ritual)
+        self.assertIsInstance(adapter, CovenantInductionAdapter)
+
+    def test_banner_call_ritual_gets_banner_call_adapter(self) -> None:
+        ritual = BattleCovenantRiseRitualFactory()
+        adapter = get_adapter(ritual)
+        self.assertIsInstance(adapter, BannerCallAdapter)
+
+
+class CovenantInductionAdapterDraftTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.covenant = CovenantFactory(name="The Ember Throne")
+
+    def test_builds_covenant_session_reference(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "The Ember Throne"}, caller=None)
+        self.assertIsInstance(parse, DraftParse)
+        self.assertEqual(len(parse.session_references), 1)
+        ref = parse.session_references[0]
+        self.assertIsInstance(ref, RitualSessionReferenceSpec)
+        self.assertEqual(ref.kind, ReferenceKind.COVENANT)
+        self.assertEqual(ref.ref_covenant, self.covenant)
+
+    def test_covenant_lookup_is_case_insensitive(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "the ember throne"}, caller=None)
+        self.assertEqual(parse.session_references[0].ref_covenant, self.covenant)
+
+    def test_unknown_covenant_raises_command_error(self) -> None:
+        adapter = CovenantInductionAdapter()
+        with self.assertRaises(CommandError) as ctx:
+            adapter.parse_draft(kwargs={"covenant": "No Such Covenant"}, caller=None)
+        self.assertIn("No covenant named", str(ctx.exception))
+
+    def test_returns_empty_session_kwargs_and_initiator_refs(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "The Ember Throne"}, caller=None)
+        self.assertEqual(parse.session_kwargs, {})
+        self.assertEqual(parse.initiator_references, [])
+        self.assertEqual(parse.initiator_participant_kwargs, {})
+
+
+class CovenantInductionAdapterJoinTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.role = CovenantRoleFactory(name="Vanguard")
+
+    def test_builds_covenant_role_reference(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_join(kwargs={"role": "Vanguard"}, caller=None)
+        self.assertIsInstance(parse, JoinParse)
+        self.assertEqual(len(parse.references), 1)
+        ref = parse.references[0]
+        self.assertIsInstance(ref, RitualSessionReferenceSpec)
+        self.assertEqual(ref.kind, ReferenceKind.COVENANT_ROLE)
+        self.assertEqual(ref.ref_covenant_role, self.role)
+
+    def test_role_lookup_is_case_insensitive(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_join(kwargs={"role": "vanguard"}, caller=None)
+        self.assertEqual(parse.references[0].ref_covenant_role, self.role)
+
+    def test_unknown_role_raises_command_error(self) -> None:
+        adapter = CovenantInductionAdapter()
+        with self.assertRaises(CommandError) as ctx:
+            adapter.parse_join(kwargs={"role": "No Such Role"}, caller=None)
+        self.assertIn("No covenant role named", str(ctx.exception))
+
+    def test_returns_empty_participant_kwargs(self) -> None:
+        adapter = CovenantInductionAdapter()
+        parse = adapter.parse_join(kwargs={"role": "Vanguard"}, caller=None)
+        self.assertEqual(parse.participant_kwargs, {})
+
+
+class BannerCallAdapterDraftTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.covenant = CovenantFactory(name="Iron Banner")
+
+    def test_builds_covenant_session_reference(self) -> None:
+        adapter = BannerCallAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "Iron Banner"}, caller=None)
+        self.assertIsInstance(parse, DraftParse)
+        self.assertEqual(len(parse.session_references), 1)
+        ref = parse.session_references[0]
+        self.assertEqual(ref.kind, ReferenceKind.COVENANT)
+        self.assertEqual(ref.ref_covenant, self.covenant)
+
+    def test_covenant_lookup_is_case_insensitive(self) -> None:
+        adapter = BannerCallAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "iron banner"}, caller=None)
+        self.assertEqual(parse.session_references[0].ref_covenant, self.covenant)
+
+    def test_unknown_covenant_raises_command_error(self) -> None:
+        adapter = BannerCallAdapter()
+        with self.assertRaises(CommandError) as ctx:
+            adapter.parse_draft(kwargs={"covenant": "No Such Covenant"}, caller=None)
+        self.assertIn("No covenant named", str(ctx.exception))
+
+    def test_returns_empty_session_kwargs(self) -> None:
+        adapter = BannerCallAdapter()
+        parse = adapter.parse_draft(kwargs={"covenant": "Iron Banner"}, caller=None)
+        self.assertEqual(parse.session_kwargs, {})
+
+
+class BannerCallAdapterJoinTests(TestCase):
+    def test_parse_join_returns_empty(self) -> None:
+        adapter = BannerCallAdapter()
+        parse = adapter.parse_join(kwargs={}, caller=None)
+        self.assertIsInstance(parse, JoinParse)
+        self.assertEqual(parse.participant_kwargs, {})
+        self.assertEqual(parse.references, [])

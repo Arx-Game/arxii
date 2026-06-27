@@ -139,11 +139,95 @@ class SoulTetherAdapter(RitualDraftAdapter):
 
 
 # ---------------------------------------------------------------------------
+# Covenant induction adapter
+# ---------------------------------------------------------------------------
+
+_COVENANT_INDUCTION_SERVICE_PATH = "world.covenants.services.induct_member_via_session"
+
+
+class CovenantInductionAdapter(RitualDraftAdapter):
+    """Adapter for the covenant INDUCTION session ritual.
+
+    Translates ``covenant=`` (draft) and ``role=`` (join) tokens into the
+    ``RitualSessionReferenceSpec`` rows that ``induct_member_via_session`` and
+    ``assert_initiator_can_induct`` expect.
+    """
+
+    def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
+        """Resolve ``covenant=`` into a session-level COVENANT reference."""
+        from world.covenants.models import Covenant  # noqa: PLC0415
+        from world.magic.constants import ReferenceKind  # noqa: PLC0415
+
+        covenant_name = kwargs.get("covenant", "").strip()
+        covenant = Covenant.objects.filter(name__iexact=covenant_name).first()
+        if covenant is None:
+            msg = f"No covenant named '{covenant_name}'."
+            raise CommandError(msg)
+        return DraftParse(
+            session_references=[
+                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
+            ],
+        )
+
+    def parse_join(self, *, kwargs: dict[str, str], caller: Any) -> JoinParse:
+        """Resolve ``role=`` into a participant-level COVENANT_ROLE reference."""
+        from world.covenants.models import CovenantRole  # noqa: PLC0415
+        from world.magic.constants import ReferenceKind  # noqa: PLC0415
+
+        role_name = kwargs.get("role", "").strip()
+        role = CovenantRole.objects.filter(name__iexact=role_name).first()
+        if role is None:
+            msg = f"No covenant role named '{role_name}'."
+            raise CommandError(msg)
+        return JoinParse(
+            references=[
+                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT_ROLE, ref_covenant_role=role)
+            ],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Banner-call (battle covenant rise) adapter
+# ---------------------------------------------------------------------------
+
+_BANNER_CALL_SERVICE_PATH = "world.covenants.services.rise_battle_covenant_via_session"
+
+
+class BannerCallAdapter(RitualDraftAdapter):
+    """Adapter for the 'call the banners' battle-covenant rise ritual.
+
+    Translates ``covenant=`` (draft) into a session-level COVENANT reference.
+    Join requires no additional tokens — members simply accept.
+
+    ``rise_battle_covenant_via_session`` reads only the session-level COVENANT
+    reference; it does not consume any ``session_kwargs``, so none are set here.
+    """
+
+    def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
+        """Resolve ``covenant=`` into a session-level COVENANT reference."""
+        from world.covenants.models import Covenant  # noqa: PLC0415
+        from world.magic.constants import ReferenceKind  # noqa: PLC0415
+
+        covenant_name = kwargs.get("covenant", "").strip()
+        covenant = Covenant.objects.filter(name__iexact=covenant_name).first()
+        if covenant is None:
+            msg = f"No covenant named '{covenant_name}'."
+            raise CommandError(msg)
+        return DraftParse(
+            session_references=[
+                RitualSessionReferenceSpec(kind=ReferenceKind.COVENANT, ref_covenant=covenant)
+            ],
+        )
+
+
+# ---------------------------------------------------------------------------
 # Registry and lookup
 # ---------------------------------------------------------------------------
 
 _REGISTRY: dict[str, RitualDraftAdapter] = {
     _SOUL_TETHER_SERVICE_PATH: SoulTetherAdapter(),
+    _COVENANT_INDUCTION_SERVICE_PATH: CovenantInductionAdapter(),
+    _BANNER_CALL_SERVICE_PATH: BannerCallAdapter(),
 }
 _DEFAULT_ADAPTER = RitualDraftAdapter()
 
