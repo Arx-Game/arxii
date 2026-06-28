@@ -83,3 +83,31 @@ def seeded_models() -> list[type[Model]]:
         Beginnings,
         Species,
     ]
+
+
+def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
+    """Per-cluster representative content models for the Game Setup inventory.
+
+    A cluster key exists for every registered seeder (so the inventory can
+    surface every cluster, even ``combat`` which has no single representative
+    content row). Keys are ordered to match :data:`CLUSTER_SEEDERS` insertion
+    order so the admin hub lists clusters in their seed sequence.
+    """
+    from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+    from world.traits.models import ResultChart  # noqa: PLC0415
+
+    return {
+        "checks": [CheckType, ResultChart],
+        "magic": [Affinity, Resonance],
+        "items": [ItemTemplate],
+        # Combat seeds check-types used by the resolution spine, not standalone
+        # content rows; it still appears in the inventory as a seeded cluster.
+        "combat": [],
+        "consent": [SocialConsentCategory],
+        "character_creation": [StartingArea, Beginnings, Species],
+    }

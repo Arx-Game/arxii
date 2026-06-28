@@ -27,3 +27,15 @@ class TestClusterRegistry(TestCase):
         seed_dev_database()  # first run creates
         report = seed_dev_database()  # second run creates nothing new
         self.assertEqual(report.clusters["character_creation"], 0)
+
+    def test_seeded_models_by_cluster_groups_per_cluster(self) -> None:
+        from world.seeds.clusters import seeded_models, seeded_models_by_cluster
+
+        grouped = seeded_models_by_cluster()
+        # every registered cluster has an entry
+        self.assertEqual(set(grouped), set(CLUSTER_SEEDERS))
+        self.assertIn("character_creation", grouped)
+        self.assertGreaterEqual(len(grouped["character_creation"]), 1)
+        # the flat-list contract is independent and unchanged
+        flat = seeded_models()
+        self.assertTrue(all(issubclass(m, Model) for m in flat))
