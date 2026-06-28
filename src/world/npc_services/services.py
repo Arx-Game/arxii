@@ -24,6 +24,7 @@ import random
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from world.checks.services import perform_check
@@ -620,6 +621,31 @@ def resolve_offer(
     result = dispatch_offer_effect(offer, session.persona)
     session.results.append(result)
     return result
+
+
+@transaction.atomic
+def adjust_npc_affection(pc_persona, npc_persona, *, delta: int) -> int:
+    """Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.
+
+    Atomic accumulate: the increment runs as a single ``UPDATE ... SET
+    affection = affection + delta`` via ``F()`` so concurrent calls cannot
+    lose updates (ADR-0016: reuses the NPCStanding affection column, no fork).
+    Creates the row at affection=0 if absent. Returns the new affection value.
+    No-op-safe for delta=0 (still returns current affection).
+    """
+    standing, _ = NPCStanding.objects.get_or_create(
+        persona=pc_persona,
+        npc_persona=npc_persona,
+        defaults={"affection": 0},
+    )
+    if delta != 0:
+        NPCStanding.objects.filter(pk=standing.pk).update(affection=F("affection") + delta)
+        # ``F()``-based UPDATE bypasses Evennia's SharedMemoryModel instance,
+        # so the cached copy must be purged and reloaded for callers that
+        # already hold the same idmapped object.
+        standing.flush_from_cache(force=True)
+        standing.refresh_from_db()
+    return standing.affection
 
 
 @transaction.atomic

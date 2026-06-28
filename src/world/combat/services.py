@@ -109,6 +109,7 @@ from world.combat.types import (
     PreparedClashContribution,
     RoundResolutionResult,
 )
+from world.conditions.constants import Allegiance
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
@@ -1897,6 +1898,56 @@ def _select_targets(
     return list(rotated[:count])
 
 
+def _exclude_charmers_party(
+    opponent: CombatOpponent, participants: list[CombatParticipant]
+) -> list[CombatParticipant]:
+    """Return ``participants`` minus the charm source's party (#1590).
+
+    The charmer is the ``source_character`` on the opponent's active Charm
+    condition. If it resolves to an active ``CombatParticipant``, exclude it.
+    MVP: parties are 1:1 with participants (no party grouping yet), so we
+    exclude the single charmer participant. If the source is unresolvable
+    (no ``source_character`` on the Charm, or the charmer left the encounter),
+    the charmed NPC has no party to fight for — returning ``[]`` so the caller
+    skips the round is intentional (NOT a fall-back to ENEMY: a charmed NPC
+    must never attack the charmer's side even if the charmer is gone).
+    """
+    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    if opponent.objectdb_id is None:
+        return participants
+    charmer_pk = None
+    for inst in get_active_conditions(opponent.objectdb):
+        if inst.condition.name == CHARM_CONDITION_NAME and inst.source_character_id is not None:
+            charmer_pk = inst.source_character_id
+            break
+    if charmer_pk is None:
+        return []
+    return [p for p in participants if p.character_sheet.character_id != charmer_pk]
+
+
+def _get_opponent_targets(
+    opponent: CombatOpponent,
+    active_participants: list[CombatParticipant],
+    encounter: CombatEncounter,
+) -> list[CombatParticipant]:
+    """Return the PCs an NPC is allowed to target after consulting allegiance.
+
+    Calm (``NEUTRAL``) returns an empty list so the NPC skips the round.
+    Charm (``ALLY_OF_CASTER``) excludes the charmer's party. Everything else
+    returns the full active participant list (#1590).
+    """
+    from world.npc_services.allegiance import derive_allegiance  # noqa: PLC0415
+
+    allegiance = derive_allegiance(opponent, encounter)
+    if allegiance == Allegiance.NEUTRAL:
+        return []
+    if allegiance == Allegiance.ALLY_OF_CASTER:
+        return _exclude_charmers_party(opponent, list(active_participants))
+    return list(active_participants)
+
+
 def _batch_fetch_cooldown_data(
     opponents: list[CombatOpponent],
     entries_by_pool: dict[int, list[ThreatPoolEntry]],
@@ -1947,7 +1998,10 @@ def select_npc_actions(
     """Select and create NPC actions for the current round.
 
     For each active opponent with a threat pool, picks a weighted-random
-    entry from eligible threat pool entries and assigns targets.
+    entry from eligible threat pool entries and assigns targets. Targeting is
+    allegiance-aware (#1590, ADR-0058): a charmed opponent (``ALLY_OF_CASTER``)
+    skips the charmer's party, and a calmed opponent (``NEUTRAL``) holds and
+    takes no action; an opponent left with no valid targets skips the round.
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
@@ -2008,11 +2062,16 @@ def select_npc_actions(
         if not eligible:
             continue
 
+        # Threat-read (#1590): consult allegiance to filter valid targets.
+        opponent_targets = _get_opponent_targets(opponent, active_participants, encounter)
+        if not opponent_targets:
+            continue
+
         if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
             n_attacks = swarm_attack_count(
                 opponent.swarm_count,
                 opponent.bodies_per_attack or 1,
-                len(active_participants),
+                len(opponent_targets),
             )
         else:
             n_attacks = 1
@@ -2020,7 +2079,7 @@ def select_npc_actions(
         for attack_index in range(n_attacks):
             weights = [e.weight for e in eligible]
             chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            targets = _select_targets(chosen, active_participants, rotation=attack_index)
+            targets = _select_targets(chosen, opponent_targets, rotation=attack_index)
             action = CombatOpponentAction.objects.create(
                 opponent=opponent,
                 round_number=encounter.round_number,

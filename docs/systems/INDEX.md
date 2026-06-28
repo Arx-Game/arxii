@@ -343,10 +343,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
   `perform_treatment()`
-- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment
-  boon/injury application, behavior-consent gating via `ConditionCategory.alters_behavior`),
-  progression (interactions), scenes (telnet `treat` + web Treat panel surface converges on the
-  `SceneActionRequest` consent seam via the custom-action-resolver registry)
+- **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
+  (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
+  `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).
+- **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
+  `ConditionCategory.alters_behavior`; `select_npc_actions` consults `derive_allegiance`),
+  magic (power sources, resonance-environment boon/injury application, behavior-consent gating
+  via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
+  web Treat panel surface converges on the `SceneActionRequest` consent seam via the
+  custom-action-resolver registry)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
@@ -880,6 +885,16 @@ register as additional kinds.
   `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;
   Plan 3 (#668) fills in real `BuildingPermit` ItemInstance creation. Mission migration
   onto this dispatch is #686.
+- **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
+  `(pc_persona, npc_persona)`) is atomically accumulated by
+  `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action
+  graded outcomes route through `apply_social_disposition_delta(actor, target_persona_id,
+  result)`. Persona-less NPCs (mooks) use the session-scoped
+  `world.npc_services.ephemeral_disposition` store; the promotion seam to durable rows is
+  future work (ADR-0058).
+- **Allegiance (#1590):** `derive_allegiance(opponent, encounter)` derives `ENEMY` /
+  `ALLY_OF_CASTER` / `NEUTRAL` from active `alters_behavior` conditions (charm/calm);
+  consumed by combat's `select_npc_actions` per opponent.
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`

@@ -28,7 +28,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
 - **Effect palette** — summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field.
-- **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down; **dispel** a condition.
+- **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
+  #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
 - **Roles grant techniques** via the one specialization engine (ADR-0055; reverses bonuses-only).
 - **War / battle system** — war covenants exist with nowhere to resolve into.

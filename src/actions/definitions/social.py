@@ -84,7 +84,13 @@ class _SocialTemplateAction(Action):
             target_difficulty=0,
             context=resolution_ctx,
         )
-        return template, self._result_from_resolution(resolution)
+        result = self._result_from_resolution(resolution)
+        # Disposition delta is a side effect of the resolution completing, like
+        # ``dispatch_effects`` above — kept in this shared path so every social
+        # template action (Persuade/Intimidate/Entrance/…) moves NPC affection
+        # (#1591). The raw ``resolution`` carries the success tier (ADR-0019).
+        self._apply_disposition_delta(actor, kwargs.get("target_persona_id"), resolution)
+        return template, result
 
     @staticmethod
     def _result_from_resolution(
@@ -108,6 +114,18 @@ class _SocialTemplateAction(Action):
         main = resolution.main_result
         succeeded = main is not None and main.check_result.success_level > 0
         return _ActionResult(success=succeeded, message=message, data={"resolution": resolution})
+
+    def _apply_disposition_delta(self, actor, target_persona_id, resolution):
+        """Move NPC disposition by the social check's success tier (#1591).
+
+        ``resolution`` is the raw ``PendingActionResolution`` whose
+        ``main_result.check_result.success_level`` grades the delta (ADR-0019).
+        """
+        from world.npc_services.social_disposition import (  # noqa: PLC0415
+            apply_social_disposition_delta,
+        )
+
+        apply_social_disposition_delta(actor, target_persona_id, resolution)
 
 
 @dataclass

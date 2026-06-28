@@ -17,6 +17,9 @@ from world.conditions.constants import (
     ConditionInteractionTrigger,   # ON_OTHER_APPLIED, ON_SELF_APPLIED, WHILE_BOTH_PRESENT
     ConditionInteractionOutcome,   # REMOVE_SELF, REMOVE_OTHER, REMOVE_BOTH, PREVENT_OTHER,
                                    # PREVENT_SELF, TRANSFORM_SELF, MERGE
+    Allegiance,                    # ENEMY, ALLY_OF_CASTER, NEUTRAL
+    CHARM_CONDITION_NAME,          # "Charmed"
+    CALM_CONDITION_NAME,           # "Calm"
 )
 ```
 
@@ -55,6 +58,13 @@ from world.conditions.types import (
 |-------|---------|------------|
 | `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings, combat settings (`affects_turn_order`, `draws_aggro`), display settings |
 | `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier` |
+
+**Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
+`Charmed` / `Calm` templates are seeded idempotently by `ensure_charm_content()` in
+`world.conditions.charm_content`, aggregated via `ensure_conditions_content()`. The
+`Allegiance` enum is derived from active `alters_behavior` conditions on an NPC. Charm on an
+NPC alters a non-player's behavior; ADR-0024's PC consent gate does not apply. See ADR-0058 for
+the two-tier NPC disposition model.
 
 ### Condition Effects (Abstract base: `ConditionOrStageEffect`)
 
