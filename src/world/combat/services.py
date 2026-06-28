@@ -2043,11 +2043,20 @@ def select_npc_actions(
         if not eligible:
             continue
 
+        # Route targeting by allegiance (#1584): an ENEMY opponent's hostile
+        # participants are the active PCs; an ALLY summon's hostiles are ENEMY
+        # opponents, which the ``targets`` M2M (CombatParticipant-only) cannot
+        # represent yet — so it resolves to no PC target rather than attacking
+        # its own side. Intersect with ``active_participants`` to keep the
+        # can_act gate (combatants_hostile_to filters on ACTIVE status only).
+        hostile_pks = {p.pk for p in combatants_hostile_to(opponent)["participants"]}
+        opponent_targets = [p for p in active_participants if p.pk in hostile_pks]
+
         if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
             n_attacks = swarm_attack_count(
                 opponent.swarm_count,
                 opponent.bodies_per_attack or 1,
-                len(active_participants),
+                len(opponent_targets),
             )
         else:
             n_attacks = 1
@@ -2055,7 +2064,7 @@ def select_npc_actions(
         for attack_index in range(n_attacks):
             weights = [e.weight for e in eligible]
             chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            targets = _select_targets(chosen, active_participants, rotation=attack_index)
+            targets = _select_targets(chosen, opponent_targets, rotation=attack_index)
             action = CombatOpponentAction.objects.create(
                 opponent=opponent,
                 round_number=encounter.round_number,
@@ -2235,17 +2244,18 @@ def _apply_passive_technique(
     Target resolution (v1):
 
     - ``SELF`` → the actor's own character.
-    - ``ENEMY`` → every ACTIVE opponent's ``objectdb``. Mirrors
-      ``_resolve_condition_target``'s ENEMY branch, which returns ``opp.objectdb``
-      for an active opponent. Every opponent (including ephemeral CombatNPCs) is
-      created with an ObjectDB by ``add_opponent``; the FK is only nulled if the
-      ObjectDB is destroyed externally, so we skip opponents whose ``objectdb`` is
-      None — matching the focused path's None-guard.
+    - ``ENEMY`` → every ACTIVE ``allegiance=ENEMY`` opponent's ``objectdb``. An
+      ALLY summon fights on the actor's side, so enemy-targeted AoE never lands on
+      it (#1584). Mirrors ``_resolve_condition_target``'s ENEMY branch, which
+      returns ``opp.objectdb`` for an active opponent. Every opponent (including
+      ephemeral CombatNPCs) is created with an ObjectDB by ``add_opponent``; the FK
+      is only nulled if the ObjectDB is destroyed externally, so we skip opponents
+      whose ``objectdb`` is None — matching the focused path's None-guard.
     - ``ALLY`` → every ACTIVE participant except the actor.
 
-    When ``technique.combo_opening_probing`` is set, every ACTIVE opponent gains
-    that much probing (the combo-opening reward) via ``increment_probing`` — this
-    is the combo-opening effect for ephemeral opponents regardless of conditions.
+    When ``technique.combo_opening_probing`` is set, every ACTIVE ENEMY opponent
+    gains that much probing (the combo-opening reward) via ``increment_probing`` —
+    the combo-opening effect for ephemeral opponents regardless of conditions.
     """
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
@@ -2269,11 +2279,13 @@ def _apply_passive_technique(
         .select_related("character_sheet__character")
     )
 
-    # Combo-opening probing: granted to every active opponent independent of any
-    # condition application (the combo-opening effect for ephemeral opponents).
+    # Combo-opening probing: granted to every active ENEMY opponent independent of
+    # any condition application (the combo-opening effect for ephemeral opponents).
+    # ALLY summons are on the actor's side, so probing them is meaningless (#1584).
     if technique.combo_opening_probing:
         for opp in active_opponents:
-            increment_probing(opp, technique.combo_opening_probing)
+            if opp.allegiance == CombatAllegiance.ENEMY:
+                increment_probing(opp, technique.combo_opening_probing)
 
     # resolve_round prefetches ``..._passive__condition_applications__condition`` so
     # this ``.all()`` reads the prefetch cache (no per-passive query in the resolution
@@ -2297,7 +2309,11 @@ def _apply_passive_technique(
         if row.target_kind == ConditionTargetKind.SELF:
             targets = [actor]
         elif row.target_kind == ConditionTargetKind.ENEMY:
-            targets = [opp.objectdb for opp in active_opponents if opp.objectdb is not None]
+            targets = [
+                opp.objectdb
+                for opp in active_opponents
+                if opp.allegiance == CombatAllegiance.ENEMY and opp.objectdb is not None
+            ]
         elif row.target_kind == ConditionTargetKind.ALLY:
             targets = [ally.character_sheet.character for ally in active_allies]
         else:
@@ -3798,9 +3814,12 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """
     from world.vitals.services import can_act  # noqa: PLC0415
 
+    # Only ENEMY opponents block victory; an ALLY summon staying active must not
+    # keep the encounter open (#1584).
     all_opponents_down = not CombatOpponent.objects.filter(
         encounter=encounter,
         status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ENEMY,
     ).exists()
 
     active_participants = CombatParticipant.objects.filter(
@@ -3821,8 +3840,12 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
+    # VICTORY hinges on ENEMY opponents only — an ALLY summon left standing is
+    # part of the winning side, not a reason to withhold victory (#1584).
     any_active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter, status=OpponentStatus.ACTIVE
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ENEMY,
     ).exists()
     if not any_active_opponents:
         hero_killer_present = CombatOpponent.objects.filter(
@@ -3937,7 +3960,11 @@ def _broadcast_encounter_outcome(
         outcome=outcome,
         active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
         fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
-        defeated_opponent_labels=[o.name for o in opponents if o.status == OpponentStatus.DEFEATED],
+        defeated_opponent_labels=[
+            o.name
+            for o in opponents
+            if o.status == OpponentStatus.DEFEATED and o.allegiance == CombatAllegiance.ENEMY
+        ],
     )
     return broadcast_action_outcome(encounter=encounter, narration=narration)
 
