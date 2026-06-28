@@ -1,7 +1,7 @@
 """Slice-4 end-to-end: Berserk rage blocks self-revert; RestoreSense unblocks it (#1111).
 
 Proves the decoupled control invariant holds against the REAL Fury/Berserk +
-RestoreSense system — not a synthetic ``alters_behavior`` stand-in.
+RestoreSense system -- not a synthetic ``alters_behavior`` stand-in.
 
 Tagged ``postgres`` because ``apply_condition(Berserk)`` hits the DISTINCT ON
 path in ``conditions/services._build_bulk_context``.
@@ -14,11 +14,13 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, tag
 from evennia.objects.models import ObjectDB
 
+from actions.constants import ResolutionPhase
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
 from actions.definitions.social import RestoreSenseAction
-from actions.types import ActionResult
+from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.conditions.services import apply_condition, has_condition
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -32,6 +34,23 @@ from world.magic.factories import (
 )
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
+
+
+def _make_pending_resolution(*, success: bool = True) -> PendingActionResolution:
+    """Minimal PendingActionResolution so the mocked check chain has a main_result."""
+    check_result = MagicMock()
+    check_result.success_level = 1 if success else -1
+    check_result.outcome_name = "Success" if success else "Failure"
+    check_result.outcome = None
+    main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=10,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
 
 
 @tag("postgres")
@@ -59,28 +78,27 @@ class AltSelfRageEndToEndTests(TestCase):
 
         # REAL Berserk condition + Restore-to-Sense calm-down action.
         cls.berserk = BerserkConditionTemplateFactory()
-        RestoreToSenseActionTemplateFactory()
+        cls.check_cat = CheckCategoryFactory(name="Social")
+        cls.check_type = CheckTypeFactory(name="Willpower", category=cls.check_cat)
+        RestoreToSenseActionTemplateFactory(check_type=cls.check_type)
 
     def setUp(self):
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.accrue_patcher.start()
         self.addCleanup(self.accrue_patcher.stop)
 
-    @patch("actions.effects.conditions.resolve_target_difficulty", return_value=15)
     @patch("actions.effects.conditions.perform_check")
-    @patch("actions.definitions.social.start_action_resolution")
+    @patch("world.scenes.action_services.start_action_resolution")
     def test_revert_blocked_while_raging_unblocked_after_calm_down(
         self,
         mock_resolve: MagicMock,
         mock_check: MagicMock,
-        mock_difficulty: MagicMock,
     ):
         """Full slice-4 lifecycle with the real Fury + RestoreSense system."""
         mock_check.return_value = MagicMock(success_level=1)
-        mock_resolve.return_value = ActionResult(success=True)
-        self.assertEqual(mock_difficulty.return_value, 15)
+        mock_resolve.return_value = _make_pending_resolution(success=True)
 
-        # 1. Shift into the alt-self — NOT in_control-gated; succeeds.
+        # 1. Shift into the alt-self -- NOT in_control-gated; succeeds.
         shift = ShiftFormAction().run(self.character, alternate_self_id=self.alt_self.pk)
         self.assertTrue(shift.success, shift.message)
 
