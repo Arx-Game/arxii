@@ -124,6 +124,13 @@ class OpponentStatus(models.TextChoices):
     FLED = "fled", "Fled"
 
 
+class CombatAllegiance(models.TextChoices):
+    """Which side a combatant fights on. Mutable: charm/switch-sides flips it."""
+
+    ENEMY = "enemy", "Enemy"
+    ALLY = "ally", "Ally"
+
+
 # ---------------------------------------------------------------------------
 # Action enums
 # ---------------------------------------------------------------------------

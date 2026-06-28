@@ -26,6 +26,7 @@ from world.combat.constants import (
     ClashFlavor,
     ClashResolution,
     ClashStatus,
+    CombatAllegiance,
     CombatManeuver,
     ComboLearningMethod,
     DuelChallengeStatus,
@@ -406,6 +407,32 @@ class CombatOpponent(SharedMemoryModel):
         blank=True,
         related_name="mirror_surface",
         help_text="If set, this opponent is a passive duel mirror of that PC participant.",
+    )
+
+    # === Allegiance + summon fields (Task 1 / #1584) ===
+    allegiance = models.CharField(
+        max_length=10,
+        choices=CombatAllegiance.choices,
+        default=CombatAllegiance.ENEMY,
+        help_text=(
+            "Which side this combatant fights on. ENEMY (default) is hostile to "
+            "PCs; ALLY fights for them (summons, charmed/switched-sides foes). "
+            "Mutable — a charm flips it."
+        ),
+    )
+    summoned_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="summoned_combatants",
+        help_text="The character who summoned this ally; null for non-summons.",
+    )
+    bond_expires_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Encounter round_number at which a summon's bond lapses and it "
+        "is dismissed; null = lasts until encounter end.",
     )
 
     # === Clash fields (Task 1.5) ===

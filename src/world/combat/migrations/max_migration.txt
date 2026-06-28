@@ -1,1 +1,1 @@
-0021_combatroundaction_confirm_soulfray_risk_and_more
+0022_combatopponent_allegiance_and_more
