@@ -164,7 +164,9 @@ The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled
   revert is blocked; assumption stays allowed.
 - **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
   re-derives `in_control=True`, which unblocks a later self-revert. The form persists
-  after the condition clears.
+  after the condition clears. The canonical instance is the fury `Berserk` condition,
+  seeded with a `Control` category carrying `alters_behavior=True`; it is cleared by
+  the existing `RestoreSenseAction` (`restore_sense`) calm-down action.
 
 ## Player-facing action seam
 

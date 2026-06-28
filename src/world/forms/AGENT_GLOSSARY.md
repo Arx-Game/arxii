@@ -22,8 +22,9 @@ character may assume as a single shapeshift/identity shift. Stored in
 
 **In Control**:
 Whether the character is currently in control of their own actions. Derived from active
-conditions whose `ConditionCategory.alters_behavior=True` (rage, possession, charm,
-mind-control). It is a read-time derivation on `CharacterSheet`, not a stored column.
+conditions whose `ConditionCategory.alters_behavior=True` — e.g. the fury `Berserk`
+condition (category `Control`), possession, charm, mind-control. It is a read-time
+derivation on `CharacterSheet`, not a stored column.
 _Avoid_: self-control flag, dominated flag.
 
 ## Shapeshift lifecycle

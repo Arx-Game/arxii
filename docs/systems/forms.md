@@ -138,7 +138,9 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError
   gated by `in_control`.
 - `revert_alternate_self(sheet)` — restore return anchors and delete the granted
   modifier / technique rows. Blocked while `not sheet.in_control`; raises
-  `RevertBlockedError`.
+  `RevertBlockedError`. The canonical blocker is the fury `Berserk` condition,
+  whose `Control` category has `alters_behavior=True`; it is cleared by the existing
+  `RestoreSenseAction` (`restore_sense`) calm-down action.
 - `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
   blocked.
 
