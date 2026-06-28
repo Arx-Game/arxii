@@ -4,7 +4,12 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from actions.definitions.forms import RevertFormAction, ShiftFormAction
+from actions.definitions.forms import (
+    _NO_ACTIVE_ALT_SELF_ACTION_MSG,
+    RevertFormAction,
+    ShiftFormAction,
+)
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import CharacterSheet
 from world.forms.factories import (
     AlternateSelfFactory,
@@ -112,6 +117,25 @@ class ShiftFormActionTests(TestCase):
         active = ActiveAlternateSelf.objects.filter(character=self.sheet).first()
         self.assertTrue(active is None or active.alternate_self_id is None)
 
+    def test_shift_cross_sheet_form_returns_safe_failure_not_500(self) -> None:
+        # Symmetric to the persona case: an AlternateSelf grant owned by this
+        # sheet, but whose form FK points at ANOTHER character's CharacterForm
+        # (bad seed/admin edit). switch_form would raise a bare ValueError;
+        # the action must catch FormOwnershipError and return a safe failure
+        # rather than letting the ValueError propagate uncaught (-> 500 on web).
+        from world.forms.services import FormOwnershipError
+
+        other_character = CharacterFactory()
+        foreign_form = self._make_form(
+            other_character, name="stranger", form_type=FormType.ALTERNATE
+        )
+        alt = self._make_alt(self.sheet, form=foreign_form, display_name="stolen shape")
+
+        result = ShiftFormAction().run(actor=self.character, alternate_self_id=alt.pk)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, FormOwnershipError.user_message)
+
 
 class RevertFormActionTests(TestCase):
     def setUp(self) -> None:
@@ -162,3 +186,6 @@ class RevertFormActionTests(TestCase):
         result = RevertFormAction().run(actor=sheet.character)
 
         self.assertFalse(result.success)
+        # Locks the "never str(exc)" invariant: the safe constant, not the
+        # exception's text, must reach the player.
+        self.assertEqual(result.message, _NO_ACTIVE_ALT_SELF_ACTION_MSG)

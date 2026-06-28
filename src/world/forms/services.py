@@ -63,6 +63,18 @@ class AlternateSelfActiveError(ValueError):
     user_message = "You are already wearing another alternate self. Revert first."
 
 
+class FormOwnershipError(ValueError):
+    """Raised when switching a character to a ``CharacterForm`` that doesn't
+    belong to them (a cross-sheet ``AlternateSelf.form`` FK — bad seed/admin
+    edit; the ``form`` FK has no cross-sheet DB guard). Carries a fixed
+    ``user_message`` so the action/view can surface a safe string without
+    leaking internals, instead of propagating an uncaught ``ValueError`` to a
+    500. Mirrors ``ActivePersonaError`` on the persona facet.
+    """
+
+    user_message = "That isn't one of this character's forms."
+
+
 _NO_ACTIVE_ALT_SELF_MSG = "No active alternate self to revert"
 
 
@@ -104,11 +116,12 @@ def switch_form(character, target_form: CharacterForm) -> None:
         target_form: The form to switch to
 
     Raises:
-        ValueError: If the form doesn't belong to this character
+        FormOwnershipError: If the form doesn't belong to this character
+            (a cross-sheet ``AlternateSelf.form`` FK — surfaced with a safe
+            ``user_message`` rather than a bare ``ValueError``).
     """
     if target_form.character_id != character.id:
-        msg = "Cannot switch to a form belonging to another character"
-        raise ValueError(msg)
+        raise FormOwnershipError
 
     form_state, _ = CharacterFormState.objects.get_or_create(character=character)
     form_state.active_form = target_form

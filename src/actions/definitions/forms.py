@@ -55,6 +55,7 @@ class ShiftFormAction(Action):
         from world.forms.models import AlternateSelf  # noqa: PLC0415
         from world.forms.services import (  # noqa: PLC0415
             AlternateSelfActiveError,
+            FormOwnershipError,
             assume_alternate_self,
         )
         from world.scenes.services import ActivePersonaError  # noqa: PLC0415
@@ -65,12 +66,13 @@ class ShiftFormAction(Action):
         ).first()
         if alt is None:
             return ActionResult(success=False, message=_UNKNOWN_ALT_SELF_MSG)
-        # Defense in depth: the alt-self's persona FK should belong to this
-        # sheet too. ``set_active_persona`` would raise ``ActivePersonaError``
-        # (a ValueError subclass) on a cross-sheet persona — catch it here and
-        # surface the safe message instead of letting it propagate uncaught
-        # (``Action.run`` calls ``execute`` bare, so an uncaught exception
-        # becomes a 500 on the web path).
+        # Defense in depth: the alt-self's ``form`` and ``persona`` FKs should
+        # belong to this sheet too. ``switch_form`` raises ``FormOwnershipError``
+        # and ``set_active_persona`` raises ``ActivePersonaError`` (both ValueError
+        # subclasses) on a cross-sheet FK — catch them here and surface the safe
+        # message instead of letting them propagate uncaught (``Action.run``
+        # calls ``execute`` bare, so an uncaught exception becomes a 500 on the
+        # web path).
         try:
             active = assume_alternate_self(sheet, alt)
         except AlternateSelfActiveError as exc:
@@ -78,6 +80,8 @@ class ShiftFormAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         except ActivePersonaError:
             return ActionResult(success=False, message=ActivePersonaError.user_message)
+        except FormOwnershipError:
+            return ActionResult(success=False, message=FormOwnershipError.user_message)
         return ActionResult(
             success=True,
             message=f"You assume {alt.display_name or 'an alternate self'}.",
@@ -107,6 +111,7 @@ class RevertFormAction(Action):
     ) -> ActionResult:
         from world.forms.services import (  # noqa: PLC0415
             AlternateSelfActiveError,
+            FormOwnershipError,
             RevertBlockedError,
             revert_alternate_self,
         )
@@ -121,6 +126,10 @@ class RevertFormAction(Action):
             # The active alt-self's persona FK points at another sheet (bad
             # seed/admin edit). Surface the safe message — never ``str(exc)``.
             return ActionResult(success=False, message=ActivePersonaError.user_message)
+        except FormOwnershipError:
+            # The active alt-self's form FK points at another character (bad
+            # seed/admin edit). Surface the safe message — never ``str(exc)``.
+            return ActionResult(success=False, message=FormOwnershipError.user_message)
         except AlternateSelfActiveError as exc:
             # Revert clears the active alt-self, so this shouldn't fire from
             # the service — but if it ever does, surface the safe message.
