@@ -234,13 +234,15 @@ actions, backends, and service functions.
   `setstage <name|id> replace` replaces the room's existing position grid. Thin `ArxCommand` over
   `action.run()` (same seam as the web quick-action `_set_the_stage_actions`); staff-gated by
   `StaffOnlyPrerequisite`. No business logic in the command.
-- **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
-  personas or switch the active one. Bare `persona`/`persona list` renders all the
-  caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
-  <name>` resolves the name among the caller's own faces and dispatches `SetActivePersonaAction`
-  (key `"set_active_persona"`, REGISTRY backend) through `dispatch_player_action` — the same
-  seam the web `PersonaViewSet.set_active` uses. Pose/sdesc reflection of the presented
-  persona is #1109's scope, not this command.
+- **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list, create, or switch
+  faces. Bare `persona`/`persona list` renders all the caller's personas (marking the active one
+  `◄ active`). `persona <name>`/`wear-face <name>` resolves the name among the caller's own faces
+  and dispatches `SetActivePersonaAction` (key `"set_active_persona"`, REGISTRY backend) through
+  `dispatch_player_action` — the same seam the web `PersonaViewSet.set_active` uses. `persona create
+  <name>` (durable ESTABLISHED) and `persona mask <name>` (TEMPORARY anonymous mask, worn on
+  creation) call the validated `scenes.services.create_persona`/`create_mask` directly (#1127) — the
+  same services the web `create-established`/`create-mask` actions use; staff bypass the
+  ESTABLISHED cap. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
 - **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.
   Thin read over `world.areas.services.where_listing`: characters in **public** rooms,
   each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,

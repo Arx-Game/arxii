@@ -10302,6 +10302,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/create-established/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1127 — the designed create path for a durable ESTABLISHED identity.
+     *
+     *     Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+     *     staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+     */
+    post: operations['personas_create_established_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/create-mask/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1127 — create a TEMPORARY anonymous mask and wear it (the "put on a mask" path). */
+    post: operations['personas_create_mask_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/set-active/': {
     parameters: {
       query?: never;
@@ -15887,6 +15926,14 @@ export interface components {
       post: number;
       author_persona: number;
       body: string;
+    };
+    /** @description POST body for the #1127 create-established-persona endpoint. */
+    CreateEstablishedPersonaRequestRequest: {
+      name: string;
+    };
+    /** @description POST body for the #1127 create-mask endpoint — a temporary anonymous face. */
+    CreateMaskRequestRequest: {
+      name: string;
     };
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
@@ -40989,6 +41036,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedSpreadableDeedList'];
+        };
+      };
+    };
+  };
+  personas_create_established_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEstablishedPersonaRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_create_mask_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateMaskRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
         };
       };
     };

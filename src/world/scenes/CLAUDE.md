@@ -125,10 +125,18 @@ Key service functions for scene round lifecycle:
 
 ### `views.py`
 - **`SceneViewSet`**: Scene CRUD operations and filtering
-- **`PersonaViewSet`**: Persona management. `set_active` dispatches `SetActivePersonaAction`
+- **`PersonaViewSet`**: Persona management (read + actions; **not** a `ModelViewSet` — the raw
+  create was removed, #1127). `set_active` dispatches `SetActivePersonaAction`
   (key `"set_active_persona"`, `actions/definitions/personas.py`) via `dispatch_player_action`
   — the same seam the telnet `CmdPersona` uses. `set_active_persona` (service) remains the
   sole mutator of `CharacterSheet.active_persona`; the action wraps it.
+  - **Designed creation (#1127):** `create-established` / `create-mask` POST actions are the only
+    creation surface (telnet `persona create|mask` mirrors them). Both call the validated services
+    `scenes.services.create_persona` (ESTABLISHED; capped by
+    `settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET`, staff bypass) and `create_mask` (TEMPORARY
+    anonymous mask, optionally applying a #1110 disguise overlay + switching the worn face). PRIMARY
+    is never created here. Creation copies **no** descriptors from sibling faces — the
+    descriptor-never-auto-attach privacy invariant (#1109) holds structurally.
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
 ### `interaction_views.py`
