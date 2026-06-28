@@ -172,6 +172,74 @@ def reflect_damage(*, payload: Any) -> None:
     # else: ref is None / Technique / unknown → payload already zeroed, no bounce
 
 
+def summon_ally(*, payload: Any) -> None:
+    """Create an ALLY CombatOpponent in the caster's encounter (ACTIVE cast-time handler).
+
+    Reads from payload:
+    - ``payload.caster``         – caster's character ObjectDB.
+    - ``payload.threat_pool_id`` – pk of the ThreatPool to use.
+    - ``payload.bond_rounds``    – optional int; sets bond_expires_round on the summon.
+    - ``payload.max_health``     – optional int (default 30); explicit max_health for
+                                   manual mode (skips scaling formula → SQLite-safe).
+
+    Resolution:
+    1. Finds the caster's active CombatParticipant; returns early if not in combat.
+    2. Creates an ephemeral MOOK CombatOpponent via ``add_opponent`` (reuse — ADR-0016).
+    3. Sets allegiance=ALLY, summoned_by=caster sheet, bond_expires_round if provided.
+    4. Defensively moves the summon to the caster's Position (no-op when not positioned).
+    """
+    # Lazy imports to avoid the combat↔magic circular dependency.
+    from world.combat.constants import (  # noqa: PLC0415
+        CombatAllegiance,
+        OpponentTier,
+        ParticipantStatus,
+    )
+    from world.combat.models import CombatParticipant, ThreatPool  # noqa: PLC0415
+    from world.combat.services import add_opponent  # noqa: PLC0415
+
+    participant = (
+        CombatParticipant.objects.filter(
+            character_sheet__character=payload.caster,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("encounter", "character_sheet")
+        .first()
+    )
+    if participant is None:
+        return  # Caster is not in active combat — nothing to summon into.
+
+    encounter = participant.encounter
+    caster_sheet = participant.character_sheet
+
+    threat_pool = ThreatPool.objects.get(pk=payload.threat_pool_id)
+    max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
+    bond_rounds: int | None = getattr(payload, "bond_rounds", None)  # noqa: GETATTR_LITERAL
+
+    # Reuse the canonical opponent-creation primitive (anti-reinvention, ADR-0016).
+    # Passing max_health explicitly → manual mode → no scaling formula → SQLite-safe.
+    opp = add_opponent(
+        encounter,
+        name=f"{caster_sheet.character.db_key}'s Summon",
+        tier=OpponentTier.MOOK,
+        threat_pool=threat_pool,
+        max_health=max_health,
+    )
+
+    # Set summon fields (add_opponent does not set these).
+    update_fields = ["allegiance", "summoned_by"]
+    opp.allegiance = CombatAllegiance.ALLY
+    opp.summoned_by = caster_sheet
+    if bond_rounds is not None:
+        opp.bond_expires_round = encounter.round_number + bond_rounds
+        update_fields.append("bond_expires_round")
+    opp.save(update_fields=update_fields)
+
+    # Defensively place the summon at the caster's Position (same room guaranteed).
+    pos = position_of(payload.caster)
+    if pos is not None:
+        force_move_to_position(opp.objectdb, pos)
+
+
 def blink_dodge(*, payload: Any) -> None:
     """Teleport the bearer to an alternate position, fully avoiding incoming damage.
 
