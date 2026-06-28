@@ -13,6 +13,24 @@ _Avoid_: mana, magic points.
 **Gift**:
 A thematic collection of Techniques (e.g. Pyromancy, Shadow Majesty), associated with a set of Resonances. A character acquires a Gift to gain access to its Techniques.
 
+**Major Gift**:
+The Gift chosen at character creation — a character's primary magical calling (one per character). Same `Gift` model as a Minor Gift, distinguished by a `kind` column. (ADR-0050.)
+_Avoid_: main gift.
+
+**Minor Gift**:
+A smaller, shared, more-easily-acquired Gift (e.g. Sight → Soulsight/Magesight; Travel → teleportation). **Species abilities (vampire/lycan/khati) are delivered as species-granted Minor Gifts.** (ADR-0050.)
+_Avoid_: lesser gift, sub-gift.
+
+**Gift-thread**:
+The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
+
+**Signature**:
+A Thread woven into a single Technique, deepening just that technique above its Gift baseline; it carries its own resonance, which usually matches the Gift but may deliberately diverge (a *discordant signature*). (ADR-0056.)
+_Avoid_: technique thread (use "signature").
+
+**Specialization engine**:
+The one shared `(entity × resonance) → customized capability` resolution (a generalization of covenant sub-role resolution): the same Gift down different Paths, or with a different resonance, yields different specialized techniques, derived on read. (ADR-0055.)
+
 **Technique**:
 A specific, player-created magical ability that lives within a Gift, carrying base intensity, control, and anima cost plus a style and effect type. It is the primary unit of magical action.
 _Avoid_: power, spell, ability.

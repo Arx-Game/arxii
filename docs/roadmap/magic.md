@@ -10,6 +10,11 @@ full scope-by-scope build record lives in
 anything new, to avoid reinventing existing surfaces). When this doc and the archive
 disagree, this doc and the code win.
 
+**Capability tiers + MVP sequencing:** [`player-capability-ledger.md`](player-capability-ledger.md)
+(DO / GROW / COMBINE pillars). **Gift/resonance economy decisions:** ADR-0050–0057 — Major/Minor
+gifts (species abilities as Minor Gifts), gift-thread strength + resonance, XP-unlocks-gate-never-grant,
+the one specialization engine, fall/redemption, Covenant of the Court.
+
 ## The playable loop, stage by stage
 
 | Stage | Status | Where |
