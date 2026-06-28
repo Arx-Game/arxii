@@ -39,6 +39,11 @@ class DeriveAllegianceTest(TestCase):
             [BulkConditionApplication(target=opponent.objectdb, template=template)],
         )
 
+    def test_no_objectdb_is_enemy(self):
+        # An opponent with no in-world ObjectDB cannot be charmed -> ENEMY.
+        opponent = CombatOpponentFactory(encounter=self.encounter, objectdb_id=None)
+        self.assertEqual(derive_allegiance(opponent, self.encounter), Allegiance.ENEMY)
+
     def test_enemy_by_default(self):
         self.assertEqual(derive_allegiance(self.enemy_opponent, self.encounter), Allegiance.ENEMY)
 

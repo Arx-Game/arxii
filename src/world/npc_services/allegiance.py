@@ -8,6 +8,8 @@ target-selection consults this so a charmed NPC skips the caster's party.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.conditions.constants import (
     CALM_CONDITION_NAME,
     CHARM_CONDITION_NAME,
@@ -15,8 +17,14 @@ from world.conditions.constants import (
 )
 from world.conditions.services import get_active_conditions
 
+if TYPE_CHECKING:
+    from world.combat.models import CombatEncounter, CombatOpponent
 
-def derive_allegiance(opponent, encounter) -> Allegiance:  # noqa: ARG001 (encounter for future party lookup)
+
+def derive_allegiance(
+    opponent: CombatOpponent,
+    encounter: CombatEncounter,  # noqa: ARG001 — reserved for future party lookup
+) -> Allegiance:
     """Return the opponent's current allegiance (derived, not stored)."""
     if opponent.objectdb_id is None:
         return Allegiance.ENEMY
