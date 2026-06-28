@@ -55,6 +55,8 @@ export interface CharacterData {
   galleries: CharacterGallery[];
 }
 
+export type CreationProvenance = 'staff' | 'gm_table' | 'player';
+
 export interface RosterEntryData {
   id: number;
   character: CharacterData;
@@ -64,6 +66,10 @@ export interface RosterEntryData {
   fullname: string;
   quote: string;
   description: string;
+  // Who authored this character — a viewable quality/trust signal (#1506).
+  creation_provenance: CreationProvenance;
+  creation_provenance_display: string;
+  created_for_table_name: string | null;
 }
 
 export interface RosterData {

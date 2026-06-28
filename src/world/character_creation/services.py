@@ -24,7 +24,7 @@ from world.character_creation.models import CharacterDraft
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry, RosterTenure
-from world.roster.models.choices import RosterType
+from world.roster.models.choices import CreationProvenance, RosterType
 
 # "Pending" is CG-specific and not a general roster type in RosterType choices
 PENDING_ROSTER_NAME = "Pending"
@@ -32,6 +32,7 @@ PENDING_ROSTER_NAME = "Pending"
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
+    from evennia.accounts.models import AccountDB
 
     from world.character_creation.models import (
         DraftApplication,
@@ -64,13 +65,22 @@ class DraftExpiredError(CharacterCreationError):
 
 
 @transaction.atomic
-def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) -> ObjectDB:
+def finalize_character(
+    draft: CharacterDraft,
+    *,
+    add_to_roster: bool = False,
+    created_by_account: AccountDB | None = None,
+) -> ObjectDB:
     """
     Create a Character from a completed CharacterDraft.
 
     Args:
         draft: The completed CharacterDraft to finalize
         add_to_roster: If True, skip application and add directly to roster (staff/GM only)
+        created_by_account: The account authoring this character, stamped on the
+            RosterEntry for provenance (#1506). Defaults to the draft's own account.
+            ``add_to_roster`` is the staff direct-add path, so it records STAFF
+            provenance; the normal player path records PLAYER (an original character).
 
     Returns:
         The created Character object
@@ -138,12 +148,19 @@ def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) ->
     vitals.save(update_fields=["health"])
 
     # Handle roster assignment
+    # Provenance signal (#1506): the staff direct-add path is STAFF; the normal
+    # self-creation path is PLAYER (an original character). The authoring account
+    # defaults to the draft's owner.
+    provenance = CreationProvenance.STAFF if add_to_roster else CreationProvenance.PLAYER
+    author = created_by_account if created_by_account is not None else draft.account
     if add_to_roster:
         # Staff/GM directly adding to roster - no application needed
         roster = _get_or_create_available_roster()
         RosterEntry.objects.create(
             character_sheet=character.sheet_data,
             roster=roster,
+            creation_provenance=provenance,
+            created_by_account=author,
         )
     else:
         # Character awaiting approval — placed in Pending roster.
@@ -152,6 +169,8 @@ def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) ->
         RosterEntry.objects.create(
             character_sheet=character.sheet_data,
             roster=roster,
+            creation_provenance=provenance,
+            created_by_account=author,
         )
 
     # Family is already set on CharacterSheet above
@@ -1424,10 +1443,15 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     # sits on the Available roster with no location. Once a player claims the
     # character (via RosterApplication → tenure), downstream code sets the
     # starting location at activation time.
-    # Create RosterEntry on Available roster (no tenure).
+    # Create RosterEntry on Available roster (no tenure). Stamp GM_TABLE provenance
+    # (#1506): the player-GM authored this for their table, recorded as a viewable
+    # quality/trust signal alongside the GM's account and the table itself.
     entry = RosterEntry.objects.create(
         character_sheet=sheet,
         roster=_get_or_create_available_roster(),
+        creation_provenance=CreationProvenance.GM_TABLE,
+        created_by_account=draft.account,
+        created_for_table=draft.target_table,
     )
 
     # Create the Story tied to the GM's target table.

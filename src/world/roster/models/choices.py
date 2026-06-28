@@ -23,6 +23,23 @@ class PlotInvolvement(models.TextChoices):
     NONE = "none", "None - Social Only"
 
 
+class CreationProvenance(models.TextChoices):
+    """Who authored a RosterEntry — a viewable quality/trust signal (#1506).
+
+    Players browsing the Available roster use this to calibrate expectations: a
+    ``STAFF`` character is held to the global content bar, while a ``GM_TABLE``
+    character is a player-GM's creation for their own table (the GM vouches for it
+    for that table; others may try it knowing it isn't staff-vetted). ``PLAYER`` is
+    an original character authored through self character-creation (e.g. an OC that
+    later becomes a roster character). It is a display signal only — it never gates
+    who may apply.
+    """
+
+    STAFF = "staff", "Staff-created"
+    GM_TABLE = "gm_table", "GM-created (for a table)"
+    PLAYER = "player", "Player-created"
+
+
 class RosterType(models.TextChoices):
     """Common roster type names for validation"""
 

@@ -1336,6 +1336,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/finalize-gm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Finalize a player-GM's character onto the Available roster for their table (#1506).
+     *
+     *     The requesting account must own the target GM table. Creates the character + a
+     *     Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
+     *     viewable quality/trust signal (the GM vouches for it for their table; apping is
+     *     never gated by it). Body: ``target_table`` (id, required), ``story_title``
+     *     (required), optional ``story_description``.
+     */
+    post: operations['character_creation_drafts_finalize_gm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
@@ -16029,6 +16054,13 @@ export interface components {
     CreateMaskRequestRequest: {
       name: string;
     };
+    /**
+     * @description * `staff` - Staff-created
+     *     * `gm_table` - GM-created (for a table)
+     *     * `player` - Player-created
+     * @enum {string}
+     */
+    CreationProvenanceEnum: 'staff' | 'gm_table' | 'player';
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
       boundary_level: number;
@@ -24022,6 +24054,16 @@ export interface components {
       readonly fullname: string;
       readonly quote: string;
       readonly description: string;
+      /**
+       * @description Who authored this character — a display-only quality/trust signal.
+       *
+       *     * `staff` - Staff-created
+       *     * `gm_table` - GM-created (for a table)
+       *     * `player` - Player-created
+       */
+      readonly creation_provenance: components['schemas']['CreationProvenanceEnum'];
+      readonly creation_provenance_display: string;
+      readonly created_for_table_name: string | null;
     };
     /** @description Serializer for listing rosters with character counts. */
     RosterList: {
@@ -28243,6 +28285,31 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_finalize_gm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
