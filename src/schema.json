@@ -17280,6 +17280,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSpreadableDeedList'
           description: ''
+  /api/personas/create-established/:
+    post:
+      operationId: personas_create_established_create
+      description: |-
+        #1127 — the designed create path for a durable ESTABLISHED identity.
+
+        Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+        staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEstablishedPersonaRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
+  /api/personas/create-mask/:
+    post:
+      operationId: personas_create_mask_create
+      description: '#1127 — create a TEMPORARY anonymous mask and wear it (the "put
+        on a mask" path).'
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMaskRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/set-active/:
     post:
       operationId: personas_set_active_create
@@ -27897,6 +27944,27 @@ components:
       - author_persona
       - body
       - post
+    CreateEstablishedPersonaRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-established-persona endpoint.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+    CreateMaskRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-mask endpoint — a temporary anonymous
+        face.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A

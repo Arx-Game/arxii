@@ -99,6 +99,38 @@ class CmdPersonaTests(TestCase):
         self.assertEqual(kwargs, {"persona_id": self.alt.pk})
 
 
+class CmdPersonaCreateTests(TestCase):
+    """`persona create <name>` / `persona mask <name>` — the #1127 creation subverbs."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.character.msg = MagicMock()
+
+    def test_create_makes_an_established_persona(self) -> None:
+        from world.scenes.models import Persona
+
+        _cmd(self.character, "create Robert D'Vile").func()
+        assert Persona.objects.filter(
+            character_sheet=self.sheet, name="Robert D'Vile", persona_type=PersonaType.ESTABLISHED
+        ).exists()
+
+    def test_mask_makes_a_temporary_face_and_wears_it(self) -> None:
+        from world.scenes.models import Persona
+
+        _cmd(self.character, "mask A Masked Figure").func()
+        mask = Persona.objects.get(character_sheet=self.sheet, name="A Masked Figure")
+        assert mask.persona_type == PersonaType.TEMPORARY
+        assert mask.is_fake_name is True
+        self.sheet.refresh_from_db()
+        assert self.sheet.active_persona_id == mask.pk
+
+    def test_create_without_a_name_shows_usage(self) -> None:
+        _cmd(self.character, "create").func()
+        sent = "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
+        self.assertIn("Usage: persona create", sent)
+
+
 class CmdPersonaActiveNoneTests(TestCase):
     """Listing must not crash when active_persona_for_sheet returns None."""
 
