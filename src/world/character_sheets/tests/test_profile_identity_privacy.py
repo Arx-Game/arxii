@@ -93,6 +93,64 @@ class ProfileIdentityPrivacyTests(APITestCase):
         # ...but the secret alt list is NOT — only the presented (primary) face.
         assert len(data["personas"]) == 1
 
+    def _set_body(self, sheet, *, inches=70, desc="a tall auburn-haired woman with a birthmark"):
+        """Give a sheet an exact height + identifying free-text description."""
+        sheet.true_height_inches = inches
+        sheet.additional_desc = desc
+        sheet.save(update_fields=["true_height_inches", "additional_desc"])
+
+    def test_non_owner_of_an_anonymous_face_gets_band_not_exact_height_and_no_description(
+        self,
+    ) -> None:
+        """A masked character leaks neither exact height nor identifying prose (#1325)."""
+        from world.forms.factories import HeightBandFactory
+
+        HeightBandFactory(name="average", display_name="Average", min_inches=66, max_inches=72)
+        sheet = self._character_sheet(AccountFactory(), fake_active=True)
+        self._set_body(sheet)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        appearance = self._get(sheet, viewer).data["appearance"]
+        # Exact inches are owner/staff-only; the observer sees only the coarse band.
+        assert appearance["height_inches"] is None
+        assert appearance["height_band"] == "Average"
+        # The free-text description must not leak through the mask.
+        assert appearance["description"] == ""
+
+    def test_owner_sees_exact_height_and_description(self) -> None:
+        """The owner's own sheet shows the precise height + their description (#1325)."""
+        from world.forms.factories import HeightBandFactory
+
+        HeightBandFactory(name="average", display_name="Average", min_inches=66, max_inches=72)
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=True)
+        self._set_body(sheet)
+
+        appearance = self._get(sheet, owner).data["appearance"]
+        assert appearance["height_inches"] == 70
+        assert appearance["height_band"] == "Average"
+        assert appearance["description"] == "a tall auburn-haired woman with a birthmark"
+
+    def test_non_owner_of_a_public_face_gets_band_but_keeps_public_description(self) -> None:
+        """A public (non-masked) face still bands height for observers, but its desc is public.
+
+        You can't measure exact inches by looking — but a public character's description is
+        meant to be read, so only height is coarsened (#1325).
+        """
+        from world.forms.factories import HeightBandFactory
+
+        HeightBandFactory(name="average", display_name="Average", min_inches=66, max_inches=72)
+        sheet = self._character_sheet(AccountFactory(), fake_active=False)
+        self._set_body(sheet, desc="an imposing figure")
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        appearance = self._get(sheet, viewer).data["appearance"]
+        assert appearance["height_inches"] is None
+        assert appearance["height_band"] == "Average"
+        assert appearance["description"] == "an imposing figure"
+
     def test_a_discoverer_sees_the_revealed_identity(self) -> None:
         owner = AccountFactory()
         sheet = self._character_sheet(owner, fake_active=True)

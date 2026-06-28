@@ -53,9 +53,17 @@ class FormTraitEntry(TypedDict):
 
 
 class AppearanceSection(TypedDict):
-    """The appearance section of the character sheet API response."""
+    """The appearance section of the character sheet API response.
+
+    ``height_inches`` is the exact height, exposed only to the owner / staff (#1325);
+    every other observer sees ``None`` there and reads the coarse ``height_band`` label
+    instead, so two faces of one character can't be correlated by an identical height.
+    ``description`` (the free-text ``additional_desc``) is blank unless the presented
+    identity is revealed — a mask must not leak identifying prose.
+    """
 
     height_inches: int | None
+    height_band: str | None
     build: IdNameRef | None
     description: str
     form_traits: list[FormTraitEntry]

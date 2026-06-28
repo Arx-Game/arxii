@@ -462,7 +462,7 @@ class TestAppearanceSection(TestCase):
     def test_appearance_has_all_expected_keys(self) -> None:
         """The appearance section contains every specified field."""
         appearance = self._get_appearance()
-        expected_keys = {"height_inches", "build", "description", "form_traits"}
+        expected_keys = {"height_inches", "height_band", "build", "description", "form_traits"}
         assert set(appearance.keys()) == expected_keys
 
     def test_height_inches(self) -> None:
@@ -1885,11 +1885,13 @@ class TestCharacterSheetQueryCount(TestCase):
         20.    goals
         21.    personas + thumbnails (via Prefetch select_related)
         22.    persona trait_descriptors (nested Prefetch — appearance overlay)
-        23-25. Session management (savepoint, update, release)
-        26.    block gate — one indexed exists() check (#1278, get_object)
+        23.    HeightBand range lookup for the coarse band label (#1325; one constant
+               query — the band is derived from inches, not stored on the sheet)
+        24-26. Session management (savepoint, update, release)
+        27.    block gate — one indexed exists() check (#1278, get_object)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(26):
+        with self.assertNumQueries(27):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2067,10 +2069,12 @@ class TestPrefetchCompleteness(TestCase):
         with self.assertNumQueries(0):
             _build_identity(sheet)
 
-    def test_appearance_zero_queries(self) -> None:
+    def test_appearance_one_query(self) -> None:
+        # 1 query: the HeightBand range lookup for the coarse band label (#1325). It is a
+        # single constant query — independent of form/trait count — not an N+1.
         sheet = self._get_sheet()
-        with self.assertNumQueries(0):
-            _build_appearance(sheet)
+        with self.assertNumQueries(1):
+            _build_appearance(sheet, reveal_identity=True, privileged=True)
 
     def test_stats_zero_queries(self) -> None:
         sheet = self._get_sheet()

@@ -333,11 +333,29 @@ def _resolve_presented_identity(
     )
 
 
-def _build_appearance(sheet: CharacterSheet) -> AppearanceSection:
+def _build_appearance(
+    sheet: CharacterSheet, *, reveal_identity: bool, privileged: bool
+) -> AppearanceSection:
     """Build the appearance section: normalized TRUE-form traits overlaid with the
     active persona's descriptors (descriptor, else normalized) — mirroring the telnet
-    ``item_data`` composition. Query-free: reads prefetched forms + personas.
+    ``item_data`` composition.
+
+    Identity gating (#1325):
+
+    - **Exact ``height_inches`` is owner/staff-only** (``privileged``). Every other
+      observer — including a stranger viewing the real public face — sees ``None`` and
+      reads only the coarse ``height_band`` (you can tell someone is tall by looking, but
+      not their precise inches, and two faces of one character can't be matched on it).
+    - **Free-text ``description`` shows only when ``reveal_identity``.** A mask must not
+      leak prose that names height, scars, or hair ("a tall auburn-haired woman…").
+    - ``form_traits`` already reduce to the generic option name unless the *presented*
+      persona supplies a descriptor (a base mask shows "red", not "flowing crimson"); a
+      richer disguise overlay supplying its own descriptors is the disguise system's job.
+
+    One query (the ``HeightBand`` range lookup); otherwise reads prefetched forms + personas.
     """
+    from world.forms.services import get_height_band  # noqa: PLC0415
+
     character = sheet.character
 
     active = _resolve_active_persona(sheet)
@@ -357,10 +375,14 @@ def _build_appearance(sheet: CharacterSheet) -> AppearanceSection:
     else:
         form_traits = []
 
+    true_height = sheet.true_height_inches
+    band = get_height_band(true_height) if true_height is not None else None
+
     return AppearanceSection(
-        height_inches=sheet.true_height_inches,
+        height_inches=true_height if privileged else None,
+        height_band=band.display_name if band is not None else None,
         build=_id_name_or_null(sheet.build, name_field="display_name"),
-        description=sheet.additional_desc,
+        description=sheet.additional_desc if reveal_identity else "",
         form_traits=form_traits,
     )
 
@@ -925,7 +947,9 @@ class CharacterSheetSerializer(serializers.Serializer):
                 reveal_identity=reveal_identity,
                 bio_profile=bio_profile,
             ),
-            "appearance": _build_appearance(sheet),
+            "appearance": _build_appearance(
+                sheet, reveal_identity=reveal_identity, privileged=privileged
+            ),
             "stats": _build_stats(sheet) if show_stats else {},
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
