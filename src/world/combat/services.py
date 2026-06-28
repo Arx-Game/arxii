@@ -9,7 +9,7 @@ from decimal import Decimal
 import logging
 import math
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
@@ -1876,60 +1876,106 @@ def _get_eligible_entries(
     return eligible
 
 
-def _select_targets(
+_TargetT = TypeVar("_TargetT")
+
+
+def _select_targets_core(
     entry: ThreatPoolEntry,
-    active_participants: list[CombatParticipant],
+    candidates: list[_TargetT],
+    health_of: Callable[[list[_TargetT]], list[int]],
     rotation: int = 0,
-) -> list[CombatParticipant]:
-    """Select targets for a threat pool entry from active participants.
+) -> list[_TargetT]:
+    """Shared targeting-mode selector for participants and opponents (#1584).
+
+    One algorithm (ALL / MULTI / RANDOM / LOWEST_HEALTH / rotated-default) drives
+    both the participant ``targets`` path and the opponent ``opponent_targets``
+    path (ADR-0016 — no parallel selector). ``health_of`` returns health values
+    parallel to ``candidates`` and is only invoked for the LOWEST_HEALTH mode, so
+    participants keep their single batch query and opponents read ``.health``
+    directly.
 
     ``rotation`` offsets the deterministic (non-random, non-health-sorted)
-    selection so a swarm's successive attacks fan across distinct PCs rather
+    selection so a swarm's successive attacks fan across distinct targets rather
     than dogpiling the first one (#983). It is a no-op for the ALL, RANDOM, and
-    LOWEST_HEALTH modes, which already spread across or intentionally focus the
-    party on their own terms.
+    LOWEST_HEALTH modes, which already spread across or intentionally focus on
+    their own terms.
     """
-    if not active_participants:
+    if not candidates:
         return []
 
     mode = entry.targeting_mode
     selection = entry.target_selection
 
     if mode == TargetingMode.ALL:
-        return list(active_participants)
+        return list(candidates)
 
     count = 1
     if mode == TargetingMode.MULTI:
         count = entry.target_count or 1
 
-    count = min(count, len(active_participants))
+    count = min(count, len(candidates))
 
     if selection == TargetSelection.LOWEST_HEALTH:
+        healths = health_of(candidates)
+        sorted_by_health = [
+            c
+            for _, c in sorted(
+                zip(healths, candidates, strict=True),
+                key=lambda pair: pair[0],
+            )
+        ]
+        return sorted_by_health[:count]
+
+    if selection == TargetSelection.RANDOM:
+        return random.sample(candidates, count)
+
+    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
+    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
+    # Placeholder: pick candidates by DB order, rotated so a swarm's successive
+    # attacks fan across distinct targets instead of all landing on the first
+    # one (#983).
+    offset = rotation % len(candidates)
+    rotated = candidates[offset:] + candidates[:offset]
+    return list(rotated[:count])
+
+
+def _select_targets(
+    entry: ThreatPoolEntry,
+    active_participants: list[CombatParticipant],
+    rotation: int = 0,
+) -> list[CombatParticipant]:
+    """Select participant targets for a threat pool entry (typed wrapper)."""
+
+    def _participant_healths(candidates: list[CombatParticipant]) -> list[int]:
         from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-        sheet_ids = [p.character_sheet_id for p in active_participants]
+        sheet_ids = [p.character_sheet_id for p in candidates]
         health_map = dict(
             CharacterVitals.objects.filter(
                 character_sheet_id__in=sheet_ids,
             ).values_list("character_sheet_id", "health")
         )
-        sorted_by_health = sorted(
-            active_participants,
-            key=lambda p: health_map.get(p.character_sheet_id, 0),
-        )
-        return sorted_by_health[:count]
+        return [health_map.get(p.character_sheet_id, 0) for p in candidates]
 
-    if selection == TargetSelection.RANDOM:
-        return random.sample(active_participants, count)
+    return _select_targets_core(entry, active_participants, _participant_healths, rotation)
 
-    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
-    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
-    # Placeholder: pick active participants by DB order, rotated so a swarm's
-    # successive attacks fan across distinct PCs instead of all landing on the
-    # first one (#983).
-    offset = rotation % len(active_participants)
-    rotated = active_participants[offset:] + active_participants[:offset]
-    return list(rotated[:count])
+
+def _select_opponent_targets(
+    entry: ThreatPoolEntry,
+    active_opponents: list[CombatOpponent],
+    rotation: int = 0,
+) -> list[CombatOpponent]:
+    """Select opponent targets for a threat pool entry (typed wrapper, #1584).
+
+    Routes an ALLY summon's attack at ENEMY opponents; opponents carry health on
+    the row, so no batch query is needed.
+    """
+    return _select_targets_core(
+        entry,
+        active_opponents,
+        lambda opps: [o.health for o in opps],
+        rotation,
+    )
 
 
 def _batch_fetch_cooldown_data(
@@ -2043,20 +2089,18 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        # Route targeting by allegiance (#1584): an ENEMY opponent's hostile
-        # participants are the active PCs; an ALLY summon's hostiles are ENEMY
-        # opponents, which the ``targets`` M2M (CombatParticipant-only) cannot
-        # represent yet — so it resolves to no PC target rather than attacking
-        # its own side. Intersect with ``active_participants`` to keep the
-        # can_act gate (combatants_hostile_to filters on ACTIVE status only).
-        hostile_pks = {p.pk for p in combatants_hostile_to(opponent)["participants"]}
-        opponent_targets = [p for p in active_participants if p.pk in hostile_pks]
+        target_pool, targeting_participants = _npc_action_target_pool(opponent, active_participants)
+
+        # Empty-pool guard (#1584 Task 7b): create no action row when the
+        # combatant has no valid target (e.g. a summon with no live enemy).
+        if not target_pool:
+            continue
 
         if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
             n_attacks = swarm_attack_count(
                 opponent.swarm_count,
                 opponent.bodies_per_attack or 1,
-                len(opponent_targets),
+                len(target_pool),
             )
         else:
             n_attacks = 1
@@ -2064,16 +2108,60 @@ def select_npc_actions(
         for attack_index in range(n_attacks):
             weights = [e.weight for e in eligible]
             chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            targets = _select_targets(chosen, opponent_targets, rotation=attack_index)
             action = CombatOpponentAction.objects.create(
                 opponent=opponent,
                 round_number=encounter.round_number,
                 threat_entry=chosen,
             )
-            action.targets.set(targets)
+            _set_npc_action_targets(
+                action,
+                chosen,
+                target_pool,
+                targeting_participants=targeting_participants,
+                rotation=attack_index,
+            )
             actions.append(action)
 
     return actions
+
+
+def _npc_action_target_pool(
+    opponent: CombatOpponent,
+    active_participants: list[CombatParticipant],
+) -> tuple[list, bool]:
+    """Route an opponent's targeting by allegiance (#1584).
+
+    An opponent attacks the PC side only when it has hostile participants;
+    otherwise it attacks its hostile opponents. This gates ALLY summons (whose
+    participant pool is always empty) onto ENEMY opponents, with NO behaviour
+    change for an ENEMY opponent while any PC is targetable (it still targets PCs
+    only — it does not also start attacking summons; aggro/attack-budget
+    splitting is a follow-up). ``combatants_hostile_to`` already filters on
+    ACTIVE; the participant intersection re-applies the can_act gate.
+
+    Returns ``(target_pool, targeting_participants)``.
+    """
+    hostile = combatants_hostile_to(opponent)
+    hostile_pks = {p.pk for p in hostile["participants"]}
+    participant_pool = [p for p in active_participants if p.pk in hostile_pks]
+    if participant_pool:
+        return participant_pool, True
+    return hostile["opponents"], False
+
+
+def _set_npc_action_targets(
+    action: CombatOpponentAction,
+    entry: ThreatPoolEntry,
+    target_pool: list,
+    *,
+    targeting_participants: bool,
+    rotation: int,
+) -> None:
+    """Populate exactly one target relation on an NPC action (#1584)."""
+    if targeting_participants:
+        action.targets.set(_select_targets(entry, target_pool, rotation=rotation))
+    else:
+        action.opponent_targets.set(_select_opponent_targets(entry, target_pool, rotation=rotation))
 
 
 def swarm_kills(raw_damage: int, body_toughness: int) -> int:
@@ -3560,16 +3648,48 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         condition_applications.extend((target_obj, ct) for ct in conditions)
 
 
+def _resolve_npc_action_on_opponent_target(
+    target_opponent: CombatOpponent,
+    *,
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    outcome: ActionOutcome,
+) -> None:
+    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b).
+
+    Routes an ALLY summon's attack at an ENEMY opponent. Damage only — the PC
+    survivability pipeline (``process_damage_consequences``) and the threat
+    entry's ``conditions_applied`` path stay PC-only here;
+    ``apply_damage_to_opponent`` already sets ``OpponentStatus.DEFEATED``
+    internally. The summoner (``opponent.summoned_by``, a ``CharacterSheet`` or
+    ``None``) receives damage/defeat achievement credit; null-safe for
+    non-summon attackers.
+    """
+    # Mirror the participant guard: skip an escaped/defeated (non-ACTIVE) target.
+    if target_opponent.status != OpponentStatus.ACTIVE:
+        return
+
+    dmg_result = apply_damage_to_opponent(
+        target_opponent,
+        npc_action.threat_entry.base_damage,
+        damage_type=npc_action.threat_entry.damage_type,
+        source_sheet=opponent.summoned_by,
+    )
+    outcome.damage_results.append(dmg_result)
+
+
 def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
 ) -> ActionOutcome:
-    """Resolve a single NPC's action against targeted PCs.
+    """Resolve a single NPC's action against its targets.
 
-    After applying damage, processes knockout/death transitions and
-    applies any conditions from the threat entry to damaged targets.
+    Exactly one target relation is populated per action: participant ``targets``
+    (the normal PC-facing path — applies damage, knockout/death transitions, and
+    threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
+    ENEMY opponents — damage only; #1584).
     """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
 
@@ -3577,6 +3697,14 @@ def _resolve_npc_action(
         targets: list[CombatParticipant] = npc_action.cached_targets
     except AttributeError:
         targets = list(npc_action.targets.all())
+
+    try:
+        opponent_targets: list[CombatOpponent] = npc_action.cached_opponent_targets
+    except AttributeError:
+        opponent_targets = list(npc_action.opponent_targets.all())
+
+    # Exactly one relation is populated; use whichever for narration labels.
+    label_targets: list = targets or opponent_targets
 
     # Pre-fetch conditions from the threat entry
     try:
@@ -3591,7 +3719,7 @@ def _resolve_npc_action(
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
     # NPC action share one row.
-    npc_action_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_action_label = ", ".join(str(t) for t in label_targets) if label_targets else None
     _npc_interaction_cache: list[Interaction] = []
 
     def _get_npc_action_interaction() -> Interaction:
@@ -3619,6 +3747,16 @@ def _resolve_npc_action(
             get_npc_action_interaction=_get_npc_action_interaction,
         )
 
+    # Opponent-target path (#1584): an ALLY summon attacking ENEMY opponents.
+    # Damage only — no survivability pipeline, no conditions (out of scope 7b).
+    for target_opponent in opponent_targets:
+        _resolve_npc_action_on_opponent_target(
+            target_opponent,
+            opponent=opponent,
+            npc_action=npc_action,
+            outcome=outcome,
+        )
+
     # Bulk-apply all conditions from this NPC action
     if condition_applications:
         from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
@@ -3634,7 +3772,7 @@ def _resolve_npc_action(
         render_action_outcome_narration,
     )
 
-    npc_target_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_target_label = ", ".join(str(t) for t in label_targets) if label_targets else None
     npc_narration = render_action_outcome_narration(
         actor_label=str(opponent),
         technique_name=npc_action.threat_entry.name,
@@ -4795,6 +4933,11 @@ def resolve_round(
                     "character_sheet",
                 ),
                 to_attr="cached_targets",
+            ),
+            Prefetch(
+                "opponent_targets",
+                queryset=CombatOpponent.objects.all(),
+                to_attr="cached_opponent_targets",
             ),
             Prefetch(
                 "threat_entry__conditions_applied",

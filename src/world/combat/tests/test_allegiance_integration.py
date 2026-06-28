@@ -3,9 +3,8 @@
 Covers the victory/outcome path (an ALLY summon must not block victory) and NPC
 target routing (an ENEMY opponent targets PCs; an ALLY summon does not target PCs).
 The opponent-vs-opponent damage path (an ALLY summon dealing damage to an ENEMY
-opponent) is NOT yet resolvable — ``CombatOpponentAction.targets`` is a M2M to
-``CombatParticipant`` only, so an ally summon currently gets no actionable target.
-That gap is tracked for Task 15's E2E.
+opponent via ``CombatOpponentAction.opponent_targets``) is exercised in
+``test_opponent_vs_opponent.py`` (Task 7b).
 """
 
 from django.test import TestCase

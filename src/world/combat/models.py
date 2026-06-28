@@ -947,6 +947,13 @@ class CombatOpponentAction(SharedMemoryModel):
         CombatParticipant,
         related_name="incoming_attacks",
     )
+    opponent_targets = models.ManyToManyField(
+        CombatOpponent,
+        related_name="incoming_opponent_attacks",
+        help_text="Opponent targets (#1584): an ALLY summon attacks ENEMY "
+        "opponents. Exactly one of targets / opponent_targets is populated per "
+        "action — the participant pool when it has hostile PCs, else this.",
+    )
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
