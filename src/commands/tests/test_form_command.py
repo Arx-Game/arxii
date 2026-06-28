@@ -136,11 +136,9 @@ class CmdFormTests(TestCase):
         self.assertIn("the Beast", sent)
 
     def test_form_hub_shows_blocked_when_not_in_control(self):
-        sheet = self._typed_sheet()
         fake_condition = MagicMock()
         fake_condition.condition.category.alters_behavior = True
         with patch.object(self.character.conditions, "active", return_value=[fake_condition]):
-            sheet.__dict__.pop("in_control", None)
             _cmd(self.character).func()
         sent = "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
         self.assertIn("not in control", sent)

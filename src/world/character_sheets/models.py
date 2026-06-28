@@ -927,23 +927,26 @@ class CharacterSheet(SharedMemoryModel):
             current_stage__stage_order=5,
         ).exists()
 
-    @cached_property
+    @property
     def in_control(self) -> bool:
         """Whether this character is in control of their own actions.
 
-        Derived from active conditions: False if any active condition's
-        category is ``alters_behavior`` (rage/possession/charm/mind-control).
-        Reuses the canonical consent signal (ADR-0024) — not a stored flag and
-        not a per-status name lookup. Cached for a read.
+        Derived from active conditions on each read: False if any active
+        condition's category is ``alters_behavior`` (rage/possession/charm/
+        mind-control). Reuses the canonical consent signal (ADR-0024) — not a
+        stored flag and not a per-status name lookup.
 
-        The cache is NOT auto-invalidated by condition mutation — the condition
-        services invalidate the conditions handler, not this sheet-level
-        cached_property. A caller that just changed conditions (or that reads
-        across a condition change on a sheet instance it still holds) MUST
-        ``del sheet.in_control`` (or re-fetch the sheet) to force re-derivation;
-        ``revert_alternate_self`` does this itself before its gate. A read-only
-        surface that hasn't changed conditions itself may still see a stale
-        value until the next fetch (cosmetic only).
+        Deliberately NOT a ``@cached_property``. The active-condition list is
+        already cached on the character's ``CharacterConditionHandler``
+        (``character.conditions`` — a ``cached_property`` whose ``invalidate()``
+        is called by every condition mutation service), so this property reads
+        that cache and never issues its own query. Caching the *derived boolean*
+        here would create a second, uncoordinated cache that the conditions
+        handler cannot invalidate — exactly the stale-control bug that surfaced
+        in PR #1605 review, where ``revert_alternate_self`` had to manually
+        ``pop`` the cached value to see a freshly-cleared rage condition. As a
+        plain property it always reflects the freshest conditions the handler
+        knows, and no caller needs to invalidate it.
 
         A benign shift (bird-to-fly) has no alters_behavior conditions, so this
         stays True and the form is self-revertible anytime.

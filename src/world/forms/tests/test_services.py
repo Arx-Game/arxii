@@ -723,8 +723,8 @@ class RevertAlternateSelfTests(TestCase):
         condition = ConditionTemplateFactory(category=category)
         apply_condition(self.sheet.character, condition)
 
-        # The sheet-level cache is stale until invalidated.
-        self.sheet.__dict__.pop("in_control", None)
+        # ``in_control`` reads the character's ``CharacterConditionHandler``
+        # cache, which ``apply_condition`` invalidated, so it re-derives fresh.
         self.assertIs(self.sheet.in_control, False)
 
         with self.assertRaises(RevertBlockedError):
@@ -732,7 +732,6 @@ class RevertAlternateSelfTests(TestCase):
 
         remove_condition(self.sheet.character, condition)
 
-        self.sheet.__dict__.pop("in_control", None)
         self.assertIs(self.sheet.in_control, True)
 
         revert_alternate_self(self.sheet)

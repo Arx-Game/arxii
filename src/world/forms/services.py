@@ -266,6 +266,14 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
         set_active_persona(sheet, alt.persona)
 
     _create_assumption_grants(sheet, alt)
+    # ``_create_assumption_grants`` may have written/updated ``CharacterTechnique``
+    # rows (the ability-suite). Invalidate the character's technique-handler cache
+    # per its mutation contract (``world/magic/handlers.py``: services that grant or
+    # revoke a ``CharacterTechnique`` call ``handler.invalidate()`` afterwards) so
+    # the weave picker / clash-opposition matcher see the granted techniques this
+    # session. The cast gate itself reads the DB fresh, so cast availability is
+    # unaffected; this is for the handler-cached read paths.
+    sheet.character.techniques.invalidate()
 
     active.alternate_self = alt
     active.save(update_fields=["alternate_self", "return_form", "return_persona"])
@@ -296,15 +304,12 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     if active.alternate_self_id is None:
         raise ValueError(_NO_ACTIVE_ALT_SELF_MSG)
 
-    # Force a fresh derivation of in_control — it's a cached_property on the
-    # sheet instance and condition mutation services invalidate only the
-    # conditions handler, not this sheet-level cache. Without this, a caller
-    # holding the sheet across a condition change (rage clears → revert
-    # unblocks, the decoupled flow) could read a stale in_control=False and
-    # stay blocked forever. Re-deriving here makes revert's gate always
-    # reflect current condition state.
-    sheet.__dict__.pop("in_control", None)
-
+    # ``in_control`` is a plain property reading the character's
+    # ``CharacterConditionHandler`` cache (invalidated by every condition
+    # mutation service), so it always reflects current condition state — no
+    # manual cache-pop needed here. A caller holding the sheet across a
+    # condition change (rage clears → revert unblocks, the decoupled flow) reads
+    # the fresh value on the next access.
     if not sheet.in_control:
         raise RevertBlockedError
 
@@ -345,6 +350,12 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     for source in sources:
         CharacterTechnique.objects.filter(source=source).delete()
         source.delete()
+
+    # ``CharacterTechnique`` rows for the assumption's ability-suite were just
+    # deleted above. Invalidate the technique-handler cache so the weave picker /
+    # clash-opposition matcher drop the reclaimed techniques this session — same
+    # mutation contract as the assume path. Idempotent when no rows changed.
+    sheet.character.techniques.invalidate()
 
     # Clear the active alt-self placeholder.
     active.alternate_self = None
