@@ -23,6 +23,7 @@ from actions.types import TargetFilters, TargetType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models import ActionTemplate
     from actions.types import ActionContext, ActionResult, PendingActionResolution
     from flows.scene_data_manager import SceneDataManager
 
@@ -51,13 +52,27 @@ class _SocialTemplateAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        _template, result = self._resolve_template(actor, context, **kwargs)
+        return result
+
+    def _resolve_template(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None,
+        **kwargs: Any,
+    ) -> tuple[ActionTemplate, ActionResult]:
+        """Resolve this action's ActionTemplate and wrap the outcome into an ``ActionResult``.
+
+        Shared by the base ``execute()`` and ``EntranceAction.execute()`` (which needs the
+        ``ActionTemplate`` afterward to decide the entry-flourish offer). Dispatches inherent
+        target effects first (no-op for plain social actions; RestoreSense removes Berserk).
+        On this path a single dispatch only runs through ``execute()``, never the consent
+        path too.
+        """
         from actions.models import ActionTemplate  # noqa: PLC0415
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
 
-        # Dispatch any inherent target effects first (no-op for plain social
-        # actions; RestoreSense removes Berserk here). On this path a single
-        # dispatch only runs through execute(), never the consent path too.
         scene_data = context.scene_data if context is not None else None
         self.dispatch_effects(actor, kwargs.get("target"), scene_data)
 
@@ -69,7 +84,7 @@ class _SocialTemplateAction(Action):
             target_difficulty=0,
             context=resolution_ctx,
         )
-        return self._result_from_resolution(resolution)
+        return template, self._result_from_resolution(resolution)
 
     @staticmethod
     def _result_from_resolution(
@@ -154,24 +169,7 @@ class EntranceAction(_SocialTemplateAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from actions.models import ActionTemplate  # noqa: PLC0415
-        from actions.services import start_action_resolution  # noqa: PLC0415
-        from world.checks.types import ResolutionContext  # noqa: PLC0415
-
-        # Dispatch any inherent target effects first (no-op for Entrance today),
-        # mirroring the base social execute() so the pattern stays consistent.
-        scene_data = context.scene_data if context is not None else None
-        self.dispatch_effects(actor, kwargs.get("target"), scene_data)
-
-        template = ActionTemplate.objects.get(name=self.template_name)
-        resolution_ctx = ResolutionContext(character=actor, action_context=context)
-        resolution = start_action_resolution(
-            character=actor,
-            template=template,
-            target_difficulty=0,
-            context=resolution_ctx,
-        )
-        result = self._result_from_resolution(resolution)
+        template, result = self._resolve_template(actor, context, **kwargs)
 
         # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant)
         # and prompt the actor toward declaring it. The prompt rides the result
