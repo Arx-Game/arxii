@@ -1,9 +1,10 @@
 """E2E journey: enter → flourish prompt → flourish <resonance> → grant (#1339).
 
 Drives the full telnet loop end-to-end. The only mock is
-``start_action_resolution`` — we stub it to return a success ActionResult so
-the test doesn't need a full ActionTemplate + check-chain seed. Everything
-else (offer creation, notification, flourish resolution, grant write) is real.
+``start_action_resolution`` — we stub it to return a successful
+``PendingActionResolution`` (its real return type) so the test doesn't need a
+full ActionTemplate + check-chain seed. Everything else (offer creation,
+notification, flourish resolution, grant write) is real.
 
 Tagged ``postgres`` because ``grant_resonance`` / ``create_entry_flourish``
 write ``ResonanceGrant`` rows and the magic test tier is PG-only.
@@ -16,7 +17,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
-from actions.types import ActionResult
+from actions.tests.resolution_helpers import make_resolution
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.entry_flourish import PendingEntryFlourishOffer
@@ -65,14 +66,16 @@ class EntranceFlourishJourneyTest(TestCase):
 
     def _received_messages(self) -> list[str]:
         """Return all text strings passed to character.msg()."""
-        # ArxCommand.func() calls self.msg(result.message) — positional first arg
+        # Both the entrance flourish prompt and the flourish confirmation ride
+        # ``result.message`` — ArxCommand.func() surfaces them via self.msg(result.message),
+        # which lands on character.msg. Collect every positional-first-arg call here.
         return [str(call.args[0]) for call in self.character.msg.call_args_list if call.args]
 
     def test_enter_creates_offer_and_notifies_player(self) -> None:
         """After a successful entrance, an offer is minted and the player is told to flourish."""
         with patch(
             _ENTRANCE_RESOLUTION_PATH,
-            return_value=ActionResult(success=True, message="You sweep into the room."),
+            return_value=make_resolution(1),
         ):
             self._run_enter()
 

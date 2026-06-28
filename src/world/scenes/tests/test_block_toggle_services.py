@@ -47,6 +47,18 @@ class BlockToggleServiceTests(TestCase):
         self._create(reason="again")
         assert Block.objects.filter(owner__account=self.blocker_acct).count() == 1
 
+    def test_re_block_refreshes_the_reason(self) -> None:
+        """Re-blocking the same pair updates the staff-facing reason (#1326 Finding A).
+
+        ``get_or_create`` defaults apply only on insert, so the second call's reason was
+        previously dropped. It must now win.
+        """
+        self._create(reason="They were cruel.")
+        block = self._create(reason="And again, worse.")
+        block.refresh_from_db()
+        assert block.reason == "And again, worse."
+        assert Block.objects.filter(owner__account=self.blocker_acct).count() == 1
+
     def test_cannot_block_your_own_character(self) -> None:
         with self.assertRaises(ValidationError):
             create_block(

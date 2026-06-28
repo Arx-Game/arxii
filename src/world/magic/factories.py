@@ -24,6 +24,7 @@ from world.magic.constants import (
     AlterationTier,
     CantripArchetype,
     EffectKind,
+    GiftKind,
     MagicMilestoneKind,
     ParticipationRule,
     PendingAlterationStatus,
@@ -251,6 +252,7 @@ class GiftFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Gift {n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
+    kind = GiftKind.MAJOR
 
 
 class TechniqueFactory(factory.django.DjangoModelFactory):

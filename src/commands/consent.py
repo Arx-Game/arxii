@@ -30,7 +30,7 @@ from commands.offer_registry import find_handler, format_pending_listing, get_al
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request, respond_to_action_request
-from world.scenes.interaction_services import _get_active_scene
+from world.scenes.interaction_services import get_active_scene
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class ConsentRequestCommand(ArxCommand):
         derives them. Raises ``CommandError`` on either miss so the command
         surfaces a clean message.
         """
-        scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "You are not in an active scene."
             raise CommandError(msg)

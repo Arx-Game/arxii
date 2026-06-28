@@ -9,6 +9,7 @@ from world.scenes.models import Persona, Scene
 if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
+    from world.forms.models import CharacterForm
 
 ActionType = SceneAction
 
@@ -96,6 +97,107 @@ def set_active_persona(sheet: CharacterSheet, persona: Persona) -> None:
         raise ActivePersonaError
     sheet.active_persona = persona
     sheet.save(update_fields=["active_persona"])
+
+
+class PersonaCreationError(ValueError):
+    """An invalid persona-creation request (#1127).
+
+    Carries a fixed ``user_message`` (per ``feedback_codeql_exceptions``) so the creation
+    endpoint surfaces a safe string. The specific reason is set per-raise.
+    """
+
+    user_message = "That identity can't be created."
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        if user_message is not None:
+            self.user_message = user_message
+
+
+def create_persona(
+    sheet: CharacterSheet,
+    *,
+    name: str,
+    persona_type: str,
+    is_fake_name: bool = False,
+    bypass_cap: bool = False,
+) -> Persona:
+    """Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).
+
+    The designed, validated creation path that replaces the removed raw ``ModelViewSet`` create
+    (an identity-security-critical surface). Rules:
+
+    - **PRIMARY is never created here** — it's minted once at character creation.
+    - **System personas are never created here** (OOC narrator/GM identities).
+    - **ESTABLISHED is capped** per sheet (``settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET``); staff
+      pass ``bypass_cap=True``. TEMPORARY masks are uncapped (throwaway).
+
+    Enforces the **descriptor-never-auto-attach privacy invariant** (#1109) *structurally*: this
+    creates the persona and **nothing else** — no ``PersonaTraitDescriptor`` is copied from a
+    sibling face, so a new persona always starts with a blank descriptor set. Deliberate reuse is a
+    later explicit author action, never a creation-time default.
+    """
+    from django.conf import settings  # noqa: PLC0415
+
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    cleaned_name = (name or "").strip()
+    if not cleaned_name:
+        msg = "Persona name is required."
+        raise PersonaCreationError(msg, user_message="A name is required.")
+
+    if persona_type not in (PersonaType.ESTABLISHED, PersonaType.TEMPORARY):
+        msg = f"persona_type {persona_type!r} cannot be created via the player flow."
+        user_msg = "You can only create established identities or temporary masks."
+        raise PersonaCreationError(msg, user_message=user_msg)
+
+    if persona_type == PersonaType.ESTABLISHED and not bypass_cap:
+        cap = settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET
+        existing = Persona.objects.filter(
+            character_sheet=sheet, persona_type=PersonaType.ESTABLISHED
+        ).count()
+        if existing >= cap:
+            msg = f"established-persona cap reached ({existing}/{cap})"
+            user_msg = f"You already hold the most established identities allowed ({cap})."
+            raise PersonaCreationError(msg, user_message=user_msg)
+
+    return Persona.objects.create(
+        character_sheet=sheet,
+        name=cleaned_name,
+        persona_type=persona_type,
+        is_fake_name=is_fake_name,
+    )
+
+
+def create_mask(
+    sheet: CharacterSheet,
+    *,
+    name: str,
+    disguise_form: CharacterForm | None = None,
+    disguise_kind: str | None = None,
+) -> Persona:
+    """Create a TEMPORARY anonymous **mask** — the "put on a mask" path (#1127).
+
+    A throwaway, identity-obscuring (``is_fake_name=True``) TEMPORARY persona. When a
+    ``disguise_form`` is supplied it is applied as a fake overlay over the wearer's real form
+    (#1110), tying the social mask to the physical disguise; the wearer's active face is switched
+    to the mask. Without a disguise form it is a name-only mask (sdesc-rendered until discovered).
+    """
+    from world.forms.models import DisguiseKind  # noqa: PLC0415
+
+    mask = create_persona(
+        sheet,
+        name=name,
+        persona_type="temporary",
+        is_fake_name=True,
+    )
+    if disguise_form is not None:
+        from world.forms.services import apply_disguise  # noqa: PLC0415
+
+        kind = DisguiseKind(disguise_kind) if disguise_kind else DisguiseKind.MUNDANE
+        apply_disguise(sheet.character, disguise_form, kind=kind)
+    set_active_persona(sheet, mask)
+    return mask
 
 
 def broadcast_scene_message(scene: Scene, action: ActionType) -> None:

@@ -10,7 +10,7 @@ One ``react`` command routes a leading subverb:
 
 ``<char> #N`` resolves via the existing ``get_endorseable_poses_in_scene``
 (stable per-author, visibility-filtered numbering) -- the same scheme ``endorse``
-uses. The active scene is derived from the caller's room (``_get_active_scene``).
+uses. The active scene is derived from the caller's room (``get_active_scene``).
 No business logic in the command: parse, resolve the pose, run the Action.
 """
 
@@ -84,9 +84,9 @@ class CmdReact(ArxCommand):
         return sheet
 
     def _active_scene(self) -> Any:
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)

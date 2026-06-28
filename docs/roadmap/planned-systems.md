@@ -92,12 +92,15 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 ## Gift & resonance economy (ADR-0050–0057)
 
 The 2026-06-27 design discussion produced a connected set of decisions (ADRs 0050–0057). The machinery
-below is **designed (ADR) but unbuilt** — build to the ADR; these are not open questions. See
+below is **designed (ADR)** — the Major/Minor taxonomy keystone has landed (#1577); the rest is unbuilt.
+Build to the ADR; these are not open questions. See
 [`player-capability-ledger.md`](player-capability-ledger.md) for tiers and sequencing.
 
-- **Major/Minor gift taxonomy** — extend `Gift` with a `kind` column (Major = CG-chosen, Minor =
-  shared/acquirable). **`priority:now` keystone.** ADR-0050. Supersedes the bare "Post-CG Gift
-  acquisition" intent above: acquirable powers + species abilities are Minor Gifts via the gift pipeline.
+- ✅ **Major/Minor gift taxonomy** — LANDED (#1577). `Gift.kind` column (`GiftKind`: `MAJOR` =
+  CG-chosen, `MINOR` = shared/acquirable; default `MAJOR`, db_index). The keystone the rest of the
+  economy hangs off. ADR-0050. Supersedes the bare "Post-CG Gift acquisition" intent above: acquirable
+  powers + species abilities are Minor Gifts via the gift pipeline. (Acquisition machinery itself is
+  still #1580/#1581 — this PR is the taxonomy column only.)
 - **Species abilities as Minor Gifts** — khati/vampire/lycan/lineage powers delivered as species-granted
   Minor Gifts, no bespoke per-species system. ADR-0050. (See Species & racial framework below.)
 - **GIFT thread anchor + per-target-kind cost** — add a `GIFT` `TargetKind` (+ `target_gift` FK +

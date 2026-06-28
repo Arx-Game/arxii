@@ -22,10 +22,10 @@ from world.scenes.factories import (
 )
 from world.scenes.interaction_services import (
     _get_account_for_character,
-    _get_active_scene,
     can_view_interaction,
     create_interaction,
     delete_interaction,
+    get_active_scene,
     mark_very_private,
     push_interaction,
     reassign_persona_interactions,
@@ -852,7 +852,7 @@ class TestGetActiveScene(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         scene = SceneFactory(location=room, is_active=True)
-        result = _get_active_scene(room)
+        result = get_active_scene(room)
         assert result is not None
         assert result.pk == scene.pk
 
@@ -862,11 +862,11 @@ class TestGetActiveScene(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         SceneFactory(location=room, is_active=False)
-        result = _get_active_scene(room)
+        result = get_active_scene(room)
         assert result is None
 
     def test_returns_none_for_none_location(self) -> None:
-        assert _get_active_scene(None) is None
+        assert get_active_scene(None) is None
 
 
 class TestRecordInteractionActiveSceneFromDB(TestCase):

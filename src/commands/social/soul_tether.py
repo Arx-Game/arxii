@@ -30,7 +30,7 @@ from world.magic.services.soul_tether import (
 )
 from world.magic.types.soul_tether import SoulTetherRole as _SoulTetherRoleEnum
 from world.relationships.models import CharacterRelationship
-from world.scenes.interaction_services import _get_active_scene
+from world.scenes.interaction_services import get_active_scene
 
 _RESONANCE_KWARG = "resonance"
 _SINS_KWARG = "sins"
@@ -302,7 +302,7 @@ class CmdTether(ArxCommand):
         sineater_sheet = _get_sheet(sineater_char)
         caller_sheet = _get_sheet(self.caller)
 
-        scene = _get_active_scene(
+        scene = get_active_scene(
             getattr(self.caller, "location", None)  # noqa: GETATTR_LITERAL
         )
         if scene is None:
@@ -481,7 +481,7 @@ class CmdSineater(ArxCommand):
         sinner_sheet = _get_sheet(sinner_char)
         caller_sheet = _get_sheet(self.caller)
 
-        scene = _get_active_scene(
+        scene = get_active_scene(
             getattr(self.caller, "location", None)  # noqa: GETATTR_LITERAL
         )
         if scene is None:

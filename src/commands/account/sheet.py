@@ -66,8 +66,15 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         self.caller.msg("\n".join(output))
 
     def _sections_footer(self) -> list[str]:
-        """A one-line pointer to the available sections (``sheet/<section>``)."""
-        return ["", f"|wSections|n (sheet/<section>): {', '.join(SECTION_NAMES)}"]
+        """A pointer to the available sections (``sheet/<section>``), wrapped to telnet width.
+
+        The label leads its own line and the section names wrap below it, so the list keeps
+        fitting as new sections are added (one long line would blow past the ~80-col wrap).
+        """
+        import textwrap  # noqa: PLC0415
+
+        names = textwrap.wrap(", ".join(SECTION_NAMES), width=72)
+        return ["", "|wSections|n (sheet/<section>):", *(f"  {line}" for line in names)]
 
     def _get_target_character(self) -> Any:
         """Get the target character for the sheet command."""

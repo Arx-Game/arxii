@@ -107,6 +107,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterAchievement'
           description: ''
+  /api/achievements/character-titles/:
+    get:
+      operationId: achievements_character_titles_list
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterTitle'
+          description: ''
+  /api/achievements/character-titles/{id}/:
+    get:
+      operationId: achievements_character_titles_retrieve
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character title.
+        required: true
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterTitle'
+          description: ''
   /api/action-requests/:
     get:
       operationId: action_requests_list
@@ -17260,6 +17312,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSpreadableDeedList'
           description: ''
+  /api/personas/create-established/:
+    post:
+      operationId: personas_create_established_create
+      description: |-
+        #1127 — the designed create path for a durable ESTABLISHED identity.
+
+        Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+        staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEstablishedPersonaRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
+  /api/personas/create-mask/:
+    post:
+      operationId: personas_create_mask_create
+      description: '#1127 — create a TEMPORARY anonymous mask and wear it (the "put
+        on a mask" path).'
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMaskRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/set-active/:
     post:
       operationId: personas_set_active_create
@@ -19861,6 +19960,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RosterTenureLookup'
+          description: ''
+  /api/roster/visibility-settings/:
+    get:
+      operationId: roster_visibility_settings_retrieve
+      description: Return the active character's current ``appear_offline`` value.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
+          description: ''
+    patch:
+      operationId: roster_visibility_settings_partial_update
+      description: Set the active character's ``appear_offline`` (quiet/hidden mode).
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVisibilitySettingsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
           description: ''
   /api/scenes/:
     get:
@@ -26395,6 +26528,32 @@ components:
       required:
       - character_sheet
       - resonance
+    CharacterTitle:
+      type: object
+      description: |-
+        Serializer for an earned, displayable character title (#1522).
+
+        Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+        title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        reward_key:
+          type: string
+          readOnly: true
+        earned_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - earned_at
+      - id
+      - reward_key
+      - title
     CharacterVitals:
       type: object
       description: Read-only vitals payload for the character sheet panel (#521).
@@ -27851,6 +28010,27 @@ components:
       - author_persona
       - body
       - post
+    CreateEstablishedPersonaRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-established-persona endpoint.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+    CreateMaskRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-mask endpoint — a temporary anonymous
+        face.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A
@@ -40211,6 +40391,17 @@ components:
         body:
           type: string
           minLength: 1
+    PatchedVisibilitySettingsRequest:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
     Path:
       type: object
       description: Serializer for Path in CG context.
@@ -47637,6 +47828,19 @@ components:
         * `shared` - Shared
         * `gossip` - Gossip
         * `public` - Public
+    VisibilitySettings:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
+      required:
+      - appear_offline
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

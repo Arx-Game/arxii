@@ -96,7 +96,7 @@ class ConsentTelnetE2ETests(TestCase):
         self.addCleanup(self.accrue_patcher.stop)
 
         # Room both characters share; the scene is located here so the telnet
-        # command's _get_active_scene(location) finds it.
+        # command's get_active_scene(location) finds it.
         self.room = ObjectDB.objects.create(
             db_key="TestRoom",
             db_typeclass_path="typeclasses.rooms.Room",

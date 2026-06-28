@@ -194,7 +194,7 @@ def can_engage_membership(membership: CharacterCovenantRole) -> bool:
     the Slice B spec — no .filter() on related managers.
     """
     from world.covenants.constants import CovenantType  # noqa: PLC0415
-    from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
     covenant = membership.covenant
     if covenant.covenant_type == CovenantType.BATTLE:
@@ -204,7 +204,7 @@ def can_engage_membership(membership: CharacterCovenantRole) -> bool:
     location = char.location
     if location is None:
         return False
-    if _get_active_scene(location) is None:
+    if get_active_scene(location) is None:
         return False
     self_sheet = membership.character_sheet
     target_covenant = membership.covenant
