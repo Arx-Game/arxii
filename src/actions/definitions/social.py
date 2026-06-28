@@ -23,7 +23,7 @@ from actions.types import TargetFilters, TargetType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from actions.types import ActionContext, ActionResult
+    from actions.types import ActionContext, ActionResult, PendingActionResolution
     from flows.scene_data_manager import SceneDataManager
 
 
@@ -50,7 +50,7 @@ class _SocialTemplateAction(Action):
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
-    ) -> ActionResult:
+    ) -> PendingActionResolution:
         from actions.models import ActionTemplate  # noqa: PLC0415
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
@@ -129,7 +129,7 @@ class EntranceAction(_SocialTemplateAction):
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
-    ) -> ActionResult:
+    ) -> PendingActionResolution:
         from actions.models import ActionTemplate  # noqa: PLC0415
         from actions.services import start_action_resolution  # noqa: PLC0415
         from world.checks.types import ResolutionContext  # noqa: PLC0415
@@ -148,8 +148,13 @@ class EntranceAction(_SocialTemplateAction):
             context=resolution_ctx,
         )
 
-        # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant).
-        if template.grants_entry_flourish and self._succeeded(result):
+        # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant). Read success
+        # the one canonical way now that the return type is honestly ``PendingActionResolution``
+        # (#1245) — ``main_result`` is Optional (a paused resolution hasn't run the main step), so
+        # a None main means "not resolved successfully" and no offer opens.
+        main = result.main_result
+        succeeded = main is not None and main.check_result.success_level > 0
+        if template.grants_entry_flourish and succeeded:
             from world.magic.entry_flourish import (  # noqa: PLC0415
                 maybe_create_entry_flourish_offer,
             )
@@ -162,20 +167,6 @@ class EntranceAction(_SocialTemplateAction):
                 result.message = f"{result.message}\n{prompt}" if result.message else prompt
 
         return result
-
-    @staticmethod
-    def _succeeded(result: object) -> bool:
-        """Return True if the resolution result indicates success.
-
-        Handles both ``ActionResult`` (has ``.success``) and ``PendingActionResolution``
-        (reads ``main_result.check_result.success_level``).
-        """
-        if hasattr(result, "success"):
-            return bool(result.success)
-        main = getattr(result, "main_result", None)  # noqa: GETATTR_LITERAL
-        if main is None:
-            return False
-        return main.check_result.success_level > 0
 
 
 @dataclass
