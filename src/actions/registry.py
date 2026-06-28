@@ -132,6 +132,7 @@ from actions.definitions.progression_rewards import (
     RerollRandomSceneAction,
     SetPathIntentAction,
 )
+from actions.definitions.projects import DonateToProjectAction
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -198,6 +199,7 @@ _ALL_ACTIONS: list[Action] = [
     EquipAction(),
     UnequipAction(),
     RoomEditAction(),
+    DonateToProjectAction(),
     SetActivePersonaAction(),
     SetSocialConsentPreferenceAction(),
     SetSocialConsentCategoryRuleAction(),

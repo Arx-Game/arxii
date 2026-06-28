@@ -227,6 +227,14 @@ actions, backends, and service functions.
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
   is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
   `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +
+  contribution surface. `+project <id>` shows a project's status (progress/target, remaining
+  coin to fund); `project/donate <id>=<amount>` dispatches `DonateToProjectAction` (key
+  `project_donate`), debiting the caller's `CharacterPurse` and recording a MONEY
+  `Contribution` via `world.projects.services.donate_to_project`. The `project/check` and
+  `project/story` switches (per-`ProjectKind` check-based contributions) land with the
+  check-method framework. The ransom flow reuses `donate` — a Ransom is a money-threshold
+  Project (#1500).
 - **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
   `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
