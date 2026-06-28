@@ -369,7 +369,8 @@ def _seed_call_service_flow(
 ) -> FlowStepDefinition:
     """Get-or-create a FlowDefinition + root CALL_SERVICE_FUNCTION step.
 
-    Returns the root step so callers can attach CANCEL_EVENT children.
+    Returns the root step (the reactive bundles are mutation-only single-step flows;
+    the root is returned for symmetry and any future child-step needs).
 
     ``extra_params`` are merged into the step's ``parameters`` dict alongside the
     mandatory ``{"payload": "@payload"}`` entry.  Useful for active-effect adapters
@@ -547,10 +548,10 @@ def ensure_reflect_content() -> None:
 
     Creates (get_or_create):
 
-    1. A ``FlowDefinition`` (``reflect_damage_pre_apply``) with:
-       - root ``CALL_SERVICE_FUNCTION`` step → ``reflect_damage``.
-       - a ``CANCEL_EVENT`` child step (parent = root) — stops lower-priority
-         interceptors (absorb_pool at priority 10) after the reflect fires.
+    1. A ``FlowDefinition`` (``reflect_damage_pre_apply``) with a single root
+       ``CALL_SERVICE_FUNCTION`` step → ``reflect_damage`` (mutation-only, NO
+       ``CANCEL_EVENT``). ``reflect_damage`` sets ``payload.amount = 0`` on success;
+       the lower-priority absorb_pool (10) then no-ops via its ``amount <= 0`` guard.
     2. A ``TriggerDefinition`` on ``DAMAGE_PRE_APPLY`` with priority 20.
     3. A "Mirror Ward" ``ConditionTemplate`` (``REFLECT_CONDITION_NAME``) with
        ``reactive_anima_cost=2``, ``upkeep_anima_per_round=1``.
@@ -613,10 +614,10 @@ def ensure_blink_content() -> None:
 
     Creates (get_or_create):
 
-    1. A ``FlowDefinition`` (``blink_damage_pre_apply``) with:
-       - root ``CALL_SERVICE_FUNCTION`` step → ``blink_dodge``.
-       - a ``CANCEL_EVENT`` child step (parent = root) — stops lower-priority
-         interceptors (reflect at 20, absorb at 10) after a successful dodge.
+    1. A ``FlowDefinition`` (``blink_damage_pre_apply``) with a single root
+       ``CALL_SERVICE_FUNCTION`` step → ``blink_dodge`` (mutation-only, NO
+       ``CANCEL_EVENT``). A successful dodge sets ``payload.amount = 0``; the
+       lower-priority reflect (20) and absorb (10) then no-op via their guards.
     2. A ``TriggerDefinition`` on ``DAMAGE_PRE_APPLY`` with priority 30 (highest).
     3. A "Phase Step" ``ConditionTemplate`` (``BLINK_CONDITION_NAME``) with
        ``reactive_anima_cost=2``, ``upkeep_anima_per_round=1``.

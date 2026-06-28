@@ -251,10 +251,15 @@ def move_position_on_condition(*, payload: Any, destination_position_id: int) ->
     bundles.  For SELF conditions ``payload.target`` is the caster; for ENEMY conditions
     it is the enemy objectdb.
 
-    Note — ``destination_position_id`` is seeded as a placeholder (0) in the flow step;
-    runtime destination selection (cast-time target picker) is a follow-up for Tasks 15/16.
+    Note — ``destination_position_id`` is seeded as a placeholder (0) in the flow step.
+    Runtime destination selection (cast-time target picker) is a follow-up; until then
+    an unresolved placeholder makes the cast a **no-op** rather than crashing on a
+    ``Position(pk=0)`` lookup (the placeholder pk does not exist).
     """
     from types import SimpleNamespace  # noqa: PLC0415
+
+    if destination_position_id <= 0:
+        return  # unresolved placeholder destination — no-op until runtime selection ships
 
     move_position(
         payload=SimpleNamespace(
@@ -279,10 +284,14 @@ def create_obstacle_on_condition(
 
     Used by the obstacle (Barricade, SELF) effect bundle.
 
-    Note — ``position_a_id`` / ``position_b_id`` are seeded as placeholders (0, 0);
-    runtime position selection is a follow-up for Tasks 15/16.
+    Note — ``position_a_id`` / ``position_b_id`` are seeded as placeholders (0, 0).
+    Runtime position selection is a follow-up; until then an unresolved placeholder
+    makes the cast a **no-op** rather than crashing on a ``Position(pk=0)`` lookup.
     """
     from types import SimpleNamespace  # noqa: PLC0415
+
+    if position_a_id <= 0 or position_b_id <= 0:
+        return  # unresolved placeholder positions — no-op until runtime selection ships
 
     create_obstacle(
         payload=SimpleNamespace(
