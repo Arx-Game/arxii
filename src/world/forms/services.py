@@ -13,6 +13,7 @@ from world.forms.models import (
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
+    DisguiseKind,
     FormTrait,
     FormTraitOption,
     FormType,
@@ -520,21 +521,86 @@ def reset_trait_to_natural(
     return value
 
 
-def get_presented_appearance(character) -> list[PresentedTrait]:
-    """Compose what a viewer sees: real-form normalized traits overlaid with the active
-    persona's descriptors. The single source for telnet and web (replacing the legacy
+class NotADisguiseError(ValueError):
+    """Raised when a form offered as a disguise overlay isn't a DISGUISE form (#1110).
+
+    Carries a fixed ``user_message`` (per ``feedback_codeql_exceptions``).
+    """
+
+    user_message = "That isn't a disguise you can put on."
+
+
+def apply_disguise(
+    character,
+    disguise_form: CharacterForm,
+    *,
+    kind: DisguiseKind = DisguiseKind.MUNDANE,
+) -> CharacterFormState:
+    """Paint a fake overlay over the character's real form (#1110).
+
+    The real form is preserved beneath; presentation swaps in the overlay's traits for viewers
+    who haven't pierced it (the pierce *contest* is the senior dev's domain). ``kind`` records how
+    it's pierced (mundane → perception, magical → dispel). Single-slot: applying a new overlay
+    replaces any current one. The disguise form must belong to ``character`` and be a DISGUISE.
+    """
+    if disguise_form.character_id != character.id:
+        msg = "Cannot wear a disguise belonging to another character"
+        raise ValueError(msg)
+    if disguise_form.form_type != FormType.DISGUISE:
+        raise NotADisguiseError
+
+    form_state, _ = CharacterFormState.objects.get_or_create(character=character)
+    form_state.active_fake_overlay = disguise_form
+    form_state.overlay_kind = kind
+    form_state.save(update_fields=["active_fake_overlay", "overlay_kind"])
+    return form_state
+
+
+def remove_disguise(character) -> None:
+    """Drop the active fake overlay — the real form presents again (#1110). Idempotent."""
+    try:
+        form_state = character.form_state
+    except CharacterFormState.DoesNotExist:
+        return
+    if form_state.active_fake_overlay_id is None and not form_state.overlay_kind:
+        return
+    form_state.active_fake_overlay = None
+    form_state.overlay_kind = ""
+    form_state.save(update_fields=["active_fake_overlay", "overlay_kind"])
+
+
+def _form_to_present(character, *, pierced: bool) -> CharacterForm | None:
+    """The form a viewer actually sees (#1110).
+
+    An active fake overlay is shown until the viewer pierces it (or it's the owner/staff
+    ground-truth read, ``pierced=True``); otherwise the real form. Falls back to the true form
+    when no explicit real-form slot is set.
+    """
+    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    if form_state is not None and not pierced and form_state.active_fake_overlay_id is not None:
+        return form_state.active_fake_overlay
+    try:
+        return _true_form(character)
+    except CharacterForm.DoesNotExist:
+        return None
+
+
+def get_presented_appearance(character, *, pierced: bool = False) -> list[PresentedTrait]:
+    """Compose what a viewer sees: the presented form's normalized traits overlaid with the
+    active persona's descriptors. The single source for telnet and web (replacing the legacy
     Characteristic read and the TRUE-form-only web read).
 
-    Slice 1: the real form is the true form; per-viewer gating and disguise overlays
-    arrive in later slices.
+    When the character wears a **fake overlay** (#1110) and the viewer hasn't ``pierced`` it, the
+    overlay's traits are presented over the preserved real form. The owner/staff ground-truth read
+    passes ``pierced=True`` to ignore overlays. The pierce *contest* (perception/dispel) lives in
+    the senior dev's domain; this read just takes its outcome.
     """
     # Lazy imports avoid a forms<->scenes import cycle at module load.
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    try:
-        form = _true_form(character)
-    except CharacterForm.DoesNotExist:
+    form = _form_to_present(character, pierced=pierced)
+    if form is None:
         return []
 
     descriptors: dict[int, str] = {}

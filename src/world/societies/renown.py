@@ -246,6 +246,16 @@ def _bump_prestige_from_deeds(persona: Persona, delta: int) -> None:
     persona.save(update_fields=["prestige_from_deeds", "total_prestige"])
 
 
+def award_deed_prestige(persona: Persona, amount: int) -> None:
+    """Award a flat ``amount`` of deed-prestige to a persona — the public bump seam (#1522).
+
+    For non-magnitude prestige grants (e.g. an achievement reward) that bump the number without the
+    full deed/legend/spread machinery of ``fire_renown_award``.
+    """
+    if amount:
+        _bump_prestige_from_deeds(persona, amount)
+
+
 def _resolve_home_realm(origin_area):
     """Walk an Area's parent chain to find the first non-null ``realm`` FK.
 

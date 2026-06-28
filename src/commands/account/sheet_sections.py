@@ -255,6 +255,31 @@ def _format_covenant(assignments: list) -> list[str]:
     return lines
 
 
+def _render_titles_section(command: Command) -> list[str]:
+    """The titles section: the earned, displayable titles your active character holds (#1522).
+
+    Mirrors the web Titles tab. Titles are cosmetic — the mechanical reward attached to the
+    achievement, not the title. Scoped to the active (viewing) character.
+    """
+    from world.achievements.models import CharacterTitle  # noqa: PLC0415
+
+    viewer = _viewer_sheet(command)
+    titles = list(
+        CharacterTitle.objects.filter(character_sheet=viewer)
+        .select_related("reward")
+        .order_by("-earned_at")
+    )
+    return _format_titles(titles)
+
+
+def _format_titles(titles: list) -> list[str]:
+    if not titles:
+        return ["You have earned no titles."]
+    lines = ["|wYour titles:|n"]
+    lines.extend(f"  {title.reward.name}" for title in titles)
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -266,7 +291,16 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "standing": _render_standing_section,
     "standings": _render_standing_section,
     "covenant": _render_covenant_section,
+    "title": _render_titles_section,
+    "titles": _render_titles_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
-SECTION_NAMES: tuple[str, ...] = ("secret", "renown", "relationship", "standing", "covenant")
+SECTION_NAMES: tuple[str, ...] = (
+    "secret",
+    "renown",
+    "relationship",
+    "standing",
+    "covenant",
+    "title",
+)

@@ -58,6 +58,14 @@ artist changes persona with an *identical* body; a curse changes the body and
 - Existing `Persona` (`world/scenes`): `PRIMARY` / `ESTABLISHED` / `TEMPORARY`,
   `is_fake_name`, plus prestige/fame fields (reputation is **per-persona** — a
   criminal alt's infamy never touches the primary).
+- **Creation flow (#1127).** PRIMARY is minted once at character creation; everything else goes
+  through the designed, validated services `scenes.services.create_persona` (durable ESTABLISHED,
+  capped by `settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET`, staff bypass) and `create_mask` (a
+  TEMPORARY anonymous mask, optionally applying a #1110 disguise overlay and switching the worn
+  face). Faces: telnet `persona create <name>` / `persona mask <name>` and the web
+  `PersonaViewSet` `create-established` / `create-mask` actions. The raw `ModelViewSet` create was
+  removed — these are the only creation surfaces. They create the persona and **nothing else**, so
+  the *Privacy invariant* below holds structurally (no descriptor is ever copied from a sibling).
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a
@@ -275,7 +283,7 @@ path copies a descriptor from a sibling persona.
 | `(Persona × FormTrait)` descriptor | **ABSENT** | genuinely new — the core net-new surface |
 | Trait **mutability** tag | **ABSENT** | small new flag on `FormTrait` |
 | Natural baseline + change log | **ABSENT** | new |
-| Two-slot active state (`current_real_form` + `active_fake_overlay`) | **ABSENT** | today there's a single `active_form` |
+| Two-slot active state (`current_real_form` + `active_fake_overlay`) | **BUILT (#1110)** | `forms.CharacterFormState.active_form` (real) + `active_fake_overlay` + `overlay_kind` (`DisguiseKind`); `apply_disguise`/`remove_disguise`; `get_presented_appearance(pierced=)` swaps the overlay in unless pierced (the pierce *contest* stays the senior dev's) |
 | Single render composition (gated by viewer) | **NOT WIRED** | rendering ignores both active pointers; reads TRUE form |
 
 **Consolidation to ratify:** retire the legacy `Characteristic` path for skin/eye/hair
@@ -303,7 +311,12 @@ so `FormTrait` is the single home (kills the telnet-vs-web duplication).
    invariant (Bob/Robert); anonymous personas → sdesc; `PersonaDiscovery` wiring;
    recorded-scene persona freezing.
 3. **Slice 3 — concealment (ours + perception).** Fake overlays (disguise/illusion),
-   reveal metadata, stacking.
+   reveal metadata, stacking. **Substrate shipped (#1110):** `active_fake_overlay` + `overlay_kind`
+   (`DisguiseKind` MUNDANE/MAGICAL) on `CharacterFormState`; `apply_disguise`/`remove_disguise`;
+   `get_presented_appearance(character, *, pierced=False)` presents the overlay unless pierced, with
+   the owner/staff ground-truth read passing `pierced=True`. **Single-slot** for now (the ordered-stack
+   open decision is deferred). The **pierce contest** (perception-vs-disguise / dispel) is the senior
+   dev's domain and writes into these slots — a separate issue.
 4. **Slice 4 — shapeshift (mostly senior dev).** Voluntary alternate forms first (Lily
    controlled, near-free from `ALTERNATE`); then involuntary/rage as a
    conditions-driven state; durations; combat profiles.

@@ -452,6 +452,18 @@ class ActivePersonaResultSerializer(serializers.Serializer):
     active_persona_id = serializers.IntegerField(read_only=True)
 
 
+class CreateEstablishedPersonaRequestSerializer(serializers.Serializer):
+    """POST body for the #1127 create-established-persona endpoint."""
+
+    name = serializers.CharField(max_length=255)
+
+
+class CreateMaskRequestSerializer(serializers.Serializer):
+    """POST body for the #1127 create-mask endpoint — a temporary anonymous face."""
+
+    name = serializers.CharField(max_length=255)
+
+
 class SetRoundModeRequestSerializer(serializers.Serializer):
     """POST body for the #1445 set-round-mode endpoint.
 

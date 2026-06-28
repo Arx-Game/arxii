@@ -68,7 +68,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `CharacterAnima` - Magical resource (anima) tracking
 
 ### Gifts & Techniques
-- `Gift` - Thematic collections of magical techniques (M2M to Resonance)
+- `Gift` - Thematic collections of magical techniques (M2M to Resonance). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
 - `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)

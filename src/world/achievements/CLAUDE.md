@@ -35,13 +35,19 @@ Conditions to earn an achievement. FK to StatDefinition with thresholds.
 Lookup table for rewards. Normalizes reward identifiers across game systems.
 - key (unique): dot-separated identifier, e.g., 'title.champion'
 - name: player-facing display name
-- reward_type: TextChoices (title, bonus, cosmetic)
-- Stub entries for systems not yet built
+- reward_type: TextChoices (title, bonus, cosmetic, **prestige**)
+- modifier_target: FK to `mechanics.ModifierTarget` (nullable) — for BONUS rewards, *which* stat
+  the bonus modifies (e.g. allure); the amount comes from `AchievementReward.reward_value`
 
 ### AchievementReward
 Links an achievement to a RewardDefinition with optional parameterization.
 - FK to Achievement, FK to RewardDefinition
-- reward_value: optional extra data (e.g., bonus amount)
+- reward_value: optional extra data — the **amount** for BONUS (e.g. "5") and PRESTIGE (e.g. "5000")
+
+### CharacterTitle (SharedMemoryModel)
+The cosmetic/display record of a title a character has earned (FK character_sheet, FK to a TITLE
+`RewardDefinition`, `earned_at`; unique per (sheet, reward)). **Mechanical rewards do NOT live
+here** — they attach to the *achievement* (see Reward application below); a title is display-only.
 
 ### Discovery
 First-time-earned record. OneToOne to Achievement.
@@ -51,6 +57,33 @@ First-time-earned record. OneToOne to Achievement.
 Records when a character earned an achievement.
 - FK to Discovery if they were a co-discoverer
 - UniqueConstraint on character_sheet + achievement
+
+## Reward application (#1522)
+
+`grant_achievement` applies an achievement's rewards **once per newly-earned sheet** (then fires
+the stories reactivity hook). `services.apply_achievement_rewards(sheet, achievement)` dispatches
+by `reward_type`:
+- **TITLE** → a `CharacterTitle` (idempotent via the unique constraint).
+- **BONUS** → a `CharacterModifier` on `reward.modifier_target` (amount = `reward_value`), sourced
+  via the shared `mechanics.ModifierSource.achievement_reward` marker (mirrors `residence_comfort`).
+- **PRESTIGE** → `societies.renown.award_deed_prestige(persona, amount)` on the primary persona.
+- **COSMETIC** → no-op until that system exists.
+
+Cross-app deps (mechanics/societies) are **lazy-imported** so `achievements` stays low-coupled.
+
+Achievement-sourced BONUS modifiers ARE read by `get_modifier_total`: `get_modifier_breakdown`
+counts *recognized* non-distinction sources (`achievement_reward`, `residence_comfort`) as flat
+addends — orphaned/bare (UNKNOWN) sources still contribute nothing (#909).
+
+## Displaying earned titles (#1522)
+
+Titles are cosmetic and **public** — a character shows them off — so display is ungated.
+`CharacterTitleViewSet` (`GET /api/achievements/character-titles/?character_sheet=<id>`,
+`CharacterTitleSerializer` → the `CharacterTitle` schema: `title`, `reward_key`, `earned_at`)
+lists a character's earned titles, newest first. Faces: the telnet `sheet/titles` section
+(`commands.account.sheet_sections._render_titles_section`, registered in `SHEET_SECTIONS`) and the
+React **Titles** tab (`frontend/src/achievements/TitlesPanel` on `CharacterSheetPage`). The title's
+player-facing name is the linked TITLE `RewardDefinition.name`.
 
 ## StatHandler (handlers.py)
 

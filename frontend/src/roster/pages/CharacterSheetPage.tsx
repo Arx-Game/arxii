@@ -15,6 +15,8 @@ import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
+import { CluesTab } from '@/clues/components/CluesTab';
+import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -51,7 +53,9 @@ export function CharacterSheetPage() {
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="renown">Renown</TabsTrigger>
+          <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
+          {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -101,12 +105,27 @@ export function CharacterSheetPage() {
           )}
         </TabsContent>
 
+        <TabsContent value="titles" className="space-y-4">
+          {/* Titles are cosmetic and public — render for any viewer. character.id is the
+              CharacterSheet pk the titles API filters by. */}
+          <TitlesPanel characterSheetId={entry.character.id} />
+        </TabsContent>
+
         <TabsContent value="secrets" className="space-y-4">
           {/* The character sheet shares its pk with the ObjectDB, so character.id is the
               CharacterSheet pk the secret-tab API filters by. Radix unmounts inactive tab
               content, so the query only fires when this tab is opened. */}
           <SecretsTab subjectId={entry.character.id} viewerId={viewerEntryId} />
         </TabsContent>
+
+        {isMyCharacter && (
+          <TabsContent value="clues" className="space-y-4">
+            {/* Held clues are private — only your own character's journal. character.id is the
+                CharacterSheet pk the clues API filters by. Radix unmounts inactive tab content,
+                so the query only fires when this tab is opened. */}
+            <CluesTab characterSheetId={entry.character.id} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

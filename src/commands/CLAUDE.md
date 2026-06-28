@@ -234,13 +234,15 @@ actions, backends, and service functions.
   `setstage <name|id> replace` replaces the room's existing position grid. Thin `ArxCommand` over
   `action.run()` (same seam as the web quick-action `_set_the_stage_actions`); staff-gated by
   `StaffOnlyPrerequisite`. No business logic in the command.
-- **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list own
-  personas or switch the active one. Bare `persona`/`persona list` renders all the
-  caller's personas (marking the active one `◄ active`). `persona <name>`/`wear-face
-  <name>` resolves the name among the caller's own faces and dispatches `SetActivePersonaAction`
-  (key `"set_active_persona"`, REGISTRY backend) through `dispatch_player_action` — the same
-  seam the web `PersonaViewSet.set_active` uses. Pose/sdesc reflection of the presented
-  persona is #1109's scope, not this command.
+- **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list, create, or switch
+  faces. Bare `persona`/`persona list` renders all the caller's personas (marking the active one
+  `◄ active`). `persona <name>`/`wear-face <name>` resolves the name among the caller's own faces
+  and dispatches `SetActivePersonaAction` (key `"set_active_persona"`, REGISTRY backend) through
+  `dispatch_player_action` — the same seam the web `PersonaViewSet.set_active` uses. `persona create
+  <name>` (durable ESTABLISHED) and `persona mask <name>` (TEMPORARY anonymous mask, worn on
+  creation) call the validated `scenes.services.create_persona`/`create_mask` directly (#1127) — the
+  same services the web `create-established`/`create-mask` actions use; staff bypass the
+  ESTABLISHED cap. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
 - **`form.py`**: `CmdForm` (`form`, #1111 slice 4) — list, shift into, or revert
   your alternate selves. Bare `form`/`form list` renders the active alt-self
   (`true self` if none) and the available list. `form shift <name|id>` resolves the
@@ -273,6 +275,9 @@ actions, backends, and service functions.
   toggles persistent quiet mode (`TenureDisplaySettings.appear_offline` via
   `world.roster.services.display.set_appear_offline`): off where/who + unpageable except the
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
+  The **web equivalent** is `GET`/`PATCH /api/roster/visibility-settings/`
+  (`roster.views.settings_views.VisibilitySettingsView`, #1484) — same `set_appear_offline` write,
+  scoped to the player's active character; the toggle lives on the frontend `SettingsPage`.
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
 - **`sanctum.py`**: `CmdSanctum` (`sanctum`, #1497) — the sanctum-management namespace. One
@@ -382,7 +387,9 @@ actions, backends, and service functions.
   (`sheet/standing` — your **organizational** positions: org memberships with rank titles + org
   reputations, scoped to active persona; distinct from `renown`, which holds fame / prestige /
   *society* reputation); `covenant` (`sheet/covenant` — your covenant membership(s), role, rank,
-  and which you're *engaged* in, from `CharacterCovenantRole`; read-only). Each is thin over its
+  and which you're *engaged* in, from `CharacterCovenantRole`; read-only); `title`
+  (`sheet/titles`, #1522 — the earned, displayable titles your active character holds, from
+  `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab). Each is thin over its
   app's data. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`). *Web tabs for
   standing/covenant are a follow-up — the "which contextual center owns this" call is open (#1446).*
 

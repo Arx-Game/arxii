@@ -120,6 +120,26 @@ class TestGetModifierBreakdown(TestCase):
         assert breakdown.has_immunity is False
         assert breakdown.negatives_blocked == 0
 
+    def test_recognized_non_distinction_source_is_counted_as_a_flat_addend(self):
+        """A marker source (achievement_reward / residence_comfort) contributes its flat value.
+
+        Unlike a bare/orphaned source (UNKNOWN → ignored, #909), a *recognized* non-distinction
+        source is summed — outside the amplification graph but read by get_modifier_total.
+        """
+        CharacterModifierFactory(
+            character=self.character,
+            target=self.allure,
+            value=5,
+            source=ModifierSourceFactory(achievement_reward=True),
+        )
+
+        breakdown = get_modifier_breakdown(self.character, self.allure)
+
+        assert breakdown.total == 5
+        assert len(breakdown.sources) == 1
+        assert breakdown.sources[0].source_name == "Achievement reward"
+        assert breakdown.sources[0].is_amplifier is False
+
     def test_multiple_modifiers_sum(self):
         """Multiple modifiers are summed together."""
         # First distinction

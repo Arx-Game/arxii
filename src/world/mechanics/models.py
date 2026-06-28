@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
 from world.mechanics.constants import (
+    SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_FORM,
     SOURCE_TYPE_RESIDENCE_COMFORT,
@@ -280,6 +281,16 @@ class ModifierSource(SharedMemoryModel):
         ),
     )
 
+    # === Achievement Reward Source (#1522) ===
+    # Marks the shared source for BONUS rewards granted by achievements (e.g. a +5 allure title).
+    # Like residence comfort it carries no effect template — the granted ``CharacterModifier``
+    # holds its own ``target``/``value``, and ``modifier_target`` stays None so the target-match
+    # validation is skipped. Per-character cleanup is via the modifier's own ``character`` FK.
+    achievement_reward = models.BooleanField(
+        default=False,
+        help_text="Marks the shared source for achievement-granted bonus modifiers.",
+    )
+
     class Meta:
         verbose_name = "Modifier source"
         verbose_name_plural = "Modifier sources"
@@ -293,6 +304,8 @@ class ModifierSource(SharedMemoryModel):
             return SOURCE_TYPE_RESIDENCE_COMFORT
         if self.form_combat_profile_id:
             return SOURCE_TYPE_FORM
+        if self.achievement_reward:
+            return SOURCE_TYPE_ACHIEVEMENT_REWARD
         return SOURCE_TYPE_UNKNOWN
 
     @property
@@ -311,6 +324,8 @@ class ModifierSource(SharedMemoryModel):
             return "Residence comfort"
         if self.form_combat_profile:
             return f"Form: {self.form_combat_profile}"
+        if self.achievement_reward:
+            return "Achievement reward"
         return SOURCE_TYPE_UNKNOWN.capitalize()
 
     def __str__(self) -> str:

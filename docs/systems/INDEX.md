@@ -573,6 +573,10 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
   each placement (access layer; empty rule = open to anyone)
+- **Read surface (#1575):** `GET /api/clues/held/?character_sheet=<id>` (`MyHeldCluesView`,
+  `HeldClueSerializer`) — the held-clue *journal*, scoped to characters the requester plays
+  (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
+  only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
   (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
   clues planted on capture / cleared on resolution), predicates (eligibility), checks

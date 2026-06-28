@@ -313,6 +313,25 @@ leads. The completion bar for any player-facing feature is the web client: **if
 it isn't wired into the React frontend, it isn't implemented.** A green backend
 with no player-reachable web surface is an unfinished feature, not a done one.
 
+### No improvised mechanics — cover plausible intent
+
+Anything a player should *plausibly* be able to do — or any event that can plausibly
+happen (a war, a charm, a summons) — must have a **real system** to resolve it. A GM
+forced to make up mechanics on the spot for an uncovered capability is a system failure,
+not flexibility: an improvised ruling puts the canonical veracity of everything touching it
+in question, puts fairness in question, and can force retcons. That damage is retroactive
+and hard to undo.
+
+So the MVP bar is **coverage of plausible player/GM intent**, not exhaustive handling of
+rare permutations. When scoping, ask: "could a player or GM plausibly need this and find no
+system?" → a real gap, build it. "Is this a rare permutation nobody raised?" → cut it; don't
+dignify it with an issue. Even Phase-2 capabilities (mounts, flying) can't be left to
+improvisation once an in-fiction trigger for them is plausible.
+
+This composes with **closed-issue ≠ proven**: a capability counts as covered only when an
+end-to-end test demonstrates the outcome — "we think it works" is not safe to hand a GM. The
+live coverage map is [`player-capability-ledger.md`](player-capability-ledger.md).
+
 ---
 
 ## What's NOT here

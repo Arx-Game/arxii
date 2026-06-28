@@ -4,6 +4,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
+import { ComfortWidget } from '@/comfort/components/ComfortWidget';
 
 import { FormSwitcher } from './FormSwitcher';
 import { PersonaSwitcher } from './PersonaSwitcher';
@@ -113,6 +114,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
         ))}
 
       <div className="ml-auto flex items-center gap-3">
+        <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
         <WeatherWidget />
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />

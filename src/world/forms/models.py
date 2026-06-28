@@ -214,6 +214,14 @@ class FormType(models.TextChoices):
     DISGUISE = "disguise", "Disguise"
 
 
+class DisguiseKind(models.TextChoices):
+    """How a fake overlay is defeated (#1110). The pierce *contest* itself is the senior dev's
+    domain (perception-vs-disguise / dispel); this just records which contest applies."""
+
+    MUNDANE = "mundane", "Mundane Disguise"  # defeated by perception / inspection
+    MAGICAL = "magical", "Magical Illusion"  # defeated by dispel / see-magic
+
+
 class SourceType(models.TextChoices):
     EQUIPPED_ITEM = "equipped_item", "Equipped Item"
     APPLIED_ITEM = "applied_item", "Applied Item"
@@ -297,7 +305,18 @@ class CharacterFormValue(SharedMemoryModel):
 
 
 class CharacterFormState(SharedMemoryModel):
-    """Tracks which form a character currently has active."""
+    """The character's two-slot active appearance state (#1110).
+
+    - ``active_form`` is the **current real form** — what the body actually is right now (the true
+      form unless shapeshifted). Shapeshift swaps this slot; it is always REAL.
+    - ``active_fake_overlay`` is an optional **fake overlay** (a ``DISGUISE`` form) painted *over*
+      the real form. The real form is preserved beneath and seen when the overlay is pierced.
+      Single-slot for now (ordered-stack stacking is a deferred decision).
+
+    Owner/staff ground-truth reads ignore the overlay and read ``active_form``; everyone else's
+    composed view swaps in the overlay until they pierce it. The pierce *contest* (perception vs
+    disguise / dispel) is the senior dev's domain — this only holds the slots + ``overlay_kind``.
+    """
 
     character = models.OneToOneField(
         ObjectDB,
@@ -310,11 +329,32 @@ class CharacterFormState(SharedMemoryModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name="active_for",
+        help_text="The current REAL form (what the body actually is now).",
+    )
+    active_fake_overlay = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="overlay_for",
+        help_text="Optional FAKE overlay (a DISGUISE form) presented over the real form (#1110).",
+    )
+    overlay_kind = models.CharField(
+        max_length=20,
+        choices=DisguiseKind.choices,
+        blank=True,
+        default="",
+        help_text="How the active overlay is pierced (mundane vs magical). Blank ⇒ no overlay.",
     )
 
     class Meta:
         verbose_name = "Character Form State"
         verbose_name_plural = "Character Form States"
+
+    @property
+    def current_real_form(self) -> "CharacterForm | None":
+        """The current real form — the canonical name for the ``active_form`` slot (#1110)."""
+        return self.active_form
 
     def __str__(self):
         if self.active_form:

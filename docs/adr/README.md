@@ -102,3 +102,13 @@ treat those names as hints to confirm, not gospel.
 - [0047 — STRICT rounds resolve on a quorum; an AFK participant's own peril is skipped on the END tick](0047-quorum-resolution-for-strict-rounds-afk-own-peril-skip.md)
 - [0048 — Custom action resolvers for non-template consent actions](0048-custom-action-resolvers-for-non-template-consent-actions.md)
 - [0049 — Acute peril resolves through a guarded consequence pool, never unconditional death](0049-acute-peril-resolves-through-guarded-consequence-pool.md)
+- [0057 — Covenant of the Court: a leader and their retinue, as a third covenant type](0057-retinue-covenants-leader-plus-subordinates.md)
+
+### Gift & resonance economy
+- [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
+- [0051 — Gift strength comes from the thread woven into it (the costliest thread kind)](0051-gift-strength-comes-from-the-woven-thread.md)
+- [0052 — A gift's resonance is the resonance of its woven thread](0052-gift-resonance-is-the-woven-threads-resonance.md)
+- [0053 — XP buys unlocks that gate acquisition, never grant it](0053-xp-buys-unlocks-that-gate-never-grant.md)
+- [0054 — Falling gains power; redemption is lossy (asymmetric resonance conversion)](0054-falling-gains-power-redemption-is-lossy.md)
+- [0055 — One specialization engine: resonance × entity → customized techniques (Gift, Path, Covenant Role)](0055-one-specialization-engine-resonance-times-entity.md)
+- [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)

@@ -833,6 +833,7 @@
   - relationshipchange_set <- relationships.RelationshipChange
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
+  - titles <- achievements.CharacterTitle
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -2715,6 +2716,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
+  - reward_definitions <- achievements.RewardDefinition
   - fashion_style_bonuses <- items.FashionStyleBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - covenant_role_bonuses <- covenants.CovenantRoleBonus
@@ -3982,6 +3984,8 @@
 ### Service Functions
 - `active_persona_for_sheet(sheet: 'CharacterSheet') -> 'Persona' — The face a character is currently presenting as (#981).`
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
+- `create_mask(sheet: 'CharacterSheet', *, name: 'str', disguise_form: 'CharacterForm | None' = None, disguise_kind: 'str | None' = None) -> 'Persona' — Create a TEMPORARY anonymous **mask** — the "put on a mask" path (#1127).`
+- `create_persona(sheet: 'CharacterSheet', *, name: 'str', persona_type: 'str', is_fake_name: 'bool' = False, bypass_cap: 'bool' = False) -> 'Persona' — Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).`
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`

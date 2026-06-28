@@ -1,5 +1,6 @@
 from datetime import timedelta
 from http import HTTPMethod
+from typing import TYPE_CHECKING
 
 from django.db.models import Count, Prefetch, QuerySet
 from django.utils import timezone
@@ -41,6 +42,8 @@ from world.scenes.permissions import (
 from world.scenes.scene_admin_services import finish_scene_full
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
+    CreateEstablishedPersonaRequestSerializer,
+    CreateMaskRequestSerializer,
     HighlightReelSerializer,
     PersonaSerializer,
     SceneDetailSerializer,
@@ -66,6 +69,9 @@ from world.societies.spread_serializers import (
     SpreadResultSerializer,
     SpreadSpecializationSerializer,
 )
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 def _build_scene_prefetches() -> list[Prefetch]:
@@ -474,6 +480,72 @@ class PersonaViewSet(
                 {"active_persona_id": detail.data["active_persona_id"]}
             ).data
         )
+
+    def _played_sheet(self, request: Request) -> "CharacterSheet":
+        """The played character's sheet, or raise a uniform validation error (#1127)."""
+        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        if puppet is None or sheet is None:
+            msg = "You must be playing a character to create an identity."
+            raise serializers.ValidationError(msg)
+        return sheet
+
+    @extend_schema(
+        request=CreateEstablishedPersonaRequestSerializer,
+        responses={201: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="create-established",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def create_established(self, request: Request) -> Response:
+        """#1127 — the designed create path for a durable ESTABLISHED identity.
+
+        Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+        staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+        """
+        from world.scenes.services import PersonaCreationError, create_persona  # noqa: PLC0415
+
+        body = CreateEstablishedPersonaRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        sheet = self._played_sheet(request)
+        try:
+            persona = create_persona(
+                sheet,
+                name=body.validated_data["name"],
+                persona_type="established",
+                bypass_cap=bool(request.user.is_staff),
+            )
+        except PersonaCreationError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(PersonaSerializer(persona).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=CreateMaskRequestSerializer,
+        responses={201: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="create-mask",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def create_mask(self, request: Request) -> Response:
+        """#1127 — create a TEMPORARY anonymous mask and wear it (the "put on a mask" path)."""
+        from world.scenes.services import PersonaCreationError, create_mask  # noqa: PLC0415
+
+        body = CreateMaskRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        sheet = self._played_sheet(request)
+        try:
+            mask = create_mask(sheet, name=body.validated_data["name"])
+        except PersonaCreationError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return Response(PersonaSerializer(mask).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])
