@@ -67,6 +67,7 @@ class PersonaType(models.TextChoices):
     PRIMARY = "primary", "Primary"
     ESTABLISHED = "established", "Established"
     TEMPORARY = "temporary", "Temporary"
+    ALTERNATE = "alternate", "Alternate"
 
 
 class PlaceStatus(models.TextChoices):

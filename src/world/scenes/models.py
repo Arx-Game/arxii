@@ -289,7 +289,8 @@ class Persona(SharedMemoryModel):
         choices=PersonaType.choices,
         default=PersonaType.TEMPORARY,
         help_text="PRIMARY = real identity, ESTABLISHED = persistent alter ego, "
-        "TEMPORARY = throwaway disguise",
+        "TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona "
+        "(shapeshift/possession/past-life)",
     )
     is_fake_name = models.BooleanField(
         default=False,
