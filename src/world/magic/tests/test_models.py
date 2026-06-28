@@ -160,8 +160,9 @@ class GiftModelTests(TestCase):
         self.assertIn(self.shadows, self.gift.resonances.all())
 
     def test_gift_kind_defaults_to_major(self) -> None:
-        """A Gift defaults to GiftKind.MAJOR (the CG-chosen taxonomy)."""
+        """A Gift defaults to GiftKind.MAJOR (the CG-chosen taxonomy), DB-persisted."""
         gift = GiftFactory()
+        gift.refresh_from_db()
         assert gift.kind == GiftKind.MAJOR
         assert gift.get_kind_display() == "Major (CG-chosen)"
 
