@@ -65,6 +65,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
+    CombatAllegiance,
     CombatManeuver,
     EncounterOutcome,
     EncounterType,
@@ -758,6 +759,38 @@ def _build_affected_targets(
             targets.append(ally_od)
             seen.add(ally_od.pk)
     return targets
+
+
+def combatants_hostile_to(
+    actor: CombatParticipant | CombatOpponent,
+) -> dict[str, list]:
+    """Return the combatants *actor* may attack, grouped by kind.
+
+    Single source of truth for friend/foe resolution (Tasks 7 and 13 use this):
+
+    - A PC participant is hostile to ENEMY opponents (not to ALLY summons).
+    - An ALLY opponent (summon/charmed) is hostile to ENEMY opponents only.
+    - An ENEMY opponent is hostile to PCs *and* any ALLY summons.
+    """
+    enc = actor.encounter
+    active_pcs = list(
+        CombatParticipant.objects.filter(encounter=enc, status=ParticipantStatus.ACTIVE)
+    )
+    enemies = list(
+        CombatOpponent.objects.filter(
+            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ENEMY
+        )
+    )
+    allies = list(
+        CombatOpponent.objects.filter(
+            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
+        )
+    )
+    if isinstance(actor, CombatParticipant) or actor.allegiance == CombatAllegiance.ALLY:
+        # PC side: hostile to ENEMY opponents only.
+        return {"participants": [], "opponents": enemies}
+    # ENEMY opponent: hostile to PCs and any ALLY summons.
+    return {"participants": active_pcs, "opponents": allies}
 
 
 def _build_combat_result(
