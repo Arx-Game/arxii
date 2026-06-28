@@ -1,9 +1,11 @@
-"""Persona telnet command — list faces + wear-face switch (#1347).
+"""Persona telnet command — list / create / switch faces (#1347, #1127).
 
-A single command renders the caller's owned personas (bare ``persona`` or
-``persona list``) or switches the active persona (``persona <name>``). The
-switch path dispatches through ``dispatch_player_action`` — the same seam the
-web PersonaViewSet uses — routing to the REGISTRY ``set_active_persona`` action.
+A single command renders the caller's owned personas (bare ``persona`` / ``persona list``),
+creates a new face (``persona create <name>`` durable, ``persona mask <name>`` temporary), or
+switches the active persona (``persona <name>``). The switch path dispatches through
+``dispatch_player_action`` — the same seam the web PersonaViewSet uses — routing to the REGISTRY
+``set_active_persona`` action; the create paths call the validated ``scenes.services`` creation
+directly (the same services the web ``create-established`` / ``create-mask`` actions use).
 """
 
 from __future__ import annotations
@@ -18,14 +20,21 @@ if TYPE_CHECKING:
     from actions.types import ActionRef
 
 
+_LIST = "list"
+_CREATE = "create"
+_MASK = "mask"
+
+
 class CmdPersona(DispatchCommand):
-    """List or switch your active face.
+    """List, create, or switch your faces.
 
     Usage:
-        persona              — list your personas; marks the active one
-        persona list         — same as bare ``persona``
-        persona <name>       — switch your active face to the named persona
-        wear-face <name>     — alias for persona <name>
+        persona               — list your personas; marks the active one
+        persona list          — same as bare ``persona``
+        persona create <name> — create a new established (durable) identity
+        persona mask <name>   — create a temporary anonymous mask and wear it
+        persona <name>        — switch your active face to the named persona
+        wear-face <name>      — alias for persona <name>
     """
 
     key = "persona"
@@ -35,13 +44,53 @@ class CmdPersona(DispatchCommand):
     _name: str = ""
 
     def func(self) -> None:
-        """Route: bare/list → listing; named → DispatchCommand dispatch."""
+        """Route: bare/list → listing; create/mask → service create; named → dispatch switch."""
         raw = (self.args or "").strip()
-        if not raw or raw.lower() == "list":  # noqa: STRING_LITERAL
+        if not raw or raw.lower() == _LIST:
             self._show_listing()
+            return
+        verb, _, rest = raw.partition(" ")
+        if verb.lower() == _CREATE:
+            self._create_established(rest.strip())
+            return
+        if verb.lower() == _MASK:
+            self._create_mask(rest.strip())
             return
         self._name = raw
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
+
+    def _create_established(self, name: str) -> None:
+        """``persona create <name>`` — mint a durable ESTABLISHED identity via the service."""
+        from world.scenes.services import PersonaCreationError, create_persona  # noqa: PLC0415
+
+        if not name:
+            self.msg("Usage: persona create <name>")
+            return
+        bypass = bool(getattr(self.caller, "is_staff", False))  # noqa: GETATTR_LITERAL
+        try:
+            persona = create_persona(
+                self.caller.sheet_data, name=name, persona_type="established", bypass_cap=bypass
+            )
+        except PersonaCreationError as exc:
+            self.msg(exc.user_message)
+            return
+        self.msg(
+            f"Created established identity '{persona.name}'. Switch with: persona {persona.name}"
+        )
+
+    def _create_mask(self, name: str) -> None:
+        """``persona mask <name>`` — create a TEMPORARY anonymous mask and wear it."""
+        from world.scenes.services import PersonaCreationError, create_mask  # noqa: PLC0415
+
+        if not name:
+            self.msg("Usage: persona mask <name>")
+            return
+        try:
+            mask = create_mask(self.caller.sheet_data, name=name)
+        except PersonaCreationError as exc:
+            self.msg(exc.user_message)
+            return
+        self.msg(f"You don a mask: '{mask.name}'. You are now presenting as it.")
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for ``set_active_persona``."""

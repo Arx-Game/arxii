@@ -123,3 +123,15 @@ class SheetSecretSectionTests(TestCase):
 
     def test_covenant_section_empty(self) -> None:
         assert "no covenant" in self._run("", switches=["covenant"]).lower()
+
+    def test_titles_section_lists_earned_titles(self) -> None:
+        from world.achievements.factories import RewardDefinitionFactory
+        from world.achievements.models import CharacterTitle
+
+        reward = RewardDefinitionFactory(name="Hot Flex But Okay")
+        CharacterTitle.objects.create(character_sheet=self.viewer_sheet, reward=reward)
+        out = self._run("", switches=["titles"])
+        assert "Hot Flex But Okay" in out
+
+    def test_titles_section_empty(self) -> None:
+        assert "no titles" in self._run("", switches=["titles"]).lower()

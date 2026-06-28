@@ -92,6 +92,19 @@ class TargetKind(models.TextChoices):
     SANCTUM = "SANCTUM", "Sanctum"
 
 
+class GiftKind(models.TextChoices):
+    """Taxonomy axis on Gift (ADR-0050): Major = CG-chosen, Minor = shared/acquirable.
+
+    Species abilities and acquirable powers are delivered as Minor Gifts. A gift
+    is major or minor to everyone, not per-character — so `kind` lives on `Gift`,
+    not on `CharacterGift`. Provenance (species-granted vs acquired) is a separate
+    axis owned by #1580.
+    """
+
+    MAJOR = "MAJOR", "Major (CG-chosen)"
+    MINOR = "MINOR", "Minor (shared, acquirable)"
+
+
 class SanctumSlotKind(models.TextChoices):
     """Per-PC weaving slot rules for SANCTUM-target Threads (Plan 4 §F).
 

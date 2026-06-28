@@ -2,6 +2,7 @@
 URL patterns for the roster system API.
 """
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.roster.views import (
@@ -14,6 +15,7 @@ from world.roster.views import (
     RosterViewSet,
     TenureGalleryViewSet,
 )
+from world.roster.views.settings_views import VisibilitySettingsView
 
 app_name = "roster"
 
@@ -27,4 +29,11 @@ router.register("mail", PlayerMailViewSet, basename="mail")
 router.register("tenures", RosterTenureViewSet, basename="tenures")
 router.register("galleries", TenureGalleryViewSet, basename="galleries")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "visibility-settings/",
+        VisibilitySettingsView.as_view(),
+        name="visibility-settings",
+    ),
+    *router.urls,
+]
