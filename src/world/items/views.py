@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from http import HTTPMethod
-from typing import cast
+from typing import Any, cast
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
@@ -1271,10 +1271,37 @@ class FashionPresentationViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_class = FashionPresentationFilter
 
-    def perform_create(self, serializer: serializers.BaseSerializer) -> None:
-        """Resolve the presenter sheet from the requesting account and save."""
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Record the requesting account's acting character presenting an outfit at an event.
+
+        Body: ``event`` (required) + optional ``outfit`` PKs. Returns the created
+        presentation (201), or 400 when the event has no host society / other rule failure.
+        """
+        # Converged onto the registered PresentOutfitAction so telnet and web share one
+        # seam (ADR-0001, #1508): the serializer validates input + serializes the result,
+        # but the Action — not the serializer — orchestrates the presentation (and emits the
+        # present-outfit events + scene message the web path previously skipped). The
+        # presenter is resolved server-side from the requesting account, never the client.
+        from actions.definitions.fashion import PresentOutfitAction  # noqa: PLC0415
+
+        in_serializer = self.get_serializer(data=request.data)
+        in_serializer.is_valid(raise_exception=True)
+        event = in_serializer.validated_data["event"]
+        outfit = in_serializer.validated_data.get("outfit")
+
         presenter = _resolve_actor_sheet(self.request, body_key="presenter_sheet_id")
-        serializer.save(presenter=presenter)
+        result = PresentOutfitAction().run(
+            actor=presenter.character,
+            event_id=event.pk,
+            outfit_id=outfit.pk if outfit is not None else None,
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+
+        presentation = result.data["presentation"]
+        out_serializer = self.get_serializer(presentation)
+        headers = self.get_success_headers(out_serializer.data)
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class FashionJudgementViewSet(
