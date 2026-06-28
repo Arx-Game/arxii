@@ -22,10 +22,10 @@ URL = "/api/clues/held/"
 class HeldCluesViewTests(APITestCase):
     def setUp(self):
         self.user = AccountFactory()
+        # One PlayerData per account (OneToOne); a player can hold many tenures on it.
+        self.player_data = PlayerDataFactory(account=self.user)
         self.entry = RosterEntryFactory()
-        RosterTenureFactory(
-            roster_entry=self.entry, player_data=PlayerDataFactory(account=self.user)
-        )
+        RosterTenureFactory(roster_entry=self.entry, player_data=self.player_data)
 
     def _rows(self, response):
         return response.data["results"] if isinstance(response.data, dict) else response.data
@@ -64,9 +64,7 @@ class HeldCluesViewTests(APITestCase):
         clue_a = ClueFactory(name="Clue A")
         CharacterClueFactory(roster_entry=self.entry, clue=clue_a)
         second_entry = RosterEntryFactory()
-        RosterTenureFactory(
-            roster_entry=second_entry, player_data=PlayerDataFactory(account=self.user)
-        )
+        RosterTenureFactory(roster_entry=second_entry, player_data=self.player_data)
         CharacterClueFactory(roster_entry=second_entry, clue=ClueFactory(name="Clue B"))
 
         self.client.force_authenticate(user=self.user)
