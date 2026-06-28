@@ -40,6 +40,10 @@ from world.forms.models import (
 | `CharacterFormValue` | Single trait value within a form | `form` (FK), `trait` (FK), `option` (FK) |
 | `CharacterFormState` | Tracks active form (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable) |
 | `TemporaryFormChange` | Temporary override on top of active form | `character` (FK), `trait` (FK), `option` (FK), `source_type`, `source_id`, `duration_type`, `expires_at`, `expires_after_scenes` |
+| `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name` |
+| `FormCombatProfileEffect` | One stat modifier inside a profile | `profile` (FK), `target` (FK mechanics.ModifierTarget), `value` |
+| `AlternateSelf` | A character's access to an alternate self/facet bundle | `character` (FK CharacterSheet), `form` (FK CharacterForm, nullable), `persona` (FK scenes.Persona, nullable), `combat_profile` (FK FormCombatProfile, nullable), `techniques` (M2M magic.Technique), `tuning_value`, `display_name` |
+| `ActiveAlternateSelf` | Currently-assumed alternate self + return anchors | `character` (OneToOne CharacterSheet), `alternate_self` (FK AlternateSelf, nullable), `return_form` (FK CharacterForm, nullable), `return_persona` (FK scenes.Persona, nullable) |
 
 ---
 

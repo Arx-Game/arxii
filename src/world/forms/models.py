@@ -322,6 +322,128 @@ class CharacterFormState(SharedMemoryModel):
         return f"{self.character.db_key}: No active form"
 
 
+class FormCombatProfile(SharedMemoryModel):
+    """A battle form's stat-suite — a package of stat modifiers applied while the form
+    is active. Owns its ModifierSource rows; created on assumption, deleted on revert.
+    """
+
+    form = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.CASCADE,
+        related_name="combat_profiles",
+        help_text="The ALTERNATE form this stat-suite belongs to.",
+    )
+    display_name = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["form", "display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name or f"{self.form} profile"
+
+
+class FormCombatProfileEffect(SharedMemoryModel):
+    """One stat modifier in a form's combat profile."""
+
+    profile = models.ForeignKey(FormCombatProfile, on_delete=models.CASCADE, related_name="effects")
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget", on_delete=models.CASCADE, related_name="form_effects"
+    )
+    value = models.IntegerField(help_text="Modifier value (can be negative).")
+
+    class Meta:
+        ordering = ["profile", "target"]
+
+    def __str__(self) -> str:
+        return f"{self.profile}: {self.target} {self.value:+d}"
+
+
+class AlternateSelf(SharedMemoryModel):
+    """A character's access to an alternate self — a bundle of optional facets (form,
+    stats, abilities, persona) swapped together on assumption. Each facet pointer is
+    optional and may reference a shared catalog template or a unique one. ``tuning_value``
+    parameterizes a shared template per-character (e.g. lycanthropy-thread strength).
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="alternate_selves",
+    )
+    form = models.ForeignKey(
+        CharacterForm,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="alternate_self_grants",
+    )
+    persona = models.ForeignKey(
+        SCENES_PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="alternate_self_grants",
+    )
+    combat_profile = models.ForeignKey(
+        FormCombatProfile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="grants",
+    )
+    techniques = models.ManyToManyField(
+        "magic.Technique", blank=True, related_name="alternate_self_grants"
+    )
+    tuning_value = models.IntegerField(null=True, blank=True)
+    display_name = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["character", "display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name or f"{self.character} alt-self"
+
+
+class ActiveAlternateSelf(SharedMemoryModel):
+    """The currently-assumed alternate self + per-facet return anchors. One per character.
+    Holds return_form/return_persona (the form/persona to revert to). ``in_control`` is a
+    DERIVED property (added in a later task) — NOT stored here.
+    """
+
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="active_alternate_self",
+    )
+    alternate_self = models.ForeignKey(
+        AlternateSelf,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_for",
+    )
+    return_form = models.ForeignKey(
+        CharacterForm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="return_for_active",
+    )
+    return_persona = models.ForeignKey(
+        SCENES_PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="return_for_active",
+    )
+
+    class Meta:
+        ordering = ["character"]
+
+    def __str__(self) -> str:
+        return f"{self.character}: {self.alternate_self or 'no active alt-self'}"
+
+
 class TemporaryFormChangeManager(models.Manager):
     """Manager with convenience methods for temporary changes."""
 

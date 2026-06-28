@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from world.traits.models import Trait
 from world.mechanics.constants import (
     SOURCE_TYPE_DISTINCTION,
+    SOURCE_TYPE_FORM,
     SOURCE_TYPE_RESIDENCE_COMFORT,
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
@@ -267,6 +268,18 @@ class ModifierSource(SharedMemoryModel):
         help_text="Marks the shared source for residence-comfort AP-regen modifiers (#1514).",
     )
 
+    # === Form Combat Profile Source (slice 4 — alternate self) ===
+    form_combat_profile = models.ForeignKey(
+        "forms.FormCombatProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="modifier_sources",
+        help_text=(
+            "The form combat profile this source's modifiers come from (alt-self stat-suite)."
+        ),
+    )
+
     class Meta:
         verbose_name = "Modifier source"
         verbose_name_plural = "Modifier sources"
@@ -278,6 +291,8 @@ class ModifierSource(SharedMemoryModel):
             return SOURCE_TYPE_DISTINCTION
         if self.residence_comfort:
             return SOURCE_TYPE_RESIDENCE_COMFORT
+        if self.form_combat_profile_id:
+            return SOURCE_TYPE_FORM
         return SOURCE_TYPE_UNKNOWN
 
     @property
@@ -294,6 +309,8 @@ class ModifierSource(SharedMemoryModel):
             return f"Distinction: {self.distinction_effect.distinction.name}"
         if self.residence_comfort:
             return "Residence comfort"
+        if self.form_combat_profile:
+            return f"Form: {self.form_combat_profile}"
         return SOURCE_TYPE_UNKNOWN.capitalize()
 
     def __str__(self) -> str:

@@ -3,10 +3,14 @@ from django.contrib import admin
 from django.db.models import Count, Prefetch
 
 from world.forms.models import (
+    ActiveAlternateSelf,
+    AlternateSelf,
     Build,
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
+    FormCombatProfile,
+    FormCombatProfileEffect,
     FormTrait,
     FormTraitOption,
     HeightBand,
@@ -171,6 +175,34 @@ class CharacterFormAdmin(admin.ModelAdmin):
 class CharacterFormStateAdmin(admin.ModelAdmin):
     list_display = ["character", "active_form"]
     search_fields = ["character__db_key"]
+
+
+class FormCombatProfileEffectInline(admin.TabularInline):
+    model = FormCombatProfileEffect
+    extra = 0
+    autocomplete_fields = ["target"]
+
+
+@admin.register(FormCombatProfile)
+class FormCombatProfileAdmin(admin.ModelAdmin):
+    list_display = ["form", "display_name"]
+    search_fields = ["form__character__db_key", "display_name"]
+    inlines = [FormCombatProfileEffectInline]
+
+
+@admin.register(AlternateSelf)
+class AlternateSelfAdmin(admin.ModelAdmin):
+    list_display = ["character", "display_name", "form", "persona", "combat_profile"]
+    list_filter = ["form__form_type"]
+    search_fields = ["character__character__db_key", "display_name"]
+    autocomplete_fields = ["character", "form", "persona", "combat_profile", "techniques"]
+
+
+@admin.register(ActiveAlternateSelf)
+class ActiveAlternateSelfAdmin(admin.ModelAdmin):
+    list_display = ["character", "alternate_self", "return_form", "return_persona"]
+    search_fields = ["character__character__db_key"]
+    autocomplete_fields = ["character", "alternate_self", "return_form", "return_persona"]
 
 
 @admin.register(TemporaryFormChange)

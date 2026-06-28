@@ -22,6 +22,7 @@ TECHNIQUE_STAT_CONTROL = "control"
 SOURCE_TYPE_DISTINCTION = "distinction"
 SOURCE_TYPE_RESIDENCE_COMFORT = "residence_comfort"
 SOURCE_TYPE_UNKNOWN = "unknown"
+SOURCE_TYPE_FORM = "form"
 
 
 class ChallengeType(models.TextChoices):

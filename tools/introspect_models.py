@@ -33,6 +33,7 @@ TARGET_APPS = [
     "world.conditions",
     "world.consent",
     "world.covenants",
+    "world.forms",
     "world.goals",
     "world.items",
     "world.locations",

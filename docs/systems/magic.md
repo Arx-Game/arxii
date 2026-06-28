@@ -77,7 +77,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
 | `CharacterResonance` | Per-character per-resonance identity + currency (Spec A §2.2) | `character_sheet` FK, `resonance` FK, `balance`, `lifetime_earned`, `claimed_at`, `flavor_text` | FK via `character_sheet.resonances` (unique_together: (character_sheet, resonance)) |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
-| `CharacterTechnique` | Known techniques | `technique`, `acquired_at` | FK via `character.character_techniques` |
+| `CharacterTechnique` | Known techniques | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
 | `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
 | `CharacterAffinityTotal` | Cached affinity totals | `character`, `affinity`, `total` | FK via character |

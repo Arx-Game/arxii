@@ -750,6 +750,7 @@
   - path_intent -> progression.PathIntent [OneToOne] (nullable)
   - motif -> magic.Motif [OneToOne] (nullable)
   - technique_draft -> magic.TechniqueDraft [OneToOne] (nullable)
+  - active_alternate_self -> forms.ActiveAlternateSelf [OneToOne] (nullable)
   - purse -> currency.CharacterPurse [OneToOne] (nullable)
   - weekly_journal_xp -> journals.WeeklyJournalXP [OneToOne] (nullable)
   - fatigue -> fatigue.FatiguePool [OneToOne] (nullable)
@@ -818,6 +819,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - alternate_selves <- forms.AlternateSelf
   - employments <- currency.CharacterEmployment
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
@@ -1537,6 +1539,129 @@
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
 
 
+## world.forms
+
+### HeightBand
+**Pointed to by:**
+  - drafts <- character_creation.CharacterDraft
+
+### Build
+**Pointed to by:**
+  - character_sheets <- character_sheets.CharacterSheet
+  - drafts <- character_creation.CharacterDraft
+
+### FormTrait
+**Pointed to by:**
+  - options <- forms.FormTraitOption
+  - species_links <- forms.SpeciesFormTrait
+  - character_values <- forms.CharacterFormValue
+  - temporary_changes <- forms.TemporaryFormChange
+  - persona_descriptors <- forms.PersonaTraitDescriptor
+  - appearance_changes <- forms.AppearanceChangeLog
+
+### FormTraitOption
+**Foreign Keys:**
+  - trait -> forms.FormTrait [FK]
+**Pointed to by:**
+  - species_restrictions <- forms.SpeciesFormTrait
+  - character_values <- forms.CharacterFormValue
+  - natural_for_values <- forms.CharacterFormValue
+  - temporary_changes <- forms.TemporaryFormChange
+
+### SpeciesFormTrait
+**Foreign Keys:**
+  - species -> species.Species [FK]
+  - trait -> forms.FormTrait [FK]
+
+### CharacterForm
+**Foreign Keys:**
+  - character -> objects.ObjectDB [FK]
+**Pointed to by:**
+  - values <- forms.CharacterFormValue
+  - active_for <- forms.CharacterFormState
+  - combat_profiles <- forms.FormCombatProfile
+  - alternate_self_grants <- forms.AlternateSelf
+  - return_for_active <- forms.ActiveAlternateSelf
+  - appearance_changes <- forms.AppearanceChangeLog
+
+### CharacterFormValue
+**Foreign Keys:**
+  - form -> forms.CharacterForm [FK]
+  - trait -> forms.FormTrait [FK]
+  - option -> forms.FormTraitOption [FK]
+  - natural_option -> forms.FormTraitOption [FK] (nullable)
+
+### CharacterFormState
+**Foreign Keys:**
+  - character -> objects.ObjectDB [OneToOne]
+  - active_form -> forms.CharacterForm [FK] (nullable)
+
+### FormCombatProfile
+**Foreign Keys:**
+  - form -> forms.CharacterForm [FK]
+**Pointed to by:**
+  - effects <- forms.FormCombatProfileEffect
+  - grants <- forms.AlternateSelf
+  - modifier_sources <- mechanics.ModifierSource
+
+### FormCombatProfileEffect
+**Foreign Keys:**
+  - profile -> forms.FormCombatProfile [FK]
+  - target -> mechanics.ModifierTarget [FK]
+
+### AlternateSelf
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - form -> forms.CharacterForm [FK] (nullable)
+  - persona -> scenes.Persona [FK] (nullable)
+  - combat_profile -> forms.FormCombatProfile [FK] (nullable)
+**Pointed to by:**
+  - active_for <- forms.ActiveAlternateSelf
+
+### ActiveAlternateSelf
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [OneToOne]
+  - alternate_self -> forms.AlternateSelf [FK] (nullable)
+  - return_form -> forms.CharacterForm [FK] (nullable)
+  - return_persona -> scenes.Persona [FK] (nullable)
+
+### TemporaryFormChange
+**Foreign Keys:**
+  - character -> objects.ObjectDB [FK]
+  - trait -> forms.FormTrait [FK]
+  - option -> forms.FormTraitOption [FK]
+
+### PersonaTraitDescriptor
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - trait -> forms.FormTrait [FK]
+
+### AppearanceChangeLog
+**Foreign Keys:**
+  - form -> forms.CharacterForm [FK]
+  - persona -> scenes.Persona [FK] (nullable)
+  - trait -> forms.FormTrait [FK]
+  - from_option -> forms.FormTraitOption [FK] (nullable)
+  - to_option -> forms.FormTraitOption [FK] (nullable)
+  - actor_persona -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
+- `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
+- `create_true_form(character, selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
+- `get_apparent_build(character) -> 'Build | None' — Get the apparent build for a character.`
+- `get_apparent_form(character) -> 'dict[FormTrait, FormTraitOption]' — Get the apparent form for a character, combining active form with temporaries.`
+- `get_apparent_height(character) -> 'tuple[int, HeightBand | None]' — Get the apparent height for a character including trait modifiers.`
+- `get_cg_builds() -> 'QuerySet[Build]' — Get builds available in character creation.`
+- `get_cg_form_options(species: 'Species') -> 'dict[FormTrait, list[FormTraitOption]]' — Get available form trait options for character creation.`
+- `get_cg_height_bands() -> 'QuerySet[HeightBand]' — Get height bands available in character creation.`
+- `get_height_band(height_inches: 'int') -> 'HeightBand | None' — Get the HeightBand for a given height in inches.`
+- `get_presented_appearance(character) -> 'list[PresentedTrait]' — Compose what a viewer sees: real-form normalized traits overlaid with the active`
+- `reset_trait_to_natural(character, trait: 'FormTrait', *, persona: 'Persona', actor_persona: 'Persona | None' = None, note: 'str' = '') -> 'CharacterFormValue' — Restore one trait to its natural (origin) value — "wash out the dye.`
+- `revert_to_true_form(character) -> 'None' — Revert a character to their true form.`
+- `switch_form(character, target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
+
+
 ## world.goals
 
 ### CharacterGoal
@@ -2017,6 +2142,7 @@
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
+  - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
 
 ### TechniqueCapabilityGrant
@@ -2034,6 +2160,7 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
   - technique -> magic.Technique [FK]
+  - source -> mechanics.ModifierSource [FK] (nullable)
 
 ### TechniqueOutcomeModifier
 **Foreign Keys:**
@@ -2581,6 +2708,7 @@
   - target_check_type -> checks.CheckType [OneToOne] (nullable)
   - target_damage_type -> conditions.DamageType [OneToOne] (nullable)
 **Pointed to by:**
+  - form_effects <- forms.FormCombatProfileEffect
   - distinction_effects <- distinctions.DistinctionEffect
   - character_goals <- goals.CharacterGoal
   - goal_journals <- goals.GoalJournal
@@ -2595,7 +2723,9 @@
 **Foreign Keys:**
   - distinction_effect -> distinctions.DistinctionEffect [FK] (nullable)
   - character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
+  - form_combat_profile -> forms.FormCombatProfile [FK] (nullable)
 **Pointed to by:**
+  - granted_techniques <- magic.CharacterTechnique
   - modifiers <- mechanics.CharacterModifier
 
 ### CharacterModifier
@@ -3626,6 +3756,8 @@
   - window_reactions <- scenes.WindowReaction
   - table_bulletin_posts <- stories.TableBulletinPost
   - table_bulletin_replies <- stories.TableBulletinReply
+  - alternate_self_grants <- forms.AlternateSelf
+  - return_for_active <- forms.ActiveAlternateSelf
   - trait_descriptors <- forms.PersonaTraitDescriptor
   - appearance_changes <- forms.AppearanceChangeLog
   - appearance_changes_made <- forms.AppearanceChangeLog
