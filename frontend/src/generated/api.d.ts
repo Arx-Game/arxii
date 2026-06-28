@@ -6377,6 +6377,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/locations/comfort/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /summary/?character_id=<id> — how uncomfortable that character is, and why. */
+    get: operations['locations_comfort_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -7605,8 +7622,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     get: operations['magic_sanctums_list'];
     put?: never;
@@ -7629,8 +7647,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     get: operations['magic_sanctums_retrieve'];
     put?: never;
@@ -7655,8 +7674,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_absorb_create'];
     delete?: never;
@@ -7675,10 +7695,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+     * @description Ritual of Dissolution — ``POST /api/magic/sanctums/{id}/dissolve/``.
      *
-     *     Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
-     *     Service enforces physical presence; tiered check determines
+     *     Wraps :class:`actions.definitions.sanctum.SanctumDissolveAction`.
+     *     Action enforces physical presence; tiered check determines
      *     recovery fraction. Returns the dissolution outcome.
      */
     post: operations['magic_sanctums_dissolve_create'];
@@ -7702,8 +7722,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_homecoming_create'];
     delete?: never;
@@ -7726,8 +7747,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_purging_create'];
     delete?: never;
@@ -7750,8 +7772,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_sever_create'];
     delete?: never;
@@ -7774,8 +7797,9 @@ export interface paths {
      *
      *     `list` returns Sanctums the user has standing in (owns or has woven
      *     into). `retrieve` is gated by the same standing check. POST actions
-     *     delegate to the service layer; service-level exceptions surface as
-     *     HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+     *     delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+     *     ``ActionResult`` fields map 1:1 to the existing response bodies so the
+     *     contract is preserved (#1497).
      */
     post: operations['magic_sanctums_weave_create'];
     delete?: never;
@@ -7794,11 +7818,11 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Sanctification entry point — `POST /api/magic/sanctums/install/`.
+     * @description Sanctification entry point — ``POST /api/magic/sanctums/install/``.
      *
      *     Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
-     *     Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
-     *     — service does the heavy validation (room ownership, leader
+     *     Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
+     *     — action does the heavy validation (room ownership, leader
      *     standing, physical presence, partial-unique race window). Returns
      *     the new SanctumDetails on success.
      */
@@ -9576,6 +9600,51 @@ export interface paths {
     post?: never;
     /** @description The requesting player's mutes: list, create/update (IC/OOC scope), and unmute. */
     delete: operations['mutes_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/category-mutes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Manage the requesting user's UserCategoryMutes — suppress a whole category's live push.
+     *
+     *     The category-level analogue of the story-mute ViewSet (e.g. squelch the WEATHER echo). Muting
+     *     does NOT gate read access; muted messages still create delivery rows and stay readable in the
+     *     category's tab. Only the live push is skipped.
+     *
+     *     GET    /api/narrative/category-mutes/      — list my category mutes
+     *     POST   /api/narrative/category-mutes/      — mute a category
+     *     DELETE /api/narrative/category-mutes/{id}/ — unmute
+     */
+    get: operations['narrative_category_mutes_list'];
+    put?: never;
+    /** @description Create the mute and return a UserCategoryMuteSerializer response. */
+    post: operations['narrative_category_mutes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/category-mutes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Delete the mute. IsOwnCategoryMuteOrStaff enforces ownership via get_object(). */
+    delete: operations['narrative_category_mutes_destroy'];
     options?: never;
     head?: never;
     patch?: never;
@@ -14839,6 +14908,23 @@ export interface components {
       minimum_level?: number;
     };
     /**
+     * @description Read-only per-character comfort readout (mirrors ``CharacterComfortSummary``).
+     *
+     *     ``felt`` is the per-axis residual exposure (room felt minus the character's mitigation,
+     *     floored), keyed by the lowercased exposure-axis name (``cold``/``heat``/``wet``/…) and
+     *     carrying only the nonzero axes.
+     */
+    CharacterComfort: {
+      band: string;
+      band_index: number;
+      discomfort: number;
+      reasons: string[];
+      injury: number;
+      readonly felt: {
+        [key: string]: number;
+      };
+    };
+    /**
      * @description Read-only serializer for a character's covenant role assignment.
      *
      *     Exposes the member's rank (nested id/name/tier) and a viewer_capabilities
@@ -19190,20 +19276,6 @@ export interface components {
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
     };
-    /** @description Player-facing message representation. Excludes ooc_note. */
-    NarrativeMessage: {
-      readonly id: number;
-      /** @description IC content shown to recipients. */
-      readonly body: string;
-      readonly category: components['schemas']['NarrativeMessageCategoryEnum'];
-      /** @description Null = automated/system-sourced. */
-      readonly sender_account: number | null;
-      readonly related_story: number | null;
-      readonly related_beat_completion: number | null;
-      readonly related_episode_resolution: number | null;
-      /** Format: date-time */
-      readonly sent_at: string;
-    };
     /**
      * @description * `story` - Story update
      *     * `atmosphere` - Atmosphere
@@ -19215,7 +19287,7 @@ export interface components {
      *     * `weather` - Weather
      * @enum {string}
      */
-    NarrativeMessageCategoryEnum:
+    NarrativeCategoryEnum:
       | 'story'
       | 'atmosphere'
       | 'visions'
@@ -19224,6 +19296,20 @@ export interface components {
       | 'covenant'
       | 'renown'
       | 'weather';
+    /** @description Player-facing message representation. Excludes ooc_note. */
+    NarrativeMessage: {
+      readonly id: number;
+      /** @description IC content shown to recipients. */
+      readonly body: string;
+      readonly category: components['schemas']['NarrativeCategoryEnum'];
+      /** @description Null = automated/system-sourced. */
+      readonly sender_account: number | null;
+      readonly related_story: number | null;
+      readonly related_beat_completion: number | null;
+      readonly related_episode_resolution: number | null;
+      /** Format: date-time */
+      readonly sent_at: string;
+    };
     NarrativeMessageDelivery: {
       readonly id: number;
       readonly message: components['schemas']['NarrativeMessage'];
@@ -21264,6 +21350,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['TransitionRequiredOutcome'][];
+    };
+    PaginatedUserCategoryMuteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['UserCategoryMute'][];
     };
     PaginatedUserStoryMuteList: {
       /** @example 123 */
@@ -25925,6 +26026,21 @@ export interface components {
       destroyed: boolean;
       soft_deleted: boolean;
       applied_effect_count: number;
+    };
+    /** @description Full UserCategoryMute representation. */
+    UserCategoryMute: {
+      readonly id: number;
+      category: components['schemas']['NarrativeCategoryEnum'];
+      /** Format: date-time */
+      readonly muted_at: string;
+    };
+    /** @description Input serializer for POST /api/narrative/category-mutes/. */
+    UserCategoryMuteCreate: {
+      category: components['schemas']['NarrativeCategoryEnum'];
+    };
+    /** @description Input serializer for POST /api/narrative/category-mutes/. */
+    UserCategoryMuteCreateRequest: {
+      category: components['schemas']['NarrativeCategoryEnum'];
     };
     /** @description Full UserStoryMute representation. */
     UserStoryMute: {
@@ -34889,6 +35005,28 @@ export interface operations {
       };
     };
   };
+  locations_comfort_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the character to read comfort for (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterComfort'];
+        };
+      };
+    };
+  };
   magic_applicable_pulls_create: {
     parameters: {
       query?: never;
@@ -39405,6 +39543,73 @@ export interface operations {
     };
   };
   mutes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  narrative_category_mutes_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedUserCategoryMuteList'];
+        };
+      };
+    };
+  };
+  narrative_category_mutes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserCategoryMuteCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UserCategoryMuteCreate'];
+        };
+      };
+    };
+  };
+  narrative_category_mutes_destroy: {
     parameters: {
       query?: never;
       header?: never;

@@ -2,6 +2,8 @@
 
 **Status:** in-progress
 **Depends on:** Traits, Skills, Magic, Paths, Relationships, Missions
+**Capability tiers + MVP sequencing:** [`player-capability-ledger.md`](player-capability-ledger.md) (GROW + COMBINE pillars).
+**Decisions:** XP buys unlocks that gate, never grant (ADR-0053); strength in a gift comes from the woven thread (ADR-0051); Major/Minor gifts, species abilities as Minor Gifts (ADR-0050); power-tier breakthroughs at fixed thresholds (ADR-0046); one specialization engine, resonance × entity (ADR-0055).
 
 ## Overview
 The central spine connecting every system in the game. Characters develop through XP (earned via RP activities), skill development (through use and training), and Path steps (leveling their magical calling). Progression touches all three gameplay pillars and is the primary long-term motivation loop.

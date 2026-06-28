@@ -15,8 +15,11 @@ import type {
   MyMessagesQueryParams,
   NarrativeMessageDelivery,
   PaginatedDeliveries,
+  PaginatedCategoryMutes,
   PaginatedGemits,
   PaginatedMutes,
+  UserCategoryMute,
+  UserCategoryMuteCreateBody,
   UserStoryMute,
   UserStoryMuteCreateBody,
 } from './types';
@@ -114,6 +117,52 @@ export async function unmuteStory(muteId: number): Promise<void> {
   const res = await apiFetch(`${BASE_URL}/story-mutes/${muteId}/`, { method: 'DELETE' });
   if (!res.ok) {
     throw new Error(`Failed to unmute story (mute id ${muteId})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UserCategoryMute endpoints (#1522) — squelch a whole category (e.g. WEATHER)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/narrative/category-mutes/
+ * Returns the current account's list of muted narrative categories.
+ */
+export async function getCategoryMutes(): Promise<PaginatedCategoryMutes> {
+  const res = await apiFetch(`${BASE_URL}/category-mutes/`);
+  if (!res.ok) {
+    throw new Error('Failed to load category mutes');
+  }
+  return res.json() as Promise<PaginatedCategoryMutes>;
+}
+
+/**
+ * POST /api/narrative/category-mutes/
+ * Body: { category: <NarrativeCategory> }
+ * Returns 201 with the created UserCategoryMute.
+ */
+export async function muteCategory(data: UserCategoryMuteCreateBody): Promise<UserCategoryMute> {
+  const res = await apiFetch(`${BASE_URL}/category-mutes/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to mute category') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<UserCategoryMute>;
+}
+
+/**
+ * DELETE /api/narrative/category-mutes/{id}/
+ * Removes the mute. Returns 204 No Content on success.
+ */
+export async function unmuteCategory(muteId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/category-mutes/${muteId}/`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`Failed to unmute category (mute id ${muteId})`);
   }
 }
 

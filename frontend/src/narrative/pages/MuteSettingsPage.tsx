@@ -1,7 +1,9 @@
 /**
- * MuteSettingsPage — list of muted stories with per-row Unmute button.
+ * MuteSettingsPage — notification mute settings: ambient categories (e.g. weather) and
+ * per-story mutes.
  *
- * Lets users review what they have muted and remove mutes selectively.
+ * Lets users squelch whole narrative categories (the weather echo, #1522) and review/remove
+ * their per-story mutes selectively.
  *
  * Wave 11 will register the route at /profile/mute-settings.
  */
@@ -11,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useStoryMutes, useUnmuteStory } from '../queries';
 import type { UserStoryMute } from '../types';
+import { CategoryMuteToggles } from '../components/CategoryMuteToggles';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -102,13 +105,24 @@ function MuteSettingsInner() {
 export function MuteSettingsPage() {
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <h1 className="mb-2 text-2xl font-bold">Muted Stories</h1>
+      <h1 className="mb-2 text-2xl font-bold">Notification Settings</h1>
       <p className="mb-6 text-muted-foreground">
-        Muted stories still appear in your dashboard — real-time notifications are suppressed.
+        Muted items still appear in your dashboard — only the real-time push is suppressed.
       </p>
-      <ErrorBoundary>
-        <MuteSettingsInner />
-      </ErrorBoundary>
+
+      <section className="mb-8">
+        <h2 className="mb-3 text-lg font-semibold">Ambient Categories</h2>
+        <ErrorBoundary>
+          <CategoryMuteToggles />
+        </ErrorBoundary>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Muted Stories</h2>
+        <ErrorBoundary>
+          <MuteSettingsInner />
+        </ErrorBoundary>
+      </section>
     </div>
   );
 }

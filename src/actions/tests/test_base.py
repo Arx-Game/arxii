@@ -276,6 +276,13 @@ class ActionRegistryTests(TestCase):
             "event_cancel",
             "event_invite",
             "respond_invitation",
+            "sanctum_install",
+            "sanctum_homecoming",
+            "sanctum_purging",
+            "sanctum_weave",
+            "sanctum_dissolve",
+            "sanctum_absorb",
+            "sanctum_sever",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

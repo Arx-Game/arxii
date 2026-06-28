@@ -66,11 +66,17 @@ class SanctumDetailsTests(TestCase):
         sanctum = _sanctum_details(founder_character_sheet=founder)
         self.assertEqual(sanctum.founder_character_sheet, founder)
 
-    def test_one_personal_per_founder_constraint(self) -> None:
+    def test_two_personal_per_founder_allowed_at_model_level(self) -> None:
+        # The one_personal_per_character_sheet UniqueConstraint was removed in
+        # magic/0051 (#1497) because dissolution is a soft-delete: a dissolved
+        # personal sanctum + a new active one = two PERSONAL rows for the same
+        # founder, which the old DB constraint forbade.  One-personal-per-ACTIVE
+        # is now enforced in the service layer (perform_sanctification); see
+        # test_sanctum_install.py for that coverage.
         founder = CharacterSheetFactory()
-        _sanctum_details(founder_character_sheet=founder, owner_mode=SanctumOwnerMode.PERSONAL)
-        with self.assertRaises(IntegrityError):
-            _sanctum_details(founder_character_sheet=founder, owner_mode=SanctumOwnerMode.PERSONAL)
+        s1 = _sanctum_details(founder_character_sheet=founder, owner_mode=SanctumOwnerMode.PERSONAL)
+        s2 = _sanctum_details(founder_character_sheet=founder, owner_mode=SanctumOwnerMode.PERSONAL)
+        self.assertNotEqual(s1.pk, s2.pk)
 
     def test_covenant_sanctums_not_constrained_per_founder(self) -> None:
         """Same founder can lead multiple COVENANT Sanctification rites."""

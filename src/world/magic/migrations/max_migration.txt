@@ -1,1 +1,1 @@
-0051_alter_techniqueappliedcondition_condition_and_more
+0052_remove_sanctum_personal_unique_constraint

@@ -9,7 +9,7 @@ import type { components } from '@/generated/api';
 
 export type NarrativeMessage = components['schemas']['NarrativeMessage'];
 export type NarrativeMessageDelivery = components['schemas']['NarrativeMessageDelivery'];
-export type NarrativeCategory = components['schemas']['NarrativeMessageCategoryEnum'];
+export type NarrativeCategory = components['schemas']['NarrativeCategoryEnum'];
 
 export interface MyMessagesQueryParams {
   category?: NarrativeCategory;
@@ -79,4 +79,22 @@ export interface PaginatedMutes {
   next: string | null;
   previous: string | null;
   results: UserStoryMute[];
+}
+
+// ---------------------------------------------------------------------------
+// UserCategoryMute (#1522) — squelch a whole narrative category's live push
+// (e.g. the WEATHER echo). Generated from UserCategoryMuteSerializer.
+// ---------------------------------------------------------------------------
+
+export type UserCategoryMute = components['schemas']['UserCategoryMute'];
+
+export interface UserCategoryMuteCreateBody {
+  category: NarrativeCategory;
+}
+
+export interface PaginatedCategoryMutes {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: UserCategoryMute[];
 }

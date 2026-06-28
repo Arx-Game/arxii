@@ -169,12 +169,24 @@ class RoomFeatureKindOwnerType(SharedMemoryModel):
         return f"{self.feature_kind.name} allows {self.get_owner_type_display()}"
 
 
+class RoomFeatureInstanceQuerySet(models.QuerySet):
+    """Custom queryset for RoomFeatureInstance with soft-delete helpers."""
+
+    def active(self) -> RoomFeatureInstanceQuerySet:
+        """Return only instances where dissolved_at IS NULL (i.e. not dissolved)."""
+        return self.filter(dissolved_at__isnull=True)
+
+
 class RoomFeatureInstance(SharedMemoryModel):
     """A feature installed in one specific room.
 
     OneToOne with ``RoomProfile`` enforces the **one-feature-per-room**
     rule at the schema level. Per-kind state (Sanctum's resonance_type
     etc.) lives in a details model keyed by OneToOne back to this row.
+
+    ``dissolved_at`` is set when the feature is dissolved; null means active.
+    Dissolution is a soft-delete — the row and all story-significant data are
+    preserved. Use ``.active()`` on the queryset to exclude dissolved instances.
     """
 
     room_profile = models.OneToOneField(
@@ -200,6 +212,13 @@ class RoomFeatureInstance(SharedMemoryModel):
         blank=True,
         help_text="Set on each successful upgrade past level 1; null at install.",
     )
+    dissolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the feature is dissolved; null = active.",
+    )
+
+    objects = RoomFeatureInstanceQuerySet.as_manager()
 
     class Meta:
         constraints = [

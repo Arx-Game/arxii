@@ -783,6 +783,40 @@ event:
 - `PathIntent` (`world/progression`) — pre-declared next path; the offer serializer
   pre-selects it when eligible.
 
+### Sanctum (#1497 — TELNET+WEB)
+
+The sanctum subsystem is a 7-op surface shared by telnet (`CmdSanctum`) and web
+(`SanctumViewSet` in `views_sanctum.py`); both converge on `action.run()`.
+
+**Actions** (`actions/definitions/sanctum.py`, all REGISTRY, `target_type=SELF`, `category="magic"`):
+- `sanctum_install` — Ritual of Sanctification: validate presence/ownership/founder-cap, create
+  `RoomFeatureInstance` + `SanctumDetails`.
+- `sanctum_homecoming` — Ritual of Homecoming: sacrifice resonance to grow the Sanctum's
+  Homecoming reservoir (wraps `perform_homecoming_ritual`).
+- `sanctum_purging` — Ritual of Purging: change the Sanctum's consecrated resonance type,
+  draining grown resonance as the cost (wraps `perform_purging_ritual`).
+- `sanctum_weave` — weave a SANCTUM-anchored `Thread` (`slot=personal|covenant|helper`).
+- `sanctum_dissolve` — soft-delete the sanctum (see dissolution below).
+- `sanctum_absorb` — drain the weaver's pending weaving/owner-bonus pool into spendable
+  resonance currency; physical presence in the Sanctum's room required (wraps
+  `absorb_sanctum_pool`).
+- `sanctum_sever` — soft-retire a SANCTUM-anchored thread by name or id.
+
+Module helpers: `sanctum_in_room(location)` returns the active `SanctumDetails` for the
+room (excludes dissolved); `room_profile_for_location(location)` resolves a `RoomProfile`.
+
+**Telnet surface** (`commands/sanctum.py` — `CmdSanctum`, key `sanctum`): namespaced `sanctum
+<subverb>` `DispatchCommand` routing the 7 subverbs through `dispatch_player_action`. Bare
+`sanctum`/`sanctum status` = hub. No business logic in the command.
+
+**Dissolution soft-delete** (#1497): `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
+(nullable `DateTimeField`) rather than deleting the row. `RoomFeatureInstance.active()` queryset
+excludes dissolved instances. SANCTUM-anchored threads are soft-retired (`Thread.retired_at`) on
+dissolution — never hard-deleted. The `one_personal_per_character_sheet` DB `UniqueConstraint`
+on `SanctumDetails` was removed (cross-table partial-unique limitation); one-personal-per-founder
+is enforced in the service layer, excluding dissolved rows. Re-sanctifying the same room after
+dissolution is a deferred follow-up.
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:

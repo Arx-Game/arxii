@@ -15,6 +15,9 @@ import { MuteSettingsPage } from '../pages/MuteSettingsPage';
 vi.mock('../queries', () => ({
   useStoryMutes: vi.fn(),
   useUnmuteStory: vi.fn(),
+  useCategoryMutes: vi.fn(),
+  useMuteCategory: vi.fn(),
+  useUnmuteCategory: vi.fn(),
 }));
 
 import * as queries from '../queries';
@@ -76,6 +79,20 @@ function setupMocks({
   vi.mocked(queries.useUnmuteStory).mockReturnValue(
     makeMutationIdle(unmuteMutate) as unknown as ReturnType<typeof queries.useUnmuteStory>
   );
+
+  // The page also renders the category-mute toggles; stub those hooks (empty = nothing muted).
+  vi.mocked(queries.useCategoryMutes).mockReturnValue({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+    isSuccess: true,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useCategoryMutes>);
+  vi.mocked(queries.useMuteCategory).mockReturnValue(
+    makeMutationIdle() as unknown as ReturnType<typeof queries.useMuteCategory>
+  );
+  vi.mocked(queries.useUnmuteCategory).mockReturnValue(
+    makeMutationIdle() as unknown as ReturnType<typeof queries.useUnmuteCategory>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +107,73 @@ describe('MuteSettingsPage', () => {
   it('renders page heading', () => {
     setupMocks();
     render(<MuteSettingsPage />, { wrapper: createWrapper() });
+    expect(screen.getByRole('heading', { name: 'Notification Settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Muted Stories' })).toBeInTheDocument();
+  });
+
+  it('renders the weather category toggle, unchecked when not muted', () => {
+    setupMocks();
+    render(<MuteSettingsPage />, { wrapper: createWrapper() });
+    const sw = screen.getByTestId('category-mute-switch');
+    expect(sw).toBeInTheDocument();
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('mutes the weather category when the toggle is switched on', async () => {
+    const user = userEvent.setup();
+    const muteMutate = vi.fn();
+    setupMocks();
+    vi.mocked(queries.useMuteCategory).mockReturnValue(
+      makeMutationIdle(muteMutate) as unknown as ReturnType<typeof queries.useMuteCategory>
+    );
+
+    render(<MuteSettingsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByTestId('category-mute-switch'));
+
+    expect(muteMutate).toHaveBeenCalledWith({ category: 'weather' });
+  });
+
+  it('shows the weather toggle as checked when the category is muted', () => {
+    setupMocks();
+    vi.mocked(queries.useCategoryMutes).mockReturnValue({
+      data: {
+        count: 1,
+        next: null,
+        previous: null,
+        results: [{ id: 7, category: 'weather', muted_at: '2026-06-01T00:00:00Z' }],
+      },
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useCategoryMutes>);
+
+    render(<MuteSettingsPage />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('category-mute-switch')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('unmutes the weather category when toggled off', async () => {
+    const user = userEvent.setup();
+    const unmuteMutate = vi.fn();
+    setupMocks();
+    vi.mocked(queries.useCategoryMutes).mockReturnValue({
+      data: {
+        count: 1,
+        next: null,
+        previous: null,
+        results: [{ id: 7, category: 'weather', muted_at: '2026-06-01T00:00:00Z' }],
+      },
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useCategoryMutes>);
+    vi.mocked(queries.useUnmuteCategory).mockReturnValue(
+      makeMutationIdle(unmuteMutate) as unknown as ReturnType<typeof queries.useUnmuteCategory>
+    );
+
+    render(<MuteSettingsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByTestId('category-mute-switch'));
+
+    expect(unmuteMutate).toHaveBeenCalledWith(7);
   });
 
   it('renders empty state when no mutes exist', () => {
@@ -111,6 +194,18 @@ describe('MuteSettingsPage', () => {
 
     vi.mocked(queries.useUnmuteStory).mockReturnValue(
       makeMutationIdle() as unknown as ReturnType<typeof queries.useUnmuteStory>
+    );
+    vi.mocked(queries.useCategoryMutes).mockReturnValue({
+      data: { count: 0, next: null, previous: null, results: [] },
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useCategoryMutes>);
+    vi.mocked(queries.useMuteCategory).mockReturnValue(
+      makeMutationIdle() as unknown as ReturnType<typeof queries.useMuteCategory>
+    );
+    vi.mocked(queries.useUnmuteCategory).mockReturnValue(
+      makeMutationIdle() as unknown as ReturnType<typeof queries.useUnmuteCategory>
     );
 
     const { container } = render(<MuteSettingsPage />, { wrapper: createWrapper() });

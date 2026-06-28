@@ -10079,6 +10079,30 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/locations/comfort/:
+    get:
+      operationId: locations_comfort_retrieve
+      description: GET /summary/?character_id=<id> — how uncomfortable that character
+        is, and why.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the character to read comfort for (must be your
+          own).
+        required: true
+      tags:
+      - comfort
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterComfort'
+          description: ''
   /api/magic/applicable-pulls/:
     post:
       operationId: magic_applicable_pulls_create
@@ -12022,8 +12046,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       tags:
       - magic
       security:
@@ -12045,8 +12070,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12073,8 +12099,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12097,10 +12124,10 @@ paths:
     post:
       operationId: magic_sanctums_dissolve_create
       description: |-
-        Ritual of Dissolution — `POST /api/magic/sanctums/{id}/dissolve/`.
+        Ritual of Dissolution — ``POST /api/magic/sanctums/{id}/dissolve/``.
 
-        Wraps :func:`world.magic.services.sanctum_install.perform_dissolution`.
-        Service enforces physical presence; tiered check determines
+        Wraps :class:`actions.definitions.sanctum.SanctumDissolveAction`.
+        Action enforces physical presence; tiered check determines
         recovery fraction. Returns the dissolution outcome.
       parameters:
       - in: path
@@ -12128,8 +12155,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12156,8 +12184,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12184,8 +12213,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12218,8 +12248,9 @@ paths:
 
         `list` returns Sanctums the user has standing in (owns or has woven
         into). `retrieve` is gated by the same standing check. POST actions
-        delegate to the service layer; service-level exceptions surface as
-        HTTP 400 with the typed `user_message` per `feedback_codeql_exceptions`.
+        delegate to the seven Actions in ``actions/definitions/sanctum.py``;
+        ``ActionResult`` fields map 1:1 to the existing response bodies so the
+        contract is preserved (#1497).
       parameters:
       - in: path
         name: feature_instance_id
@@ -12242,11 +12273,11 @@ paths:
     post:
       operationId: magic_sanctums_install_create
       description: |-
-        Sanctification entry point — `POST /api/magic/sanctums/install/`.
+        Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
         Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
-        Wraps :func:`world.magic.services.sanctum_install.perform_sanctification`
-        — service does the heavy validation (room ownership, leader
+        Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
+        — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
         the new SanctumDetails on success.
       tags:
@@ -15556,6 +15587,81 @@ paths:
         required: true
       tags:
       - mutes
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/narrative/category-mutes/:
+    get:
+      operationId: narrative_category_mutes_list
+      description: |-
+        Manage the requesting user's UserCategoryMutes — suppress a whole category's live push.
+
+        The category-level analogue of the story-mute ViewSet (e.g. squelch the WEATHER echo). Muting
+        does NOT gate read access; muted messages still create delivery rows and stay readable in the
+        category's tab. Only the live push is skipped.
+
+        GET    /api/narrative/category-mutes/      — list my category mutes
+        POST   /api/narrative/category-mutes/      — mute a category
+        DELETE /api/narrative/category-mutes/{id}/ — unmute
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - narrative
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserCategoryMuteList'
+          description: ''
+    post:
+      operationId: narrative_category_mutes_create
+      description: Create the mute and return a UserCategoryMuteSerializer response.
+      tags:
+      - narrative
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCategoryMuteCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCategoryMuteCreate'
+          description: ''
+  /api/narrative/category-mutes/{id}/:
+    delete:
+      operationId: narrative_category_mutes_destroy
+      description: Delete the mute. IsOwnCategoryMuteOrStaff enforces ownership via
+        get_object().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - narrative
       security:
       - cookieAuth: []
       responses:
@@ -25523,6 +25629,39 @@ components:
       required:
       - id
       - name
+    CharacterComfort:
+      type: object
+      description: |-
+        Read-only per-character comfort readout (mirrors ``CharacterComfortSummary``).
+
+        ``felt`` is the per-axis residual exposure (room felt minus the character's mitigation,
+        floored), keyed by the lowercased exposure-axis name (``cold``/``heat``/``wet``/…) and
+        carrying only the nonzero axes.
+      properties:
+        band:
+          type: string
+        band_index:
+          type: integer
+        discomfort:
+          type: integer
+        reasons:
+          type: array
+          items:
+            type: string
+        injury:
+          type: integer
+        felt:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+      required:
+      - band
+      - band_index
+      - discomfort
+      - felt
+      - injury
+      - reasons
     CharacterCovenantRole:
       type: object
       description: |-
@@ -34670,6 +34809,26 @@ components:
       required:
       - npc_persona
       - persona
+    NarrativeCategoryEnum:
+      enum:
+      - story
+      - atmosphere
+      - visions
+      - happenstance
+      - system
+      - covenant
+      - renown
+      - weather
+      type: string
+      description: |-
+        * `story` - Story update
+        * `atmosphere` - Atmosphere
+        * `visions` - Visions
+        * `happenstance` - Happenstance
+        * `system` - System
+        * `covenant` - Covenant
+        * `renown` - Renown
+        * `weather` - Weather
     NarrativeMessage:
       type: object
       description: Player-facing message representation. Excludes ooc_note.
@@ -34683,7 +34842,7 @@ components:
           description: IC content shown to recipients.
         category:
           allOf:
-          - $ref: '#/components/schemas/NarrativeMessageCategoryEnum'
+          - $ref: '#/components/schemas/NarrativeCategoryEnum'
           readOnly: true
         sender_account:
           type: integer
@@ -34715,26 +34874,6 @@ components:
       - related_story
       - sender_account
       - sent_at
-    NarrativeMessageCategoryEnum:
-      enum:
-      - story
-      - atmosphere
-      - visions
-      - happenstance
-      - system
-      - covenant
-      - renown
-      - weather
-      type: string
-      description: |-
-        * `story` - Story update
-        * `atmosphere` - Atmosphere
-        * `visions` - Visions
-        * `happenstance` - Happenstance
-        * `system` - System
-        * `covenant` - Covenant
-        * `renown` - Renown
-        * `weather` - Weather
     NarrativeMessageDelivery:
       type: object
       properties:
@@ -38137,6 +38276,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TransitionRequiredOutcome'
+    PaginatedUserCategoryMuteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserCategoryMute'
     PaginatedUserStoryMuteList:
       type: object
       required:
@@ -47294,6 +47456,39 @@ components:
       - charges_remaining
       - destroyed
       - soft_deleted
+    UserCategoryMute:
+      type: object
+      description: Full UserCategoryMute representation.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
+        muted_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category
+      - id
+      - muted_at
+    UserCategoryMuteCreate:
+      type: object
+      description: Input serializer for POST /api/narrative/category-mutes/.
+      properties:
+        category:
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
+      required:
+      - category
+    UserCategoryMuteCreateRequest:
+      type: object
+      description: Input serializer for POST /api/narrative/category-mutes/.
+      properties:
+        category:
+          $ref: '#/components/schemas/NarrativeCategoryEnum'
+      required:
+      - category
     UserStoryMute:
       type: object
       description: Full UserStoryMute representation.
