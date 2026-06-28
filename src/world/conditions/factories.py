@@ -343,6 +343,57 @@ class _ReactiveConditionFactory:
 ReactiveConditionFactory = _ReactiveConditionFactory()
 
 
+def install_cancel_damage_trigger(objectdb: object) -> None:
+    """Install a DAMAGE_PRE_APPLY trigger on *objectdb* that cancels the event.
+
+    Builds a FlowDefinition with a single CANCEL_EVENT step and a
+    TriggerDefinition scoped to DAMAGE_PRE_APPLY with a self-target filter
+    (fires only when ``payload.target`` is *objectdb* itself).  Used in tests
+    to verify that opponent-side DAMAGE_PRE_APPLY emission honours cancellation.
+
+    Args:
+        objectdb: The ObjectDB (Character / CombatNPC / etc.) on which to
+            install the trigger.  Must already be in a room so that
+            ``emit_event`` can reach it via the room's contents list.
+    """
+    from flows.constants import EventName
+    from flows.consts import FlowActionChoices
+    from flows.factories import (
+        FlowDefinitionFactory,
+        FlowStepDefinitionFactory,
+        TriggerDefinitionFactory,
+        TriggerFactory,
+    )
+
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        parent_id=None,
+        action=FlowActionChoices.CANCEL_EVENT,
+        parameters={},
+    )
+    trigger_def = TriggerDefinitionFactory(
+        event_name=EventName.DAMAGE_PRE_APPLY,
+        flow_definition=flow,
+    )
+    TriggerFactory(
+        trigger_definition=trigger_def,
+        obj=objectdb,
+        additional_filter_condition={"path": "target", "op": "==", "value": "self"},
+        source_condition=None,
+    )
+
+    # Make the just-installed trigger visible to the next emit_event dispatch in
+    # this transaction. A Trigger save notifies the handler via on_trigger_added,
+    # whose cache reset is transaction.on_commit-deferred — and on_commit never
+    # fires inside a rolled-back TestCase, so the trigger would stay invisible and
+    # the cancel would not fire. Refresh synchronously (the #1584 / resolve_round
+    # pattern).
+    handler = getattr(objectdb, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    if handler is not None:
+        handler.refresh()
+
+
 # =============================================================================
 # Scope 6 §8.3 — Aftermath condition factories
 # =============================================================================

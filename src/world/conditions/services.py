@@ -209,6 +209,20 @@ def get_condition_instance(
     ).first()
 
 
+def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """True if *target* holds any active intangibility condition.
+
+    Mirrors the derive-on-read pattern: aggregate over the bearer's active,
+    non-suppressed, unresolved ConditionInstances whose category grants
+    intangibility. Gates target resolution in cast + combat.
+    """
+    return target.condition_instances.filter(
+        condition__category__grants_intangibility=True,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+    ).exists()
+
+
 @dataclass
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
@@ -631,6 +645,11 @@ def apply_condition(  # noqa: PLR0913
 
     _invalidate_condition_handler(target)
 
+    if result.success and result.instance is not None:
+        _notify_stories_condition_applied(target, result.instance)
+        _install_reactive_side_effects(target, condition, result.instance)
+        _make_just_installed_triggers_live(target)
+
     if result.instance is not None and target_location is not None:
         emit_event(
             EventName.CONDITION_APPLIED,
@@ -641,10 +660,6 @@ def apply_condition(  # noqa: PLR0913
             ),
             location=target_location,
         )
-
-    if result.success and result.instance is not None:
-        _notify_stories_condition_applied(target, result.instance)
-        _install_reactive_side_effects(target, condition, result.instance)
 
     return result
 
@@ -744,6 +759,11 @@ def bulk_apply_conditions(
         # any reactive subscriber would read the stale pre-bulk cache instead.
         _invalidate_condition_handler(app.target)
 
+        if result.success and result.instance is not None:
+            _notify_stories_condition_applied(app.target, result.instance)
+            _install_reactive_side_effects(app.target, app.template, result.instance)
+            _make_just_installed_triggers_live(app.target)
+
         if result.instance is not None and target_location is not None:
             emit_event(
                 EventName.CONDITION_APPLIED,
@@ -755,13 +775,26 @@ def bulk_apply_conditions(
                 location=target_location,
             )
 
-        if result.success and result.instance is not None:
-            _notify_stories_condition_applied(app.target, result.instance)
-            _install_reactive_side_effects(app.target, app.template, result.instance)
-
         results.append(result)
 
     return results
+
+
+def _make_just_installed_triggers_live(target: "ObjectDB") -> None:  # noqa: OBJECTDB_PARAM
+    """Synchronously refresh ``target``'s trigger handler after install (#1584).
+
+    ``_install_reactive_side_effects`` installs Trigger rows via ``on_trigger_added``,
+    whose cache reset is ``transaction.on_commit``-deferred for cross-transaction
+    rollback safety — so the new triggers are NOT visible within the current
+    transaction. An active cast-time effect (e.g. summon) wired as a
+    ``CONDITION_APPLIED`` trigger on its OWN condition must catch its own application,
+    and ``apply_condition``/``bulk_apply_conditions`` emit ``CONDITION_APPLIED``
+    immediately after installing. Refresh synchronously here so that emit sees the
+    just-installed trigger (mirrors combat ``resolve_round``'s pre-attack refresh).
+    """
+    handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    if handler is not None:
+        handler.refresh()
 
 
 def _install_reactive_side_effects(

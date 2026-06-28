@@ -116,3 +116,18 @@ A peer's recognition of another character's pose (`PoseEndorsement`) that settle
 
 **Renown**:
 The reputation/legend award fired alongside certain magical events (Dramatic Moments, Audere Majora crossings) via `fire_renown_award`. A live award mechanism; when an event's configured risk is NONE, no deed is minted.
+
+**Effect palette**:
+The seeded set of nine castable combat effects (`ensure_effect_palette_content()` in
+`world/magic/effect_palette_content.py`): Summon Spirit, Aegis Field (force-field), Mirror
+Ward (reflect), Phase Step (blink), Phase Jump (teleport), Barricade (obstacle), Ghostform
+(incorporeal), Earthmeld (sink), Force Grip (telekinesis). Each is a full Technique + Condition
++ Flow + Trigger bundle wired idempotently via `get_or_create`. Handlers and adapters live in
+`world/magic/services/effect_handlers.py`.
+
+**Intangibility**:
+The status of being untargetable in combat, conferred by a `ConditionInstance` whose
+`ConditionCategory.grants_intangibility` is True. Checked by `is_untargetable(objectdb)` in
+`world/conditions/services.py` at NPC targeting and PC AoE filter sites. Ghostform and
+Earthmeld are the seeded intangibility conditions (#1584).
+_Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

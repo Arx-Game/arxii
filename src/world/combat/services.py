@@ -9,7 +9,7 @@ from decimal import Decimal
 import logging
 import math
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
+    from world.magic.models.anima import CharacterAnima
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -44,6 +45,7 @@ from flows.events.payloads import (
     AttackPreResolvePayload,
     CharacterIncapacitatedPayload,
     CharacterKilledPayload,
+    CombatRoundStartingPayload,
     DamageAppliedPayload,
     DamagePreApplyPayload,
     EncounterCompletedPayload,
@@ -65,6 +67,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PENETRATION_CHECK_TYPE_NAME,
     ActionCategory,
+    CombatAllegiance,
     CombatManeuver,
     EncounterOutcome,
     EncounterType,
@@ -759,6 +762,38 @@ def _build_affected_targets(
             targets.append(ally_od)
             seen.add(ally_od.pk)
     return targets
+
+
+def combatants_hostile_to(
+    actor: CombatParticipant | CombatOpponent,
+) -> dict[str, list]:
+    """Return the combatants *actor* may attack, grouped by kind.
+
+    Single source of truth for friend/foe resolution (Tasks 7 and 13 use this):
+
+    - A PC participant is hostile to ENEMY opponents (not to ALLY summons).
+    - An ALLY opponent (summon/charmed) is hostile to ENEMY opponents only.
+    - An ENEMY opponent is hostile to PCs *and* any ALLY summons.
+    """
+    enc = actor.encounter
+    active_pcs = list(
+        CombatParticipant.objects.filter(encounter=enc, status=ParticipantStatus.ACTIVE)
+    )
+    enemies = list(
+        CombatOpponent.objects.filter(
+            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ENEMY
+        )
+    )
+    allies = list(
+        CombatOpponent.objects.filter(
+            encounter=enc, status=OpponentStatus.ACTIVE, allegiance=CombatAllegiance.ALLY
+        )
+    )
+    if isinstance(actor, CombatParticipant) or actor.allegiance == CombatAllegiance.ALLY:
+        # PC side: hostile to ENEMY opponents only.
+        return {"participants": [], "opponents": enemies}
+    # ENEMY opponent: hostile to PCs and any ALLY summons.
+    return {"participants": active_pcs, "opponents": allies}
 
 
 def _build_combat_result(
@@ -1842,60 +1877,106 @@ def _get_eligible_entries(
     return eligible
 
 
-def _select_targets(
+_TargetT = TypeVar("_TargetT")
+
+
+def _select_targets_core(
     entry: ThreatPoolEntry,
-    active_participants: list[CombatParticipant],
+    candidates: list[_TargetT],
+    health_of: Callable[[list[_TargetT]], list[int]],
     rotation: int = 0,
-) -> list[CombatParticipant]:
-    """Select targets for a threat pool entry from active participants.
+) -> list[_TargetT]:
+    """Shared targeting-mode selector for participants and opponents (#1584).
+
+    One algorithm (ALL / MULTI / RANDOM / LOWEST_HEALTH / rotated-default) drives
+    both the participant ``targets`` path and the opponent ``opponent_targets``
+    path (ADR-0016 — no parallel selector). ``health_of`` returns health values
+    parallel to ``candidates`` and is only invoked for the LOWEST_HEALTH mode, so
+    participants keep their single batch query and opponents read ``.health``
+    directly.
 
     ``rotation`` offsets the deterministic (non-random, non-health-sorted)
-    selection so a swarm's successive attacks fan across distinct PCs rather
+    selection so a swarm's successive attacks fan across distinct targets rather
     than dogpiling the first one (#983). It is a no-op for the ALL, RANDOM, and
-    LOWEST_HEALTH modes, which already spread across or intentionally focus the
-    party on their own terms.
+    LOWEST_HEALTH modes, which already spread across or intentionally focus on
+    their own terms.
     """
-    if not active_participants:
+    if not candidates:
         return []
 
     mode = entry.targeting_mode
     selection = entry.target_selection
 
     if mode == TargetingMode.ALL:
-        return list(active_participants)
+        return list(candidates)
 
     count = 1
     if mode == TargetingMode.MULTI:
         count = entry.target_count or 1
 
-    count = min(count, len(active_participants))
+    count = min(count, len(candidates))
 
     if selection == TargetSelection.LOWEST_HEALTH:
+        healths = health_of(candidates)
+        sorted_by_health = [
+            c
+            for _, c in sorted(
+                zip(healths, candidates, strict=True),
+                key=lambda pair: pair[0],
+            )
+        ]
+        return sorted_by_health[:count]
+
+    if selection == TargetSelection.RANDOM:
+        return random.sample(candidates, count)  # NOSONAR game RNG (combat targeting), not crypto
+
+    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
+    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
+    # Placeholder: pick candidates by DB order, rotated so a swarm's successive
+    # attacks fan across distinct targets instead of all landing on the first
+    # one (#983).
+    offset = rotation % len(candidates)
+    rotated = candidates[offset:] + candidates[:offset]
+    return list(rotated[:count])
+
+
+def _select_targets(
+    entry: ThreatPoolEntry,
+    active_participants: list[CombatParticipant],
+    rotation: int = 0,
+) -> list[CombatParticipant]:
+    """Select participant targets for a threat pool entry (typed wrapper)."""
+
+    def _participant_healths(candidates: list[CombatParticipant]) -> list[int]:
         from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-        sheet_ids = [p.character_sheet_id for p in active_participants]
+        sheet_ids = [p.character_sheet_id for p in candidates]
         health_map = dict(
             CharacterVitals.objects.filter(
                 character_sheet_id__in=sheet_ids,
             ).values_list("character_sheet_id", "health")
         )
-        sorted_by_health = sorted(
-            active_participants,
-            key=lambda p: health_map.get(p.character_sheet_id, 0),
-        )
-        return sorted_by_health[:count]
+        return [health_map.get(p.character_sheet_id, 0) for p in candidates]
 
-    if selection == TargetSelection.RANDOM:
-        return random.sample(active_participants, count)
+    return _select_targets_core(entry, active_participants, _participant_healths, rotation)
 
-    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
-    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
-    # Placeholder: pick active participants by DB order, rotated so a swarm's
-    # successive attacks fan across distinct PCs instead of all landing on the
-    # first one (#983).
-    offset = rotation % len(active_participants)
-    rotated = active_participants[offset:] + active_participants[:offset]
-    return list(rotated[:count])
+
+def _select_opponent_targets(
+    entry: ThreatPoolEntry,
+    active_opponents: list[CombatOpponent],
+    rotation: int = 0,
+) -> list[CombatOpponent]:
+    """Select opponent targets for a threat pool entry (typed wrapper, #1584).
+
+    Routes an ALLY summon's attack at ENEMY opponents; opponents carry health on
+    the row, so no batch query is needed.
+    """
+    return _select_targets_core(
+        entry,
+        active_opponents,
+        lambda opps: [o.health for o in opps],
+        rotation,
+    )
 
 
 def _exclude_charmers_party(
@@ -2043,6 +2124,8 @@ def select_npc_actions(
     # Unconscious PCs (awareness 0) are "down" and not picked as targets; a
     # dying-but-conscious PC remains in the fight and is targetable. can_act is
     # the same coarse agency gate used for declaration eligibility.
+    # Intangible PCs (incorporeal, sunk, phased) are also excluded (#1584 Task 8).
+    from world.conditions.services import is_untargetable  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     candidate_participants = list(
@@ -2051,7 +2134,11 @@ def select_npc_actions(
             status=ParticipantStatus.ACTIVE,
         ).select_related("character_sheet__character")
     )
-    active_participants = [p for p in candidate_participants if can_act(p.character_sheet)]
+    active_participants = [
+        p
+        for p in candidate_participants
+        if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
+    ]
 
     actions: list[CombatOpponentAction] = []
 
@@ -2062,16 +2149,21 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        # Threat-read (#1590): consult allegiance to filter valid targets.
-        opponent_targets = _get_opponent_targets(opponent, active_participants, encounter)
-        if not opponent_targets:
+        target_pool, targeting_participants = _npc_action_target_pool(
+            opponent, active_participants, encounter
+        )
+
+        # Empty-pool guard: create no action row when the combatant has no valid
+        # target — a #1584 ALLY summon with no live enemy, or a #1590
+        # calmed/neutral opponent whose threat-read yielded no PCs.
+        if not target_pool:
             continue
 
         if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
             n_attacks = swarm_attack_count(
                 opponent.swarm_count,
                 opponent.bodies_per_attack or 1,
-                len(opponent_targets),
+                len(target_pool),
             )
         else:
             n_attacks = 1
@@ -2079,16 +2171,73 @@ def select_npc_actions(
         for attack_index in range(n_attacks):
             weights = [e.weight for e in eligible]
             chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            targets = _select_targets(chosen, opponent_targets, rotation=attack_index)
             action = CombatOpponentAction.objects.create(
                 opponent=opponent,
                 round_number=encounter.round_number,
                 threat_entry=chosen,
             )
-            action.targets.set(targets)
+            _set_npc_action_targets(
+                action,
+                chosen,
+                target_pool,
+                targeting_participants=targeting_participants,
+                rotation=attack_index,
+            )
             actions.append(action)
 
     return actions
+
+
+def _npc_action_target_pool(
+    opponent: CombatOpponent,
+    active_participants: list[CombatParticipant],
+    encounter: CombatEncounter,
+) -> tuple[list, bool]:
+    """Route an opponent's targeting by allegiance (#1584 + #1590).
+
+    Two allegiance systems compose here:
+
+    * **#1584 `CombatOpponent.allegiance`** routes an ALLY *summon* onto its
+      hostile ENEMY opponents (opponent-vs-opponent damage). Intangible opponents
+      (objectdb set, grants_intangibility active) are excluded (#1584 Task 8);
+      opponents with no objectdb are kept (they cannot be queried for it).
+    * **#1590 threat-read** (`_get_opponent_targets`) refines an ENEMY opponent's
+      PC targets — calm (NEUTRAL) yields no PCs (the empty-pool guard then makes it
+      skip the round), charm (ALLY_OF_CASTER) excludes the charmer's party.
+
+    An ENEMY opponent targets the (threat-read-filtered) PC side; an ALLY summon
+    targets ENEMY opponents. ``active_participants`` is already intangibility- and
+    can_act-filtered by ``select_npc_actions``.
+
+    Returns ``(target_pool, targeting_participants)``.
+    """
+    if opponent.allegiance == CombatAllegiance.ALLY:
+        from world.conditions.services import is_untargetable  # noqa: PLC0415
+
+        opponent_pool = [
+            opp
+            for opp in combatants_hostile_to(opponent)["opponents"]
+            if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
+        ]
+        return opponent_pool, False
+
+    # ENEMY opponent: #1590's allegiance threat-read decides the PC pool.
+    return _get_opponent_targets(opponent, active_participants, encounter), True
+
+
+def _set_npc_action_targets(
+    action: CombatOpponentAction,
+    entry: ThreatPoolEntry,
+    target_pool: list,
+    *,
+    targeting_participants: bool,
+    rotation: int,
+) -> None:
+    """Populate exactly one target relation on an NPC action (#1584)."""
+    if targeting_participants:
+        action.targets.set(_select_targets(entry, target_pool, rotation=rotation))
+    else:
+        action.opponent_targets.set(_select_opponent_targets(entry, target_pool, rotation=rotation))
 
 
 def swarm_kills(raw_damage: int, body_toughness: int) -> int:
@@ -2114,11 +2263,12 @@ def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count
     return max(1, min(raw, active_pc_count))
 
 
-def apply_damage_to_opponent(
+def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
 ) -> OpponentDamageResult:
@@ -2150,6 +2300,49 @@ def apply_damage_to_opponent(
             kills=kills,
             opponent_id=opponent.pk,
         )
+
+    # --- DAMAGE_PRE_APPLY (cancellable, amount mutable) — mirrors the participant
+    # path so reactive defences (force-field/reflect/blink) fire on NPCs and
+    # ALLY summons identically (#1584).
+    # bypass_pre_apply=True skips emit + mutation; the bounced-reflect path uses
+    # this to terminate re-emission (loop guard). ---
+    if not bypass_pre_apply:
+        if opponent.objectdb is not None and opponent.objectdb.location is not None:
+            damage_source = classify_source(
+                source_sheet.character if source_sheet is not None else None
+            )
+            pre_payload = DamagePreApplyPayload(
+                target=opponent.objectdb,
+                amount=raw_damage,
+                damage_type=damage_type,
+                source=damage_source,
+            )
+            stack = emit_event(
+                EventName.DAMAGE_PRE_APPLY,
+                pre_payload,
+                location=opponent.objectdb.location,
+            )
+            if stack.was_cancelled():
+                return OpponentDamageResult(
+                    damage_dealt=0,
+                    health_damaged=False,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    kills=0,
+                    opponent_id=opponent.pk,
+                )
+            raw_damage = pre_payload.amount
+            if raw_damage <= 0:
+                return OpponentDamageResult(
+                    damage_dealt=0,
+                    health_damaged=False,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    kills=0,
+                    opponent_id=opponent.pk,
+                )
 
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
@@ -2219,17 +2412,18 @@ def _apply_passive_technique(
     Target resolution (v1):
 
     - ``SELF`` → the actor's own character.
-    - ``ENEMY`` → every ACTIVE opponent's ``objectdb``. Mirrors
-      ``_resolve_condition_target``'s ENEMY branch, which returns ``opp.objectdb``
-      for an active opponent. Every opponent (including ephemeral CombatNPCs) is
-      created with an ObjectDB by ``add_opponent``; the FK is only nulled if the
-      ObjectDB is destroyed externally, so we skip opponents whose ``objectdb`` is
-      None — matching the focused path's None-guard.
+    - ``ENEMY`` → every ACTIVE ``allegiance=ENEMY`` opponent's ``objectdb``. An
+      ALLY summon fights on the actor's side, so enemy-targeted AoE never lands on
+      it (#1584). Mirrors ``_resolve_condition_target``'s ENEMY branch, which
+      returns ``opp.objectdb`` for an active opponent. Every opponent (including
+      ephemeral CombatNPCs) is created with an ObjectDB by ``add_opponent``; the FK
+      is only nulled if the ObjectDB is destroyed externally, so we skip opponents
+      whose ``objectdb`` is None — matching the focused path's None-guard.
     - ``ALLY`` → every ACTIVE participant except the actor.
 
-    When ``technique.combo_opening_probing`` is set, every ACTIVE opponent gains
-    that much probing (the combo-opening reward) via ``increment_probing`` — this
-    is the combo-opening effect for ephemeral opponents regardless of conditions.
+    When ``technique.combo_opening_probing`` is set, every ACTIVE ENEMY opponent
+    gains that much probing (the combo-opening reward) via ``increment_probing`` —
+    the combo-opening effect for ephemeral opponents regardless of conditions.
     """
     from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
     from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
@@ -2253,11 +2447,13 @@ def _apply_passive_technique(
         .select_related("character_sheet__character")
     )
 
-    # Combo-opening probing: granted to every active opponent independent of any
-    # condition application (the combo-opening effect for ephemeral opponents).
+    # Combo-opening probing: granted to every active ENEMY opponent independent of
+    # any condition application (the combo-opening effect for ephemeral opponents).
+    # ALLY summons are on the actor's side, so probing them is meaningless (#1584).
     if technique.combo_opening_probing:
         for opp in active_opponents:
-            increment_probing(opp, technique.combo_opening_probing)
+            if opp.allegiance == CombatAllegiance.ENEMY:
+                increment_probing(opp, technique.combo_opening_probing)
 
     # resolve_round prefetches ``..._passive__condition_applications__condition`` so
     # this ``.all()`` reads the prefetch cache (no per-passive query in the resolution
@@ -2281,7 +2477,11 @@ def _apply_passive_technique(
         if row.target_kind == ConditionTargetKind.SELF:
             targets = [actor]
         elif row.target_kind == ConditionTargetKind.ENEMY:
-            targets = [opp.objectdb for opp in active_opponents if opp.objectdb is not None]
+            targets = [
+                opp.objectdb
+                for opp in active_opponents
+                if opp.allegiance == CombatAllegiance.ENEMY and opp.objectdb is not None
+            ]
         elif row.target_kind == ConditionTargetKind.ALLY:
             targets = [ally.character_sheet.character for ally in active_allies]
         else:
@@ -2402,6 +2602,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
     damage: int,
     *,
     force_death: bool = False,
+    bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source: object | None = None,
     source_sheet: CharacterSheet | None = None,
@@ -2433,19 +2634,36 @@ def apply_damage_to_participant(  # noqa: PLR0913
     damage_source = classify_source(source)
 
     # --- DAMAGE_PRE_APPLY (cancellable, amount may be modified) ---
+    # bypass_pre_apply=True skips emit + interpose; the bounced-reflect path
+    # uses this to terminate re-emission (loop guard). pre_payload is still
+    # built so effective_damage derives from it regardless.
     pre_payload = DamagePreApplyPayload(
         target=character,
         amount=damage,
         damage_type=damage_type,
         source=damage_source,
     )
-    if room is not None:
-        stack = emit_event(
-            EventName.DAMAGE_PRE_APPLY,
-            pre_payload,
-            location=room,
-        )
-        if stack.was_cancelled():
+    if not bypass_pre_apply:
+        if room is not None:
+            stack = emit_event(
+                EventName.DAMAGE_PRE_APPLY,
+                pre_payload,
+                location=room,
+            )
+            if stack.was_cancelled():
+                return ParticipantDamageResult(
+                    damage_dealt=0,
+                    health_after=vitals.health,
+                    knockout_eligible=False,
+                    death_eligible=False,
+                    permanent_wound_eligible=False,
+                )
+
+        # A reactive interceptor (blink/reflect/force-field) that fully avoids the
+        # hit zeroes pre_payload.amount via mutation rather than CANCEL_EVENT (#1584).
+        # Short-circuit BEFORE _try_interpose so an ally is not charged interpose
+        # fatigue for blocking a hit that no longer exists.
+        if pre_payload.amount <= 0:
             return ParticipantDamageResult(
                 damage_dealt=0,
                 health_after=vitals.health,
@@ -2454,7 +2672,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
                 permanent_wound_eligible=False,
             )
 
-    _try_interpose(participant, pre_payload)
+        _try_interpose(participant, pre_payload)
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
             damage_dealt=0,
@@ -3528,16 +3746,48 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
         condition_applications.extend((target_obj, ct) for ct in conditions)
 
 
+def _resolve_npc_action_on_opponent_target(
+    target_opponent: CombatOpponent,
+    *,
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    outcome: ActionOutcome,
+) -> None:
+    """Resolve one NPC action against a single OPPONENT target (#1584 Task 7b).
+
+    Routes an ALLY summon's attack at an ENEMY opponent. Damage only — the PC
+    survivability pipeline (``process_damage_consequences``) and the threat
+    entry's ``conditions_applied`` path stay PC-only here;
+    ``apply_damage_to_opponent`` already sets ``OpponentStatus.DEFEATED``
+    internally. The summoner (``opponent.summoned_by``, a ``CharacterSheet`` or
+    ``None``) receives damage/defeat achievement credit; null-safe for
+    non-summon attackers.
+    """
+    # Mirror the participant guard: skip an escaped/defeated (non-ACTIVE) target.
+    if target_opponent.status != OpponentStatus.ACTIVE:
+        return
+
+    dmg_result = apply_damage_to_opponent(
+        target_opponent,
+        npc_action.threat_entry.base_damage,
+        damage_type=npc_action.threat_entry.damage_type,
+        source_sheet=opponent.summoned_by,
+    )
+    outcome.damage_results.append(dmg_result)
+
+
 def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
 ) -> ActionOutcome:
-    """Resolve a single NPC's action against targeted PCs.
+    """Resolve a single NPC's action against its targets.
 
-    After applying damage, processes knockout/death transitions and
-    applies any conditions from the threat entry to damaged targets.
+    Exactly one target relation is populated per action: participant ``targets``
+    (the normal PC-facing path — applies damage, knockout/death transitions, and
+    threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
+    ENEMY opponents — damage only; #1584).
     """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
 
@@ -3545,6 +3795,14 @@ def _resolve_npc_action(
         targets: list[CombatParticipant] = npc_action.cached_targets
     except AttributeError:
         targets = list(npc_action.targets.all())
+
+    try:
+        opponent_targets: list[CombatOpponent] = npc_action.cached_opponent_targets
+    except AttributeError:
+        opponent_targets = list(npc_action.opponent_targets.all())
+
+    # Exactly one relation is populated; use whichever for narration labels.
+    label_targets: list = targets or opponent_targets
 
     # Pre-fetch conditions from the threat entry
     try:
@@ -3559,7 +3817,7 @@ def _resolve_npc_action(
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
     # NPC action share one row.
-    npc_action_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_action_label = ", ".join(str(t) for t in label_targets) if label_targets else None
     _npc_interaction_cache: list[Interaction] = []
 
     def _get_npc_action_interaction() -> Interaction:
@@ -3587,6 +3845,16 @@ def _resolve_npc_action(
             get_npc_action_interaction=_get_npc_action_interaction,
         )
 
+    # Opponent-target path (#1584): an ALLY summon attacking ENEMY opponents.
+    # Damage only — no survivability pipeline, no conditions (out of scope 7b).
+    for target_opponent in opponent_targets:
+        _resolve_npc_action_on_opponent_target(
+            target_opponent,
+            opponent=opponent,
+            npc_action=npc_action,
+            outcome=outcome,
+        )
+
     # Bulk-apply all conditions from this NPC action
     if condition_applications:
         from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
@@ -3602,7 +3870,7 @@ def _resolve_npc_action(
         render_action_outcome_narration,
     )
 
-    npc_target_label = ", ".join(str(t) for t in targets) if targets else None
+    npc_target_label = ", ".join(str(t) for t in label_targets) if label_targets else None
     npc_narration = render_action_outcome_narration(
         actor_label=str(opponent),
         technique_name=npc_action.threat_entry.name,
@@ -3782,9 +4050,12 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """
     from world.vitals.services import can_act  # noqa: PLC0415
 
+    # Only ENEMY opponents block victory; an ALLY summon staying active must not
+    # keep the encounter open (#1584).
     all_opponents_down = not CombatOpponent.objects.filter(
         encounter=encounter,
         status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ENEMY,
     ).exists()
 
     active_participants = CombatParticipant.objects.filter(
@@ -3805,8 +4076,12 @@ def _classify_encounter_outcome(encounter: CombatEncounter) -> EncounterOutcome:
     2. No ACTIVE participants and at least one FLED → FLED.
     3. Else → DEFEAT (catch-all: downed ACTIVE participants, or all-REMOVED).
     """
+    # VICTORY hinges on ENEMY opponents only — an ALLY summon left standing is
+    # part of the winning side, not a reason to withhold victory (#1584).
     any_active_opponents = CombatOpponent.objects.filter(
-        encounter=encounter, status=OpponentStatus.ACTIVE
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ENEMY,
     ).exists()
     if not any_active_opponents:
         hero_killer_present = CombatOpponent.objects.filter(
@@ -3921,7 +4196,11 @@ def _broadcast_encounter_outcome(
         outcome=outcome,
         active_labels=[str(p) for p in participants if p.status == ParticipantStatus.ACTIVE],
         fled_labels=[str(p) for p in participants if p.status == ParticipantStatus.FLED],
-        defeated_opponent_labels=[o.name for o in opponents if o.status == OpponentStatus.DEFEATED],
+        defeated_opponent_labels=[
+            o.name
+            for o in opponents
+            if o.status == OpponentStatus.DEFEATED and o.allegiance == CombatAllegiance.ENEMY
+        ],
     )
     return broadcast_action_outcome(encounter=encounter, narration=narration)
 
@@ -4559,6 +4838,86 @@ def dispatch_interpose(
     )
 
 
+def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_PARAM
+    """Return the CharacterAnima row for *character*, or None if absent.
+
+    Uses the ``anima`` reverse OneToOneField relation set by
+    ``CharacterAnima.character`` (``related_name="anima"``). Mirrors the
+    accessor used by ``CombatParticipant.available_strain``.
+
+    Returns None when no CharacterAnima row exists (defensive; characters
+    without an anima pool cannot sustain reactive conditions).
+    """
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    try:
+        return CharacterAnima.objects.get(character=character)
+    except CharacterAnima.DoesNotExist:
+        return None
+
+
+def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[AvailableCombo]:
+    """Emit COMBAT_ROUND_STARTING, drain upkeep, detect combos.
+
+    Called once at the top of ``resolve_round`` after the DECLARING→RESOLVING
+    transition.  Bundles three sequential steps so the caller contributes a
+    single statement toward the ``PLR0915`` limit.
+    """
+    emit_event(
+        EventName.COMBAT_ROUND_STARTING,
+        CombatRoundStartingPayload(
+            encounter_id=enc.pk,
+            round_number=round_number,
+        ),
+        location=enc.room,
+    )
+    drain_reactive_upkeep(enc)
+    return detect_available_combos(enc, round_number)
+
+
+def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
+    """Debit per-round upkeep from each active participant's sustained conditions.
+
+    For each ACTIVE participant, for each active (not suppressed, not resolved)
+    condition with ``upkeep_anima_per_round > 0``: spend that anima from the
+    participant's ``CharacterAnima`` pool. If the participant cannot pay in
+    full, the condition lapses — its ``ConditionInstance`` row is deleted and
+    any ``Trigger`` rows on it cascade.
+
+    Participants without a ``CharacterAnima`` row are skipped (defensive; they
+    cannot sustain reactive conditions without an anima pool).
+
+    Anima is written at most once per participant (after the inner loop) so that
+    a round with N sustained conditions produces a single UPDATE rather than N.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    parts = CombatParticipant.objects.filter(
+        encounter=encounter, status=ParticipantStatus.ACTIVE
+    ).select_related("character_sheet__character")
+    for part in parts:
+        char = part.character_sheet.character
+        anima = _get_anima(char)
+        if anima is None:
+            continue
+        instances = ConditionInstance.objects.filter(
+            target=char,
+            is_suppressed=False,
+            resolved_at__isnull=True,
+            condition__upkeep_anima_per_round__gt=0,
+        ).select_related("condition")
+        remaining = anima.current
+        for inst in instances:
+            cost = inst.condition.upkeep_anima_per_round
+            if remaining >= cost:
+                remaining -= cost
+            else:
+                inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+        if remaining != anima.current:
+            anima.current = remaining
+            anima.save(update_fields=["current"])
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -4626,8 +4985,8 @@ def resolve_round(
     round_number = enc.round_number
     result = RoundResolutionResult(round_number=round_number)
 
-    # --- Combo detection (informational — upgrades happen in DECLARING) ---
-    result.available_combos = detect_available_combos(encounter, round_number)
+    # --- Round-start lifecycle: emit event, drain upkeep, detect combos ---
+    result.available_combos = _fire_round_start(enc, round_number)
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
@@ -4672,6 +5031,11 @@ def resolve_round(
                     "character_sheet",
                 ),
                 to_attr="cached_targets",
+            ),
+            Prefetch(
+                "opponent_targets",
+                queryset=CombatOpponent.objects.all(),
+                to_attr="cached_opponent_targets",
             ),
             Prefetch(
                 "threat_entry__conditions_applied",

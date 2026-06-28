@@ -59,3 +59,25 @@ _Avoid_: main action, primary (use "focused" specifically)
 **Secondary action**:
 A supporting action a PC takes alongside the focused action (physical and/or social), up to two per round. The non-focused action type.
 _Avoid_: passive
+
+**Allegiance**:
+Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or `ALLY`
+(fights for the party). Allegiance is mutable: a summon spell creates an ALLY opponent; future
+charm / switch-sides effects flip an existing ENEMY to ALLY. Both cases use the same field on
+the same model; no parallel model is needed (ADR-0059).
+_Avoid_: faction, team, side (as model names)
+
+**Summon**:
+An ALLY `CombatOpponent` conjured during combat by a technique. It has `allegiance=ALLY`,
+`summoned_by` (FK → `CharacterSheet`), and `bond_expires_round`; it attacks ENEMY opponents
+via `CombatOpponentAction.opponent_targets`. "Summon" means this specific bonded ALLY; the
+general concept of a combat companion is "ally combatant".
+_Avoid_: familiar, pet, companion (for the in-combat summon row specifically)
+
+**Reactive interceptor**:
+A mutation-only `DAMAGE_PRE_APPLY` flow handler that can reduce or nullify an incoming hit —
+force-field (absorb_pool, priority 10), reflect (reflect_damage, priority 20), or blink
+(blink_dodge, priority 30). Each sets `payload.amount = 0` on success; lower-priority
+interceptors guard `if payload.amount <= 0: return`. Cost: `reactive_anima_cost` per fire;
+can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0060).
+_Avoid_: cancel-event interceptor, reactive cancel, shield handler

@@ -10,6 +10,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 
 from actions.constants import ActionTargetType
+from world.conditions.services import is_untargetable
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
 from world.scenes.models import Persona, Scene
@@ -200,6 +201,8 @@ def resolve_targets(
         initiator_persona=initiator_persona,
         scene_personas=scene_personas,
     )
+    # Exclude intangible targets — they are untargetable regardless of technique type.
+    eligible = [p for p in eligible if not is_untargetable(p.character_sheet.character)]
 
     if target_type == ActionTargetType.AREA:
         return eligible

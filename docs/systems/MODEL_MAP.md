@@ -860,6 +860,7 @@
   - mentor_bonds_as_sidekick <- covenants.MentorBond
   - vitals <- vitals.CharacterVitals
   - duels_won <- combat.CombatEncounter
+  - summoned_combatants <- combat.CombatOpponent
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
@@ -1370,6 +1371,7 @@
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool — Return True if the character has any active condition granting death_deferred.`
+- `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`

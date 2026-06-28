@@ -1,1 +1,1 @@
-0010_conditioninstance_abandoned_since_round
+0011_conditioncategory_grants_intangibility_and_more
