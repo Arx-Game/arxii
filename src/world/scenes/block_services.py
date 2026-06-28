@@ -267,17 +267,27 @@ def create_block(
         msg = "You cannot block your own character."
         raise ValidationError(msg)
 
-    block, _ = Block.objects.get_or_create(
+    block, created = Block.objects.get_or_create(
         owner=blocker_player,
         blocked_player=blocked_player,
         blocker_persona=blocker_persona,
         blocked_persona=blocked_persona,
         defaults={"reason": reason, "account_level": False, "pending_removal_at": None},
     )
+    # ``defaults`` only apply on INSERT (the django_get_or_create gotcha). On a re-block (the row
+    # already exists — the real path being a re-block within the unblock grace window) refresh the
+    # staff-facing ``reason`` to the latest one rather than silently keeping the stale one (#1326).
+    # (``account_level`` staleness on re-block is a deliberate player-intent question — left as-is.)
+    update_fields: list[str] = []
+    if not created and block.reason != reason:
+        block.reason = reason
+        update_fields.append("reason")
     # Re-blocking a pair mid-grace cancels the pending removal (it's active again).
     if block.pending_removal_at is not None:
         block.pending_removal_at = None
-        block.save(update_fields=["pending_removal_at"])
+        update_fields.append("pending_removal_at")
+    if update_fields:
+        block.save(update_fields=update_fields)
     return block
 
 
