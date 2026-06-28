@@ -5,6 +5,11 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import apply_condition, remove_condition
 from world.forms.factories import (
     AlternateSelfFactory,
     BuildFactory,
@@ -657,3 +662,46 @@ class RevertAlternateSelfTests(TestCase):
             active = assume_alternate_self(self.sheet, alt_self)
 
         self.assertEqual(active.alternate_self, alt_self)
+
+    def test_revert_no_orphaned_source_for_persona_only_alt_self(self):
+        persona = PersonaFactory(character_sheet=self.sheet)
+        alt_self = AlternateSelfFactory(
+            character=self.sheet,
+            persona=persona,
+            form=None,
+            combat_profile=None,
+        )
+        before = ModifierSource.objects.count()
+
+        assume_alternate_self(self.sheet, alt_self)
+        self.assertEqual(ModifierSource.objects.count(), before)
+
+        revert_alternate_self(self.sheet)
+        self.assertEqual(ModifierSource.objects.count(), before)
+
+    def test_revert_unblocked_after_alters_behavior_condition_removed(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, form=self.alt_form)
+        assume_alternate_self(self.sheet, alt_self)
+
+        category = ConditionCategoryFactory(alters_behavior=True)
+        condition = ConditionTemplateFactory(category=category)
+        apply_condition(self.sheet.character, condition)
+
+        # The sheet-level cache is stale until invalidated.
+        self.sheet.__dict__.pop("in_control", None)
+        self.assertIs(self.sheet.in_control, False)
+
+        with self.assertRaises(RevertBlockedError):
+            revert_alternate_self(self.sheet)
+
+        remove_condition(self.sheet.character, condition)
+
+        self.sheet.__dict__.pop("in_control", None)
+        self.assertIs(self.sheet.in_control, True)
+
+        revert_alternate_self(self.sheet)
+
+        state = CharacterFormState.objects.get(character=self.character)
+        self.assertEqual(state.active_form, self.true_form)
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        self.assertIsNone(active.alternate_self)

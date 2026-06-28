@@ -252,6 +252,10 @@ class CurrentLevelTests(TestCase):
         CharacterClassLevelFactory(character=sheet.character, level=7)
         self.assertEqual(sheet.current_level, 5, "Cached value should persist")
 
+        # Invalidate and confirm the cache re-derives the new higher value.
+        sheet.invalidate_class_level_cache()
+        self.assertEqual(sheet.current_level, 7)
+
 
 class InControlPropertyTests(TestCase):
     """Tests for CharacterSheet.in_control derived property (slice 4)."""

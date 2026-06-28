@@ -27,6 +27,7 @@ from world.mechanics.models import CharacterModifier, ModifierSource
 from world.species.models import Species
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
 
 
@@ -113,8 +114,44 @@ def revert_to_true_form(character) -> None:
     switch_form(character, true_form)
 
 
+def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> None:
+    """Create the stat-suite and ability-suite grants for an assumed alt-self.
+
+    One ``ModifierSource`` owns both the ``CharacterModifier`` rows (CASCADE)
+    and any granted ``CharacterTechnique`` rows. A persona-only/form-only
+    alt-self has no granted rows, so no source is created (and revert deletes
+    none). Permanently-known techniques (existing rows with ``source=None``)
+    are left untouched by the stacking guard.
+    """
+    profile = alt.combat_profile
+    has_techniques = alt.techniques.exists()
+    if profile is None and not has_techniques:
+        return
+
+    source = ModifierSource.objects.create(form_combat_profile=profile)
+
+    # Stat-suite.
+    if profile is not None:
+        for effect in profile.effects.all():
+            CharacterModifier.objects.create(
+                character=sheet,
+                target=effect.target,
+                value=effect.value,
+                source=source,
+            )
+
+    # Ability-suite with stacking guard.
+    if has_techniques:
+        for technique in alt.techniques.all():
+            CharacterTechnique.objects.get_or_create(
+                character=sheet,
+                technique=technique,
+                defaults={"source": source},
+            )
+
+
 @transaction.atomic
-def assume_alternate_self(sheet, alt: AlternateSelf) -> ActiveAlternateSelf:
+def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAlternateSelf:
     """Assume an alternate self — swap in form/persona facets, create the
     stat-suite (ModifierSource + CharacterModifier rows) and ability-suite
     (source-tagged CharacterTechnique rows), set return anchors.
@@ -173,29 +210,7 @@ def assume_alternate_self(sheet, alt: AlternateSelf) -> ActiveAlternateSelf:
     if alt.persona is not None:
         set_active_persona(sheet, alt.persona)
 
-    # One source owns both the stat-suite and the ability-suite grants.
-    source = ModifierSource.objects.create(form_combat_profile=alt.combat_profile)
-
-    # Stat-suite.
-    profile = alt.combat_profile
-    if profile is not None:
-        for effect in profile.effects.all():
-            CharacterModifier.objects.create(
-                character=sheet,
-                target=effect.target,
-                value=effect.value,
-                source=source,
-            )
-
-    # Ability-suite with stacking guard: permanently-known techniques keep
-    # source=None and are not duplicated.
-    if alt.techniques.exists():
-        for technique in alt.techniques.all():
-            CharacterTechnique.objects.get_or_create(
-                character=sheet,
-                technique=technique,
-                defaults={"source": source},
-            )
+    _create_assumption_grants(sheet, alt)
 
     active.alternate_self = alt
     active.save(update_fields=["alternate_self", "return_form", "return_persona"])
@@ -203,7 +218,7 @@ def assume_alternate_self(sheet, alt: AlternateSelf) -> ActiveAlternateSelf:
 
 
 @transaction.atomic
-def revert_alternate_self(sheet) -> None:
+def revert_alternate_self(sheet: CharacterSheet) -> None:
     """Revert the active alternate self — restore return anchors, delete the
     granted stat-suite and ability-suite rows.
 
@@ -226,6 +241,15 @@ def revert_alternate_self(sheet) -> None:
     if active.alternate_self_id is None:
         raise ValueError(_NO_ACTIVE_ALT_SELF_MSG)
 
+    # Force a fresh derivation of in_control — it's a cached_property on the
+    # sheet instance and condition mutation services invalidate only the
+    # conditions handler, not this sheet-level cache. Without this, a caller
+    # holding the sheet across a condition change (rage clears → revert
+    # unblocks, the decoupled flow) could read a stale in_control=False and
+    # stay blocked forever. Re-deriving here makes revert's gate always
+    # reflect current condition state.
+    sheet.__dict__.pop("in_control", None)
+
     if not sheet.in_control:
         raise RevertBlockedError
 
@@ -241,21 +265,16 @@ def revert_alternate_self(sheet) -> None:
 
     # Delete the assumption source(s). Because CharacterTechnique.source is
     # SET_NULL, deleting the source alone would NULL out granted techniques and
-    # turn temporary grants permanent; delete granted rows first.
+    # turn temporary grants permanent; delete granted rows first. Symmetric with
+    # assume: a source exists only when profile or techniques were granted.
     alt = active.alternate_self
     if alt.combat_profile is not None:
-        sources = ModifierSource.objects.filter(form_combat_profile=alt.combat_profile).distinct()
+        sources = ModifierSource.objects.filter(form_combat_profile=alt.combat_profile)
     elif alt.techniques.exists():
-        # Profile-less technique grants: identify the source by the
-        # techniques it granted to this character.
-        sources = (
-            ModifierSource.objects.filter(
-                granted_techniques__character=sheet,
-                granted_techniques__technique__in=alt.techniques.all(),
-            )
-            .distinct()
-            .iterator()
-        )
+        sources = ModifierSource.objects.filter(
+            granted_techniques__character=sheet,
+            granted_techniques__technique__in=alt.techniques.all(),
+        ).distinct()
     else:
         sources = ModifierSource.objects.none()
 
