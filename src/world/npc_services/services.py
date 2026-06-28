@@ -623,6 +623,31 @@ def resolve_offer(
 
 
 @transaction.atomic
+def adjust_npc_affection(pc_persona, npc_persona, *, delta: int) -> int:
+    """Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.
+
+    Reuses the same ``update_or_create`` flush as ``end_interaction`` (no fork —
+    ADR-0016). Creates the row at affection=0 if absent, then applies the delta.
+    Returns the new affection value. No-op-safe for delta=0.
+    """
+    if delta == 0:
+        standing, _ = NPCStanding.objects.get_or_create(
+            persona=pc_persona,
+            npc_persona=npc_persona,
+            defaults={"affection": 0},
+        )
+        return standing.affection
+    standing, _ = NPCStanding.objects.get_or_create(
+        persona=pc_persona,
+        npc_persona=npc_persona,
+        defaults={"affection": 0},
+    )
+    standing.affection += delta
+    standing.save(update_fields=["affection"])
+    return standing.affection
+
+
+@transaction.atomic
 def end_interaction(session: InteractionSession) -> None:
     """Close the session and persist final affection for class 2-4 NPCs.
 
