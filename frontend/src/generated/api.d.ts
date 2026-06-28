@@ -11856,6 +11856,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/visibility-settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the active character's current ``appear_offline`` value. */
+    get: operations['roster_visibility_settings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set the active character's ``appear_offline`` (quiet/hidden mode). */
+    patch: operations['roster_visibility_settings_partial_update'];
+    trace?: never;
+  };
   '/api/scenes/': {
     parameters: {
       query?: never;
@@ -22579,6 +22597,16 @@ export interface components {
     PatchedUpdateBulletinReplyInputRequest: {
       body?: string;
     };
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    PatchedVisibilitySettingsRequest: {
+      appear_offline?: boolean;
+    };
     /** @description Serializer for Path in CG context. */
     Path: {
       readonly id: number;
@@ -26181,6 +26209,16 @@ export interface components {
      * @enum {string}
      */
     VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    VisibilitySettings: {
+      appear_offline: boolean;
+    };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {
       physical: components['schemas']['FatiguePoolStatus'];
@@ -43554,6 +43592,48 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterTenureLookup'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedVisibilitySettingsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
         };
       };
     };

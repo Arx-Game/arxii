@@ -19929,6 +19929,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/RosterTenureLookup'
           description: ''
+  /api/roster/visibility-settings/:
+    get:
+      operationId: roster_visibility_settings_retrieve
+      description: Return the active character's current ``appear_offline`` value.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
+          description: ''
+    patch:
+      operationId: roster_visibility_settings_partial_update
+      description: Set the active character's ``appear_offline`` (quiet/hidden mode).
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVisibilitySettingsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
+          description: ''
   /api/scenes/:
     get:
       operationId: scenes_list
@@ -40276,6 +40310,17 @@ components:
         body:
           type: string
           minLength: 1
+    PatchedVisibilitySettingsRequest:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
     Path:
       type: object
       description: Serializer for Path in CG context.
@@ -47702,6 +47747,19 @@ components:
         * `shared` - Shared
         * `gossip` - Gossip
         * `public` - Public
+    VisibilitySettings:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
+      required:
+      - appear_offline
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

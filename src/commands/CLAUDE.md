@@ -267,6 +267,9 @@ actions, backends, and service functions.
   toggles persistent quiet mode (`TenureDisplaySettings.appear_offline` via
   `world.roster.services.display.set_appear_offline`): off where/who + unpageable except the
   caller's `PlayerAllowList`. Viewer-scoping lives in the presence services + `CmdPage`'s gate.
+  The **web equivalent** is `GET`/`PATCH /api/roster/visibility-settings/`
+  (`roster.views.settings_views.VisibilitySettingsView`, #1484) — same `set_appear_offline` write,
+  scoped to the player's active character; the toggle lives on the frontend `SettingsPage`.
 - **`fatigue.py`**: `CmdRest` (`rest`, #1491) — telnet face of `RestAction`. Spend AP to become
   Well-Rested; thin REGISTRY command that delegates directly to `actions.definitions.fatigue.RestAction`.
 - **`sanctum.py`**: `CmdSanctum` (`sanctum`, #1497) — the sanctum-management namespace. One
