@@ -2,6 +2,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.tests.resolution_helpers import make_paused_resolution, make_resolution
+
 
 class ActionTemplateEntryFlourishFieldTest(TestCase):
     def test_entrance_template_grants_entry_flourish(self):
@@ -34,50 +36,6 @@ class EntranceActionDispatchTest(TestCase):
         from evennia_extensions.factories import ObjectDBFactory
 
         return ObjectDBFactory(db_key="DispatchTestActor")
-
-    def _resolution(self, success_level: int):
-        """Build a real ``PendingActionResolution`` whose main step rolled ``success_level``.
-
-        This is what ``start_action_resolution`` actually returns — the load-bearing
-        ``main_result.check_result.success_level`` branch is exercised for real, instead
-        of a stand-in ``ActionResult`` that only happened to expose ``.success`` (#1245).
-        """
-        from actions.types import PendingActionResolution, StepResult
-        from world.checks.types import CheckResult
-
-        check_result = CheckResult(
-            check_type=MagicMock(),
-            outcome=MagicMock(success_level=success_level),
-            chart=None,
-            roller_rank=None,
-            target_rank=None,
-            rank_difference=0,
-            trait_points=0,
-            aspect_bonus=0,
-            total_points=0,
-        )
-        step = StepResult(step_label="main", check_result=check_result, consequence_id=None)
-        return PendingActionResolution(
-            template_id=0,
-            character_id=0,
-            target_difficulty=0,
-            resolution_context_data={},
-            current_phase="main",
-            main_result=step,
-        )
-
-    def _paused_resolution(self):
-        """Build a ``PendingActionResolution`` whose main step has not rolled yet."""
-        from actions.types import PendingActionResolution
-
-        return PendingActionResolution(
-            template_id=0,
-            character_id=0,
-            target_difficulty=0,
-            resolution_context_data={},
-            current_phase="gate",
-            main_result=None,
-        )
 
     def _make_entrance_template(self, grants_entry_flourish: bool):
         """Create and return an ActionTemplate for Entrance."""
@@ -118,7 +76,7 @@ class EntranceActionDispatchTest(TestCase):
         with (
             patch(
                 "actions.services.start_action_resolution",
-                return_value=self._resolution(success_level=1),
+                return_value=make_resolution(1),
             ),
             self._location_patch(actor, fake_location),
             patch(
@@ -149,7 +107,7 @@ class EntranceActionDispatchTest(TestCase):
         with (
             patch(
                 "actions.services.start_action_resolution",
-                return_value=self._resolution(success_level=0),
+                return_value=make_resolution(0),
             ),
             self._location_patch(actor, fake_location),
             patch(
@@ -180,7 +138,7 @@ class EntranceActionDispatchTest(TestCase):
         with (
             patch(
                 "actions.services.start_action_resolution",
-                return_value=self._paused_resolution(),
+                return_value=make_paused_resolution(),
             ),
             self._location_patch(actor, fake_location),
             patch(
@@ -207,7 +165,7 @@ class EntranceActionDispatchTest(TestCase):
         with (
             patch(
                 "actions.services.start_action_resolution",
-                return_value=self._resolution(success_level=1),
+                return_value=make_resolution(1),
             ),
             self._location_patch(actor, fake_location),
             patch(
