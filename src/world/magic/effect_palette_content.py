@@ -4,10 +4,13 @@ Tasks 14a, 14b, 14c — idempotent ``ensure_*_content()`` builders.
 
 Task 14a — "Summon Spirit" technique → CONDITION_APPLIED → ``summon_ally``.
 
-Task 14b — Three DAMAGE_PRE_APPLY reactive techniques:
+Task 14b — Three DAMAGE_PRE_APPLY reactive techniques. All mutation-only: each handler
+sets ``payload.amount = 0`` on success and lower-priority interceptors guard on
+``payload.amount <= 0`` (no CANCEL_EVENT — it would fire on the anima-cost fizzle path
+too; see #1584 Task 16):
 * ``ensure_force_field_content()`` — Aegis Field (absorb_pool, priority 10).
-* ``ensure_reflect_content()`` — Mirror Ward (reflect_damage, priority 20, CANCEL_EVENT).
-* ``ensure_blink_content()`` — Phase Step (blink_dodge, priority 30, CANCEL_EVENT).
+* ``ensure_reflect_content()`` — Mirror Ward (reflect_damage, priority 20).
+* ``ensure_blink_content()`` — Phase Step (blink_dodge, priority 30).
 
 Task 14c — Five simple effect techniques + the unified entry point:
 * ``ensure_teleport_content()``   — Phase Jump (SELF): CONDITION_APPLIED → move_position.
