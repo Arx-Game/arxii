@@ -342,8 +342,9 @@ def blink_dodge(*, payload: Any) -> None:
     - Sets ``payload.amount = 0`` (full avoidance).
 
     Fizzles silently when the bearer cannot afford the cost — attack lands unchanged.
-    The CANCEL_EVENT flow step (Task 14) stops lower-priority handlers; this
-    handler only zeros the payload.
+    Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
+    interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
+    is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).
     """
     if payload.amount <= 0:
         return

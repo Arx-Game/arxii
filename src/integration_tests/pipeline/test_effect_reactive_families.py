@@ -56,8 +56,10 @@ class BlinkDodgeReactiveE2ETests(TestCase):
     """Phase Step blink_dodge fires at priority 30 — full damage avoidance.
 
     SQLite-safe: condition installed via _install_reactive_side_effects, NOT
-    apply_condition. The flow has a CANCEL_EVENT child step that stops all
-    lower-priority interceptors after a successful blink.
+    apply_condition. Mutation-only: a successful blink sets payload.amount=0, which
+    zeroes the damage and makes lower-priority interceptors no-op (they guard on
+    payload.amount<=0). No CANCEL_EVENT — see #1584 Task 16 (it would fire even on
+    the anima-cost fizzle path).
     """
 
     def setUp(self) -> None:
@@ -149,11 +151,11 @@ class BlinkDodgeReactiveE2ETests(TestCase):
             self.participant, 30, damage_type=None, source=self.enemy
         )
 
-        # Attack should be fully avoided (CANCEL_EVENT stops the stack)
+        # Attack fully avoided: blink sets payload.amount=0 (mutation-only)
         self.assertEqual(
             result.damage_dealt,
             0,
-            "blink_dodge + CANCEL_EVENT should zero damage_dealt",
+            "blink_dodge should zero damage_dealt (payload.amount=0)",
         )
 
         # Bearer should have relocated (flavor: any position != pos_a)
@@ -191,8 +193,9 @@ class BlinkDodgeReactiveE2ETests(TestCase):
 class ReflectDamageReactiveE2ETests(TestCase):
     """Mirror Ward reflect_damage fires at priority 20 — bounce back to attacker.
 
-    SQLite-safe: installed via _install_reactive_side_effects. The flow has a
-    CANCEL_EVENT child step. The enemy CombatOpponent is passed as ``source`` so
+    SQLite-safe: installed via _install_reactive_side_effects. Mutation-only:
+    reflect_damage sets payload.amount=0 on success (no CANCEL_EVENT, #1584 Task 16).
+    The enemy CombatOpponent is passed as ``source`` so
     reflect_damage can apply_damage_to_opponent with bypass_pre_apply=True.
     """
 
@@ -266,11 +269,11 @@ class ReflectDamageReactiveE2ETests(TestCase):
             self.participant, 20, damage_type=None, source=self.enemy
         )
 
-        # Bearer should be unharmed (CANCEL_EVENT stops after reflect)
+        # Bearer unharmed: reflect sets payload.amount=0 (mutation-only)
         self.assertEqual(
             result.damage_dealt,
             0,
-            "reflect_damage + CANCEL_EVENT should zero bearer's damage_dealt",
+            "reflect_damage should zero bearer's damage_dealt (payload.amount=0)",
         )
 
         # Enemy should have taken the bounced damage

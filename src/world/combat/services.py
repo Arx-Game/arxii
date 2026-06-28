@@ -2600,6 +2600,19 @@ def apply_damage_to_participant(  # noqa: PLR0913
                     permanent_wound_eligible=False,
                 )
 
+        # A reactive interceptor (blink/reflect/force-field) that fully avoids the
+        # hit zeroes pre_payload.amount via mutation rather than CANCEL_EVENT (#1584).
+        # Short-circuit BEFORE _try_interpose so an ally is not charged interpose
+        # fatigue for blocking a hit that no longer exists.
+        if pre_payload.amount <= 0:
+            return ParticipantDamageResult(
+                damage_dealt=0,
+                health_after=vitals.health,
+                knockout_eligible=False,
+                death_eligible=False,
+                permanent_wound_eligible=False,
+            )
+
         _try_interpose(participant, pre_payload)
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
