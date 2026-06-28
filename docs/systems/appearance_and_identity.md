@@ -228,7 +228,7 @@ path copies a descriptor from a sibling persona.
 | Trait **mutability** tag | **ABSENT** | small new flag on `FormTrait` |
 | Natural baseline + change log | **ABSENT** | new |
 | Two-slot active state (`current_real_form` + `active_fake_overlay`) | **BUILT (#1110)** | `forms.CharacterFormState.active_form` (real) + `active_fake_overlay` + `overlay_kind` (`DisguiseKind`); `apply_disguise`/`remove_disguise`; `get_presented_appearance(pierced=)` swaps the overlay in unless pierced (the pierce *contest* stays the senior dev's) |
-| Single render composition (gated by viewer) | **NOT WIRED** | rendering ignores both active pointers; reads TRUE form |
+| Single render composition (gated by viewer) | **PARTLY WIRED (#1325)** | scalar fields ARE viewer-gated: `_build_appearance` exposes exact `height_inches` only to owner/staff (others get the coarse `height_band` label via `get_height_band`) and shows the free-text `description` only when `reveal_identity`; form-trait *overlay* selection still reads the TRUE form (ignores `active_fake_overlay`) — that part remains not wired |
 
 **Consolidation to ratify:** retire the legacy `Characteristic` path for skin/eye/hair
 so `FormTrait` is the single home (kills the telnet-vs-web duplication).
