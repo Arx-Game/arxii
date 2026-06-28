@@ -1928,7 +1928,7 @@ def _select_targets_core(
         return sorted_by_health[:count]
 
     if selection == TargetSelection.RANDOM:
-        return random.sample(candidates, count)
+        return random.sample(candidates, count)  # NOSONAR game RNG (combat targeting), not crypto
 
     # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
     # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
