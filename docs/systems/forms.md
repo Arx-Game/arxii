@@ -155,6 +155,16 @@ and the web share the same `action.run()` path:
 - `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
   Catches `RevertBlockedError` and surfaces `exc.user_message` as a failure result.
 
+### Telnet surface
+
+- `form` / `form list` — status hub: shows current alternate self (or true self),
+  available alternate selves, and whether revert is blocked while not in control.
+- `form shift <name|id>` — assume a named alternate self.
+- `form revert` — revert to the true self.
+
+Implemented in `commands/form.py` as `CmdForm`; routes through
+`dispatch_player_action` to the same REGISTRY actions the web uses.
+
 The decoupling of control from the shift and the stacking guard are documented in
 [`appearance_and_identity.md`](appearance_and_identity.md).
 

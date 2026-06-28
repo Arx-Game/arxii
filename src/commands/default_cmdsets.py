@@ -67,6 +67,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.events import CmdEvent
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
+from commands.form import CmdForm
 from commands.gemit import CmdGemit
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
@@ -249,6 +250,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdComfort,
             # #1522 — IC time + local weather readout (`time`/`weather`).
             CmdTime,
+            # #1111 — form shift/revert telnet namespace for alternate selves.
+            CmdForm,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
             # Training allocation and unlock purchase telnet surfaces.

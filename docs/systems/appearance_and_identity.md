@@ -85,6 +85,11 @@ artist changes persona with an *identical* body; a curse changes the body and
   **Scope boundary:** the pose/sdesc read-path (`record_interaction` /
   `_characters_to_active_personas`) is **not** changed here — making poses reflect the
   presented persona (with privacy/discovery/freeze) is **#1109**'s scope.
+- **Telnet `form` namespace** (`commands/form.py`, #1111 slice 4) — `form list` shows
+  the active alternate self, the available alternate selves, and whether revert is
+  blocked; `form shift <name|id>` triggers `ShiftFormAction`; `form revert` triggers
+  `RevertFormAction`. All dispatch through `dispatch_player_action`, converging with
+  the web form dispatcher on the same action seam.
 
 ## Layer 2 — Form (physical body, REAL)
 
