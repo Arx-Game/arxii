@@ -383,6 +383,16 @@ def install_cancel_damage_trigger(objectdb: object) -> None:
         source_condition=None,
     )
 
+    # Make the just-installed trigger visible to the next emit_event dispatch in
+    # this transaction. A Trigger save notifies the handler via on_trigger_added,
+    # whose cache reset is transaction.on_commit-deferred — and on_commit never
+    # fires inside a rolled-back TestCase, so the trigger would stay invisible and
+    # the cancel would not fire. Refresh synchronously (the #1584 / resolve_round
+    # pattern).
+    handler = getattr(objectdb, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    if handler is not None:
+        handler.refresh()
+
 
 # =============================================================================
 # Scope 6 §8.3 — Aftermath condition factories
