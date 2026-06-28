@@ -1322,6 +1322,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
+- `ensure_conditions_content() -> None — Idempotently seed all core conditions content.`
 - `ensure_poison_content() -> None — Idempotently seed poison content (#1050).`
 - `expire_end_of_combat_conditions(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionTemplate] — Remove all UNTIL_END_OF_COMBAT conditions from the given targets.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
@@ -3034,6 +3035,7 @@
   - building_kind -> buildings.BuildingKind [FK] (nullable)
 
 ### Service Functions
+- `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
 - `dispatch_offer_effect(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Look up the registered handler for ``offer.kind`` and invoke it.`
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
@@ -3854,6 +3856,8 @@
 ### Service Functions
 - `active_persona_for_sheet(sheet: 'CharacterSheet') -> 'Persona' — The face a character is currently presenting as (#981).`
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
+- `create_mask(sheet: 'CharacterSheet', *, name: 'str', disguise_form: 'CharacterForm | None' = None, disguise_kind: 'str | None' = None) -> 'Persona' — Create a TEMPORARY anonymous **mask** — the "put on a mask" path (#1127).`
+- `create_persona(sheet: 'CharacterSheet', *, name: 'str', persona_type: 'str', is_fake_name: 'bool' = False, bypass_cap: 'bool' = False) -> 'Persona' — Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).`
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`

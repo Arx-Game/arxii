@@ -529,7 +529,7 @@ point calls all nine sub-builders:
 
 | Effect | Condition name | Handler / mechanism | Note |
 |--------|---------------|---------------------|------|
-| Summon Spirit | Summoning | `summon_ally_on_condition` adapter → `summon_ally` | CONDITION_APPLIED; creates an ALLY `CombatOpponent` (ADR-0058) |
+| Summon Spirit | Summoning | `summon_ally_on_condition` adapter → `summon_ally` | CONDITION_APPLIED; creates an ALLY `CombatOpponent` (ADR-0059) |
 | Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
 | Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
 | Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
@@ -558,7 +558,7 @@ picks a position) is deferred to a follow-up issue.
 | `summon_ally_on_condition(*, payload, threat_pool_id, ...)` | CONDITION_APPLIED adapter | Bridges `ConditionAppliedPayload` (`.target` as bearer/caster) → `summon_ally` |
 | `init_absorb_buffer(*, payload, buffer)` | CONDITION_APPLIED handler | Seeds `ConditionInstance.absorb_remaining` on Aegis Field application |
 
-**Reactive interceptor cost pattern** (ADR-0059):
+**Reactive interceptor cost pattern** (ADR-0060):
 
 - `ConditionTemplate.reactive_anima_cost` — anima spent per fire; can't pay → fizzle,
   attack lands.

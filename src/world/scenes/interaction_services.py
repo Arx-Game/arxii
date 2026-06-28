@@ -35,12 +35,14 @@ DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
 
 
-def _get_active_scene(location: ObjectDB | None) -> Scene | None:
-    """Get the active scene for a location, with in-memory caching.
+def get_active_scene(location: ObjectDB | None) -> Scene | None:
+    """The location → active-scene resolver, with in-memory caching (#1370).
 
-    Caches the result on the location object (which persists in memory via
-    SharedMemoryModel's identity map). Invalidated by
-    invalidate_active_scene_cache() when a scene starts or ends.
+    The single public entry point for deriving the scene at a room — shared by the say/pose
+    recorders and the telnet scene-derivation commands (consent / endorse / react / etc.), so
+    they never hand-roll a parallel ``Scene.objects.filter(...)`` query. Caches the result on
+    the location object (which persists in memory via SharedMemoryModel's identity map);
+    invalidated by ``invalidate_active_scene_cache()`` when a scene starts or ends.
     """
     if location is None:
         return None
@@ -652,7 +654,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         return None
 
     if scene is None:
-        scene = _get_active_scene(character.location)
+        scene = get_active_scene(character.location)
 
     # Ephemeral scenes: push in real-time but never persist
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
@@ -715,7 +717,7 @@ def record_whisper_interaction(
     except ObjectDoesNotExist:
         return None
 
-    scene = _get_active_scene(character.location)
+    scene = get_active_scene(character.location)
 
     # Ephemeral scenes: push in real-time but never persist
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:

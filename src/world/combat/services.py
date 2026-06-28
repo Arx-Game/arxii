@@ -112,6 +112,7 @@ from world.combat.types import (
     PreparedClashContribution,
     RoundResolutionResult,
 )
+from world.conditions.constants import Allegiance
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
@@ -1978,6 +1979,56 @@ def _select_opponent_targets(
     )
 
 
+def _exclude_charmers_party(
+    opponent: CombatOpponent, participants: list[CombatParticipant]
+) -> list[CombatParticipant]:
+    """Return ``participants`` minus the charm source's party (#1590).
+
+    The charmer is the ``source_character`` on the opponent's active Charm
+    condition. If it resolves to an active ``CombatParticipant``, exclude it.
+    MVP: parties are 1:1 with participants (no party grouping yet), so we
+    exclude the single charmer participant. If the source is unresolvable
+    (no ``source_character`` on the Charm, or the charmer left the encounter),
+    the charmed NPC has no party to fight for — returning ``[]`` so the caller
+    skips the round is intentional (NOT a fall-back to ENEMY: a charmed NPC
+    must never attack the charmer's side even if the charmer is gone).
+    """
+    from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    if opponent.objectdb_id is None:
+        return participants
+    charmer_pk = None
+    for inst in get_active_conditions(opponent.objectdb):
+        if inst.condition.name == CHARM_CONDITION_NAME and inst.source_character_id is not None:
+            charmer_pk = inst.source_character_id
+            break
+    if charmer_pk is None:
+        return []
+    return [p for p in participants if p.character_sheet.character_id != charmer_pk]
+
+
+def _get_opponent_targets(
+    opponent: CombatOpponent,
+    active_participants: list[CombatParticipant],
+    encounter: CombatEncounter,
+) -> list[CombatParticipant]:
+    """Return the PCs an NPC is allowed to target after consulting allegiance.
+
+    Calm (``NEUTRAL``) returns an empty list so the NPC skips the round.
+    Charm (``ALLY_OF_CASTER``) excludes the charmer's party. Everything else
+    returns the full active participant list (#1590).
+    """
+    from world.npc_services.allegiance import derive_allegiance  # noqa: PLC0415
+
+    allegiance = derive_allegiance(opponent, encounter)
+    if allegiance == Allegiance.NEUTRAL:
+        return []
+    if allegiance == Allegiance.ALLY_OF_CASTER:
+        return _exclude_charmers_party(opponent, list(active_participants))
+    return list(active_participants)
+
+
 def _batch_fetch_cooldown_data(
     opponents: list[CombatOpponent],
     entries_by_pool: dict[int, list[ThreatPoolEntry]],
@@ -2028,7 +2079,10 @@ def select_npc_actions(
     """Select and create NPC actions for the current round.
 
     For each active opponent with a threat pool, picks a weighted-random
-    entry from eligible threat pool entries and assigns targets.
+    entry from eligible threat pool entries and assigns targets. Targeting is
+    allegiance-aware (#1590, ADR-0058): a charmed opponent (``ALLY_OF_CASTER``)
+    skips the charmer's party, and a calmed opponent (``NEUTRAL``) holds and
+    takes no action; an opponent left with no valid targets skips the round.
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
@@ -2095,10 +2149,13 @@ def select_npc_actions(
         if not eligible:
             continue
 
-        target_pool, targeting_participants = _npc_action_target_pool(opponent, active_participants)
+        target_pool, targeting_participants = _npc_action_target_pool(
+            opponent, active_participants, encounter
+        )
 
-        # Empty-pool guard (#1584 Task 7b): create no action row when the
-        # combatant has no valid target (e.g. a summon with no live enemy).
+        # Empty-pool guard: create no action row when the combatant has no valid
+        # target — a #1584 ALLY summon with no live enemy, or a #1590
+        # calmed/neutral opponent whose threat-read yielded no PCs.
         if not target_pool:
             continue
 
@@ -2134,36 +2191,38 @@ def select_npc_actions(
 def _npc_action_target_pool(
     opponent: CombatOpponent,
     active_participants: list[CombatParticipant],
+    encounter: CombatEncounter,
 ) -> tuple[list, bool]:
-    """Route an opponent's targeting by allegiance (#1584).
+    """Route an opponent's targeting by allegiance (#1584 + #1590).
 
-    An opponent attacks the PC side only when it has hostile participants;
-    otherwise it attacks its hostile opponents. This gates ALLY summons (whose
-    participant pool is always empty) onto ENEMY opponents, with NO behaviour
-    change for an ENEMY opponent while any PC is targetable (it still targets PCs
-    only — it does not also start attacking summons; aggro/attack-budget
-    splitting is a follow-up). ``combatants_hostile_to`` already filters on
-    ACTIVE; the participant intersection re-applies the can_act gate.
+    Two allegiance systems compose here:
 
-    Intangible opponents (objectdb set, grants_intangibility condition active) are
-    excluded from the opponent pool (#1584 Task 8). Opponents with no objectdb are
-    kept (they cannot be queried for intangibility).
+    * **#1584 `CombatOpponent.allegiance`** routes an ALLY *summon* onto its
+      hostile ENEMY opponents (opponent-vs-opponent damage). Intangible opponents
+      (objectdb set, grants_intangibility active) are excluded (#1584 Task 8);
+      opponents with no objectdb are kept (they cannot be queried for it).
+    * **#1590 threat-read** (`_get_opponent_targets`) refines an ENEMY opponent's
+      PC targets — calm (NEUTRAL) yields no PCs (the empty-pool guard then makes it
+      skip the round), charm (ALLY_OF_CASTER) excludes the charmer's party.
+
+    An ENEMY opponent targets the (threat-read-filtered) PC side; an ALLY summon
+    targets ENEMY opponents. ``active_participants`` is already intangibility- and
+    can_act-filtered by ``select_npc_actions``.
 
     Returns ``(target_pool, targeting_participants)``.
     """
-    from world.conditions.services import is_untargetable  # noqa: PLC0415
+    if opponent.allegiance == CombatAllegiance.ALLY:
+        from world.conditions.services import is_untargetable  # noqa: PLC0415
 
-    hostile = combatants_hostile_to(opponent)
-    hostile_pks = {p.pk for p in hostile["participants"]}
-    participant_pool = [p for p in active_participants if p.pk in hostile_pks]
-    if participant_pool:
-        return participant_pool, True
-    opponent_pool = [
-        opp
-        for opp in hostile["opponents"]
-        if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
-    ]
-    return opponent_pool, False
+        opponent_pool = [
+            opp
+            for opp in combatants_hostile_to(opponent)["opponents"]
+            if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
+        ]
+        return opponent_pool, False
+
+    # ENEMY opponent: #1590's allegiance threat-read decides the PC pool.
+    return _get_opponent_targets(opponent, active_participants, encounter), True
 
 
 def _set_npc_action_targets(

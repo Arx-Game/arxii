@@ -90,6 +90,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/achievements/character-titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/character-titles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/': {
     parameters: {
       query?: never;
@@ -2112,6 +2156,28 @@ export interface paths {
     put?: never;
     /** @description POST /unpause/ — staff: unpause the clock. */
     post: operations['clock_unpause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clues/held/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the clues held by the requesting player's characters (#1575).
+     *
+     *     Newest first. Always scoped to characters the requester plays — a foreign or unknown
+     *     ``character_sheet`` filter simply returns nothing (no existence leak).
+     */
+    get: operations['clues_held_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -10302,6 +10368,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/create-established/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1127 — the designed create path for a durable ESTABLISHED identity.
+     *
+     *     Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+     *     staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+     */
+    post: operations['personas_create_established_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/create-mask/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1127 — create a TEMPORARY anonymous mask and wear it (the "put on a mask" path). */
+    post: operations['personas_create_mask_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/set-active/': {
     parameters: {
       query?: never;
@@ -11771,6 +11876,24 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/roster/visibility-settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the active character's current ``appear_offline`` value. */
+    get: operations['roster_visibility_settings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set the active character's ``appear_offline`` (quiet/hidden mode). */
+    patch: operations['roster_visibility_settings_partial_update'];
     trace?: never;
   };
   '/api/scenes/': {
@@ -15228,6 +15351,19 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /**
+     * @description Serializer for an earned, displayable character title (#1522).
+     *
+     *     Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+     *     title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+     */
+    CharacterTitle: {
+      readonly id: number;
+      readonly title: string;
+      readonly reward_key: string;
+      /** Format: date-time */
+      readonly earned_at: string;
+    };
     /** @description Read-only vitals payload for the character sheet panel (#521). */
     CharacterVitals: {
       health: number;
@@ -15887,6 +16023,14 @@ export interface components {
       post: number;
       author_persona: number;
       body: string;
+    };
+    /** @description POST body for the #1127 create-established-persona endpoint. */
+    CreateEstablishedPersonaRequestRequest: {
+      name: string;
+    };
+    /** @description POST body for the #1127 create-mask endpoint — a temporary anonymous face. */
+    CreateMaskRequestRequest: {
+      name: string;
     };
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
@@ -17709,6 +17853,15 @@ export interface components {
       max_inches: number;
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
+    };
+    /** @description One clue a character holds — the journal row (#1575). */
+    HeldClue: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly target_kind: string;
+      /** Format: date-time */
+      readonly found_at: string;
     };
     /**
      * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
@@ -20248,6 +20401,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GroupStoryProgress'][];
     };
+    PaginatedHeldClueList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['HeldClue'][];
+    };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
       count: number;
@@ -22474,6 +22642,16 @@ export interface components {
      */
     PatchedUpdateBulletinReplyInputRequest: {
       body?: string;
+    };
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    PatchedVisibilitySettingsRequest: {
+      appear_offline?: boolean;
     };
     /** @description Serializer for Path in CG context. */
     Path: {
@@ -26077,6 +26255,16 @@ export interface components {
      * @enum {string}
      */
     VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    VisibilitySettings: {
+      appear_offline: boolean;
+    };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {
       physical: components['schemas']['FatiguePoolStatus'];
@@ -26386,6 +26574,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterAchievement'];
+        };
+      };
+    };
+  };
+  achievements_character_titles_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'][];
+        };
+      };
+    };
+  };
+  achievements_character_titles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this character title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'];
         };
       };
     };
@@ -28913,6 +29144,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ClockDetail'];
+        };
+      };
+    };
+  };
+  clues_held_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedHeldClueList'];
         };
       };
     };
@@ -40993,6 +41248,52 @@ export interface operations {
       };
     };
   };
+  personas_create_established_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEstablishedPersonaRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_create_mask_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateMaskRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
   personas_set_active_create: {
     parameters: {
       query?: never;
@@ -43361,6 +43662,48 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterTenureLookup'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedVisibilitySettingsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
         };
       };
     };

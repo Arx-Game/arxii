@@ -64,7 +64,7 @@ _Avoid_: passive
 Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or `ALLY`
 (fights for the party). Allegiance is mutable: a summon spell creates an ALLY opponent; future
 charm / switch-sides effects flip an existing ENEMY to ALLY. Both cases use the same field on
-the same model; no parallel model is needed (ADR-0058).
+the same model; no parallel model is needed (ADR-0059).
 _Avoid_: faction, team, side (as model names)
 
 **Summon**:
@@ -79,5 +79,5 @@ A mutation-only `DAMAGE_PRE_APPLY` flow handler that can reduce or nullify an in
 force-field (absorb_pool, priority 10), reflect (reflect_damage, priority 20), or blink
 (blink_dodge, priority 30). Each sets `payload.amount = 0` on success; lower-priority
 interceptors guard `if payload.amount <= 0: return`. Cost: `reactive_anima_cost` per fire;
-can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0059).
+can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0060).
 _Avoid_: cancel-event interceptor, reactive cancel, shield handler

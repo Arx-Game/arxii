@@ -195,7 +195,7 @@ other systems FK into it. _Avoid_: rumor, mystery.
 Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or
 `ALLY` (fights for the party). Mutable: summons create `ALLY` opponents; future charm
 or switch-sides flips an existing `ENEMY`. One `CombatOpponent` model covers both cases
-(ADR-0058). _Avoid_: faction, team (as model-attribute names).
+(ADR-0059). _Avoid_: faction, team (as model-attribute names).
 
 **Summon** (in-combat):
 An `ALLY` `CombatOpponent` conjured during combat by a technique
@@ -213,7 +213,7 @@ in `world/conditions/services.py`. Seeded as Ghostform and Earthmeld by the effe
 A mutation-only `DAMAGE_PRE_APPLY` flow handler: force-field (`absorb_pool`, priority 10),
 reflect (`reflect_damage`, priority 20), or blink (`blink_dodge`, priority 30). Sets
 `payload.amount = 0` on success; fizzles on insufficient `reactive_anima_cost`. No
-`CANCEL_EVENT` child step — mutation-only (ADR-0059).
+`CANCEL_EVENT` child step — mutation-only (ADR-0060).
 
 **Effect palette**:
 The seeded set of nine castable combat effects (`ensure_effect_palette_content()` in

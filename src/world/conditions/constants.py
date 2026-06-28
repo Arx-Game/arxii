@@ -103,6 +103,23 @@ POISONED_CONDITION_NAME: str = "Poisoned"
 SLOW_POISON_CONDITION_NAME: str = "Slow Poison"
 POISON_CATEGORY_NAME: str = "Poison"
 
+# Charm/Calm content identity keys (#1590). Seeded idempotently by
+# ensure_charm_content() in world.conditions.charm_content.
+CHARM_CONDITION_NAME: str = "Charmed"
+CALM_CONDITION_NAME: str = "Calm"
+
+
+class Allegiance(models.TextChoices):
+    """Behavioral allegiance states used by charm/control effects.
+
+    Declared in the conditions constants module so combat and social code can
+    share one source of truth.
+    """
+
+    ENEMY = "enemy", "Enemy"
+    ALLY_OF_CASTER = "ally", "Fights for the charmer"
+    NEUTRAL = "neutral", "Will not attack"
+
 
 class FoundationalCapability:
     """String constants for capabilities every character has innately.

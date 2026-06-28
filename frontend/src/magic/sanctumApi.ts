@@ -9,6 +9,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 
 import type {
   AbsorbResult,
@@ -27,19 +28,6 @@ function jsonHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json' };
 }
 
-async function parseErrorDetail(res: Response, fallback: string): Promise<never> {
-  let detail = fallback;
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (typeof data.detail === 'string' && data.detail.trim()) {
-      detail = data.detail;
-    }
-  } catch {
-    // body wasn't JSON; keep the generic fallback
-  }
-  throw new Error(detail);
-}
-
 export async function getSanctums(): Promise<SanctumDetails[]> {
   const res = await apiFetch(`${SANCTUMS_URL}/`);
   if (!res.ok) throw new Error('Failed to load Sanctums');
@@ -56,7 +44,7 @@ export async function performHomecoming(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to perform Ritual of Homecoming');
+    await readErrorDetail(res, 'Failed to perform Ritual of Homecoming');
   }
   return res.json() as Promise<HomecomingResult>;
 }
@@ -71,7 +59,7 @@ export async function performPurging(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to perform Ritual of Purging');
+    await readErrorDetail(res, 'Failed to perform Ritual of Purging');
   }
   return res.json() as Promise<PurgingResult>;
 }
@@ -86,7 +74,7 @@ export async function weaveSanctumThread(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to weave Sanctum thread');
+    await readErrorDetail(res, 'Failed to weave Sanctum thread');
   }
   return res.json() as Promise<SanctumThread>;
 }
@@ -97,7 +85,7 @@ export async function absorbSanctumPool(featureInstanceId: number): Promise<Abso
     headers: jsonHeaders(),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to absorb from this Sanctum');
+    await readErrorDetail(res, 'Failed to absorb from this Sanctum');
   }
   return res.json() as Promise<AbsorbResult>;
 }
@@ -111,6 +99,6 @@ export async function severSanctumThread(
     headers: jsonHeaders(),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to sever Sanctum thread');
+    await readErrorDetail(res, 'Failed to sever Sanctum thread');
   }
 }
