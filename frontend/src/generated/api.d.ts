@@ -6026,13 +6026,10 @@ export interface paths {
     get: operations['items_fashion_presentations_list'];
     put?: never;
     /**
-     * @description Present an outfit + list presentations (#514).
+     * @description Record the requesting account's acting character presenting an outfit at an event.
      *
-     *     POST /api/items/fashion-presentations/ — record the requesting account's
-     *     acting character presenting an outfit at an event.
-     *     GET  /api/items/fashion-presentations/?event=<id> — list presentations
-     *     (filterable by event) so the UI can show who is presenting there to judge.
-     *     GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+     *     Body: ``event`` (required) + optional ``outfit`` PKs. Returns the created
+     *     presentation (201), or 400 when the event has no host society / other rule failure.
      */
     post: operations['items_fashion_presentations_create'];
     delete?: never;
@@ -17372,11 +17369,12 @@ export interface components {
     /**
      * @description Serializer for FashionPresentation create + read (#514).
      *
-     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-     *     request body. The ``presenter`` is resolved from the requesting account in
-     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
-     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
-     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *     Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+     *     body. The orchestration runs through ``PresentOutfitAction`` in
+     *     ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+     *     Action seam, #1508); this serializer only validates input and serializes the result.
+     *     The ``presenter`` is resolved from the requesting account in the view, never supplied
+     *     by the client.
      *
      *     Read: all fields are present; read-only fields cannot be supplied.
      */
@@ -17398,11 +17396,12 @@ export interface components {
     /**
      * @description Serializer for FashionPresentation create + read (#514).
      *
-     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-     *     request body. The ``presenter`` is resolved from the requesting account in
-     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
-     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
-     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *     Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+     *     body. The orchestration runs through ``PresentOutfitAction`` in
+     *     ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+     *     Action seam, #1508); this serializer only validates input and serializes the result.
+     *     The ``presenter`` is resolved from the requesting account in the view, never supplied
+     *     by the client.
      *
      *     Read: all fields are present; read-only fields cannot be supplied.
      */

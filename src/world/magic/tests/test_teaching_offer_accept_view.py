@@ -110,8 +110,8 @@ class TeachingOfferAcceptViewTests(APITestCase):
         _give_xp(self.learner_account, 500)
         # Bank AP on teacher's pool so it can be consumed.
         teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher_character)
-        teacher_pool.regenerate(10)
-        teacher_pool.bank(5)
+        teacher_pool.banked = 5
+        teacher_pool.save(update_fields=["banked"])
 
         self.client.force_authenticate(user=self.learner_account)
         response = self.client.post(self._accept_url(self.offer.pk), {}, format="json")
@@ -192,8 +192,8 @@ class TeachingOfferAcceptViewTests(APITestCase):
         _give_xp(self.learner_account, 500)
         # Give teacher enough banked AP
         teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher_character)
-        teacher_pool.regenerate(10)
-        teacher_pool.bank(5)
+        teacher_pool.banked = 5
+        teacher_pool.save(update_fields=["banked"])
         PendingAlterationFactory(character=self.learner_sheet)
 
         self.client.force_authenticate(user=self.learner_account)

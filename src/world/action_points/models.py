@@ -155,32 +155,6 @@ class ActionPointPool(SharedMemoryModel):
             self.current = pool.current
         return True
 
-    def bank(self, amount: int) -> bool:
-        """
-        Move action points from current to banked (for teaching offers).
-
-        Uses select_for_update to prevent race conditions.
-
-        Args:
-            amount: Number of AP to bank.
-
-        Returns:
-            True if successful, False if insufficient current AP.
-        """
-        if amount < 0:
-            return False
-
-        with transaction.atomic():
-            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
-            if pool.current < amount:
-                return False
-            pool.current -= amount
-            pool.banked += amount
-            pool.save(update_fields=["current", "banked"])
-            self.current = pool.current
-            self.banked = pool.banked
-        return True
-
     def unbank(self, amount: int) -> int:
         """
         Return banked AP to current pool, capped at effective maximum.
@@ -251,45 +225,8 @@ class ActionPointPool(SharedMemoryModel):
             self.banked = pool.banked
         return True
 
-    def regenerate(self, amount: int) -> int:
-        """
-        Add action points to current, capped at effective maximum.
-
-        Banked AP is separate and does not affect regeneration.
-        Uses select_for_update to prevent race conditions.
-        Respects modifier-adjusted maximum (e.g., Efficient increases cap).
-
-        Args:
-            amount: Number of AP to add.
-
-        Returns:
-            Amount actually added (may be less if near maximum).
-        """
-        if amount < 0:
-            return 0
-
-        effective_max = self.get_effective_maximum()
-
-        with transaction.atomic():
-            # Lock row for update
-            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
-
-            space_available = effective_max - pool.current
-            actually_added = min(amount, max(0, space_available))
-
-            if actually_added > 0:
-                pool.current += actually_added
-                pool.save(update_fields=["current"])
-                self.current = pool.current
-
-        return actually_added
-
     def can_afford(self, amount: int) -> bool:
         """Check if character has enough current AP to spend."""
-        return self.current >= amount
-
-    def can_bank(self, amount: int) -> bool:
-        """Check if character has enough current AP to bank."""
         return self.current >= amount
 
     def _get_ap_modifier(self, modifier_target_name: str) -> int:

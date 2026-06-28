@@ -409,3 +409,41 @@ class ConsumeCostApShortfallTests(_CraftingCostBase):
                 staged=staged,
                 consumption=CostConsumption.FULL,
             )
+
+
+class ConsumeCostAnimaShortfallTests(_CraftingCostBase):
+    """consume_cost raises when Anima is drained after staging — symmetric with AP (#1243)."""
+
+    def test_anima_drained_between_stage_and_consume_raises(self) -> None:
+        """A concurrent spend below the staged anima aborts instead of silently clamping.
+
+        ``deduct_anima(lethal=False)`` would clamp to available and leave the consumed
+        summary over-reporting; the symmetric guard fails hard like the AP path instead.
+        """
+        staged = StagedCost(action_points=0, anima=8, material_pks=[])
+
+        # Simulate a concurrent spend draining anima below the staged amount.
+        self.anima.current = 3
+        self.anima.save(update_fields=["current"])
+
+        with self.assertRaises(CraftingCostUnaffordable):
+            consume_cost(
+                crafter_character=self.character,
+                staged=staged,
+                consumption=CostConsumption.FULL,
+            )
+        # The raise aborts before deduct_anima — anima is untouched (no partial clamp).
+        self.anima.refresh_from_db()
+        self.assertEqual(self.anima.current, 3)
+
+    def test_anima_row_deleted_after_staging_raises(self) -> None:
+        """A positive anima cost can't be paid when the anima row vanished after staging."""
+        staged = StagedCost(action_points=0, anima=5, material_pks=[])
+        CharacterAnima.objects.filter(character=self.character).delete()
+
+        with self.assertRaises(CraftingCostUnaffordable):
+            consume_cost(
+                crafter_character=self.character,
+                staged=staged,
+                consumption=CostConsumption.FULL,
+            )
