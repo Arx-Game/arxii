@@ -148,6 +148,14 @@ class AltSelfRageEndToEndTests(TestCase):
         state = CharacterFormState.objects.get(character=self.character)
         self.assertEqual(state.active_form, self.true_form)
         self.sheet.refresh_from_db()
+        # ``active_persona`` is a ForeignKey, and ``refresh_from_db`` reloads the
+        # scalar ``active_persona_id`` but leaves the SharedMemoryModel cached
+        # related-object in ``__dict__`` stale (the action mutated a different
+        # sheet instance via ``set_active_persona``). On Postgres the cache
+        # survives across the action's transaction; pop it so the next access
+        # re-fetches the now-restored primary persona. Mirrors the ``in_control``
+        # pop above (same cross-instance cause).
+        self.sheet.__dict__.pop("active_persona", None)
         self.assertEqual(self.sheet.active_persona, self.sheet.primary_persona)
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
