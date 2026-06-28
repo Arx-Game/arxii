@@ -188,7 +188,7 @@ class EndorsementJourneyE2ETests(TestCase):
     def test_poses_no_active_scene_shows_error(self) -> None:
         """``poses`` outside an active scene sends a CommandError message."""
         # Move both characters to a room with no active scene so search succeeds
-        # but _get_active_scene returns None.
+        # but get_active_scene returns None.
         empty_room = ObjectDB.objects.create(
             db_key="EmptyRoom",
             db_typeclass_path="typeclasses.rooms.Room",

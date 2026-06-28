@@ -6,7 +6,7 @@ CmdEndorse: ``endorse pose <char> [#N] resonance=<name> [confirm]``
             ``endorse style <char> resonance=<name>``
 
 Both commands derive the active scene from the caller's room
-(``_get_active_scene``), exactly like CmdIntimidate / CmdAccept.
+(``get_active_scene``), exactly like CmdIntimidate / CmdAccept.
 All eligibility and creation logic lives in the actions + service functions.
 """
 
@@ -41,7 +41,7 @@ class CmdPoses(ArxCommand):
 
     def _list_poses(self) -> None:
         from world.magic.services.gain import get_endorseable_poses_in_scene  # noqa: PLC0415
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         char_name = (self.args or "").strip()
         if not char_name:
@@ -62,7 +62,7 @@ class CmdPoses(ArxCommand):
             msg = "You have no character sheet."
             raise CommandError(msg)
 
-        scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)
@@ -176,9 +176,9 @@ class CmdEndorse(ArxCommand):
         return sheet
 
     def _active_scene(self) -> Any:
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        scene = _get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(getattr(self.caller, "location", None))  # noqa: GETATTR_LITERAL
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)

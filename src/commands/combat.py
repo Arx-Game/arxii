@@ -640,10 +640,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         if not self._target_name:
             return None
 
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
         name = self._target_name.lower()
-        scene = _get_active_scene(self.caller.location)
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)

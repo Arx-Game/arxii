@@ -94,7 +94,7 @@ class EngagementPrerequisiteBranchesTests(TestCase):
         if hasattr(room, "_active_scene_cache"):
             del room._active_scene_cache
 
-        # No Scene created at this room → _get_active_scene returns None
+        # No Scene created at this room → get_active_scene returns None
         self.assertFalse(can_engage_membership(self.mem_a_durance))
 
         # Cleanup location so other tests start fresh
