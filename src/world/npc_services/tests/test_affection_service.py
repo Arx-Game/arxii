@@ -32,3 +32,15 @@ class AdjustNpcAffectionTest(TestCase):
         NPCStanding.objects.create(persona=self.pc, npc_persona=self.npc, affection=2)
         new = adjust_npc_affection(self.pc, self.npc, delta=-10)
         self.assertEqual(new, -8)
+
+    def test_delta_zero_returns_current_and_no_row_change(self):
+        NPCStanding.objects.create(persona=self.pc, npc_persona=self.npc, affection=7)
+        result = adjust_npc_affection(self.pc, self.npc, delta=0)
+        self.assertEqual(result, 7)
+        standing = NPCStanding.objects.get(persona=self.pc, npc_persona=self.npc)
+        self.assertEqual(standing.affection, 7)
+
+    def test_delta_zero_creates_row_at_zero(self):
+        result = adjust_npc_affection(self.pc, self.npc, delta=0)
+        self.assertEqual(result, 0)
+        self.assertTrue(NPCStanding.objects.filter(persona=self.pc, npc_persona=self.npc).exists())
