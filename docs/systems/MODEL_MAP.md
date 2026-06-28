@@ -831,6 +831,7 @@
   - relationshipchange_set <- relationships.RelationshipChange
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
+  - titles <- achievements.CharacterTitle
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
@@ -2587,6 +2588,7 @@
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
+  - reward_definitions <- achievements.RewardDefinition
   - fashion_style_bonuses <- items.FashionStyleBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - covenant_role_bonuses <- covenants.CovenantRoleBonus

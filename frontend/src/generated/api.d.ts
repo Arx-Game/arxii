@@ -90,6 +90,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/achievements/character-titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/character-titles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/': {
     parameters: {
       query?: never;
@@ -15228,6 +15272,19 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /**
+     * @description Serializer for an earned, displayable character title (#1522).
+     *
+     *     Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+     *     title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+     */
+    CharacterTitle: {
+      readonly id: number;
+      readonly title: string;
+      readonly reward_key: string;
+      /** Format: date-time */
+      readonly earned_at: string;
+    };
     /** @description Read-only vitals payload for the character sheet panel (#521). */
     CharacterVitals: {
       health: number;
@@ -26386,6 +26443,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterAchievement'];
+        };
+      };
+    };
+  };
+  achievements_character_titles_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'][];
+        };
+      };
+    };
+  };
+  achievements_character_titles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this character title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'];
         };
       };
     };
