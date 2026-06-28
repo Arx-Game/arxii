@@ -92,6 +92,26 @@ class ShiftFormActionTests(TestCase):
         # rejected second alt-self.
         self.assertFalse(ModifierSource.objects.filter(form_combat_profile=other_profile).exists())
 
+    def test_shift_cross_sheet_persona_returns_safe_failure_not_500(self) -> None:
+        # An AlternateSelf grant owned by this sheet, but whose persona FK points
+        # at ANOTHER sheet (bad seed/admin edit). set_active_persona would raise
+        # ActivePersonaError; the action must catch it and return a safe failure
+        # rather than letting the ValueError propagate uncaught (-> 500 on web).
+        from world.scenes.factories import PersonaFactory
+        from world.scenes.services import ActivePersonaError
+
+        other_sheet = self._sheet()
+        foreign_persona = PersonaFactory(character_sheet=other_sheet)
+        alt = self._make_alt(self.sheet, persona=foreign_persona, display_name="stolen face")
+
+        result = ShiftFormAction().run(actor=self.character, alternate_self_id=alt.pk)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, ActivePersonaError.user_message)
+        # The alt-self was not assumed.
+        active = ActiveAlternateSelf.objects.filter(character=self.sheet).first()
+        self.assertTrue(active is None or active.alternate_self_id is None)
+
 
 class RevertFormActionTests(TestCase):
     def setUp(self) -> None:

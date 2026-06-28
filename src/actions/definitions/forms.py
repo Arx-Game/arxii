@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 # Uniform failure message for unknown/foreign alternate-self ids (no identity leak).
 _UNKNOWN_ALT_SELF_MSG = "You have no such alternate self."
 
+# Safe message for the no-active-alt-self revert case. Mirrors the service's
+# ``_NO_ACTIVE_ALT_SELF_MSG`` but kept here so the action never reaches into the
+# service's private constant or — worse — leaks an exception's ``str()``.
+_NO_ACTIVE_ALT_SELF_ACTION_MSG = "You have no alternate self to revert."
+
 
 @dataclass
 class ShiftFormAction(Action):
@@ -29,6 +34,10 @@ class ShiftFormAction(Action):
 
     The ``alternate_self_id`` kwarg must be the pk of an ``AlternateSelf`` owned
     by the actor's sheet. A foreign or unknown id returns a uniform failure.
+    The alt-self's optional ``persona`` FK must also belong to the actor's
+    sheet — a cross-sheet persona (bad seed/admin edit) is rejected before
+    reaching ``set_active_persona`` rather than raising an uncaught
+    ``ActivePersonaError``.
     """
 
     key: str = "shift_form"
@@ -48,6 +57,7 @@ class ShiftFormAction(Action):
             AlternateSelfActiveError,
             assume_alternate_self,
         )
+        from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
         sheet = actor.sheet_data
         alt = AlternateSelf.objects.filter(
@@ -55,11 +65,19 @@ class ShiftFormAction(Action):
         ).first()
         if alt is None:
             return ActionResult(success=False, message=_UNKNOWN_ALT_SELF_MSG)
+        # Defense in depth: the alt-self's persona FK should belong to this
+        # sheet too. ``set_active_persona`` would raise ``ActivePersonaError``
+        # (a ValueError subclass) on a cross-sheet persona — catch it here and
+        # surface the safe message instead of letting it propagate uncaught
+        # (``Action.run`` calls ``execute`` bare, so an uncaught exception
+        # becomes a 500 on the web path).
         try:
             active = assume_alternate_self(sheet, alt)
         except AlternateSelfActiveError as exc:
             # A different alt-self is already active — revert it first.
             return ActionResult(success=False, message=exc.user_message)
+        except ActivePersonaError:
+            return ActionResult(success=False, message=ActivePersonaError.user_message)
         return ActionResult(
             success=True,
             message=f"You assume {alt.display_name or 'an alternate self'}.",
@@ -87,14 +105,29 @@ class RevertFormAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.forms.services import RevertBlockedError, revert_alternate_self  # noqa: PLC0415
+        from world.forms.services import (  # noqa: PLC0415
+            AlternateSelfActiveError,
+            RevertBlockedError,
+            revert_alternate_self,
+        )
+        from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
         sheet = actor.sheet_data
         try:
             revert_alternate_self(sheet)
         except RevertBlockedError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except ValueError as exc:
-            # No active alt-self to revert.
-            return ActionResult(success=False, message=str(exc))
+        except ActivePersonaError:
+            # The active alt-self's persona FK points at another sheet (bad
+            # seed/admin edit). Surface the safe message — never ``str(exc)``.
+            return ActionResult(success=False, message=ActivePersonaError.user_message)
+        except AlternateSelfActiveError as exc:
+            # Revert clears the active alt-self, so this shouldn't fire from
+            # the service — but if it ever does, surface the safe message.
+            return ActionResult(success=False, message=exc.user_message)
+        except ValueError:
+            # No active alt-self to revert. Safe constant — not ``str(exc)``,
+            # which would leak the exception's text (CLAUDE.md: never ``str(exc)``
+            # in responses).
+            return ActionResult(success=False, message=_NO_ACTIVE_ALT_SELF_ACTION_MSG)
         return ActionResult(success=True, message="You revert to your true self.")

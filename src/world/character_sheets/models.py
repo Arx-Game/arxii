@@ -934,9 +934,16 @@ class CharacterSheet(SharedMemoryModel):
         Derived from active conditions: False if any active condition's
         category is ``alters_behavior`` (rage/possession/charm/mind-control).
         Reuses the canonical consent signal (ADR-0024) — not a stored flag and
-        not a per-status name lookup. Cached for a read; condition mutation
-        services invalidate the handler, and callers that just changed
-        conditions should ``del sheet.in_control`` to force re-derivation.
+        not a per-status name lookup. Cached for a read.
+
+        The cache is NOT auto-invalidated by condition mutation — the condition
+        services invalidate the conditions handler, not this sheet-level
+        cached_property. A caller that just changed conditions (or that reads
+        across a condition change on a sheet instance it still holds) MUST
+        ``del sheet.in_control`` (or re-fetch the sheet) to force re-derivation;
+        ``revert_alternate_self`` does this itself before its gate. A read-only
+        surface that hasn't changed conditions itself may still see a stale
+        value until the next fetch (cosmetic only).
 
         A benign shift (bird-to-fly) has no alters_behavior conditions, so this
         stays True and the form is self-revertible anytime.
