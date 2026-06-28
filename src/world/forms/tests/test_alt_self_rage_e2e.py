@@ -124,9 +124,12 @@ class AltSelfRageEndToEndTests(TestCase):
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt_self)
 
-        # 4. Calm-down: RestoreSenseAction removes Berserk.
+        # 4. Calm-down: RestoreSenseAction removes Berserk. RestoreSense is a
+        # social-template action: run() returns a PendingActionResolution (not an
+        # ActionResult), so assert on the side effect it produced, not on a
+        # ``.success`` attribute that doesn't exist on that type.
         calm = RestoreSenseAction().run(self.character, target=self.character)
-        self.assertTrue(calm.success, calm.message)
+        self.assertEqual(calm.current_phase, ResolutionPhase.COMPLETE)
 
         self.assertFalse(has_condition(self.character, self.berserk))
         # The cached_property may be stale across the action's remove_condition call.
