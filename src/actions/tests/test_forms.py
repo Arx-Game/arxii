@@ -10,6 +10,8 @@ from world.forms.factories import (
     AlternateSelfFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
+    FormCombatProfileEffectFactory,
+    FormCombatProfileFactory,
 )
 from world.forms.models import (
     ActiveAlternateSelf,
@@ -19,6 +21,7 @@ from world.forms.models import (
     FormType,
 )
 from world.forms.services import RevertBlockedError, assume_alternate_self
+from world.mechanics.models import ModifierSource
 
 
 class ShiftFormActionTests(TestCase):
@@ -67,6 +70,27 @@ class ShiftFormActionTests(TestCase):
             result = ShiftFormAction().run(actor=self.character, alternate_self_id=self.alt.pk)
 
         self.assertTrue(result.success)
+
+    def test_blocks_shift_over_active_alternate_self(self) -> None:
+        # Assume a first alt-self, then try to shift to a second without reverting.
+        first = ShiftFormAction().run(actor=self.character, alternate_self_id=self.alt.pk)
+        self.assertTrue(first.success)
+        # Give the second a combat profile so we can assert its grants weren't created.
+        other_profile = FormCombatProfileFactory(form=self.alt_form)
+        FormCombatProfileEffectFactory(profile=other_profile)
+        other_alt = self._make_alt(
+            self.sheet, form=self.alt_form, combat_profile=other_profile, display_name="the Wolf"
+        )
+
+        result = ShiftFormAction().run(actor=self.character, alternate_self_id=other_alt.pk)
+
+        self.assertFalse(result.success)
+        # The active alt-self is unchanged (the first one, not the second).
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        self.assertEqual(active.alternate_self, self.alt)
+        # No grants (ModifierSource / CharacterModifier) were created for the
+        # rejected second alt-self.
+        self.assertFalse(ModifierSource.objects.filter(form_combat_profile=other_profile).exists())
 
 
 class RevertFormActionTests(TestCase):

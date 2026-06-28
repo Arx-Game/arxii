@@ -34,6 +34,7 @@ from world.forms.models import (
     FormType,
 )
 from world.forms.services import (
+    AlternateSelfActiveError,
     NonCosmeticTraitError,
     RevertBlockedError,
     assume_alternate_self,
@@ -585,6 +586,41 @@ class AssumeAlternateSelfTests(TestCase):
 
         active.refresh_from_db()
         self.assertEqual(active.return_form, first_return_form)
+
+    def test_assume_raises_when_a_different_alt_self_is_active(self):
+        # A different alt-self is already active — assuming a second would
+        # orphan the first's grants. Enforce strictly-one-active.
+        first = AlternateSelfFactory(character=self.sheet, combat_profile=self.profile)
+        assume_alternate_self(self.sheet, first)
+        first_sources = ModifierSource.objects.count()
+
+        second_profile = FormCombatProfileFactory(form=self.alt_form)
+        second = AlternateSelfFactory(character=self.sheet, combat_profile=second_profile)
+
+        with self.assertRaises(AlternateSelfActiveError):
+            assume_alternate_self(self.sheet, second)
+
+        # No new grants were created; the first alt-self is still the active one.
+        self.assertEqual(ModifierSource.objects.count(), first_sources)
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        self.assertEqual(active.alternate_self, first)
+
+    def test_assume_techniques_only_all_known_creates_no_orphan_source(self):
+        # A techniques-only alt-self whose only technique is permanently known
+        # grants nothing — no empty ModifierSource should leak each cycle.
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique, source=None)
+        before = ModifierSource.objects.count()
+
+        assume_alternate_self(self.sheet, alt_self)
+        self.assertEqual(ModifierSource.objects.count(), before)
+
+        revert_alternate_self(self.sheet)
+        self.assertEqual(ModifierSource.objects.count(), before)
+        # The permanently-known technique survives the revert untouched.
+        ct = self.sheet.character_techniques.get(technique=self.technique)
+        self.assertIsNone(ct.source)
 
 
 class RevertAlternateSelfTests(TestCase):

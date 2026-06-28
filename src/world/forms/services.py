@@ -51,6 +51,18 @@ class RevertBlockedError(ValueError):
     user_message = "You can't revert while not in control of yourself."
 
 
+class AlternateSelfActiveError(ValueError):
+    """Raised when assuming an alternate self while a *different* one is already
+    active. Assumption over an active alt-self would orphan the active one's
+    stat-suite (ModifierSource/CharacterModifier) and ability-suite
+    (source-tagged CharacterTechnique) grants with no revert path to clean them.
+    Revert the active alt-self first. Carries a fixed ``user_message`` so the
+    action/view can surface a safe string without leaking internals.
+    """
+
+    user_message = "You are already wearing another alternate self. Revert first."
+
+
 _NO_ACTIVE_ALT_SELF_MSG = "No active alternate self to revert"
 
 
@@ -114,7 +126,7 @@ def revert_to_true_form(character) -> None:
     switch_form(character, true_form)
 
 
-def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> None:
+def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> ModifierSource | None:
     """Create the stat-suite and ability-suite grants for an assumed alt-self.
 
     One ``ModifierSource`` owns both the ``CharacterModifier`` rows (CASCADE)
@@ -122,13 +134,19 @@ def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> None
     alt-self has no granted rows, so no source is created (and revert deletes
     none). Permanently-known techniques (existing rows with ``source=None``)
     are left untouched by the stacking guard.
+
+    Returns the created ``ModifierSource``, or ``None`` when nothing was
+    granted (persona-only alt-self, or a techniques-only alt-self whose
+    techniques were all permanently known) — so no empty source leaks for
+    revert to miss.
     """
     profile = alt.combat_profile
     has_techniques = alt.techniques.exists()
     if profile is None and not has_techniques:
-        return
+        return None
 
     source = ModifierSource.objects.create(form_combat_profile=profile)
+    granted_any = profile is not None
 
     # Stat-suite.
     if profile is not None:
@@ -140,14 +158,26 @@ def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> None
                 source=source,
             )
 
-    # Ability-suite with stacking guard.
+    # Ability-suite with stacking guard. ``get_or_create`` returns
+    # ``created=False`` for a permanently-known technique (existing row with
+    # ``source=None``); only a freshly-granted row points at this source. If
+    # every technique was already known and there's no profile, the source is
+    # empty and revert (which finds sources via ``granted_techniques``) would
+    # never reclaim it — drop it now so no empty source leaks.
     if has_techniques:
         for technique in alt.techniques.all():
-            CharacterTechnique.objects.get_or_create(
+            _ct, created = CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,
                 defaults={"source": source},
             )
+            if created:
+                granted_any = True
+
+    if not granted_any:
+        source.delete()
+        return None
+    return source
 
 
 @transaction.atomic
@@ -158,7 +188,9 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
 
     NOT gated by ``in_control`` — you can assume (or be forced into) an
     alternate self while not in control. Idempotent on re-assume of the same
-    alt-self (no-op; preserves existing return anchors).
+    alt-self (no-op; preserves existing return anchors). Raises
+    ``AlternateSelfActiveError`` if a *different* alt-self is already active
+    — revert it first (strictly-one-active, so grants never orphan).
 
     Source granularity: exactly one ``ModifierSource`` is created per
     assumption (using ``form_combat_profile=alt.combat_profile``). It owns both
@@ -182,6 +214,15 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
     # Idempotent: re-assuming the same alt-self is a no-op.
     if active.alternate_self_id == alt.pk:
         return active
+
+    # A *different* alt-self is already active. Assumption here would overwrite
+    # ``active.alternate_self`` and the return anchors and create the new
+    # alt-self's grants — but never clean the active one's ModifierSource /
+    # CharacterModifier / source-tagged CharacterTechnique rows, orphaning them
+    # with no revert path (reverting the new one later finds no active alt-self
+    # to clean the prior one). Enforce strictly-one-active: revert first.
+    if active.alternate_self_id is not None:
+        raise AlternateSelfActiveError
 
     # Capture current return anchors (active form / active persona) before
     # overwriting them. If there's no active form state, default to true form.

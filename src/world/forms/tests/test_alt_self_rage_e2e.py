@@ -132,9 +132,14 @@ class AltSelfRageEndToEndTests(TestCase):
         self.assertEqual(calm.current_phase, ResolutionPhase.COMPLETE)
 
         self.assertFalse(has_condition(self.character, self.berserk))
-        # The cached_property may be stale across the action's remove_condition call.
-        self.sheet.__dict__.pop("in_control", None)
-        self.assertTrue(self.character.sheet_data.in_control)
+        # The cached_property may be stale across the action's remove_condition
+        # call. Pop on the SAME instance we assert against (``sheet_data``), so
+        # the assertion reads a freshly-derived value rather than a cached one.
+        # ``self.sheet`` and ``self.character.sheet_data`` may be distinct
+        # SharedMemoryModel instances across the action dispatch.
+        assert_sheet = self.character.sheet_data
+        assert_sheet.__dict__.pop("in_control", None)
+        self.assertTrue(assert_sheet.in_control)
 
         # 5. Revert now SUCCEEDS (unblocked after the alters_behavior condition cleared).
         revert2 = RevertFormAction().run(self.character)

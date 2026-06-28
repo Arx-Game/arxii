@@ -44,7 +44,10 @@ class ShiftFormAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.forms.models import AlternateSelf  # noqa: PLC0415
-        from world.forms.services import assume_alternate_self  # noqa: PLC0415
+        from world.forms.services import (  # noqa: PLC0415
+            AlternateSelfActiveError,
+            assume_alternate_self,
+        )
 
         sheet = actor.sheet_data
         alt = AlternateSelf.objects.filter(
@@ -52,7 +55,11 @@ class ShiftFormAction(Action):
         ).first()
         if alt is None:
             return ActionResult(success=False, message=_UNKNOWN_ALT_SELF_MSG)
-        active = assume_alternate_self(sheet, alt)
+        try:
+            active = assume_alternate_self(sheet, alt)
+        except AlternateSelfActiveError as exc:
+            # A different alt-self is already active — revert it first.
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=f"You assume {alt.display_name or 'an alternate self'}.",
