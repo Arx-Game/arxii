@@ -12,7 +12,7 @@ handler registry on ``CraftingRecipeKind``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -66,7 +66,8 @@ class CraftingQuoteCost:
     action_points_have: int
     anima: int
     anima_have: int
-    materials: list[dict]
+    # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
+    materials: tuple[dict, ...]
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,8 @@ class CraftingQuote:
     costs: CraftingQuoteCost
     affordable: bool
     max_quality_tier: QualityTier | None
-    failure_risk: list[CraftingQuoteRisk] = field(default_factory=list)
+    # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
+    failure_risk: tuple[CraftingQuoteRisk, ...] = ()
 
 
 def build_crafting_quote(
@@ -201,11 +203,11 @@ def build_crafting_quote(
             action_points_have=ap_have,
             anima=anima_cost,
             anima_have=anima_have,
-            materials=material_rows,
+            materials=tuple(material_rows),
         ),
         affordable=affordable,
         max_quality_tier=max_quality_tier,
-        failure_risk=failure_risk,
+        failure_risk=tuple(failure_risk),
     )
 
 

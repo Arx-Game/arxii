@@ -401,14 +401,17 @@ def _wire_recipe_caps_and_consequences(
 class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     """Factory for CraftingRecipe.
 
-    Creates a minimal recipe with sensible defaults. Override ``kind`` when you need
-    a specific recipe kind; note the unique constraint means only one recipe per kind
-    can exist at a time.
+    Creates a minimal recipe with sensible defaults. ``kind`` carries a ``unique``
+    constraint (one recipe per kind), so the factory keys ``django_get_or_create`` on
+    ``kind`` — two bare ``CraftingRecipeFactory()`` calls return the *same* FACET_ATTACH
+    recipe instead of raising ``IntegrityError`` on the second. Override ``kind`` to
+    create a recipe of a different kind. (Per the ``django_get_or_create`` gotcha,
+    non-lookup kwargs are ignored when the row for a ``kind`` already exists.)
     """
 
     class Meta:
         model = "items.CraftingRecipe"
-        django_get_or_create = ("name",)
+        django_get_or_create = ("kind",)
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
     kind = CraftingRecipeKind.FACET_ATTACH

@@ -165,8 +165,19 @@ def consume_cost(
             msg = "Action points were spent elsewhere before crafting completed."
             raise CraftingCostUnaffordable(msg)
 
-    # Deduct Anima
+    # Deduct Anima — symmetric with the AP path above. ``deduct_anima(lethal=False)``
+    # *clamps* to available anima and never draws life force, so a concurrent spend that
+    # dropped the balance below ``anima_to_spend`` (between staging and now) would be
+    # silently absorbed and the consumed-summary would over-report. Assert sufficiency
+    # first and fail-hard like AP does, so the returned ``anima`` is always truthful.
     if anima_to_spend > 0:
+        from world.magic.models import CharacterAnima  # noqa: PLC0415
+
+        anima_row = CharacterAnima.objects.filter(character=crafter_character).first()
+        current_anima = anima_row.current if anima_row is not None else 0
+        if current_anima < anima_to_spend:
+            msg = "Anima was spent elsewhere before crafting completed."
+            raise CraftingCostUnaffordable(msg)
         deduct_anima(crafter_character, anima_to_spend, lethal=False)
 
     # Consume materials (PARTIAL and FULL both consume ALL materials)
