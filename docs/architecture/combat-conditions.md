@@ -265,6 +265,15 @@ After all actions resolved:
        │           # CombatOpponent rows preserved (historical record)
        └─ else: status → BETWEEN_ROUNDS
 
+## Allegiance during NPC action selection (#1590)
+
+`select_npc_actions` calls `derive_allegiance(opponent, encounter)` for every active opponent
+and filters the PC target list from that allegiance: `ALLY_OF_CASTER` excludes the charmer's
+party, `NEUTRAL` returns no valid targets (the NPC skips the round), and `ENEMY` targets the
+full active participant list. Allegiance is derived on read from active `alters_behavior`
+conditions (`Charmed` / `Calm`) on the opponent's ObjectDB. See ADR-0058 for the two-tier NPC
+disposition model.
+
 begin_declaration_phase(encounter)  # next round
   ├─ status BETWEEN_ROUNDS → DECLARING; round_number += 1
   ├─ NEW: process_round_start for each active participant + active opponent

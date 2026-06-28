@@ -2933,3 +2933,15 @@ def ensure_poison_content() -> None:
             "is_long_term": True,
         },
     )
+
+
+def ensure_conditions_content() -> None:
+    """Idempotently seed all core conditions content.
+
+    Aggregates the existing poison seed with the charm/calm seed so callers have
+    a single entry point for the condition content required by multiple systems.
+    """
+    from world.conditions.charm_content import ensure_charm_content  # noqa: PLC0415
+
+    ensure_poison_content()
+    ensure_charm_content()

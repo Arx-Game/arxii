@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 import type {
   PerformRitualRequest,
   PerformRitualResponse,
@@ -195,19 +196,6 @@ export async function fetchRitualSessionDetail(id: number): Promise<RitualSessio
 // RitualSession writes (Covenants Slice B)
 // ---------------------------------------------------------------------------
 
-async function parseErrorDetail(res: Response, fallback: string): Promise<never> {
-  let detail = fallback;
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (typeof data.detail === 'string' && data.detail.trim()) {
-      detail = data.detail;
-    }
-  } catch {
-    // body wasn't JSON; keep generic
-  }
-  throw new Error(detail);
-}
-
 /**
  * POST /api/magic/rituals/sessions/
  * Draft a new ritual session as initiator.
@@ -220,7 +208,7 @@ export async function draftRitualSession(
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to draft ritual session');
+  if (!res.ok) await readErrorDetail(res, 'Failed to draft ritual session');
   return res.json() as Promise<RitualSessionDraft>;
 }
 
@@ -237,7 +225,7 @@ export async function acceptRitualSession(
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to accept ritual session');
+  if (!res.ok) await readErrorDetail(res, 'Failed to accept ritual session');
   return res.json() as Promise<RitualSessionAccept>;
 }
 
@@ -251,7 +239,7 @@ export async function declineRitualSession(id: number): Promise<RitualSessionAcc
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to decline ritual session');
+  if (!res.ok) await readErrorDetail(res, 'Failed to decline ritual session');
   // 204 → session was deleted; no body
   if (res.status === 204) return null;
   return res.json() as Promise<RitualSessionAccept>;
@@ -268,7 +256,7 @@ export async function fireRitualSession(id: number): Promise<RitualSessionList> 
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to fire ritual session');
+  if (!res.ok) await readErrorDetail(res, 'Failed to fire ritual session');
   return res.json() as Promise<RitualSessionList>;
 }
 
@@ -280,5 +268,5 @@ export async function cancelRitualSession(id: number): Promise<void> {
   const res = await apiFetch(`${SESSIONS_URL}/${id}/`, {
     method: 'DELETE',
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to cancel ritual session');
+  if (!res.ok) await readErrorDetail(res, 'Failed to cancel ritual session');
 }

@@ -22,6 +22,9 @@
             Import Data
         </a>
         {% if user.is_superuser %}
+        <a href="{% url 'admin_game_setup' %}" class="export-btn" id="game-setup-btn">
+            Game Setup
+        </a>
         <a href="{% url 'admin_seed' %}" class="export-btn" id="seed-defaults-btn">
             Load sane defaults
         </a>

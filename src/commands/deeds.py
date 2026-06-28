@@ -171,9 +171,9 @@ class CmdDeed(DispatchCommand):
 
     def _current_scene_id(self) -> int:
         """Return the active scene for the caller's current location."""
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        scene = _get_active_scene(self.caller.location)
+        scene = get_active_scene(self.caller.location)
         if scene is None:
             msg = "There is no active scene here."
             raise CommandError(msg)

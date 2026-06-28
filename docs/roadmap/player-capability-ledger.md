@@ -73,8 +73,8 @@ in-fiction trigger is plausible.
 | Combo attack **full journey** | 🟨 WIRED-UNPROVEN | `services.py:3356-3367`; pieces unit-tested only | prove-it |
 | Thread pull changes a cast/clash **final outcome** | 🟨 WIRED-UNPROVEN | reaches check input; final outcome not asserted | prove-it |
 | **Remove / dispel** a condition (cleanse) | ❌ ABSENT | no `EffectKind` REMOVE | MVP |
-| **Charm / switch-sides** an enemy NPC | 🟡→❌ | only an `alters_behavior` consent flag | MVP |
-| **Negotiate / parley** an NPC down | ❌ ABSENT | no stance/disposition model | MVP |
+| **Charm / switch-sides** an enemy NPC | ✅ PROVEN | `derive_allegiance` → `select_npc_actions` (#1590, ADR-0058) | MVP |
+| **Negotiate / parley** an NPC down | ✅ PROVEN | `apply_social_disposition_delta` → `adjust_npc_affection`; durable + ephemeral tiers (#1591, ADR-0058) | MVP |
 | **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ❌ ABSENT | #1320 catalog is the engine | MVP |
 | **Companions / pets / summons** w/ breath weapons & ordered abilities | ❌ ABSENT | #672 (planned) | MVP |
 | **Roles grant techniques** (resonance-spec at lvl 3) | ❌ → DESIGNED | **ADR-0055** (the specialization engine); reverses bonuses-only | MVP+ADR |

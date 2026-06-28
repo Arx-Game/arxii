@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <h1>Welcome to a new Arx-based instance</h1>
+  <p>This is the starting point for configuring your game. The flow is:</p>
+  <ol>
+    <li>
+      <strong>Seed defaults</strong> —
+      <a href="{{ seed_url }}">Load sane defaults</a>
+      populates a baseline playable game (rules + character-creation content).
+      Idempotent; never overwrites your edits.
+    </li>
+    <li>
+      <strong>Author content</strong> — add or edit species, paths, magic,
+      combat, traits, etc. via the World apps on the
+      <a href="{% url 'admin:index' %}">admin index</a>.
+    </li>
+    <li>
+      <strong>Tune mechanics</strong> — (coming soon) difficulty analytics +
+      simulation.
+    </li>
+    <li>
+      <strong>Export your game</strong> —
+      <a href="{{ export_url }}">Export Data</a>
+      saves your configuration as a portable JSON fixture;
+      <a href="{{ import_url }}">Import Data</a> loads one.
+    </li>
+  </ol>
+
+  <h2>Content inventory</h2>
+  <p>What your game currently contains. Empty rows are content gaps to fill.</p>
+  <table>
+    <thead>
+      <tr><th>Cluster</th><th>Content</th><th>Rows</th></tr>
+    </thead>
+    <tbody>
+    {% for group in inventory %}
+      {% for m in group.models %}
+        <tr>
+          {% if forloop.first %}
+            <td rowspan="{{ group.models|length }}">{{ group.cluster }}</td>
+          {% endif %}
+          <td>{{ m.name }}</td>
+          <td>{{ m.count }}</td>
+        </tr>
+      {% empty %}
+        <tr><td>{{ group.cluster }}</td><td><em>(resolution spine — no standalone rows)</em></td><td>&mdash;</td></tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Jump to authoring</h2>
+  <ul>
+    {% for app in world_apps %}
+      <li><a href="{% url 'admin:app_list' app %}">{{ app }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

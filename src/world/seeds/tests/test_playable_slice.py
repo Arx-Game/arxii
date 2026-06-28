@@ -68,3 +68,84 @@ class TestPlayableSlice(TestCase):
         self.assertGreater(result.trait_points, 0)
         self.assertIsNotNone(result.outcome)
         self.assertIsInstance(result.outcome, CheckOutcome)
+
+
+class TestSeededCharacterCreation(TestCase):
+    """The #1333 proof: a clean DB seeded via the Big Button can run CG.
+
+    Builds a CharacterDraft against the SEEDED CG-world content (not test-only
+    rows) and asserts ``finalize_character`` produces a CharacterSheet + primary
+    Persona without raising. This is the test that closes the "fresh DB cannot
+    run character creation" gap.
+    """
+
+    def test_finalize_character_works_on_seeded_only_db(self) -> None:
+        from evennia.accounts.models import AccountDB
+
+        from world.character_creation.models import CharacterDraft
+        from world.character_creation.services import finalize_character
+        from world.character_sheets.models import CharacterSheet
+        from world.magic.models import Cantrip
+        from world.seeds.character_creation import DEFAULT_STAT_NAMES
+        from world.tarot.models import TarotCard
+
+        seed_dev_database()
+
+        area = CharacterDraft._meta.get_field("selected_area").related_model.objects.get(
+            name="Arx City"
+        )
+        beginnings = CharacterDraft._meta.get_field(
+            "selected_beginnings"
+        ).related_model.objects.get(name="Commoner")
+        species = CharacterDraft._meta.get_field("selected_species").related_model.objects.get(
+            name="Human"
+        )
+        gender = CharacterDraft._meta.get_field("selected_gender").related_model.objects.get(
+            key="unspecified"
+        )
+        path = CharacterDraft._meta.get_field("selected_path").related_model.objects.get(
+            name="The Wanderer"
+        )
+        height_band = CharacterDraft._meta.get_field("height_band").related_model.objects.get(
+            name="average_band"
+        )
+        build = CharacterDraft._meta.get_field("build").related_model.objects.get(
+            name="average_build"
+        )
+        tarot = TarotCard.objects.get(name="The Fool")
+
+        # The seeded magic cluster provides a selectable cantrip.
+        cantrip = Cantrip.objects.first()
+        self.assertIsNotNone(cantrip, "magic cluster must seed a selectable cantrip")
+
+        account = AccountDB.objects.create(username="seeded_cg_player")
+        draft_data = {
+            "first_name": "Seeded",
+            "description": "A character finalized against seeded-only content.",
+            "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 2),
+            "lineage_is_orphan": True,
+            "tarot_card_name": tarot.name,
+            "tarot_reversed": False,
+            "traits_complete": True,
+            "selected_cantrip_id": cantrip.id,
+        }
+        # selected_tradition may be nullable; leave it unset unless finalize needs it.
+
+        draft = CharacterDraft.objects.create(
+            account=account,
+            selected_area=area,
+            selected_beginnings=beginnings,
+            selected_species=species,
+            selected_gender=gender,
+            selected_path=path,
+            age=25,
+            height_band=height_band,
+            height_inches=(height_band.min_inches + height_band.max_inches) // 2,
+            build=build,
+            draft_data=draft_data,
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        self.assertIsNotNone(character)
+        self.assertTrue(CharacterSheet.objects.filter(character=character).exists())

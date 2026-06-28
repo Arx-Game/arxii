@@ -12,6 +12,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type {
@@ -74,19 +75,6 @@ export type Technique = components['schemas']['Technique'];
 
 function jsonHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json' };
-}
-
-async function parseErrorDetail(res: Response, fallback: string): Promise<never> {
-  let detail = fallback;
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (typeof data.detail === 'string' && data.detail.trim()) {
-      detail = data.detail;
-    }
-  } catch {
-    // body wasn't JSON; keep generic
-  }
-  throw new Error(detail);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +152,7 @@ export async function dissolveSoulTether(body: DissolveRequest): Promise<void> {
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to dissolve Soul Tether');
+    await readErrorDetail(res, 'Failed to dissolve Soul Tether');
   }
 }
 
@@ -182,7 +170,7 @@ export async function requestSineating(body: SineatingRequest): Promise<Sineatin
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to send Sineating request');
+    await readErrorDetail(res, 'Failed to send Sineating request');
   }
 
   return res.json() as Promise<SineatingOffer>;
@@ -202,7 +190,7 @@ export async function respondToSineating(body: SineatingRespondRequest): Promise
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to respond to Sineating offer');
+    await readErrorDetail(res, 'Failed to respond to Sineating offer');
   }
 
   return res.json() as Promise<SineatingResult>;
@@ -222,7 +210,7 @@ export async function performRescue(body: RescueRequest): Promise<RescueOutcome>
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to perform Soul Tether rescue');
+    await readErrorDetail(res, 'Failed to perform Soul Tether rescue');
   }
 
   return res.json() as Promise<RescueOutcome>;
@@ -244,7 +232,7 @@ export async function respondToStageAdvance(
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to respond to stage-advance offer');
+    await readErrorDetail(res, 'Failed to respond to stage-advance offer');
   }
 
   return res.json() as Promise<StageAdvanceBonusResult>;
@@ -427,7 +415,7 @@ export async function weaveThread(body: WeaveThreadRequest): Promise<Thread> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to weave thread');
+    await readErrorDetail(res, 'Failed to weave thread');
   }
   return res.json() as Promise<Thread>;
 }
@@ -444,7 +432,7 @@ export async function patchThreadNarrative(id: number, body: PatchThreadRequest)
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, `Failed to update thread ${id}`);
+    await readErrorDetail(res, `Failed to update thread ${id}`);
   }
   return res.json() as Promise<Thread>;
 }
@@ -459,7 +447,7 @@ export async function retireThread(id: number): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) {
-    await parseErrorDetail(res, `Failed to retire thread ${id}`);
+    await readErrorDetail(res, `Failed to retire thread ${id}`);
   }
 }
 
@@ -479,7 +467,7 @@ export async function crossXPLock(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, `Failed to cross XP lock on thread ${threadId}`);
+    await readErrorDetail(res, `Failed to cross XP lock on thread ${threadId}`);
   }
   return res.json() as Promise<CrossXPLockResponse>;
 }
@@ -608,7 +596,7 @@ export async function previewPull(body: PullPreviewRequest): Promise<PullPreview
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to preview pull effects');
+    await readErrorDetail(res, 'Failed to preview pull effects');
   }
   return res.json() as Promise<PullPreviewResponse>;
 }
@@ -644,7 +632,7 @@ export async function acceptTeachingOffer(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    await parseErrorDetail(res, `Failed to accept teaching offer ${offerId}`);
+    await readErrorDetail(res, `Failed to accept teaching offer ${offerId}`);
   }
   return res.json() as Promise<AcceptTeachingOfferResponse>;
 }
@@ -670,7 +658,7 @@ export class AlterationResolveError extends Error {
  */
 export async function getPendingAlterations(): Promise<PaginatedPendingAlterationList> {
   const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/`);
-  if (!res.ok) await parseErrorDetail(res, 'Failed to load pending alterations');
+  if (!res.ok) await readErrorDetail(res, 'Failed to load pending alterations');
   return res.json() as Promise<PaginatedPendingAlterationList>;
 }
 
@@ -680,7 +668,7 @@ export async function getPendingAlterations(): Promise<PaginatedPendingAlteratio
  */
 export async function getAlterationLibrary(pendingId: number): Promise<AlterationLibraryEntry[]> {
   const res = await apiFetch(`${PENDING_ALTERATIONS_URL}/${pendingId}/library/`);
-  if (!res.ok) await parseErrorDetail(res, 'Failed to load the alteration library');
+  if (!res.ok) await readErrorDetail(res, 'Failed to load the alteration library');
   return res.json() as Promise<AlterationLibraryEntry[]>;
 }
 
@@ -751,7 +739,7 @@ export async function respondToAudere(body: AudereRespondRequest): Promise<Auder
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to respond to Audere offer');
+    await readErrorDetail(res, 'Failed to respond to Audere offer');
   }
 
   return res.json() as Promise<AudereOfferResult>;
@@ -787,7 +775,7 @@ export async function respondToAudereMajora(
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to respond to Audere Majora crossing offer');
+    await readErrorDetail(res, 'Failed to respond to Audere Majora crossing offer');
   }
 
   return res.json() as Promise<AudereMajoraCrossingResult>;
@@ -824,7 +812,7 @@ export async function respondToEntryFlourish(
   });
 
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to respond to entry-flourish offer');
+    await readErrorDetail(res, 'Failed to respond to entry-flourish offer');
   }
 
   return res.json() as Promise<EntryFlourishResult>;
@@ -864,7 +852,7 @@ export async function putPathIntent(
     body: JSON.stringify({ path_id: pathId }),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to declare path intent');
+    await readErrorDetail(res, 'Failed to declare path intent');
   }
   return res.json() as Promise<PathIntentResponse>;
 }
@@ -881,7 +869,7 @@ export async function deletePathIntent(characterId: number): Promise<void> {
     headers: { 'X-Character-ID': String(characterId) },
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to clear path intent');
+    await readErrorDetail(res, 'Failed to clear path intent');
   }
 }
 
@@ -932,7 +920,7 @@ export async function priceTechnique(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to price technique');
+    await readErrorDetail(res, 'Failed to price technique');
   }
   return res.json() as Promise<TechniqueCostBreakdown>;
 }
@@ -945,7 +933,7 @@ export async function priceTechnique(
  * Staff path: advisory budget, no character binding.
  *
  * Returns the created Technique; on a 400 the error body may include a
- * `breakdown` field alongside `detail` — `parseErrorDetail` surfaces the
+ * `breakdown` field alongside `detail` — `readErrorDetail` surfaces the
  * `detail` message so callers receive a human-readable error.
  */
 export async function authorTechnique(
@@ -957,7 +945,7 @@ export async function authorTechnique(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to author technique');
+    await readErrorDetail(res, 'Failed to author technique');
   }
   return res.json() as Promise<Technique & { breakdown: TechniqueCostBreakdown }>;
 }
@@ -984,7 +972,7 @@ export async function fetchApplicablePulls(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    await parseErrorDetail(res, 'Failed to fetch applicable pulls');
+    await readErrorDetail(res, 'Failed to fetch applicable pulls');
   }
   return res.json() as Promise<ThreadApplicability[]>;
 }
