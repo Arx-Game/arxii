@@ -314,9 +314,18 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     else:
         revert_to_true_form(sheet.character)
 
-    # Restore persona facet.
+    # Restore persona facet. Symmetric with the form facet's ``else`` above:
+    # ``return_persona`` is NULL when the character was on their implicit PRIMARY
+    # (NULL ⇒ primary via ``active_persona_for_sheet``) at assume time — restore
+    # explicitly to the PRIMARY persona row rather than leaving the assumed alt
+    # persona stuck on. ``set_active_persona`` validates ownership, so this stays
+    # within the character's own faces. (Previously this branch was skipped when
+    # ``return_persona`` was NULL, so reverting an alt-self assumed from the
+    # implicit-primary state left ``active_persona`` stuck on the alt persona.)
     if active.return_persona is not None:
         set_active_persona(sheet, active.return_persona)
+    else:
+        set_active_persona(sheet, sheet.primary_persona)
 
     # Delete the assumption source(s). Because CharacterTechnique.source is
     # SET_NULL, deleting the source alone would NULL out granted techniques and
