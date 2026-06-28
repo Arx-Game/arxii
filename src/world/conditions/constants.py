@@ -86,6 +86,15 @@ REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (
 BLINK_CONDITION_NAME: str = "Phase Step"  # blink_dodge reactive handler (#1584)
 SUMMONING_CONDITION_NAME: str = "Summoning"  # active CONDITION_APPLIED summon trigger (#1584)
 
+# Task 14c simple effect bundles (#1584). These names locate the ConditionTemplate rows
+# seeded by ensure_teleport_content / ensure_obstacle_content / ensure_incorporeal_content /
+# ensure_sink_content / ensure_telekinesis_content in world.magic.effect_palette_content.
+TELEPORT_CONDITION_NAME: str = "Phase Jump"  # CONDITION_APPLIED → move_position (SELF)
+OBSTACLE_CONDITION_NAME: str = "Barricade"  # CONDITION_APPLIED → create_obstacle (SELF)
+INCORPOREAL_CONDITION_NAME: str = "Ghostform"  # intangibility gate only; no handler
+SINK_CONDITION_NAME: str = "Earthmeld"  # intangibility gate, 1-round duration; no handler
+TELEKINESIS_CONDITION_NAME: str = "Force Grip"  # CONDITION_APPLIED → move_position (ENEMY)
+
 # Poison content identity keys (#1050). The DamageType, the staged acute
 # Poisoned ConditionTemplate, and the long-term Slow Poison variant are seeded
 # idempotently by ensure_poison_content(); these names locate those rows.

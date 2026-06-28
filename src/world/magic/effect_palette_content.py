@@ -1,44 +1,34 @@
-"""Summon effect bundle + the active-effect CONDITION_APPLIED wiring + reactive
-effect bundles (force-field/reflect/blink) (#1584, Tasks 14a & 14b).
+"""Summon + reactive + simple effect bundles for the castable effect palette (#1584).
 
-Task 14a — idempotently seeds the castable "Summon Spirit" technique so that
-casting it fires the ``summon_ally`` effect handler via CONDITION_APPLIED.
+Tasks 14a, 14b, 14c — idempotent ``ensure_*_content()`` builders.
 
-Task 14b — idempotently seeds three DAMAGE_PRE_APPLY reactive techniques:
-* ``ensure_force_field_content()`` — Aegis Field (absorb_pool, priority 10),
-  plus a CONDITION_APPLIED trigger that calls ``init_absorb_buffer`` to seed the
-  instance's absorb buffer on application.
-* ``ensure_reflect_content()`` — Mirror Ward (reflect_damage, priority 20),
-  with a CANCEL_EVENT child step that stops lower-priority interceptors.
-* ``ensure_blink_content()`` — Phase Step (blink_dodge, priority 30), with a
-  CANCEL_EVENT child step (highest priority; full avoidance stops reflect+absorb).
+Task 14a — "Summon Spirit" technique → CONDITION_APPLIED → ``summon_ally``.
+
+Task 14b — Three DAMAGE_PRE_APPLY reactive techniques:
+* ``ensure_force_field_content()`` — Aegis Field (absorb_pool, priority 10).
+* ``ensure_reflect_content()`` — Mirror Ward (reflect_damage, priority 20, CANCEL_EVENT).
+* ``ensure_blink_content()`` — Phase Step (blink_dodge, priority 30, CANCEL_EVENT).
+
+Task 14c — Five simple effect techniques + the unified entry point:
+* ``ensure_teleport_content()``   — Phase Jump (SELF): CONDITION_APPLIED → move_position.
+* ``ensure_obstacle_content()``   — Barricade (SELF): CONDITION_APPLIED → create_obstacle.
+* ``ensure_incorporeal_content()`` — Ghostform (SELF): intangibility gate only (no handler).
+* ``ensure_sink_content()``        — Earthmeld (SELF, 1 round): intangibility gate only.
+* ``ensure_telekinesis_content()`` — Force Grip (ENEMY): CONDITION_APPLIED → move_position.
+* ``ensure_effect_palette_content()`` — calls every builder; the single entry point for
+  tests and seed data.
 
 All ``ensure_*()`` functions are idempotent (get_or_create throughout) and double
 as integration-test setup and staff seed data.  Safe to call repeatedly.
 
-Idempotently seeds the content a castable "Summon Spirit" technique needs so that
-casting it actually fires the ``summon_ally`` effect handler:
+Note — destination/position placeholder params: teleport, obstacle, and telekinesis
+flow steps carry ``destination_position_id=0`` / ``position_a_id=0`` / ``position_b_id=0``
+as placeholders.  Runtime destination selection (cast-time target picker) is deferred to
+a follow-up; the Task 15/16 E2Es use real seeded Positions passed in test setup.
 
-* A ``ThreatPool`` ("Summoned Spirit") with one ``ThreatPoolEntry`` carrying
-  ``base_damage`` + ``damage_type`` so the summon can attack.
-* A ``FlowDefinition`` with a single ``CALL_SERVICE_FUNCTION`` step pointing at the
-  ``summon_ally_on_condition`` adapter, passing ``@payload`` alongside the static
-  ``threat_pool_id`` (the pool's pk), ``bond_rounds`` and ``max_health`` params.
-* A ``TriggerDefinition`` subscribed to ``CONDITION_APPLIED`` with a SELF filter
-  (only fires when the applied condition's bearer is the caster).
-* A "Summoning" ``ConditionTemplate`` with that trigger in its ``reactive_triggers``
-  M2M. When the SELF technique applies it on cast, ``_install_reactive_side_effects``
-  makes it live, so the ``CONDITION_APPLIED`` emit fires the summon flow.
-* A "Summon Spirit" ``Technique`` with a
-  ``TechniqueAppliedCondition(target_kind=SELF, condition=Summoning)``.
-
-This is the active-effect wiring exemplar (cast -> CONDITION_APPLIED -> flow ->
-service handler) that the rest of the effect palette reuses. ``ensure_summon_content()``
-is idempotent (all writes via ``get_or_create``) and doubles as integration-test
-setup and staff seed data. Safe to call repeatedly.
-
-The full cast -> trigger -> summon path is exercised by the Task 15 PG E2E
-(``apply_condition`` uses PG-only DISTINCT ON); this module's own tests stay SQLite-safe.
+The full cast → CONDITION_APPLIED → trigger → handler paths are exercised by the
+Task 15/16 PG E2Es (``apply_condition`` uses PG-only DISTINCT ON); this module's
+own tests stay SQLite-safe.
 """
 
 from flows.constants import EventName
@@ -49,8 +39,13 @@ from world.combat.constants import ActionCategory
 from world.conditions.constants import (
     BLINK_CONDITION_NAME,
     FORCE_FIELD_CONDITION_NAME,
+    INCORPOREAL_CONDITION_NAME,
+    OBSTACLE_CONDITION_NAME,
     REFLECT_CONDITION_NAME,
+    SINK_CONDITION_NAME,
     SUMMONING_CONDITION_NAME,
+    TELEKINESIS_CONDITION_NAME,
+    TELEPORT_CONDITION_NAME,
 )
 from world.conditions.models import ConditionTemplate
 from world.magic.models.gifts import Gift
@@ -123,6 +118,46 @@ _BLINK_DPA_TRIGGER_NAME: str = "blink_damage_pre_apply"
 
 # --- Absorb buffer size seeded by the CONDITION_APPLIED init handler ---
 _FORCE_FIELD_INIT_BUFFER: int = 20
+
+# ---------------------------------------------------------------------------
+# Task 14c: Simple effect bundles (teleport / obstacle / incorporeal / sink / telekinesis)
+# ---------------------------------------------------------------------------
+
+#: Castable technique name for the Phase Jump (teleport) bundle.
+TELEPORT_TECHNIQUE_NAME: str = "Phase Jump"
+
+#: Castable technique name for the Barricade (obstacle) bundle.
+OBSTACLE_TECHNIQUE_NAME: str = "Barricade"
+
+#: Castable technique name for the Ghostform (incorporeal) bundle.
+INCORPOREAL_TECHNIQUE_NAME: str = "Ghostform"
+
+#: Castable technique name for the Earthmeld (sink into earth) bundle.
+SINK_TECHNIQUE_NAME: str = "Earthmeld"
+
+#: Castable technique name for the Force Grip (telekinesis) bundle.
+TELEKINESIS_TECHNIQUE_NAME: str = "Force Grip"
+
+# --- Dotted adapter handler paths ---
+_MOVE_POSITION_ADAPTER_PATH: str = "world.magic.services.effect_handlers.move_position_on_condition"
+_CREATE_OBSTACLE_ADAPTER_PATH: str = (
+    "world.magic.services.effect_handlers.create_obstacle_on_condition"
+)
+
+# --- Flow names ---
+_TELEPORT_FLOW_NAME: str = "teleport_on_condition_applied"
+_OBSTACLE_FLOW_NAME: str = "obstacle_on_condition_applied"
+_TELEKINESIS_FLOW_NAME: str = "telekinesis_on_condition_applied"
+
+# --- Trigger names ---
+_TELEPORT_TRIGGER_NAME: str = "teleport_condition_applied"
+_OBSTACLE_TRIGGER_NAME: str = "obstacle_condition_applied"
+_TELEKINESIS_TRIGGER_NAME: str = "telekinesis_condition_applied"
+
+#: Placeholder Position pk seeded into the flow step's static params for teleport /
+#: obstacle / telekinesis.  Runtime destination selection (cast-time target picker) is
+#: a follow-up; the Task 15/16 E2Es pass a real Position via test setup.
+_PLACEHOLDER_POSITION_ID: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -322,19 +357,30 @@ def _seed_reactive_condition(
     return template
 
 
-def _seed_call_service_flow(flow_name: str, handler_path: str) -> FlowStepDefinition:
+def _seed_call_service_flow(
+    flow_name: str,
+    handler_path: str,
+    extra_params: dict[str, object] | None = None,
+) -> FlowStepDefinition:
     """Get-or-create a FlowDefinition + root CALL_SERVICE_FUNCTION step.
 
     Returns the root step so callers can attach CANCEL_EVENT children.
+
+    ``extra_params`` are merged into the step's ``parameters`` dict alongside the
+    mandatory ``{"payload": "@payload"}`` entry.  Useful for active-effect adapters
+    that need static ids (e.g. ``destination_position_id``) alongside the payload.
     """
     flow, _created = FlowDefinition.objects.get_or_create(name=flow_name)
+    params: dict[str, object] = {"payload": "@payload"}
+    if extra_params:
+        params.update(extra_params)
     root_step, _created = FlowStepDefinition.objects.get_or_create(
         flow=flow,
         action=FlowActionChoices.CALL_SERVICE_FUNCTION,
         variable_name=handler_path,
         defaults={
             "parent_id": None,
-            "parameters": {"payload": "@payload"},
+            "parameters": params,
         },
     )
     return root_step
@@ -348,10 +394,13 @@ def _seed_technique(  # noqa: PLR0913
     description: str,
     technique_description: str,
     condition_template: ConditionTemplate,
+    target_kind: str = ConditionTargetKind.SELF,
 ) -> None:
-    """Get-or-create a SELF-cast ``Technique`` + ``TechniqueAppliedCondition`` row.
+    """Get-or-create a ``Technique`` + ``TechniqueAppliedCondition`` row.
 
-    Shared boilerplate for the three reactive bundles.
+    Shared boilerplate for all effect bundles.  Defaults to ``target_kind=SELF``
+    (reactive / self-buff / teleport / incorporeal); pass ``target_kind=ENEMY``
+    for techniques applied to opponents (e.g. telekinesis Force Grip).
     """
     gift, _ = Gift.objects.get_or_create(
         name=gift_name,
@@ -388,7 +437,7 @@ def _seed_technique(  # noqa: PLR0913
     TechniqueAppliedCondition.objects.get_or_create(
         technique=tech,
         condition=condition_template,
-        target_kind=ConditionTargetKind.SELF,
+        target_kind=target_kind,
         defaults={
             "base_severity": 1,
             "minimum_success_level": 1,
@@ -623,3 +672,408 @@ def ensure_blink_content() -> None:
         ),
         condition_template=condition,
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 14c: Simple effect bundles
+# ---------------------------------------------------------------------------
+
+
+def _seed_active_condition(
+    condition_name: str,
+    category_name: str,
+    category_is_negative: bool,
+    category_display_order: int,
+    description: str,
+) -> ConditionTemplate:
+    """Get-or-create a one-shot marker ``ConditionTemplate`` for active CONDITION_APPLIED effects.
+
+    The returned template is meant to be applied on cast (SELF or ENEMY) and
+    immediately trigger a reactive flow via ``reactive_triggers``.  Duration is
+    ``UNTIL_USED`` so the marker expires after the trigger fires.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+
+    category, _ = ConditionCategory.objects.get_or_create(
+        name=category_name,
+        defaults={
+            "description": f"Conditions related to {category_name.lower()} effects.",
+            "is_negative": category_is_negative,
+            "display_order": category_display_order,
+        },
+    )
+    template, _ = ConditionTemplate.objects.get_or_create(
+        name=condition_name,
+        defaults={
+            "description": description,
+            "category": category,
+            "default_duration_type": DurationType.UNTIL_USED,
+            "default_duration_value": 1,
+            "is_stackable": False,
+            "max_stacks": 1,
+            "has_progression": False,
+            "can_be_dispelled": False,
+        },
+    )
+    return template
+
+
+def _seed_intangibility_condition(
+    condition_name: str,
+    description: str,
+    default_duration_type: str,
+    default_duration_value: int,
+) -> ConditionTemplate:
+    """Get-or-create a ``ConditionTemplate`` whose category has ``grants_intangibility=True``.
+
+    Used by Ghostform (incorporeal) and Earthmeld (sink into earth).  These conditions
+    carry no reactive triggers — the Task 8 targeting gate reads ``grants_intangibility``
+    to make the bearer untargetable while the condition is active.
+    """
+    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+
+    intangible_cat, _ = ConditionCategory.objects.get_or_create(
+        name="Incorporeal",
+        defaults={
+            "description": (
+                "Conditions that render the bearer untargetable by phasing them out of "
+                "the physical plane (incorporeal flight, earthbound sink, etc.)."
+            ),
+            "is_negative": False,
+            "display_order": 30,
+            "grants_intangibility": True,
+        },
+    )
+    template, _ = ConditionTemplate.objects.get_or_create(
+        name=condition_name,
+        defaults={
+            "description": description,
+            "category": intangible_cat,
+            "default_duration_type": default_duration_type,
+            "default_duration_value": default_duration_value,
+            "is_stackable": False,
+            "max_stacks": 1,
+            "has_progression": False,
+            "can_be_dispelled": True,
+        },
+    )
+    return template
+
+
+def ensure_teleport_content() -> None:
+    """Idempotently seed the Phase Jump (teleport) active-effect bundle (#1584, Task 14c).
+
+    Creates (get_or_create):
+
+    1. A ``FlowDefinition`` (``teleport_on_condition_applied``) with a single
+       ``CALL_SERVICE_FUNCTION`` step pointing at ``move_position_on_condition``,
+       passing ``{"payload": "@payload", "destination_position_id": 0}`` (placeholder;
+       runtime destination selection is a follow-up — see note in module docstring).
+    2. A ``TriggerDefinition`` on ``CONDITION_APPLIED`` with a SELF filter (fires only
+       when the applied condition's bearer is the caster).
+    3. A "Phase Jump" ``ConditionTemplate`` (``TELEPORT_CONDITION_NAME``) in the
+       "Movement" category, duration ``UNTIL_USED``.  The marker expires after the
+       trigger fires.
+    4. A "Phase Jump" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
+    """
+    # 1. Flow: single CALL_SERVICE_FUNCTION step with static destination placeholder.
+    root_step = _seed_call_service_flow(
+        _TELEPORT_FLOW_NAME,
+        _MOVE_POSITION_ADAPTER_PATH,
+        extra_params={"destination_position_id": _PLACEHOLDER_POSITION_ID},
+    )
+    teleport_flow = root_step.flow
+
+    # 2. Trigger: CONDITION_APPLIED, SELF filter.
+    teleport_trigger, _created = TriggerDefinition.objects.get_or_create(
+        name=_TELEPORT_TRIGGER_NAME,
+        defaults={
+            "event_name": EventName.CONDITION_APPLIED,
+            "flow_definition": teleport_flow,
+            "base_filter_condition": _SELF_TARGET_FILTER,
+            "priority": 0,
+            "description": (
+                "Relocates the caster to a new position when the Phase Jump condition "
+                "is applied (CONDITION_APPLIED; active teleport effect)."
+            ),
+        },
+    )
+
+    # 3. ConditionTemplate: "Phase Jump" marker in the Movement category.
+    condition = _seed_active_condition(
+        TELEPORT_CONDITION_NAME,
+        category_name="Movement",
+        category_is_negative=False,
+        category_display_order=40,
+        description=(
+            "A transient teleportation marker applied when the caster invokes Phase Jump.  "
+            "The CONDITION_APPLIED trigger immediately relocates the caster to the target "
+            "position, then the marker expires."
+        ),
+    )
+    condition.reactive_triggers.add(teleport_trigger)
+
+    # 4. Technique.
+    _seed_technique(
+        TELEPORT_TECHNIQUE_NAME,
+        gift_name="Translocation",
+        style_name="Translocation Stance",
+        effect_type_name="Teleport",
+        description="Techniques that bend space to move the caster instantly.",
+        technique_description=(
+            "Phase through space in a heartbeat, instantly relocating to a target position "
+            "within the encounter."
+        ),
+        condition_template=condition,
+    )
+
+
+def ensure_obstacle_content() -> None:
+    """Idempotently seed the Barricade (obstacle) active-effect bundle (#1584, Task 14c).
+
+    Creates (get_or_create):
+
+    1. A ``FlowDefinition`` (``obstacle_on_condition_applied``) with a single
+       ``CALL_SERVICE_FUNCTION`` step pointing at ``create_obstacle_on_condition``,
+       passing ``{"payload": "@payload", "position_a_id": 0, "position_b_id": 0}``
+       (placeholder positions; runtime target selection is a follow-up).
+    2. A ``TriggerDefinition`` on ``CONDITION_APPLIED`` with a SELF filter.
+    3. A "Barricade" ``ConditionTemplate`` (``OBSTACLE_CONDITION_NAME``) in the
+       "Movement" category, duration ``UNTIL_USED``.
+    4. A "Barricade" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
+    """
+    # 1. Flow: single CALL_SERVICE_FUNCTION step with static position placeholders.
+    root_step = _seed_call_service_flow(
+        _OBSTACLE_FLOW_NAME,
+        _CREATE_OBSTACLE_ADAPTER_PATH,
+        extra_params={
+            "position_a_id": _PLACEHOLDER_POSITION_ID,
+            "position_b_id": _PLACEHOLDER_POSITION_ID,
+        },
+    )
+    obstacle_flow = root_step.flow
+
+    # 2. Trigger: CONDITION_APPLIED, SELF filter.
+    obstacle_trigger, _created = TriggerDefinition.objects.get_or_create(
+        name=_OBSTACLE_TRIGGER_NAME,
+        defaults={
+            "event_name": EventName.CONDITION_APPLIED,
+            "flow_definition": obstacle_flow,
+            "base_filter_condition": _SELF_TARGET_FILTER,
+            "priority": 0,
+            "description": (
+                "Creates an impassable barrier between two positions when the Barricade "
+                "condition is applied (CONDITION_APPLIED; active obstacle effect)."
+            ),
+        },
+    )
+
+    # 3. ConditionTemplate: "Barricade" marker in the Movement category.
+    condition = _seed_active_condition(
+        OBSTACLE_CONDITION_NAME,
+        category_name="Movement",
+        category_is_negative=False,
+        category_display_order=40,
+        description=(
+            "A transient barrier marker applied when the caster invokes Barricade.  "
+            "The CONDITION_APPLIED trigger seals the edge between two positions, "
+            "then the marker expires."
+        ),
+    )
+    condition.reactive_triggers.add(obstacle_trigger)
+
+    # 4. Technique.
+    _seed_technique(
+        OBSTACLE_TECHNIQUE_NAME,
+        gift_name="Translocation",
+        style_name="Translocation Stance",
+        effect_type_name="Obstacle",
+        description="Techniques that reshape the battlefield with barriers and blockades.",
+        technique_description=(
+            "Erect an impassable magical barrier between two positions in the encounter, "
+            "forcing enemies to find another route."
+        ),
+        condition_template=condition,
+    )
+
+
+def ensure_incorporeal_content() -> None:
+    """Idempotently seed the Ghostform (incorporeal) bundle (#1584, Task 14c).
+
+    No handler or trigger is wired — the Task 8 targeting gate reads
+    ``ConditionCategory.grants_intangibility`` to make the bearer untargetable while
+    Ghostform is active.  Creates (get_or_create):
+
+    1. An "Incorporeal" ``ConditionCategory`` with ``grants_intangibility=True``.
+    2. A "Ghostform" ``ConditionTemplate`` (``INCORPOREAL_CONDITION_NAME``) lasting
+       until end of combat (sustained incorporeal form).
+    3. A "Ghostform" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+
+    condition = _seed_intangibility_condition(
+        INCORPOREAL_CONDITION_NAME,
+        description=(
+            "The caster's body becomes insubstantial, phasing through physical matter "
+            "and rendering them untargetable by mundane attacks.  Lasts until the end "
+            "of combat or until dispelled."
+        ),
+        default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+        default_duration_value=1,
+    )
+
+    _seed_technique(
+        INCORPOREAL_TECHNIQUE_NAME,
+        gift_name="Translocation",
+        style_name="Translocation Stance",
+        effect_type_name="Incorporeal Form",
+        description="Techniques that phase the caster out of the physical plane.",
+        technique_description=(
+            "Render yourself incorporeal for the duration of the encounter, passing "
+            "through physical barriers and becoming untargetable by mundane weapons."
+        ),
+        condition_template=condition,
+    )
+
+
+def ensure_sink_content() -> None:
+    """Idempotently seed the Earthmeld (sink into earth) bundle (#1584, Task 14c).
+
+    Like Ghostform but lasts only 1 round — a burst of intangibility for defensive
+    timing.  No handler or trigger; the Task 8 targeting gate does the work via
+    ``ConditionCategory.grants_intangibility``.  Creates (get_or_create):
+
+    1. An "Incorporeal" ``ConditionCategory`` with ``grants_intangibility=True``
+       (shared with Ghostform).
+    2. An "Earthmeld" ``ConditionTemplate`` (``SINK_CONDITION_NAME``) lasting
+       1 round (shorter than Ghostform's until-end-of-combat).
+    3. An "Earthmeld" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+
+    condition = _seed_intangibility_condition(
+        SINK_CONDITION_NAME,
+        description=(
+            "The caster sinks into the earth momentarily, becoming untargetable for "
+            "one round before surfacing.  A brief but potent defensive maneuver."
+        ),
+        default_duration_type=DurationType.ROUNDS,
+        default_duration_value=1,
+    )
+
+    _seed_technique(
+        SINK_TECHNIQUE_NAME,
+        gift_name="Translocation",
+        style_name="Translocation Stance",
+        effect_type_name="Earth Sink",
+        description="Techniques that merge the caster with the earth for a fleeting moment.",
+        technique_description=(
+            "Sink into the earth for one round, becoming untargetable.  "
+            "A burst defensive technique with the shortest possible window of intangibility."
+        ),
+        condition_template=condition,
+    )
+
+
+def ensure_telekinesis_content() -> None:
+    """Idempotently seed the Force Grip (telekinesis) active-effect bundle (#1584, Task 14c).
+
+    Applies the "Force Grip" condition to an **enemy** target; the CONDITION_APPLIED
+    trigger repositions that enemy via ``move_position_on_condition``.  Damage is
+    deferred as a follow-up (MVP = reposition only).  Creates (get_or_create):
+
+    1. A ``FlowDefinition`` (``telekinesis_on_condition_applied``) with a single
+       ``CALL_SERVICE_FUNCTION`` step → ``move_position_on_condition``.
+    2. A ``TriggerDefinition`` on ``CONDITION_APPLIED`` with a SELF filter (fires on
+       the enemy's bearer, which is the enemy objectdb for an ENEMY condition).
+    3. A "Force Grip" ``ConditionTemplate`` (``TELEKINESIS_CONDITION_NAME``) in the
+       "Control" category, duration ``UNTIL_USED``.
+    4. A "Force Grip" ``Technique`` with an **ENEMY** ``TechniqueAppliedCondition``.
+    """
+    # 1. Flow: single CALL_SERVICE_FUNCTION step with static destination placeholder.
+    root_step = _seed_call_service_flow(
+        _TELEKINESIS_FLOW_NAME,
+        _MOVE_POSITION_ADAPTER_PATH,
+        extra_params={"destination_position_id": _PLACEHOLDER_POSITION_ID},
+    )
+    telekinesis_flow = root_step.flow
+
+    # 2. Trigger: CONDITION_APPLIED, SELF filter (payload.target = the repositioned enemy).
+    telekinesis_trigger, _created = TriggerDefinition.objects.get_or_create(
+        name=_TELEKINESIS_TRIGGER_NAME,
+        defaults={
+            "event_name": EventName.CONDITION_APPLIED,
+            "flow_definition": telekinesis_flow,
+            "base_filter_condition": _SELF_TARGET_FILTER,
+            "priority": 0,
+            "description": (
+                "Repositions an enemy when the Force Grip condition is applied to them "
+                "(CONDITION_APPLIED; active telekinesis effect, ENEMY target)."
+            ),
+        },
+    )
+
+    # 3. ConditionTemplate: "Force Grip" marker in the Control category.
+    condition = _seed_active_condition(
+        TELEKINESIS_CONDITION_NAME,
+        category_name="Control",
+        category_is_negative=True,  # applied to enemies
+        category_display_order=50,
+        description=(
+            "An invisible telekinetic grip applied to an enemy.  The CONDITION_APPLIED "
+            "trigger immediately flings the target to a new position, then the marker "
+            "expires.  Damage follow-up is a future enhancement."
+        ),
+    )
+    condition.reactive_triggers.add(telekinesis_trigger)
+
+    # 4. Technique — ENEMY target kind.
+    _seed_technique(
+        TELEKINESIS_TECHNIQUE_NAME,
+        gift_name="Translocation",
+        style_name="Translocation Stance",
+        effect_type_name="Telekinesis",
+        description="Techniques that move objects and enemies with invisible force.",
+        technique_description=(
+            "Seize an enemy in an invisible telekinetic grip and hurl them to another "
+            "position.  MVP: reposition only; damage is a future follow-up."
+        ),
+        condition_template=condition,
+        target_kind=ConditionTargetKind.ENEMY,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unified entry point — Task 14c
+# ---------------------------------------------------------------------------
+
+
+def ensure_effect_palette_content() -> None:
+    """Idempotently seed the complete castable effect palette (#1584).
+
+    Calls every ``ensure_*_content()`` builder in dependency order.  Safe to
+    call repeatedly (all builders are idempotent via ``get_or_create``).
+
+    Bundles seeded:
+    - **Task 14a** — Summon Spirit (CONDITION_APPLIED → summon_ally).
+    - **Task 14b** — Aegis Field (absorb_pool), Mirror Ward (reflect_damage),
+      Phase Step (blink_dodge).
+    - **Task 14c** — Phase Jump (teleport), Barricade (obstacle), Ghostform
+      (incorporeal), Earthmeld (sink), Force Grip (telekinesis).
+
+    This is the single function that integration-test setup (Tasks 15/16 E2Es)
+    and the staff seed loader call.
+    """
+    # 14a
+    ensure_summon_content()
+    # 14b
+    ensure_force_field_content()
+    ensure_reflect_content()
+    ensure_blink_content()
+    # 14c
+    ensure_teleport_content()
+    ensure_obstacle_content()
+    ensure_incorporeal_content()
+    ensure_sink_content()
+    ensure_telekinesis_content()

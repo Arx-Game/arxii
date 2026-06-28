@@ -240,6 +240,58 @@ def summon_ally(*, payload: Any) -> None:
         force_move_to_position(opp.objectdb, pos)
 
 
+def move_position_on_condition(*, payload: Any, destination_position_id: int) -> None:
+    """CONDITION_APPLIED adapter: relocate ``payload.target`` to a seeded destination.
+
+    Bridges the CONDITION_APPLIED payload shape to ``move_position``, which expects
+    ``payload.target`` (the objectdb to move) and ``payload.destination_position_id``
+    (the target Position pk).
+
+    Used by the teleport (Phase Jump, SELF) and telekinesis (Force Grip, ENEMY) effect
+    bundles.  For SELF conditions ``payload.target`` is the caster; for ENEMY conditions
+    it is the enemy objectdb.
+
+    Note — ``destination_position_id`` is seeded as a placeholder (0) in the flow step;
+    runtime destination selection (cast-time target picker) is a follow-up for Tasks 15/16.
+    """
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    move_position(
+        payload=SimpleNamespace(
+            target=payload.target,
+            destination_position_id=destination_position_id,
+        )
+    )
+
+
+def create_obstacle_on_condition(
+    *,
+    payload: Any,  # noqa: ARG001
+    position_a_id: int,
+    position_b_id: int,
+) -> None:
+    """CONDITION_APPLIED adapter: seal the edge between two positions.
+
+    Bridges the CONDITION_APPLIED payload shape to ``create_obstacle``, which
+    expects ``payload.position_a_id`` and ``payload.position_b_id`` (the two
+    adjacent Position pks to seal).  ``payload.target`` (the caster) is not
+    forwarded — ``create_obstacle`` only needs the position IDs.
+
+    Used by the obstacle (Barricade, SELF) effect bundle.
+
+    Note — ``position_a_id`` / ``position_b_id`` are seeded as placeholders (0, 0);
+    runtime position selection is a follow-up for Tasks 15/16.
+    """
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    create_obstacle(
+        payload=SimpleNamespace(
+            position_a_id=position_a_id,
+            position_b_id=position_b_id,
+        )
+    )
+
+
 def summon_ally_on_condition(
     *, payload: Any, threat_pool_id: int, bond_rounds: int | None = None, max_health: int = 30
 ) -> None:
