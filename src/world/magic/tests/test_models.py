@@ -172,6 +172,11 @@ class GiftModelTests(TestCase):
         assert gift.kind == GiftKind.MINOR
         assert gift.get_kind_display() == "Minor (shared, acquirable)"
 
+    def test_gift_factory_kind_is_overridable(self) -> None:
+        """GiftFactory defaults to MAJOR but tests can build a MINOR gift."""
+        assert GiftFactory().kind == GiftKind.MAJOR
+        assert GiftFactory(kind=GiftKind.MINOR).kind == GiftKind.MINOR
+
 
 class CharacterGiftModelTests(TestCase):
     """Tests for the CharacterGift model."""
