@@ -5,12 +5,14 @@ from world.narrative.views import (
     GemitViewSet,
     MarkNarrativeMessageAcknowledgedView,
     MyNarrativeMessagesView,
+    UserCategoryMuteViewSet,
     UserStoryMuteViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"gemits", GemitViewSet, basename="gemit")
 router.register(r"story-mutes", UserStoryMuteViewSet, basename="storymute")
+router.register(r"category-mutes", UserCategoryMuteViewSet, basename="categorymute")
 
 urlpatterns = [
     path("my-messages/", MyNarrativeMessagesView.as_view(), name="narrative-my-messages"),

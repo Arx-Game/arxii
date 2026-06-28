@@ -12,6 +12,10 @@ _Avoid_: a Durance, durance covenant.
 The `CovenantType.BATTLE` covenant — an oath sworn to a martial cause. A STANDING one can stand down into dormancy and *rise again* through a "call the banners" rise ritual; a CAMPAIGN one dissolves when its defining story concludes.
 _Avoid_: setting active=true / "activating" a covenant (a dormant covenant rises via ritual, it is not flipped on).
 
+**Covenant of the Court**:
+The `CovenantType.COURT` covenant — a master/servants oath: a single powerful leader and the servants/apprentices/acolytes sworn to them across a wide power gulf (by design ≥1 power tier), explicitly not a co-adventuring party (e.g. "the Court of Shadows" serving the Shadowlord). Lets a peerless puissant hold a covenant role. (ADR-0057.)
+_Avoid_: retinue covenant (descriptive only), guild, household, mentor bond.
+
 **Covenant Role**:
 The combat-power axis of membership: a role's archetype (Sword / Shield / Crown), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
 _Avoid_: rank, position, office.

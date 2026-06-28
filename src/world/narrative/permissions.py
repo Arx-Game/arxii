@@ -82,3 +82,24 @@ class IsOwnStoryMuteOrStaff(BasePermission):
         if request.user.is_staff:
             return True
         return obj.account_id == request.user.pk
+
+
+class IsOwnCategoryMuteOrStaff(BasePermission):
+    """Owners of a UserCategoryMute (account == request.user) or staff may delete it."""
+
+    message = "You may only manage your own category mutes."
+
+    def has_permission(self, request: "Request", view: "APIView") -> bool:
+        """Authenticated users only."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(
+        self,
+        request: "Request",
+        view: "APIView",
+        obj: "Model",
+    ) -> bool:
+        """Only the owning account or staff may delete the mute."""
+        if request.user.is_staff:
+            return True
+        return obj.account_id == request.user.pk

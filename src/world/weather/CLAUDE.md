@@ -86,7 +86,9 @@ Services (`world.weather.services`):
   precisely; offline players skip it — no stale catch-up flood).
 - **Squelch** — `narrative.UserCategoryMute` (mirrors `UserStoryMute`: suppress the live push,
   keep it readable in the tab). `narrative.services.set_category_mute` / `is_category_muted`;
-  `time` command exposes `weather squelch` / `weather unsquelch` on the WEATHER category.
+  `time` command exposes `weather squelch` / `weather unsquelch` on the WEATHER category. The
+  **web face** is `narrative.UserCategoryMuteViewSet` (`/api/narrative/category-mutes/`) →
+  `CategoryMuteToggles` Switch on the frontend `MuteSettingsPage` (#1522).
 - **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
   the room's effective weather + one emit line. Any field is None when its source is absent.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
@@ -114,8 +116,13 @@ Services (`world.weather.services`):
   by name. Load order: `weather_types` → `weather_type_exposures` → `weather_emits` (via
   `loaddata`). Exposure magnitudes, temperature bands, and selection weights are PLACEHOLDER.
   Weather is inert in any DB until these are loaded (`roll_region_weather` returns None with no
-  types). **Re-seeding edited emits needs an upsert path** (loaddata duplicates the keyless emit
-  rows — the #946 idmapper caveat); not yet built.
+  types). **Re-seeding** an edited corpus goes through `world.weather.seed` (the upsert path), NOT
+  a second `loaddata`: `loaddata` can't UPDATE idmapper rows and DUPLICATES the keyless `WeatherEmit`
+  rows (#944/#946). `seed.load_weather_seed(fixtures_dir)` upserts each model by natural identity
+  (`WeatherType`→name, `WeatherTypeExposure`→(type, axis), `WeatherEmit`→(type, text),
+  `FeastDay`→(month, day)), so editing a magnitude/weight/flag and re-running mutates in place.
+  The same generated fixture JSON stays valid for fresh-DB `loaddata`. Invoke via the tools wrapper
+  `tools/load_weather_seed.py` (`--fixtures-dir` or `WEATHER_SEED_PATH`); not a management command.
 - **Wind as a mechanic** (flyers/arrows/gale spells, driven by the active weather's WIND) —
   combat/technique consumer, **Tehom's domain**; filed as **#1555** (`needs-design`). The WIND
   *provider* side is done (`felt_exposure(room, WIND)` / `current_conditions`).
