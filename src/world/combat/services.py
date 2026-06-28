@@ -1907,8 +1907,10 @@ def _exclude_charmers_party(
     condition. If it resolves to an active ``CombatParticipant``, exclude it.
     MVP: parties are 1:1 with participants (no party grouping yet), so we
     exclude the single charmer participant. If the source is unresolvable
-    (e.g. left the encounter), the charmed NPC has no valid PC target and
-    skips the round.
+    (no ``source_character`` on the Charm, or the charmer left the encounter),
+    the charmed NPC has no party to fight for — returning ``[]`` so the caller
+    skips the round is intentional (NOT a fall-back to ENEMY: a charmed NPC
+    must never attack the charmer's side even if the charmer is gone).
     """
     from world.conditions.constants import CHARM_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
@@ -1996,7 +1998,10 @@ def select_npc_actions(
     """Select and create NPC actions for the current round.
 
     For each active opponent with a threat pool, picks a weighted-random
-    entry from eligible threat pool entries and assigns targets.
+    entry from eligible threat pool entries and assigns targets. Targeting is
+    allegiance-aware (#1590, ADR-0058): a charmed opponent (``ALLY_OF_CASTER``)
+    skips the charmer's party, and a calmed opponent (``NEUTRAL``) holds and
+    takes no action; an opponent left with no valid targets skips the round.
 
     Raises ValueError if the encounter is not in DECLARING status.
     """
