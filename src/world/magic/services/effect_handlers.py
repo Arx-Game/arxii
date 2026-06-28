@@ -265,6 +265,20 @@ def summon_ally_on_condition(
     )
 
 
+def init_absorb_buffer(*, payload: Any, buffer: int) -> None:
+    """CONDITION_APPLIED init: seed the force-field instance's absorb buffer.
+
+    Called by the Aegis Field condition's CONDITION_APPLIED reactive trigger.
+    Sets ``absorb_remaining`` to *buffer* on the freshly applied instance only
+    when the field is still uninitialized (``absorb_remaining is None``), so a
+    double-fire (idempotent seed calls) never overwrites an already-seeded value.
+    """
+    inst = payload.instance
+    if inst is not None and inst.absorb_remaining is None:
+        inst.absorb_remaining = buffer
+        inst.save(update_fields=["absorb_remaining"])
+
+
 def blink_dodge(*, payload: Any) -> None:
     """Teleport the bearer to an alternate position, fully avoiding incoming damage.
 
