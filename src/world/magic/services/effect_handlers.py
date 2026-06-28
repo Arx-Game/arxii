@@ -7,8 +7,12 @@ its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 from typing import Any
 
 from world.areas.positioning.models import Position
-from world.areas.positioning.services import connect_positions, force_move_to_position
-from world.conditions.constants import FORCE_FIELD_CONDITION_NAME, REFLECT_CONDITION_NAME
+from world.areas.positioning.services import connect_positions, force_move_to_position, position_of
+from world.conditions.constants import (
+    BLINK_CONDITION_NAME,
+    FORCE_FIELD_CONDITION_NAME,
+    REFLECT_CONDITION_NAME,
+)
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
 
@@ -166,3 +170,45 @@ def reflect_damage(*, payload: Any) -> None:
                 participant, amount, bypass_pre_apply=True, damage_type=payload.damage_type
             )
     # else: ref is None / Technique / unknown → payload already zeroed, no bounce
+
+
+def blink_dodge(*, payload: Any) -> None:
+    """Teleport the bearer to an alternate position, fully avoiding incoming damage.
+
+    Highest-priority DAMAGE_PRE_APPLY interceptor (priority 30). When the bearer
+    can pay ``reactive_anima_cost`` via ``_try_spend_reactive``:
+
+    - Repositions the bearer to any other ``Position`` in their current room
+      (flavor; if no alternate position exists the move is skipped).
+    - Sets ``payload.amount = 0`` (full avoidance).
+
+    Fizzles silently when the bearer cannot afford the cost — attack lands unchanged.
+    The CANCEL_EVENT flow step (Task 14) stops lower-priority handlers; this
+    handler only zeros the payload.
+    """
+    if payload.amount <= 0:
+        return
+
+    instance = (
+        ConditionInstance.objects.filter(
+            target=payload.target,
+            condition__name=BLINK_CONDITION_NAME,
+            resolved_at__isnull=True,
+        )
+        .order_by("pk")
+        .first()
+    )
+    if instance is None or not _try_spend_reactive(instance):
+        return
+
+    # Cost paid — attempt relocation (flavor; avoidance is the mechanic).
+    current = position_of(payload.target)
+    if current is not None:
+        dest = Position.objects.filter(room=payload.target.location).exclude(pk=current.pk).first()
+    else:
+        dest = Position.objects.filter(room=payload.target.location).first()
+
+    if dest is not None:
+        force_move_to_position(payload.target, dest)
+
+    payload.amount = 0
