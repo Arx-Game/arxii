@@ -32,4 +32,4 @@ def seed_run(request: HttpRequest) -> HttpResponse:
         f"Seeded {report.created_total} new rows across "
         f"{len(report.clusters)} clusters (existing rows untouched).",
     )
-    return HttpResponseRedirect(reverse("admin:index"))
+    return HttpResponseRedirect(reverse("admin_game_setup"))

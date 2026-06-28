@@ -193,3 +193,17 @@ from world.character_creation.services import (
 ## Admin
 
 Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+
+## Seeded content + Game Setup hub
+
+A fresh dev DB has no CG-"world" content (Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/stats/Rosters/Path), so `finalize_character` cannot run. The `"character_creation"` cluster fixes this:
+
+```python
+from world.seeds.character_creation import seed_character_creation_dev
+# also runs as part of seed_dev_database() (the "Load sane defaults" Big Button)
+seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edits
+```
+
+It seeds: `Realm` "Arx"; `StartingArea` "Arx City" (access_level=ALL); `Beginnings` "Commoner" (+ allowed_species M2M); `Species` "Human"; `Gender` key `unspecified`; `TarotCard` "The Fool" (MAJOR, rank 0); `HeightBand` `average_band` + `Build` `average_build`; the 12 stat `Trait` rows; the two `Roster` rows ("Available"/"Active Characters"); a `Path` "The Wanderer" (PROSPECT). Registered last in `CLUSTER_SEEDERS` (after `magic`, which provides the cantrip/resonance `finalize_character` picks). Verified by `test_playable_slice.py::TestSeededCharacterCreation` (finalize runs on a seeded-only DB) and `test_idempotency.py::test_edited_cg_row_survives_reseed`.
+
+The admin **Game Setup** hub (`admin_game_setup` view, `_game_setup/` URL) is a superuser-only landing page for clone hosts: the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. See `src/web/admin/CLAUDE.md`.

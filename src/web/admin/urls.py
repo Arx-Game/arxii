@@ -3,6 +3,7 @@
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.views import (
     export_data,
@@ -26,5 +27,6 @@ urlpatterns = [
     path("_import_execute/", import_execute, name="admin_import_execute"),
     path("_seed/", seed_confirm, name="admin_seed"),
     path("_seed_run/", seed_run, name="admin_seed_run"),
+    path("_game_setup/", game_setup, name="admin_game_setup"),
     path("", arx_admin_site.urls),
 ]
