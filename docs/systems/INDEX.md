@@ -158,6 +158,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Effect palette (#1584):
+    `ensure_effect_palette_content()` (`world/magic/effect_palette_content.py`) — idempotent
+    entry point that seeds all 9 castable effects (Summon Spirit, Aegis Field, Mirror Ward,
+    Phase Step, Phase Jump, Barricade, Ghostform, Earthmeld, Force Grip). Calls individual
+    `ensure_*_content()` sub-builders. Effect handlers live in
+    `world/magic/services/effect_handlers.py`: `absorb_pool`, `reflect_damage`, `blink_dodge`,
+    `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
+    `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
+    See magic.md §"Effect Palette" for the full handler/adapter table.
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,
@@ -330,8 +339,12 @@ Check resolution engine — converts trait values to ranks and rolls against res
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
-  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent),
-  `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`,
+  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
+  `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
+  `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
+  conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0059),
+  `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
+  absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
@@ -1420,6 +1433,46 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
+- **Effect-palette / summon / allegiance additions (#1584):**
+  - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
+    side-field; ALLY opponents fight *for* the party (summons, and future charm/
+    switch-sides targets). See ADR-0058.
+  - `CombatOpponent.summoned_by` (FK → `CharacterSheet`, nullable) — conjurer bond; set on
+    summoned ALLY opponents.
+  - `CombatOpponent.bond_expires_round` (int, nullable) — round at which the summon expires.
+  - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
+    `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
+    `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Effect-palette / allegiance / intangibility services (#1584):**
+  - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
+    returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
+    given actor, querying on `allegiance`.
+  - `_resolve_npc_action_on_opponent_target(action, npc_action)` — routes an ALLY summon's
+    action against a `CombatOpponent` target through `apply_damage_to_opponent`, bypassing
+    the PC survivability pipeline and conditions.
+  - `apply_damage_to_opponent(..., bypass_pre_apply=False)` /
+    `apply_damage_to_participant(..., bypass_pre_apply=False)` — optional kwarg that skips
+    `DAMAGE_PRE_APPLY` emit + `_try_interpose`; used by `reflect_damage` to bounce a hit
+    without triggering another reactive cycle (loop-safety via `bypass_pre_apply=True`).
+  - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
+    from each active participant holding a reactive condition; called by `begin_round_of_combat`
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0059.
+  - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
+    True when the target has an active `ConditionInstance` whose
+    `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
+    filter sites to honour the intangibility gate.
+- **Event:** `EventName.COMBAT_ROUND_STARTING` (`flows/constants.py`) — emitted at the
+  start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
+- **Condition fields added for effect palette (#1584):**
+  - `ConditionCategory.grants_intangibility` (bool) — marks intangibility categories
+    (Ghostform, Earthmeld); the `is_untargetable` gate reads this.
+  - `ConditionTemplate.upkeep_anima_per_round` (int) — anima drained per round from the
+    bearer when they hold this reactive condition (0 = no upkeep).
+  - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
+    can't pay → fizzle, the attack lands (0 = free).
+  - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
+    the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
+    `CONDITION_APPLIED`.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
@@ -1455,11 +1508,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   yield, flee, my_action, available_combos), duel challenge endpoints
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
-  conditions (`bulk_apply_conditions` — now installs reactive side-effects),
+  conditions (`bulk_apply_conditions` — now installs reactive side-effects;
+  `is_untargetable` for intangibility gate; `ConditionCategory.grants_intangibility`),
   mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
-  flows (`DAMAGE_PRE_APPLY` event; `MODIFY_PAYLOAD` flow action for DEFEND),
+  flows (`DAMAGE_PRE_APPLY` event; `COMBAT_ROUND_STARTING` event; `MODIFY_PAYLOAD` flow
+  action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),
   covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
-  magic (technique use pipeline, `CombatPull`)
+  magic (technique use pipeline, `CombatPull`, effect palette — summon/reactive handlers)
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,

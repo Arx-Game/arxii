@@ -75,8 +75,8 @@ in-fiction trigger is plausible.
 | **Remove / dispel** a condition (cleanse) | ❌ ABSENT | no `EffectKind` REMOVE | MVP |
 | **Charm / switch-sides** an enemy NPC | 🟡→❌ | only an `alters_behavior` consent flag | MVP |
 | **Negotiate / parley** an NPC down | ❌ ABSENT | no stance/disposition model | MVP |
-| **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ❌ ABSENT | #1320 catalog is the engine | MVP |
-| **Companions / pets / summons** w/ breath weapons & ordered abilities | ❌ ABSENT | #672 (planned) | MVP |
+| **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN | `effect_palette_content.py`; 9 seeded effects; summon E2E `test_summon_e2e.py`; reactive interceptor E2Es in `magic/tests/test_effect_handlers.py` (#1584) | done |
+| **Companions / pets / summons** w/ breath weapons & ordered abilities | ✅ PROVEN (basic) | ALLY `CombatOpponent` via `allegiance`/`summoned_by`; opponent-vs-opponent damage; advanced ordered abilities are a follow-up | done (ADR-0058; #672 folds in) |
 | **Roles grant techniques** (resonance-spec at lvl 3) | ❌ → DESIGNED | **ADR-0055** (the specialization engine); reverses bonuses-only | MVP+ADR |
 | **War / battle system** | ❌ ABSENT | war covenants have nowhere to resolve | soon |
 | Mounts / charging · flying mounts / dragons | ❌ ABSENT | planned-systems (aerial positioning exists, no mount) | P2 |
@@ -128,7 +128,13 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
 - **Identity (ADR-0050):** species abilities / lineage / khati / vampire / lycan as Minor Gifts; identity-granted gifts. Plus species vulnerabilities + immunity/vulnerability framework (no ADR yet).
 - **Gift/resonance economy (ADR-0050–0056):** Minor-Gift acquisition; GIFT thread anchor + per-target-kind cost (0051); gift-resonance-from-thread refactor (0052); the specialization engine (0055); signature re-scope of `TargetKind.TECHNIQUE` (0056); fall/redemption conversion service (0054).
 - **Covenants:** `CovenantType.COURT` + Court roles (ADR-0057).
-- **Effects:** the effect palette (summon/reflect/incorporeal/sink/telekinesis/teleport/obstacle/force-field); charm/switch-sides; NPC negotiation; condition removal/dispel; companions/summons.
+- **Effects:** the effect palette — **SHIPPED #1584** (9 effects: summon/reflect [Mirror Ward]/
+  incorporeal [Ghostform]/sink [Earthmeld]/telekinesis [Force Grip]/teleport [Phase Jump]/
+  obstacle [Barricade]/force-field [Aegis Field]/blink [Phase Step]; allegiance-aware summon
+  proven E2E; reactive interceptor trio proven E2E; ADR-0058 + ADR-0059). Remaining effects work:
+  charm/switch-sides (#1590, allegiance-flip); NPC negotiation (#1591); condition removal/dispel.
+  Teleport/obstacle/telekinesis have placeholder position IDs — runtime destination selection
+  deferred to a follow-up issue.
 - **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.
 
 ### Prove-it (WIRED-UNPROVEN — write the journey E2E, fix what it exposes)

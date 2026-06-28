@@ -189,6 +189,36 @@ A magical affinity-tied charge a character earns and spends (a `balance` with
 A piece of concealed canon scoped per knower; the `secrets` app stays dependency-free and
 other systems FK into it. _Avoid_: rumor, mystery.
 
+## Combat-magic surface (#1584)
+
+**Allegiance**:
+Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or
+`ALLY` (fights for the party). Mutable: summons create `ALLY` opponents; future charm
+or switch-sides flips an existing `ENEMY`. One `CombatOpponent` model covers both cases
+(ADR-0058). _Avoid_: faction, team (as model-attribute names).
+
+**Summon** (in-combat):
+An `ALLY` `CombatOpponent` conjured during combat by a technique
+(`CombatOpponent.allegiance=ALLY`, `summoned_by` FK → `CharacterSheet`,
+`bond_expires_round`). It attacks `ENEMY` opponents via
+`CombatOpponentAction.opponent_targets`. The per-app glossary (combat) has
+the full entry. _Avoid_: familiar, pet, companion (for the in-combat row).
+
+**Intangibility** (conditions gate):
+The untargetable-in-combat status conferred by a `ConditionInstance` whose
+`ConditionCategory.grants_intangibility` is `True`. Checked by `is_untargetable(objectdb)`
+in `world/conditions/services.py`. Seeded as Ghostform and Earthmeld by the effect palette.
+
+**Reactive interceptor**:
+A mutation-only `DAMAGE_PRE_APPLY` flow handler: force-field (`absorb_pool`, priority 10),
+reflect (`reflect_damage`, priority 20), or blink (`blink_dodge`, priority 30). Sets
+`payload.amount = 0` on success; fizzles on insufficient `reactive_anima_cost`. No
+`CANCEL_EVENT` child step — mutation-only (ADR-0059).
+
+**Effect palette**:
+The seeded set of nine castable combat effects (`ensure_effect_palette_content()` in
+`world/magic/effect_palette_content.py`). See the magic per-app glossary for the full entry.
+
 ## Magic spine
 
 **Thread**:

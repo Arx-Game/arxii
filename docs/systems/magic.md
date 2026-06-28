@@ -520,6 +520,55 @@ persona (`legend_entry` stays null).
 | `AnimaRitualPerformance` | Historical record of ritual performances |
 | `Reincarnation` | Tracks character reincarnation events |
 
+### Effect Palette (#1584) [BUILT & PROVEN]
+
+Nine castable effects seeded idempotently by `ensure_effect_palette_content()`
+(`src/world/magic/effect_palette_content.py`). Each effect is a full technique +
+condition + flow + trigger bundle wired via `get_or_create` throughout. The entry
+point calls all nine sub-builders:
+
+| Effect | Condition name | Handler / mechanism | Note |
+|--------|---------------|---------------------|------|
+| Summon Spirit | Summoning | `summon_ally_on_condition` adapter → `summon_ally` | CONDITION_APPLIED; creates an ALLY `CombatOpponent` (ADR-0058) |
+| Aegis Field | Aegis Field | `absorb_pool` (priority 10) | DAMAGE_PRE_APPLY; mutation-only; overflow lands |
+| Mirror Ward | Mirror Ward | `reflect_damage` (priority 20) | DAMAGE_PRE_APPLY; mutation-only; bounces via `bypass_pre_apply` |
+| Phase Step | Phase Step | `blink_dodge` (priority 30) | DAMAGE_PRE_APPLY; mutation-only; moves bearer on success |
+| Phase Jump | Phase Jump | `move_position_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Barricade | Barricade | `create_obstacle_on_condition` adapter | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+| Ghostform | Ghostform | intangibility category only (`grants_intangibility=True`) | `ConditionCategory`; intangibility gate via `is_untargetable` |
+| Earthmeld | Earthmeld | intangibility category only (1-round duration) | `ConditionCategory`; as Ghostform |
+| Force Grip | Force Grip | `move_position_on_condition` adapter (ENEMY target) | CONDITION_APPLIED; placeholder destination (follow-up: #1584 note) |
+
+**Placeholder-destination follow-up:** Phase Jump, Barricade, and Force Grip embed
+`destination_position_id=0` at seed time; runtime destination selection (player
+picks a position) is deferred to a follow-up issue.
+
+**Handlers and adapters** (`src/world/magic/services/effect_handlers.py`):
+
+| Function | Kind | Purpose |
+|----------|------|---------|
+| `move_position(*, payload)` | direct handler | Move bearer's `ObjectDB` to a target `Position` |
+| `create_obstacle(*, payload)` | direct handler | Create a blocking `Obstacle` at a target `Position` |
+| `absorb_pool(*, payload)` | reactive handler (prio 10) | Drain `absorb_remaining` buffer; sets `payload.amount=0` when fully absorbed; overflow lands |
+| `reflect_damage(*, payload)` | reactive handler (prio 20) | Pay `reactive_anima_cost`; resolve attacker from `payload.source.ref`; bounce via `bypass_pre_apply`; set `payload.amount=0` |
+| `blink_dodge(*, payload)` | reactive handler (prio 30) | Pay `reactive_anima_cost`; move bearer; set `payload.amount=0` |
+| `summon_ally(*, payload)` | direct handler | Create a `CombatOpponent` with `allegiance=ALLY`, `summoned_by=caster` |
+| `move_position_on_condition(*, payload, destination_position_id)` | CONDITION_APPLIED adapter | Thin wrapper → `move_position` |
+| `create_obstacle_on_condition(*, payload, ...)` | CONDITION_APPLIED adapter | Thin wrapper → `create_obstacle` |
+| `summon_ally_on_condition(*, payload, threat_pool_id, ...)` | CONDITION_APPLIED adapter | Bridges `ConditionAppliedPayload` (`.target` as bearer/caster) → `summon_ally` |
+| `init_absorb_buffer(*, payload, buffer)` | CONDITION_APPLIED handler | Seeds `ConditionInstance.absorb_remaining` on Aegis Field application |
+
+**Reactive interceptor cost pattern** (ADR-0059):
+
+- `ConditionTemplate.reactive_anima_cost` — anima spent per fire; can't pay → fizzle,
+  attack lands.
+- `ConditionTemplate.upkeep_anima_per_round` — drained each round by
+  `drain_reactive_upkeep` on `COMBAT_ROUND_STARTING`.
+- All three reactive handlers are **mutation-only** (no `CANCEL_EVENT` child step).
+  A `CANCEL_EVENT` child fires unconditionally — even on the fizzle path — so an
+  unaffordable defense would still cancel the attack. That bug was caught and fixed
+  by the reactive E2E tests (#1584 Task 16).
+
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 
 **Design:** `docs/architecture/resonance-environment-universal-path.md`
