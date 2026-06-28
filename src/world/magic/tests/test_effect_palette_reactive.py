@@ -144,18 +144,18 @@ class EnsureReflectContentTests(TestCase):
         self.assertEqual(t.priority, 20)
         self.assertEqual(t.base_filter_condition, _SELF_FILTER)
 
-    def test_reflect_flow_has_cancel_event_child_step(self) -> None:
+    def test_reflect_flow_is_mutation_only_no_cancel_event(self) -> None:
         template = ConditionTemplate.objects.get(name=REFLECT_CONDITION_NAME)
         dpa_trigger = template.reactive_triggers.get(event_name=EventName.DAMAGE_PRE_APPLY)
         cancel_steps = FlowStepDefinition.objects.filter(
             flow=dpa_trigger.flow_definition,
             action=FlowActionChoices.CANCEL_EVENT,
         )
-        self.assertEqual(cancel_steps.count(), 1, "Reflect MUST have a CANCEL_EVENT step")
-        cancel_step = cancel_steps.get()
-        # Confirm it is a child of the CALL_SERVICE_FUNCTION root step
-        self.assertIsNotNone(cancel_step.parent_id, "CANCEL_EVENT step must have a parent")
-        self.assertEqual(cancel_step.parent.action, FlowActionChoices.CALL_SERVICE_FUNCTION)
+        # Mutation-only — NO CANCEL_EVENT. An unconditional cancel child fires even on
+        # the anima-cost fizzle path, wrongly cancelling an unaffordable reflect (#1584
+        # Task 16). reflect_damage sets payload.amount=0 on success; the emitter's
+        # `amount <= 0` check and lower interceptors' guards do the rest.
+        self.assertEqual(cancel_steps.count(), 0, "Reflect must NOT have a CANCEL_EVENT step")
 
     def test_reflect_flow_has_reflect_damage_call(self) -> None:
         template = ConditionTemplate.objects.get(name=REFLECT_CONDITION_NAME)
@@ -210,18 +210,17 @@ class EnsureBlinkContentTests(TestCase):
         self.assertEqual(t.priority, 30)
         self.assertEqual(t.base_filter_condition, _SELF_FILTER)
 
-    def test_blink_flow_has_cancel_event_child_step(self) -> None:
+    def test_blink_flow_is_mutation_only_no_cancel_event(self) -> None:
         template = ConditionTemplate.objects.get(name=BLINK_CONDITION_NAME)
         dpa_trigger = template.reactive_triggers.get(event_name=EventName.DAMAGE_PRE_APPLY)
         cancel_steps = FlowStepDefinition.objects.filter(
             flow=dpa_trigger.flow_definition,
             action=FlowActionChoices.CANCEL_EVENT,
         )
-        self.assertEqual(cancel_steps.count(), 1, "Blink MUST have a CANCEL_EVENT step")
-        cancel_step = cancel_steps.get()
-        # Confirm it is a child of the CALL_SERVICE_FUNCTION root step
-        self.assertIsNotNone(cancel_step.parent_id, "CANCEL_EVENT step must have a parent")
-        self.assertEqual(cancel_step.parent.action, FlowActionChoices.CALL_SERVICE_FUNCTION)
+        # Mutation-only — NO CANCEL_EVENT. An unconditional cancel child would cancel
+        # the attack even when blink_dodge can't afford the anima cost and returns
+        # early (#1584 Task 16). blink_dodge sets payload.amount=0 only when it dodges.
+        self.assertEqual(cancel_steps.count(), 0, "Blink must NOT have a CANCEL_EVENT step")
 
     def test_blink_flow_has_blink_dodge_call(self) -> None:
         template = ConditionTemplate.objects.get(name=BLINK_CONDITION_NAME)

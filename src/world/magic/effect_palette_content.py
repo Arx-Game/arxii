@@ -553,17 +553,14 @@ def ensure_reflect_content() -> None:
        ``reactive_anima_cost=2``, ``upkeep_anima_per_round=1``.
     4. A "Mirror Ward" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
     """
-    # 1. Flow: CALL_SERVICE_FUNCTION root + CANCEL_EVENT child.
+    # 1. Flow: a single CALL_SERVICE_FUNCTION step (mutation-only, NO CANCEL_EVENT).
+    # reflect_damage sets payload.amount=0 on success; the emitter's `amount <= 0`
+    # check zeroes damage, and lower-priority interceptors guard on the same. A
+    # CANCEL_EVENT child would fire UNCONDITIONALLY — even on the anima-cost fizzle
+    # path where reflect_damage returns early — wrongly cancelling an unaffordable
+    # reflect so the attack never lands (#1584 Task 16 caught this).
     root_step = _seed_call_service_flow(_REFLECT_FLOW_NAME, _REFLECT_DAMAGE_PATH)
     reflect_flow = root_step.flow
-
-    # CANCEL_EVENT child step — get_or_create keyed on (flow, action, parent).
-    FlowStepDefinition.objects.get_or_create(
-        flow=reflect_flow,
-        action=FlowActionChoices.CANCEL_EVENT,
-        parent=root_step,
-        defaults={"parameters": {}},
-    )
 
     # 2. Trigger: DAMAGE_PRE_APPLY, priority 20.
     reflect_trigger, _created = TriggerDefinition.objects.get_or_create(
@@ -622,17 +619,13 @@ def ensure_blink_content() -> None:
        ``reactive_anima_cost=2``, ``upkeep_anima_per_round=1``.
     4. A "Phase Step" ``Technique`` with a SELF ``TechniqueAppliedCondition``.
     """
-    # 1. Flow: CALL_SERVICE_FUNCTION root + CANCEL_EVENT child.
+    # 1. Flow: a single CALL_SERVICE_FUNCTION step (mutation-only, NO CANCEL_EVENT).
+    # blink_dodge sets payload.amount=0 only when the bearer can pay the anima cost;
+    # the emitter's `amount <= 0` check then zeroes damage. A CANCEL_EVENT child would
+    # fire UNCONDITIONALLY — even when blink_dodge returns early on the fizzle path —
+    # so an unaffordable blink would still cancel the attack (#1584 Task 16 caught this).
     root_step = _seed_call_service_flow(_BLINK_FLOW_NAME, _BLINK_DODGE_PATH)
     blink_flow = root_step.flow
-
-    # CANCEL_EVENT child step — get_or_create keyed on (flow, action, parent).
-    FlowStepDefinition.objects.get_or_create(
-        flow=blink_flow,
-        action=FlowActionChoices.CANCEL_EVENT,
-        parent=root_step,
-        defaults={"parameters": {}},
-    )
 
     # 2. Trigger: DAMAGE_PRE_APPLY, priority 30.
     blink_trigger, _created = TriggerDefinition.objects.get_or_create(
