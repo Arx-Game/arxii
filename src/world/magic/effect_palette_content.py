@@ -56,6 +56,7 @@ from world.magic.models.techniques import (
     TechniqueAppliedCondition,
     TechniqueStyle,
 )
+from world.magic.seeds_cast import get_standalone_cast_template
 
 # ---------------------------------------------------------------------------
 # Identity keys (module-level constants for stable naming)
@@ -299,6 +300,7 @@ def ensure_summon_content() -> None:
             "control": 4,
             "anima_cost": 0,
             "combo_opening_probing": None,
+            "action_template": get_standalone_cast_template(),
         },
     )
     TechniqueAppliedCondition.objects.get_or_create(
@@ -432,6 +434,7 @@ def _seed_technique(  # noqa: PLR0913
             "control": 4,
             "anima_cost": 2,
             "combo_opening_probing": None,
+            "action_template": get_standalone_cast_template(),
         },
     )
     TechniqueAppliedCondition.objects.get_or_create(
