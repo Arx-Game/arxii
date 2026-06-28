@@ -38,7 +38,10 @@ _Avoid_: self-control flag, dominated flag.
 
 **Assume**:
 To activate an alternate self, swapping in its form/persona facets and granting its
-stat and ability suites. Not gated by `in_control`. _Avoid_: shift, activate.
+stat and ability suites. Not gated by `in_control`. Strictly-one-active: raising a
+second while one is active raises `AlternateSelfActiveError` (would orphan the
+prior grants) — revert first. A cross-sheet `form`/`persona` FK raises
+`FormOwnershipError` / `ActivePersonaError`. _Avoid_: shift, activate.
 
 **Shift Form**:
 Player-facing verb for the assume action (registry key `"shift_form"`,

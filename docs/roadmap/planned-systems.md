@@ -55,8 +55,20 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   positioning `enter_aerial` path exists internally but no player surface). `intent`, `unrecorded`.
 - **Knockback + trap-into-combat hazards** — #1317.
 - **Out-of-combat reactive interpose / DANGER-round arming** — #1316.
-- **Shapeshift (voluntary + rage) + combat profiles** — #1111 (spec:approved, unbuilt). Note: a
-  `forms` shapeshift/appearance engine exists at the service layer but is NO-SURFACE (see audit).
+- **Shapeshift (voluntary + rage) + combat profiles** — #1111, **DONE**: an "alternate self"
+  mechanism — a bundle of optional facets (form + stats + abilities + persona + control-state)
+  swapped together on assumption, reverted together. `assume_alternate_self` /
+  `revert_alternate_self` services; `in_control` is a derived `@cached_property` (not stored —
+  ADR-0014) that is False while any active condition's category is `alters_behavior` (rage/
+  possession/charm). Assumption is NOT `in_control`-gated; revert IS (`RevertBlockedError`);
+  clearing the condition re-derives `in_control=True` and unblocks a later self-revert (decoupled).
+  Strictly-one-active (`AlternateSelfActiveError`); cross-sheet `form`/`persona` FKs rejected
+  (`FormOwnershipError` / `ActivePersonaError`) — never an uncaught 500. Berserk's category was
+  wired to `alters_behavior=True`, reusing the existing Fury lever (#567: Berserk +
+  `RestoreSenseAction` calm-down) rather than building a parallel rage/calm-down. `ShiftFormAction`
+  / `RevertFormAction` (REGISTRY `target_type=SELF`) wrap the services; telnet `CmdForm`
+  (`form shift`/`form revert`) and the web `AlternateSelfViewSet` + `FormSwitcher` both dispatch
+  via `dispatch_player_action` → `action.run()` (ADR-0001). `PersonaType.ALTERNATE` added.
 - **Combo mechanics — fuller rules** — combos exist (upgrade/revert); the exact rules need design. `partial`, `unrecorded`.
 - **Soulfray-risk accept + fury commit** — player-chosen combat risk decisions. #1454, **DONE**:
   party-combat casts carry the player's `confirm_soulfray_risk` + fury (`fury_commitment` tier +

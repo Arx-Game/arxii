@@ -367,7 +367,7 @@ shapeshift lifecycle.
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
   `get_presented_appearance(character)`
-- **Key Exceptions:** `RevertBlockedError`
+- **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
 - **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
   mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)
 - **Source:** `src/world/forms/`

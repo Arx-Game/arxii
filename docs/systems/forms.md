@@ -102,7 +102,7 @@ apparent = get_apparent_form(character)
 # Returns: dict[FormTrait, FormTraitOption]
 
 # Switch a character to a different form
-switch_form(character, target_form)  # Raises ValueError if wrong character
+switch_form(character, target_form)  # Raises FormOwnershipError if wrong character
 
 # Revert to true form
 revert_to_true_form(character)
@@ -126,8 +126,12 @@ bands = get_cg_height_bands()  # HeightBand.objects.filter(is_cg_selectable=True
 builds = get_cg_builds()       # Build.objects.filter(is_cg_selectable=True)
 
 # Alternate-self lifecycle (slice 4)
-active = assume_alternate_self(sheet, alt_self)  # Raises on wrong-character form
-revert_alternate_self(sheet)                     # Raises RevertBlockedError
+active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveError if
+                                                 # a different alt-self is active;
+                                                 # FormOwnershipError / ActivePersonaError
+                                                 # on a cross-sheet form/persona FK.
+revert_alternate_self(sheet)                     # Raises RevertBlockedError while not
+                                                 # in_control; ValueError if none active.
 ```
 
 ### Alternate-self services
@@ -135,7 +139,12 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError
 - `assume_alternate_self(sheet, alt)` — assume an `AlternateSelf` grant. Swaps form
   and/or persona, creates one `ModifierSource` + `CharacterModifier` rows per profile
   effect and `CharacterTechnique` rows per technique, and stores return anchors. Not
-  gated by `in_control`.
+  gated by `in_control`. **Strictly-one-active**: raises `AlternateSelfActiveError`
+  if a *different* alt-self is already active (assumption over an active one would
+  orphan its grants with no revert path) — revert the active one first. The same call
+  raises `FormOwnershipError` / `ActivePersonaError` (both `ValueError` subclasses)
+  if the alt-self's `form` or `persona` FK points at another sheet (bad seed/admin
+  edit — neither FK has a cross-sheet DB guard).
 - `revert_alternate_self(sheet)` — restore return anchors and delete the granted
   modifier / technique rows. Blocked while `not sheet.in_control`; raises
   `RevertBlockedError`. The canonical blocker is the fury `Berserk` condition,
@@ -143,6 +152,10 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError
   `RestoreSenseAction` (`restore_sense`) calm-down action.
 - `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
   blocked.
+- `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
+  already active (strictly-one-active).
+- `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
+  `CharacterForm` FK; surfaced as a safe failure by the actions.
 
 ### Alternate-self actions
 
@@ -151,9 +164,15 @@ and the web share the same `action.run()` path:
 
 - `ShiftFormAction` (key `"shift_form"`) — wraps `assume_alternate_self`. Receives
   kwarg `alternate_self_id`; validates the grant belongs to the actor's sheet.
-  **Not `in_control`-gated**.
+  **Not `in_control`-gated**. Catches `AlternateSelfActiveError`,
+  `ActivePersonaError`, and `FormOwnershipError` and surfaces each `user_message`
+  as a failure result — a cross-sheet `form`/`persona` FK never propagates uncaught
+  (`Action.run` calls `execute` bare, so an uncaught exception would 500 on web).
 - `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
-  Catches `RevertBlockedError` and surfaces `exc.user_message` as a failure result.
+  Catches `RevertBlockedError`, `ActivePersonaError`, `FormOwnershipError`, and
+  `AlternateSelfActiveError` (each → `exc.user_message`); the no-active case uses a
+  safe constant. Never surfaces `str(exc)` — the viewset maps every failure to a
+  safe 400 via `detail.message`.
 
 ### Web surface
 
