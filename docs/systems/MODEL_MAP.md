@@ -110,7 +110,6 @@
 
 ### CapabilityType
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
@@ -118,6 +117,7 @@
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - modifier_target <- mechanics.ModifierTarget
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
@@ -125,7 +125,6 @@
 
 ### DamageType
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - resonance -> magic.Resonance [OneToOne] (nullable)
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
@@ -136,21 +135,24 @@
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
+  - modifier_target <- mechanics.ModifierTarget
   - consequence_effects <- checks.ConsequenceEffect
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionTemplate
 **Foreign Keys:**
-  - magical_alteration -> magic.MagicalAlterationTemplate [OneToOne] (nullable)
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - reactive_triggers -> flows.TriggerDefinition [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
@@ -179,6 +181,8 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
   - stage_triggers <- flows.Trigger
   - auderethreshold_set <- magic.AudereThreshold
@@ -280,7 +284,6 @@
 
 ### PlayerData
 **Foreign Keys:**
-  - artist_profile -> evennia_extensions.Artist [OneToOne] (nullable)
   - account -> accounts.AccountDB [OneToOne]
   - profile_picture -> evennia_extensions.PlayerMedia [FK] (nullable)
 **Pointed to by:**
@@ -291,6 +294,7 @@
   - blocks_made <- scenes.Block
   - blocks_received <- scenes.Block
   - mutes_made <- scenes.Mute
+  - artist_profile <- evennia_extensions.Artist
   - media <- evennia_extensions.PlayerMedia
   - allow_list <- evennia_extensions.PlayerAllowList
   - allowed_by <- evennia_extensions.PlayerAllowList
@@ -326,7 +330,6 @@
 
 ### RoomProfile
 **Foreign Keys:**
-  - feature_instance -> room_features.RoomFeatureInstance [OneToOne] (nullable)
   - objectdb -> objects.ObjectDB [OneToOne]
   - area -> areas.Area [FK] (nullable)
   - tenant_persona -> scenes.Persona [FK] (nullable)
@@ -346,6 +349,7 @@
   - events <- events.Event
   - polish_by_category <- buildings.RoomPolish
   - decorations <- buildings.RoomDecoration
+  - feature_instance <- room_features.RoomFeatureInstance
   - feature_progression_projects <- room_features.RoomFeatureProgressionDetails
   - traps <- room_features.Trap
 
@@ -410,19 +414,20 @@
 
 ### Area
 **Foreign Keys:**
-  - weather_state -> weather.RegionWeatherState [OneToOne] (nullable)
-  - building_profile -> buildings.Building [OneToOne] (nullable)
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
   - climate -> weather.Climate [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
+  - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
   - children <- areas.Area
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
+  - weather_state <- weather.RegionWeatherState
   - default_permits_offered <- npc_services.PermitOfferDetails
+  - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
   - construction_projects <- buildings.BuildingConstructionDetails
   - rooms <- evennia_extensions.RoomProfile
@@ -525,6 +530,7 @@
   - building_kind -> buildings.BuildingKind [FK]
   - issued_by_role -> npc_services.NPCRole [FK] (nullable)
   - consumed_by_persona -> scenes.Persona [FK] (nullable)
+  - approved_wards -> areas.Area [M2M]
 **Pointed to by:**
   - construction_projects <- buildings.BuildingConstructionDetails
 
@@ -561,6 +567,8 @@
   - category -> buildings.PolishCategory [FK]
 
 ### ProjectTemplate
+**Foreign Keys:**
+  - tier_prerequisites -> buildings.TierThreshold [M2M]
 **Pointed to by:**
   - polish_increment_rows <- buildings.ProjectTemplatePolishIncrement
   - instances <- buildings.BuildingProjectInstance
@@ -665,6 +673,10 @@
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - starting_room_override -> objects.ObjectDB [FK] (nullable)
+  - allowed_species -> species.Species [M2M]
+  - starting_languages -> species.Language [M2M]
+  - societies -> societies.Society [M2M]
+  - traditions -> magic.Tradition [M2M]
 **Pointed to by:**
   - beginning_traditions <- character_creation.BeginningTradition
   - drafts <- character_creation.CharacterDraft
@@ -679,7 +691,6 @@
 
 ### CharacterDraft
 **Foreign Keys:**
-  - application -> character_creation.DraftApplication [OneToOne] (nullable)
   - account -> accounts.AccountDB [FK]
   - selected_area -> character_creation.StartingArea [FK] (nullable)
   - selected_beginnings -> character_creation.Beginnings [FK] (nullable)
@@ -692,6 +703,8 @@
   - height_band -> forms.HeightBand [FK] (nullable)
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)
+**Pointed to by:**
+  - application <- character_creation.DraftApplication
 
 ### DraftApplication
 **Foreign Keys:**
@@ -736,24 +749,16 @@
 
 ### Profile
 **Foreign Keys:**
-  - owning_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
   - heritage -> character_sheets.Heritage [FK] (nullable)
   - origin_realm -> realms.Realm [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
   - tarot_card -> tarot.TarotCard [FK] (nullable)
 **Pointed to by:**
+  - owning_sheet <- character_sheets.CharacterSheet
   - personas <- scenes.Persona
 
 ### CharacterSheet
 **Foreign Keys:**
-  - roster_entry -> roster.RosterEntry [OneToOne] (nullable)
-  - path_intent -> progression.PathIntent [OneToOne] (nullable)
-  - motif -> magic.Motif [OneToOne] (nullable)
-  - technique_draft -> magic.TechniqueDraft [OneToOne] (nullable)
-  - purse -> currency.CharacterPurse [OneToOne] (nullable)
-  - weekly_journal_xp -> journals.WeeklyJournalXP [OneToOne] (nullable)
-  - fatigue -> fatigue.FatiguePool [OneToOne] (nullable)
-  - vitals -> vitals.CharacterVitals [OneToOne] (nullable)
   - character -> objects.ObjectDB [OneToOne]
   - build -> forms.Build [FK] (nullable)
   - gender -> character_sheets.Gender [FK] (nullable)
@@ -764,8 +769,10 @@
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
+  - roster_entry <- roster.RosterEntry
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
+  - path_intent <- progression.PathIntent
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
@@ -794,6 +801,7 @@
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
   - resonance_grants <- magic.ResonanceGrant
+  - motif <- magic.Motif
   - reincarnations <- magic.Reincarnation
   - pending_ritual_effects <- magic.PendingRitualEffect
   - founded_sanctums <- magic.SanctumDetails
@@ -808,6 +816,7 @@
   - sineatings_as_sineater <- magic.Sineating
   - rescues_as_sinner <- magic.SoulTetherRescue
   - rescues_as_sineater <- magic.SoulTetherRescue
+  - technique_draft <- magic.TechniqueDraft
   - threads <- magic.Thread
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
   - personas <- scenes.Persona
@@ -818,6 +827,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
@@ -835,6 +845,7 @@
   - owned_instances <- instances.InstancedRoom
   - captivities <- captivity.Captivity
   - journal_entries <- journals.JournalEntry
+  - weekly_journal_xp <- journals.WeeklyJournalXP
   - owned_items <- items.ItemInstance
   - crafted_items <- items.ItemInstance
   - items_given_away <- items.OwnershipEvent
@@ -842,10 +853,12 @@
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
+  - fatigue <- fatigue.FatiguePool
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds_as_mentor <- covenants.MentorBond
   - mentor_bonds_as_sidekick <- covenants.MentorBond
+  - vitals <- vitals.CharacterVitals
   - duels_won <- combat.CombatEncounter
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
@@ -894,7 +907,6 @@
 
 ### CheckType
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - category -> checks.CheckCategory [FK]
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
@@ -906,6 +918,7 @@
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
+  - modifier_target <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -964,6 +977,8 @@
 ## world.classes
 
 ### Path
+**Foreign Keys:**
+  - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
   - skill_suggestions <- skills.PathSkillSuggestion
   - drafts <- character_creation.CharacterDraft
@@ -978,6 +993,8 @@
   - codex_grants <- codex.PathCodexGrant
 
 ### CharacterClass
+**Foreign Keys:**
+  - core_traits -> traits.Trait [M2M]
 **Pointed to by:**
   - character_assignments <- classes.CharacterClassLevel
   - stage_health_rates <- classes.ClassStageHealthRate
@@ -1072,11 +1089,11 @@
 
 ### CodexSubject
 **Foreign Keys:**
-  - breadcrumb_cache -> codex.CodexSubjectBreadcrumb [OneToOne] (nullable)
   - category -> codex.CodexCategory [FK]
   - parent -> codex.CodexSubject [FK] (nullable)
 **Pointed to by:**
   - children <- codex.CodexSubject
+  - breadcrumb_cache <- codex.CodexSubjectBreadcrumb
   - entries <- codex.CodexEntry
   - climates <- weather.Climate
   - weather_types <- weather.WeatherType
@@ -1090,6 +1107,7 @@
 **Foreign Keys:**
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
+  - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - ritual_grants <- magic.CodexEntryRitualGrant
   - progression_milestones <- magic.MagicProgressionMilestone
@@ -1114,6 +1132,9 @@
 **Foreign Keys:**
   - teacher -> roster.RosterTenure [FK]
   - entry -> codex.CodexEntry [FK]
+  - visible_to_tenures -> roster.RosterTenure [M2M]
+  - visible_to_groups -> consent.ConsentGroup [M2M]
+  - excluded_tenures -> roster.RosterTenure [M2M]
 
 ### BeginningsCodexGrant
 **Foreign Keys:**
@@ -1144,7 +1165,6 @@
 
 ### CapabilityType
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
@@ -1152,6 +1172,7 @@
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
+  - modifier_target <- mechanics.ModifierTarget
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
@@ -1159,7 +1180,6 @@
 
 ### DamageType
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - resonance -> magic.Resonance [OneToOne] (nullable)
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
@@ -1170,21 +1190,24 @@
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
+  - modifier_target <- mechanics.ModifierTarget
   - consequence_effects <- checks.ConsequenceEffect
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionTemplate
 **Foreign Keys:**
-  - magical_alteration -> magic.MagicalAlterationTemplate [OneToOne] (nullable)
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - reactive_triggers -> flows.TriggerDefinition [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
@@ -1213,6 +1236,8 @@
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - on_entry_conditions -> conditions.ConditionTemplate [M2M]
 **Pointed to by:**
   - stage_triggers <- flows.Trigger
   - auderethreshold_set <- magic.AudereThreshold
@@ -1406,13 +1431,13 @@
 
 ### Covenant
 **Foreign Keys:**
-  - legend_summary -> societies.CovenantLegendSummary [OneToOne] (nullable)
   - organization -> societies.Organization [OneToOne]
   - campaign_story -> stories.Story [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
   - legend_credits <- societies.CovenantLegendCredit
+  - legend_summary <- societies.CovenantLegendSummary
   - ranks <- covenants.CovenantRank
   - memberships <- covenants.CharacterCovenantRole
   - rite_instances <- covenants.CovenantRiteInstance
@@ -1481,6 +1506,7 @@
   - covenant -> covenants.Covenant [FK]
   - scene -> scenes.Scene [FK]
   - combat_encounter -> combat.CombatEncounter [FK] (nullable)
+  - participants -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - participant_records <- covenants.CovenantRiteParticipant
 
@@ -1597,6 +1623,7 @@
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
+  - interactions -> items.InteractionType [M2M]
 **Pointed to by:**
   - ritual_requirements <- magic.RitualComponentRequirement
   - clue_triggers <- clues.ItemClueTrigger
@@ -1614,10 +1641,6 @@
 
 ### ItemInstance
 **Foreign Keys:**
-  - currency_instrument -> currency.CurrencyInstrumentDetails [OneToOne] (nullable)
-  - room_placement -> items.RoomItem [OneToOne] (nullable)
-  - mantle -> items.Mantle [OneToOne] (nullable)
-  - building_permit_details -> buildings.BuildingPermitDetails [OneToOne] (nullable)
   - template -> items.ItemTemplate [FK]
   - game_object -> objects.ObjectDB [OneToOne] (nullable)
   - quality_tier -> items.QualityTier [FK] (nullable)
@@ -1627,14 +1650,18 @@
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
 **Pointed to by:**
+  - currency_instrument <- currency.CurrencyInstrumentDetails
   - contents <- items.ItemInstance
   - equipped_slots <- items.EquippedItem
+  - room_placement <- items.RoomItem
   - ownership_events <- items.OwnershipEvent
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
+  - mantle <- items.Mantle
   - project_contributions <- projects.Contribution
+  - building_permit_details <- buildings.BuildingPermitDetails
 
 ### TemplateInteraction
 **Foreign Keys:**
@@ -1712,6 +1739,9 @@
   - check_type -> checks.CheckType [FK]
 
 ### FashionStyle
+**Foreign Keys:**
+  - in_vogue_facets -> magic.Facet [M2M]
+  - in_vogue_styles -> items.Style [M2M]
 **Pointed to by:**
   - societies_current <- societies.Society
   - bonuses <- items.FashionStyleBonus
@@ -1873,6 +1903,7 @@
 **Foreign Keys:**
   - minimum_intensity_tier -> magic.IntensityTier [FK]
   - minimum_warp_stage -> conditions.ConditionStage [FK]
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - pending_offers <- magic.PendingAudereMajoraOffer
   - crossings <- magic.AudereMajoraCrossing
@@ -1897,8 +1928,6 @@
   - scene -> scenes.Scene [FK] (nullable)
 
 ### Affinity
-**Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
 **Pointed to by:**
   - resonances <- magic.Resonance
   - alteration_templates <- magic.MagicalAlterationTemplate
@@ -1906,15 +1935,15 @@
   - character_totals <- magic.CharacterAffinityTotal
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
+  - modifier_target <- mechanics.ModifierTarget
 
 ### Resonance
 **Foreign Keys:**
-  - opposite_of -> magic.Resonance [OneToOne] (nullable)
-  - damage_type -> conditions.DamageType [OneToOne] (nullable)
-  - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
+  - properties -> mechanics.Property [M2M]
 **Pointed to by:**
+  - opposite_of <- magic.Resonance
   - gifts <- magic.Gift
   - alteration_templates <- magic.MagicalAlterationTemplate
   - corruption_twist_templates <- magic.MagicalAlterationTemplate
@@ -1935,7 +1964,9 @@
   - rescues <- magic.SoulTetherRescue
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
+  - damage_type <- conditions.DamageType
   - corruption_condition_templates <- conditions.ConditionTemplate
+  - modifier_target <- mechanics.ModifierTarget
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - garment_mitigations <- items.GarmentMitigation
@@ -1946,11 +1977,12 @@
 
 ### Gift
 **Foreign Keys:**
-  - reincarnation -> magic.Reincarnation [OneToOne] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
+  - resonances -> magic.Resonance [M2M]
 **Pointed to by:**
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
 
@@ -1983,12 +2015,16 @@
   - combo_slots <- combat.ComboSlot
 
 ### TechniqueStyle
+**Foreign Keys:**
+  - allowed_paths -> classes.Path [M2M]
 **Pointed to by:**
   - techniques <- magic.Technique
   - cantrips <- magic.Cantrip
   - technique_drafts <- magic.TechniqueDraft
 
 ### Restriction
+**Foreign Keys:**
+  - allowed_effect_types -> magic.EffectType [M2M]
 **Pointed to by:**
   - techniques <- magic.Technique
   - technique_drafts <- magic.TechniqueDraft
@@ -2007,6 +2043,9 @@
   - source_cantrip -> magic.Cantrip [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
+  - restrictions -> magic.Restriction [M2M]
+  - applied_conditions -> conditions.ConditionTemplate [M2M]
+  - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - capability_grants <- magic.TechniqueCapabilityGrant
@@ -2116,6 +2155,7 @@
 **Foreign Keys:**
   - effect_type -> magic.EffectType [FK]
   - style -> magic.TechniqueStyle [FK]
+  - allowed_facets -> magic.Facet [M2M]
 **Pointed to by:**
   - created_techniques <- magic.Technique
 
@@ -2126,6 +2166,7 @@
 ### DramaticMomentType
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK]
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
 
@@ -2326,9 +2367,6 @@
 
 ### Ritual
 **Foreign Keys:**
-  - liturgy -> magic.RitualLiturgy [OneToOne] (nullable)
-  - check_config -> magic.RitualCheckConfig [OneToOne] (nullable)
-  - covenant_rite -> covenants.CovenantRite [OneToOne] (nullable)
   - flow -> flows.FlowDefinition [FK] (nullable)
   - author_account -> accounts.AccountDB [FK] (nullable)
   - site_property -> mechanics.Property [FK] (nullable)
@@ -2336,10 +2374,13 @@
   - class_level_advancements <- progression.ClassLevelAdvancement
   - performances <- magic.AnimaRitualPerformance
   - known_by_records <- magic.CharacterRitualKnowledge
+  - liturgy <- magic.RitualLiturgy
+  - check_config <- magic.RitualCheckConfig
   - requirements <- magic.RitualComponentRequirement
   - pending_effects <- magic.PendingRitualEffect
   - ritualsession_set <- magic.RitualSession
   - capstone_events <- relationships.RelationshipCapstone
+  - covenant_rite <- covenants.CovenantRite
   - installs_room_features <- room_features.RoomFeatureKindInstallRitual
 
 ### RitualComponentRequirement
@@ -2445,6 +2486,7 @@
   - gift -> magic.Gift [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
+  - restrictions -> magic.Restriction [M2M]
 **Pointed to by:**
   - capability_grants <- magic.TechniqueDraftCapabilityGrant
   - damage_profiles <- magic.TechniqueDraftDamageProfile
@@ -2506,6 +2548,7 @@
   - unlock_trait -> traits.Trait [FK] (nullable)
   - unlock_gift -> magic.Gift [FK] (nullable)
   - unlock_track -> relationships.RelationshipTrack [FK] (nullable)
+  - paths -> classes.Path [M2M]
 **Pointed to by:**
   - character_purchases <- magic.CharacterThreadWeavingUnlock
   - teaching_offers <- magic.ThreadWeavingTeachingOffer
@@ -2573,7 +2616,6 @@
 
 ### ModifierTarget
 **Foreign Keys:**
-  - codex_entry -> codex.CodexEntry [OneToOne] (nullable)
   - category -> mechanics.ModifierCategory [FK]
   - target_trait -> traits.Trait [FK] (nullable)
   - target_affinity -> magic.Affinity [OneToOne] (nullable)
@@ -2585,6 +2627,7 @@
   - distinction_effects <- distinctions.DistinctionEffect
   - character_goals <- goals.CharacterGoal
   - goal_journals <- goals.GoalJournal
+  - codex_entry <- codex.CodexEntry
   - conditionmodifiereffect_set <- conditions.ConditionModifierEffect
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
@@ -2672,6 +2715,8 @@
 **Foreign Keys:**
   - category -> mechanics.ChallengeCategory [FK]
   - blocked_capability -> conditions.CapabilityType [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - consequences -> checks.Consequence [M2M]
 **Pointed to by:**
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - challenge_consequences <- mechanics.ChallengeTemplateConsequence
@@ -2706,6 +2751,7 @@
 ### SituationTemplate
 **Foreign Keys:**
   - category -> mechanics.ChallengeCategory [FK]
+  - challenges -> mechanics.ChallengeTemplate [M2M]
 **Pointed to by:**
   - challenge_links <- mechanics.SituationChallengeLink
   - instances <- mechanics.SituationInstance
@@ -2801,6 +2847,7 @@
 ### MissionTemplate
 **Foreign Keys:**
   - created_in_era -> stories.Era [FK] (nullable)
+  - categories -> missions.MissionCategory [M2M]
 **Pointed to by:**
   - clues <- clues.Clue
   - nodes <- missions.MissionNode
@@ -2811,6 +2858,8 @@
 ### MissionNode
 **Foreign Keys:**
   - template -> missions.MissionTemplate [FK]
+  - allowed_riders -> checks.Consequence [M2M]
+  - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
   - options <- missions.MissionOption
 
@@ -2820,6 +2869,7 @@
   - authored_check_type -> checks.CheckType [FK] (nullable)
   - branch_target -> missions.MissionNode [FK] (nullable)
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
   - routes <- missions.MissionOptionRoute
 
@@ -2850,6 +2900,7 @@
 ### MissionRenownAward
 **Foreign Keys:**
   - route -> missions.MissionOptionRoute [FK]
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 
 ### MissionInstance
 **Foreign Keys:**
@@ -2905,6 +2956,7 @@
 **Foreign Keys:**
   - target -> objects.ObjectDB [FK] (nullable)
   - org -> societies.Organization [FK] (nullable)
+  - templates -> missions.MissionTemplate [M2M]
 **Pointed to by:**
   - cooldowns <- missions.MissionGiverCooldown
 
@@ -2966,6 +3018,8 @@
   - sender_account -> accounts.AccountDB [FK] (nullable)
   - related_era -> stories.Era [FK] (nullable)
   - related_story -> stories.Story [FK] (nullable)
+  - reach_societies -> societies.Society [M2M]
+  - reach_organizations -> societies.Organization [M2M]
 
 ### UserStoryMute
 **Foreign Keys:**
@@ -3003,12 +3057,12 @@
 
 ### NPCServiceOffer
 **Foreign Keys:**
-  - mission_offer_details -> npc_services.MissionOfferDetails [OneToOne] (nullable)
-  - permit_offer_details -> npc_services.PermitOfferDetails [OneToOne] (nullable)
   - role -> npc_services.NPCRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
   - cooldowns <- npc_services.OfferCooldown
+  - mission_offer_details <- npc_services.MissionOfferDetails
+  - permit_offer_details <- npc_services.PermitOfferDetails
 
 ### OfferCooldown
 **Foreign Keys:**
@@ -3030,6 +3084,7 @@
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - building_kind -> buildings.BuildingKind [FK] (nullable)
+  - default_approved_wards -> areas.Area [M2M]
 
 ### Service Functions
 - `available_offers(session: 'InteractionSession', *, pool_count: 'int | None' = None) -> 'list[NPCServiceOffer]' — Return offers the PC can currently see/select, in stable order.`
@@ -3202,6 +3257,7 @@
 ### MultiClassRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
 
@@ -3276,17 +3332,17 @@
 
 ### Project
 **Foreign Keys:**
-  - research_details -> clues.ResearchProjectDetails [OneToOne] (nullable)
-  - resulting_building -> buildings.Building [OneToOne] (nullable)
-  - building_construction_details -> buildings.BuildingConstructionDetails [OneToOne] (nullable)
-  - resulting_building_project_instance -> buildings.BuildingProjectInstance [OneToOne] (nullable)
-  - room_feature_progression_details -> room_features.RoomFeatureProgressionDetails [OneToOne] (nullable)
   - owner_persona -> scenes.Persona [FK]
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - research_details <- clues.ResearchProjectDetails
   - contributions <- projects.Contribution
+  - resulting_building <- buildings.Building
+  - building_construction_details <- buildings.BuildingConstructionDetails
+  - resulting_building_project_instance <- buildings.BuildingProjectInstance
+  - room_feature_progression_details <- room_features.RoomFeatureProgressionDetails
 
 ### Contribution
 **Foreign Keys:**
@@ -3318,6 +3374,8 @@
 ## world.relationships
 
 ### RelationshipCondition
+**Foreign Keys:**
+  - gates_modifiers -> mechanics.ModifierTarget [M2M]
 **Pointed to by:**
   - character_relationships <- relationships.CharacterRelationship
 
@@ -3358,6 +3416,7 @@
   - displayed_track -> relationships.RelationshipTrack [FK] (nullable)
   - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
   - game_week -> game_clock.GameWeek [FK] (nullable)
+  - conditions -> relationships.RelationshipCondition [M2M]
 **Pointed to by:**
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -3511,6 +3570,7 @@
 ### TenureGallery
 **Foreign Keys:**
   - tenure -> roster.RosterTenure [FK]
+  - allowed_viewers -> roster.RosterTenure [M2M]
 **Pointed to by:**
   - media <- roster.TenureMedia
 
@@ -3524,14 +3584,13 @@
 
 ### RosterTenure
 **Foreign Keys:**
-  - display_settings -> roster.TenureDisplaySettings [OneToOne] (nullable)
-  - social_consent_preference -> consent.SocialConsentPreference [OneToOne] (nullable)
   - player_data -> evennia_extensions.PlayerData [FK]
   - roster_entry -> roster.RosterEntry [FK]
   - approved_by -> evennia_extensions.PlayerData [FK] (nullable)
 **Pointed to by:**
   - sent_mail <- roster.PlayerMail
   - received_mail <- roster.PlayerMail
+  - display_settings <- roster.TenureDisplaySettings
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
@@ -3540,6 +3599,7 @@
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
+  - social_consent_preference <- consent.SocialConsentPreference
   - social_consent_whitelist_owned <- consent.SocialConsentWhitelist
   - social_consent_whitelist_allowed <- consent.SocialConsentWhitelist
   - codex_taught <- codex.CharacterCodexKnowledge
@@ -3554,6 +3614,7 @@
 **Foreign Keys:**
   - location -> objects.ObjectDB [FK] (nullable)
   - event -> events.Event [FK] (nullable)
+  - participants -> accounts.AccountDB [M2M]
 **Pointed to by:**
   - developmenttransaction_set <- progression.DevelopmentTransaction
   - entry_flourish_offers <- magic.PendingEntryFlourishOffer
@@ -3597,6 +3658,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - profile -> character_sheets.Profile [FK] (nullable)
   - thumbnail -> evennia_extensions.PlayerMedia [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
 **Pointed to by:**
   - mentored_allocations <- skills.TrainingAllocation
   - feedback_submissions <- player_submissions.PlayerFeedback
@@ -3696,13 +3758,12 @@
 
 ### Interaction
 **Foreign Keys:**
-  - action_request_result -> scenes.SceneActionRequest [OneToOne] (nullable)
-  - action_request_action -> scenes.SceneActionRequest [OneToOne] (nullable)
   - persona -> scenes.Persona [FK]
   - writer_account -> accounts.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - place -> scenes.Place [FK] (nullable)
   - fury_committed -> magic.FuryTier [FK] (nullable)
+  - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - endorsements <- magic.PoseEndorsement
@@ -3713,6 +3774,8 @@
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
+  - action_request_result <- scenes.SceneActionRequest
+  - action_request_action <- scenes.SceneActionRequest
   - receivers <- scenes.InteractionReceiver
   - reaction_windows <- scenes.ReactionWindow
   - consequence_outcomes <- checks.ConsequenceOutcome
@@ -3783,7 +3846,6 @@
 
 ### SceneActionRequest
 **Foreign Keys:**
-  - pull_declaration -> scenes.SceneCastPullDeclaration [OneToOne] (nullable)
   - fury_commitment -> magic.FuryTier [FK] (nullable)
   - fury_anchor -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK]
@@ -3804,8 +3866,11 @@
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
   - action_interaction -> scenes.Interaction [OneToOne] (nullable)
+  - delivery_receivers -> scenes.Persona [M2M]
+  - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - additional_targets <- scenes.SceneActionTarget
+  - pull_declaration <- scenes.SceneCastPullDeclaration
 
 ### SceneActionTarget
 **Foreign Keys:**
@@ -3817,6 +3882,7 @@
 **Foreign Keys:**
   - request -> scenes.SceneActionRequest [OneToOne]
   - resonance -> magic.Resonance [FK]
+  - threads -> magic.Thread [M2M]
 
 ### Place
 **Foreign Keys:**
@@ -3838,11 +3904,11 @@
 
 ### ReactionWindow
 **Foreign Keys:**
-  - spread_assist_target -> societies.SpreadAssistTarget [OneToOne] (nullable)
   - interaction -> scenes.Interaction [FK]
   - scene -> scenes.Scene [FK]
 **Pointed to by:**
   - reactions <- scenes.WindowReaction
+  - spread_assist_target <- societies.SpreadAssistTarget
 
 ### WindowReaction
 **Foreign Keys:**
@@ -3867,11 +3933,13 @@
 
 ### Secret
 **Foreign Keys:**
-  - distinction -> distinctions.CharacterDistinction [OneToOne] (nullable)
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
+  - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
+  - distinction <- distinctions.CharacterDistinction
   - clues <- clues.Clue
   - victims <- secrets.SecretVictim
   - grievances <- secrets.SecretGrievance
@@ -3992,9 +4060,6 @@
 
 ### Organization
 **Foreign Keys:**
-  - treasury -> currency.OrganizationTreasury [OneToOne] (nullable)
-  - economics -> currency.OrgEconomicsProfile [OneToOne] (nullable)
-  - covenant -> covenants.Covenant [OneToOne] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
@@ -4002,6 +4067,8 @@
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
+  - treasury <- currency.OrganizationTreasury
+  - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
   - obligations_owed <- currency.OrgObligation
   - obligations_due <- currency.OrgObligation
@@ -4017,6 +4084,7 @@
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
   - event_invitations <- events.EventInvitation
+  - covenant <- covenants.Covenant
   - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
 
@@ -4072,13 +4140,15 @@
 
 ### LegendEntry
 **Foreign Keys:**
-  - audere_majora_crossing -> magic.AudereMajoraCrossing [OneToOne] (nullable)
   - persona -> scenes.Persona [FK]
   - event -> societies.LegendEvent [FK] (nullable)
   - source_type -> societies.LegendSourceType [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - story -> stories.Story [FK] (nullable)
+  - societies_aware -> societies.Society [M2M]
+  - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
+  - audere_majora_crossing <- magic.AudereMajoraCrossing
   - spread_action_requests <- scenes.SceneActionRequest
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
@@ -4092,6 +4162,7 @@
   - spreader_persona -> scenes.Persona [FK]
   - skill -> skills.Skill [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - societies_reached -> societies.Society [M2M]
 
 ### LegendDeedStory
 **Foreign Keys:**
@@ -4176,11 +4247,13 @@
 
 ### Story
 **Foreign Keys:**
-  - global_progress -> stories.GlobalStoryProgress [OneToOne] (nullable)
   - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - created_in_era -> stories.Era [FK] (nullable)
   - covenant -> covenants.Covenant [FK] (nullable)
   - primary_table -> gm.GMTable [FK] (nullable)
+  - owners -> accounts.AccountDB [M2M]
+  - active_gms -> gm.GMProfile [M2M]
+  - required_trust_categories -> stories.TrustCategory [M2M]
 **Pointed to by:**
   - trust_requirements <- stories.StoryTrustRequirement
   - participants <- stories.StoryParticipation
@@ -4188,6 +4261,7 @@
   - feedback <- stories.StoryFeedback
   - referenced_by_beats <- stories.Beat
   - group_progress_records <- stories.GroupStoryProgress
+  - global_progress <- stories.GlobalStoryProgress
   - progress_records <- stories.StoryProgress
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
@@ -4239,6 +4313,7 @@
 ### PlayerTrust
 **Foreign Keys:**
   - account -> accounts.AccountDB [OneToOne]
+  - trust_categories -> stories.TrustCategory [M2M]
 **Pointed to by:**
   - trust_levels <- stories.PlayerTrustLevel
 
@@ -4252,6 +4327,7 @@
   - story -> stories.Story [FK]
   - reviewer -> accounts.AccountDB [FK]
   - reviewed_player -> accounts.AccountDB [FK]
+  - trust_categories -> stories.TrustCategory [M2M]
 **Pointed to by:**
   - category_ratings <- stories.TrustCategoryFeedbackRating
 
@@ -4392,11 +4468,10 @@
 ## world.traits
 
 ### Trait
-**Foreign Keys:**
-  - skill -> skills.Skill [OneToOne] (nullable)
 **Pointed to by:**
   - rank_descriptions <- traits.TraitRankDescription
   - character_values <- traits.CharacterTraitValue
+  - skill <- skills.Skill
   - classes_requiring_trait <- classes.CharacterClass
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
@@ -4424,10 +4499,9 @@
 ### CheckRank
 
 ### CheckOutcome
-**Foreign Keys:**
-  - technique_warp_modifier -> magic.TechniqueOutcomeModifier [OneToOne] (nullable)
 **Pointed to by:**
   - resultchartoutcome_set <- traits.ResultChartOutcome
+  - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
