@@ -9,6 +9,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.magic.constants import GiftKind
 from world.magic.models.affinity import Resonance
 
 
@@ -35,6 +36,16 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Player-facing description of this gift.",
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=GiftKind.choices,
+        default=GiftKind.MAJOR,
+        db_index=True,
+        help_text=(
+            "Major: the one CG-chosen gift. Minor: shared/acquirable gifts that "
+            "species abilities and in-play powers are delivered as (ADR-0050)."
+        ),
     )
     resonances = models.ManyToManyField(
         Resonance,

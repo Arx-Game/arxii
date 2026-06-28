@@ -948,6 +948,10 @@ class FinalizeMagicDataCantripTests(TestCase):
         gift = Gift.objects.get(name="Danger Sense")
         assert gift.creator == sheet
 
+        from world.magic.constants import GiftKind
+
+        assert gift.kind == GiftKind.MAJOR
+
     def test_character_gift_links_character_to_gift(self) -> None:
         """finalize_magic_data creates CharacterGift linking sheet to new gift."""
         from world.character_creation.services import finalize_magic_data

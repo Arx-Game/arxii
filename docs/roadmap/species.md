@@ -25,7 +25,7 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
 ## Gaps
 
 - **khati / vampire / lycan / lineage** — no model or data today (lore-only). → Minor Gifts (ADR-0050);
-  depends on the Major/Minor taxonomy keystone (`priority:now`).
+  the Major/Minor taxonomy keystone landed in #1577 (`Gift.kind`); species-grant plumbing remains.
 - **Species abilities beyond stat-bonuses** — ❌ → DESIGNED as Minor Gifts (ADR-0050).
 - **Species vulnerabilities** (e.g. vampire ↔ sunlight) + an immunity/vulnerability framework — ❌ ABSENT,
   **no ADR yet** (vulnerability is per-condition only, never tied to identity).
