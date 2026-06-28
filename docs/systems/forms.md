@@ -155,6 +155,15 @@ and the web share the same `action.run()` path:
 - `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
   Catches `RevertBlockedError` and surfaces `exc.user_message` as a failure result.
 
+### Web surface
+
+`frontend/src/game/components/FormSwitcher.tsx` mirrors `PersonaSwitcher.tsx`: a
+ top-bar control next to the face switcher that shows the active alternate self (or
+"True self") and lets the player shift or revert. `frontend/src/game/formQueries.ts`
+holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
+`useRevertFormMutation`) that hit the endpoints above. Revert errors from the action
+(e.g. "You can't revert while not in control of yourself.") are surfaced inline.
+
 ### Telnet surface
 
 - `form` / `form list` — status hub: shows current alternate self (or true self),
@@ -188,6 +197,23 @@ The decoupling of control from the shift and the stacking guard are documented i
 ### Builds
 - `GET /api/forms/builds/` - List CG-selectable builds (all for staff)
 - `GET /api/forms/builds/{id}/` - Get single build
+
+### Alternate Selves
+- `GET /api/forms/alternate-selves/` - List the played character's alternate selves
+  (`character_sheet` filter required at the API level; the viewset scopes results to the
+  caller's played character). Response is paginated; each entry carries `id`,
+  `display_name`, `persona_name`, `form_name`, `has_combat_profile`, `has_techniques`,
+  and `is_active`.
+- `GET /api/forms/alternate-selves/{id}/` - Get a single alternate self (caller-owned
+  via the viewset queryset scoping).
+- `POST /api/forms/alternate-selves/shift/` - Assume an alternate self; body is
+  `{"alternate_self_id": <id>}`. Dispatches `ShiftFormAction` (key `"shift_form"`)
+  through `dispatch_player_action` → `action.run()`. A foreign/unknown id returns 400
+  with a uniform safe message (no repertoire leak).
+- `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
+  Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
+  Returns 400 with `RevertBlockedError.user_message` while `not in_control` (rage,
+  possession, charm, mind-control).
 
 All endpoints require `IsAuthenticated`.
 

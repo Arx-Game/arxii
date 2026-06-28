@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from world.forms.models import (
+    AlternateSelf,
     Build,
     CharacterForm,
     CharacterFormValue,
@@ -80,3 +81,69 @@ class BuildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Build
         fields = ["id", "name", "display_name", "is_cg_selectable"]
+
+
+class AlternateSelfSerializer(serializers.ModelSerializer):
+    """Read shape for the alternate-self switcher (#1111 slice 4).
+
+    Includes the active alt-self flag for the played character so the switcher can
+    highlight the currently-assumed form without a second round-trip.
+    """
+
+    persona_name = serializers.SerializerMethodField()
+    form_name = serializers.SerializerMethodField()
+    has_combat_profile = serializers.SerializerMethodField()
+    has_techniques = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AlternateSelf
+        fields = [
+            "id",
+            "display_name",
+            "persona_name",
+            "form_name",
+            "has_combat_profile",
+            "has_techniques",
+            "is_active",
+        ]
+
+    def get_persona_name(self, obj: AlternateSelf) -> str | None:
+        return obj.persona.name if obj.persona_id is not None else None
+
+    def get_form_name(self, obj: AlternateSelf) -> str | None:
+        return obj.form.name or None if obj.form_id is not None else None
+
+    def get_has_combat_profile(self, obj: AlternateSelf) -> bool:
+        return obj.combat_profile_id is not None
+
+    def get_has_techniques(self, obj: AlternateSelf) -> bool:
+        return obj.techniques.exists()
+
+    def get_is_active(self, obj: AlternateSelf) -> bool:
+        if not hasattr(self, "_active_alternate_self_id"):
+            request = self.context.get("request")
+            user = getattr(request, "user", None)  # noqa: GETATTR_LITERAL
+            puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
+            sheet = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            active = (
+                getattr(sheet, "active_alternate_self", None)  # noqa: GETATTR_LITERAL
+                if sheet is not None
+                else None
+            )
+            self._active_alternate_self_id = (
+                active.alternate_self_id if active is not None else None
+            )
+        return self._active_alternate_self_id == obj.pk
+
+
+class ShiftFormRequestSerializer(serializers.Serializer):
+    """POST body for the alternate-self shift endpoint."""
+
+    alternate_self_id = serializers.IntegerField(min_value=1)
+
+
+class ActiveAlternateSelfResultSerializer(serializers.Serializer):
+    """Result of a successful shift or revert — the now-active alternate-self id."""
+
+    active_alternate_self_id = serializers.IntegerField(allow_null=True)

@@ -85,6 +85,13 @@ artist changes persona with an *identical* body; a curse changes the body and
   **Scope boundary:** the pose/sdesc read-path (`record_interaction` /
   `_characters_to_active_personas`) is **not** changed here — making poses reflect the
   presented persona (with privacy/discovery/freeze) is **#1109**'s scope.
+- **Web surface** (`world/forms/views.py:AlternateSelfViewSet`,
+  `frontend/src/game/components/FormSwitcher.tsx`, #1111 slice 4) —
+  `GET /api/forms/alternate-selves/` lists caller-owned alternate selves with an
+  `is_active` flag; `POST /api/forms/alternate-selves/shift/` and `revert/` dispatch
+  `ShiftFormAction` / `RevertFormAction` through `dispatch_player_action`. The
+  top-bar `FormSwitcher` mirrors `PersonaSwitcher` and surfaces revert errors
+  returned by the action.
 - **Telnet `form` namespace** (`commands/form.py`, #1111 slice 4) — `form list` shows
   the active alternate self, the available alternate selves, and whether revert is
   blocked; `form shift <name|id>` triggers `ShiftFormAction`; `form revert` triggers

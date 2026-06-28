@@ -26,6 +26,7 @@ const TYPE_LABEL: Record<SwitchablePersona['persona_type'], string> = {
   primary: 'True self',
   established: 'Alt identity',
   temporary: 'Mask',
+  alternate: 'Alternate form',
 };
 
 function avatarSource(p: SwitchablePersona): PersonaAvatarSource {

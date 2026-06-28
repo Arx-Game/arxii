@@ -27,6 +27,13 @@ condition (category `Control`), possession, charm, mind-control. It is a read-ti
 derivation on `CharacterSheet`, not a stored column.
 _Avoid_: self-control flag, dominated flag.
 
+## Web / telnet labels
+
+- **Shift** (verb shown in the `FormSwitcher` dropdown label and telnet `form shift`):
+  assumes an alternate self.
+- **Revert** (verb shown on the `FormSwitcher` revert button and telnet `form revert`):
+  restores the captured return anchors.
+
 ## Shapeshift lifecycle
 
 **Assume**:

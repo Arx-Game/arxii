@@ -5,6 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 
+import { FormSwitcher } from './FormSwitcher';
 import { PersonaSwitcher } from './PersonaSwitcher';
 
 interface GameTopBarProps {
@@ -60,6 +61,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
             characterSheetId={activeCharacter.character_id}
             activePersonaId={activeCharacter.active_persona_id}
           />
+          <FormSwitcher characterSheetId={activeCharacter.character_id} />
         </div>
       ) : null}
 

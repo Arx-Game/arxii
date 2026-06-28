@@ -1,16 +1,35 @@
+from http import HTTPMethod
+
 from django.db.models import Prefetch
-from rest_framework import viewsets
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
+from rest_framework import mixins, permissions, serializers, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from world.forms.models import Build, CharacterForm, CharacterFormValue, FormTrait, HeightBand
+from actions.constants import ActionBackend
+from actions.player_interface import dispatch_player_action
+from actions.types import ActionRef
+from world.forms.models import (
+    AlternateSelf,
+    Build,
+    CharacterForm,
+    CharacterFormValue,
+    FormTrait,
+    HeightBand,
+)
 from world.forms.serializers import (
+    ActiveAlternateSelfResultSerializer,
+    AlternateSelfSerializer,
     ApparentFormSerializer,
     BuildSerializer,
     CharacterFormSerializer,
     FormTraitSerializer,
     HeightBandSerializer,
+    ShiftFormRequestSerializer,
 )
 from world.forms.services import get_apparent_form, get_cg_builds, get_cg_height_bands
 
@@ -82,3 +101,104 @@ class BuildViewSet(viewsets.ReadOnlyModelViewSet):
         if self.request.user.is_staff:
             return Build.objects.all()
         return get_cg_builds()
+
+
+class AlternateSelfPagination(PageNumberPagination):
+    """Pagination for alternate-selves list."""
+
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class AlternateSelfViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read + actions over a character's alternate selves (#1111 slice 4).
+
+    Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+    player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+    and telnet share one ``action.run()`` seam.
+    """
+
+    serializer_class = AlternateSelfSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = {"character": ["exact"]}
+    pagination_class = AlternateSelfPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter to alternate selves belonging to the played character's sheet."""
+        user = self.request.user
+        sheet = getattr(getattr(user, "puppet", None), "sheet_data", None)  # noqa: GETATTR_LITERAL
+        queryset = AlternateSelf.objects.select_related(
+            "persona", "form", "combat_profile"
+        ).prefetch_related("techniques")  # noqa: PREFETCH_STRING
+        if sheet is not None:
+            return queryset.filter(character=sheet).order_by("display_name")
+        return queryset.none()
+
+    @extend_schema(
+        request=ShiftFormRequestSerializer,
+        responses={200: ActiveAlternateSelfResultSerializer},
+        tags=["alternate-selves"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="shift",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def shift(self, request: Request) -> Response:
+        """#1111 — assume an alternate self owned by the played character."""
+        body = ShiftFormRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        if puppet is None or sheet is None:
+            msg = "You must be playing a character to shift forms."
+            raise serializers.ValidationError(msg)
+
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="shift_form")
+        result = dispatch_player_action(
+            puppet, ref, {"alternate_self_id": body.validated_data["alternate_self_id"]}
+        )
+        detail = result.detail
+        if not detail.success:
+            raise serializers.ValidationError(detail.message)
+        return Response(
+            ActiveAlternateSelfResultSerializer(
+                {"active_alternate_self_id": detail.data.get("active_alternate_self_id")}
+            ).data
+        )
+
+    @extend_schema(
+        responses={200: ActiveAlternateSelfResultSerializer},
+        tags=["alternate-selves"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="revert",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def revert(self, request: Request) -> Response:
+        """#1111 — revert the active alternate self (blocked while not in control)."""
+        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        sheet = getattr(puppet, "sheet_data", None) if puppet is not None else None  # noqa: GETATTR_LITERAL
+        if puppet is None or sheet is None:
+            msg = "You must be playing a character to revert forms."
+            raise serializers.ValidationError(msg)
+
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="revert_form")
+        result = dispatch_player_action(puppet, ref, {})
+        detail = result.detail
+        if not detail.success:
+            raise serializers.ValidationError(detail.message)
+        return Response(
+            ActiveAlternateSelfResultSerializer(
+                {"active_alternate_self_id": detail.data.get("active_alternate_self_id")}
+            ).data
+        )
