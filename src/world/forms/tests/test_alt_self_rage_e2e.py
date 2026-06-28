@@ -124,12 +124,15 @@ class AltSelfRageEndToEndTests(TestCase):
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertEqual(active.alternate_self, self.alt_self)
 
-        # 4. Calm-down: RestoreSenseAction removes Berserk. RestoreSense is a
-        # social-template action: run() returns a PendingActionResolution (not an
-        # ActionResult), so assert on the side effect it produced, not on a
-        # ``.success`` attribute that doesn't exist on that type.
+        # 4. Calm-down: RestoreSenseAction removes Berserk. Since #1603 a social
+        # execute() returns an ActionResult wrapping the PendingActionResolution
+        # in ``data["resolution"]``; assert the resolution completed (the calm-down
+        # ran to done). We don't assert ``calm.success`` because the resolution's
+        # main-check tier is a real roll here, and the behavioral guarantee we
+        # care about is the Berserk removal below (driven by the live
+        # ``RemoveConditionOnCheck`` effect, not the resolution tier).
         calm = RestoreSenseAction().run(self.character, target=self.character)
-        self.assertEqual(calm.current_phase, ResolutionPhase.COMPLETE)
+        self.assertEqual(calm.data["resolution"].current_phase, ResolutionPhase.COMPLETE)
 
         self.assertFalse(has_condition(self.character, self.berserk))
         # Assert on the ``sheet_data`` instance the action dispatched on. ``in_control``
