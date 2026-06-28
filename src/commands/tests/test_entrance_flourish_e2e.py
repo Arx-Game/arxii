@@ -1,9 +1,10 @@
 """E2E journey: enter → flourish prompt → flourish <resonance> → grant (#1339).
 
 Drives the full telnet loop end-to-end. The only mock is
-``start_action_resolution`` — we stub it to return a success ActionResult so
-the test doesn't need a full ActionTemplate + check-chain seed. Everything
-else (offer creation, notification, flourish resolution, grant write) is real.
+``start_action_resolution`` — we stub it to return a successful
+``PendingActionResolution`` (its real return type) so the test doesn't need a
+full ActionTemplate + check-chain seed. Everything else (offer creation,
+notification, flourish resolution, grant write) is real.
 
 Tagged ``postgres`` because ``grant_resonance`` / ``create_entry_flourish``
 write ``ResonanceGrant`` rows and the magic test tier is PG-only.
@@ -16,9 +17,10 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
-from actions.types import ActionResult
+from actions.types import PendingActionResolution, StepResult
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.types import CheckResult
 from world.magic.entry_flourish import PendingEntryFlourishOffer
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.magic.models import CharacterResonance
@@ -26,6 +28,35 @@ from world.magic.models import CharacterResonance
 # Patch the function at the module it lives in; EntranceAction imports it
 # locally via ``from actions.services import start_action_resolution``.
 _ENTRANCE_RESOLUTION_PATH = "actions.services.start_action_resolution"
+
+
+def _successful_resolution() -> PendingActionResolution:
+    """Build the real ``PendingActionResolution`` ``start_action_resolution`` returns.
+
+    A successful main step (``success_level=1``) is what drives ``EntranceAction`` to
+    mint the offer + nudge the actor. Stubbing the production type (not a stand-in
+    ``ActionResult``) keeps the e2e honest about the actual return shape (#1245).
+    """
+    check_result = CheckResult(
+        check_type=MagicMock(),
+        outcome=MagicMock(success_level=1),
+        chart=None,
+        roller_rank=None,
+        target_rank=None,
+        rank_difference=0,
+        trait_points=0,
+        aspect_bonus=0,
+        total_points=0,
+    )
+    step = StepResult(step_label="main", check_result=check_result, consequence_id=None)
+    return PendingActionResolution(
+        template_id=0,
+        character_id=0,
+        target_difficulty=0,
+        resolution_context_data={},
+        current_phase="main",
+        main_result=step,
+    )
 
 
 @tag("postgres")
@@ -65,14 +96,16 @@ class EntranceFlourishJourneyTest(TestCase):
 
     def _received_messages(self) -> list[str]:
         """Return all text strings passed to character.msg()."""
-        # ArxCommand.func() calls self.msg(result.message) — positional first arg
+        # Both the entrance flourish prompt and the flourish confirmation ride
+        # ``result.message`` — ArxCommand.func() surfaces them via self.msg(result.message),
+        # which lands on character.msg. Collect every positional-first-arg call here.
         return [str(call.args[0]) for call in self.character.msg.call_args_list if call.args]
 
     def test_enter_creates_offer_and_notifies_player(self) -> None:
         """After a successful entrance, an offer is minted and the player is told to flourish."""
         with patch(
             _ENTRANCE_RESOLUTION_PATH,
-            return_value=ActionResult(success=True, message="You sweep into the room."),
+            return_value=_successful_resolution(),
         ):
             self._run_enter()
 

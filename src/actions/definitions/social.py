@@ -23,7 +23,7 @@ from actions.types import TargetFilters, TargetType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from actions.types import ActionContext, ActionResult
+    from actions.types import ActionContext, ActionResult, PendingActionResolution
     from flows.scene_data_manager import SceneDataManager
 
 
@@ -63,12 +63,36 @@ class _SocialTemplateAction(Action):
 
         template = ActionTemplate.objects.get(name=self.template_name)
         resolution_ctx = ResolutionContext(character=actor, action_context=context)
-        return start_action_resolution(
+        resolution = start_action_resolution(
             character=actor,
             template=template,
             target_difficulty=0,
             context=resolution_ctx,
         )
+        return self._result_from_resolution(resolution)
+
+    @staticmethod
+    def _result_from_resolution(
+        resolution: PendingActionResolution, message: str | None = None
+    ) -> ActionResult:
+        """Wrap a ``PendingActionResolution`` into the ``ActionResult`` its consumers expect.
+
+        ``execute()``'s only live consumers are REGISTRY ones — the telnet command
+        (reads ``.message``) and the web dispatcher (stuffs the result into
+        ``DispatchResult.detail``, typed ``ActionResult``). The rich pending-resolution
+        object is consumed elsewhere by direct callers of ``start_action_resolution``
+        (scene consent, cast), never through here — so returning an ``ActionResult`` is
+        both honest and what these consumers actually read (#1245). Success is the one
+        canonical expression every resolution consumer uses
+        (``main_result.check_result.success_level``); ``main_result is None`` is a
+        *paused* resolution whose main step hasn't rolled, so it cannot have succeeded.
+        The full resolution rides ``data`` so nothing is lost.
+        """
+        from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
+
+        main = resolution.main_result
+        succeeded = main is not None and main.check_result.success_level > 0
+        return _ActionResult(success=succeeded, message=message, data={"resolution": resolution})
 
 
 @dataclass
@@ -141,15 +165,19 @@ class EntranceAction(_SocialTemplateAction):
 
         template = ActionTemplate.objects.get(name=self.template_name)
         resolution_ctx = ResolutionContext(character=actor, action_context=context)
-        result = start_action_resolution(
+        resolution = start_action_resolution(
             character=actor,
             template=template,
             target_difficulty=0,
             context=resolution_ctx,
         )
+        result = self._result_from_resolution(resolution)
 
-        # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant).
-        if template.grants_entry_flourish and self._succeeded(result):
+        # On a SUCCESSFUL entrance, open the entry-flourish offer (actor self-grant)
+        # and prompt the actor toward declaring it. The prompt rides the result
+        # ``message`` like every other action — the command surfaces it via
+        # ``self.msg(result.message)`` and the web dispatcher via ``detail.message`` (#1245).
+        if template.grants_entry_flourish and result.success:
             from world.magic.entry_flourish import (  # noqa: PLC0415
                 maybe_create_entry_flourish_offer,
             )
@@ -162,20 +190,6 @@ class EntranceAction(_SocialTemplateAction):
                 result.message = f"{result.message}\n{prompt}" if result.message else prompt
 
         return result
-
-    @staticmethod
-    def _succeeded(result: object) -> bool:
-        """Return True if the resolution result indicates success.
-
-        Handles both ``ActionResult`` (has ``.success``) and ``PendingActionResolution``
-        (reads ``main_result.check_result.success_level``).
-        """
-        if hasattr(result, "success"):
-            return bool(result.success)
-        main = getattr(result, "main_result", None)  # noqa: GETATTR_LITERAL
-        if main is None:
-            return False
-        return main.check_result.success_level > 0
 
 
 @dataclass
