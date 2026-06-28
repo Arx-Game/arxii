@@ -82,6 +82,7 @@ TARGET_EFFECT_ALTERATION: str = "alteration"
 UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
 BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
 FORCE_FIELD_CONDITION_NAME: str = "Aegis Field"  # absorb_pool reactive handler (#1584)
+REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (#1584)
 
 # Poison content identity keys (#1050). The DamageType, the staged acute
 # Poisoned ConditionTemplate, and the long-term Slow Poison variant are seeded

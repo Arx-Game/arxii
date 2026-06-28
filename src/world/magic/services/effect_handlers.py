@@ -8,7 +8,7 @@ from typing import Any
 
 from world.areas.positioning.models import Position
 from world.areas.positioning.services import connect_positions, force_move_to_position
-from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
+from world.conditions.constants import FORCE_FIELD_CONDITION_NAME, REFLECT_CONDITION_NAME
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
 
@@ -93,3 +93,76 @@ def absorb_pool(*, payload: Any) -> None:
         instance.delete()  # buffer fully consumed; condition expires
     else:
         instance.save(update_fields=["absorb_remaining"])
+
+
+def reflect_damage(*, payload: Any) -> None:
+    """Bounce incoming damage back to the attacker (DAMAGE_PRE_APPLY, priority 20).
+
+    Finds the bearer's oldest active Mirror Ward ConditionInstance, pays
+    reactive_anima_cost via ``_try_spend_reactive`` (fizzles silently if
+    unaffordable), zeros ``payload.amount``, then applies the recorded amount to
+    the attacker using ``bypass_pre_apply=True`` so the bounce never re-emits
+    DAMAGE_PRE_APPLY — terminating any reflect↔reflect loop.
+
+    Attacker resolution from ``payload.source.ref``:
+    - ``CombatOpponent``  → ``apply_damage_to_opponent``  (primary E2E path)
+    - DefaultCharacter objectdb → lookup active CombatParticipant →
+      ``apply_damage_to_participant``
+    - None / Technique / unresolvable / no active participant → payload zeroed,
+      no bounce (no attacker to hit; no crash).
+    """
+    if payload.amount <= 0:
+        return
+
+    instance = (
+        ConditionInstance.objects.filter(
+            target=payload.target,
+            condition__name=REFLECT_CONDITION_NAME,
+            resolved_at__isnull=True,
+        )
+        .order_by("pk")  # oldest first — pk is monotone
+        .first()
+    )
+    if instance is None or not _try_spend_reactive(instance):
+        return
+
+    amount = payload.amount
+    payload.amount = 0
+
+    ref = payload.source.ref
+
+    # Lazy imports to avoid circular dependency: combat.services already
+    # lazy-imports world.magic.services for thread DR.
+    from world.combat.models import (  # noqa: PLC0415
+        CombatOpponent,
+        CombatParticipant,
+        ParticipantStatus,
+    )
+    from world.combat.services import (  # noqa: PLC0415
+        apply_damage_to_opponent,
+        apply_damage_to_participant,
+    )
+
+    if isinstance(ref, CombatOpponent):
+        apply_damage_to_opponent(
+            ref, amount, bypass_pre_apply=True, damage_type=payload.damage_type
+        )
+        return
+
+    # PC attacker path — ref must be a DefaultCharacter objectdb.
+    try:
+        from evennia.objects.objects import DefaultCharacter  # noqa: PLC0415
+
+        is_character = isinstance(ref, DefaultCharacter)
+    except ImportError:
+        is_character = False
+
+    if is_character:
+        participant = CombatParticipant.objects.filter(
+            character_sheet__character=ref, status=ParticipantStatus.ACTIVE
+        ).first()
+        if participant is not None:
+            apply_damage_to_participant(
+                participant, amount, bypass_pre_apply=True, damage_type=payload.damage_type
+            )
+    # else: ref is None / Technique / unknown → payload already zeroed, no bounce

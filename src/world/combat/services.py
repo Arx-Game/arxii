@@ -2204,11 +2204,12 @@ def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count
     return max(1, min(raw, active_pc_count))
 
 
-def apply_damage_to_opponent(
+def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source_sheet: CharacterSheet | None = None,
 ) -> OpponentDamageResult:
@@ -2243,43 +2244,46 @@ def apply_damage_to_opponent(
 
     # --- DAMAGE_PRE_APPLY (cancellable, amount mutable) — mirrors the participant
     # path so reactive defences (force-field/reflect/blink) fire on NPCs and
-    # ALLY summons identically (#1584). ---
-    if opponent.objectdb is not None and opponent.objectdb.location is not None:
-        damage_source = classify_source(
-            source_sheet.character if source_sheet is not None else None
-        )
-        pre_payload = DamagePreApplyPayload(
-            target=opponent.objectdb,
-            amount=raw_damage,
-            damage_type=damage_type,
-            source=damage_source,
-        )
-        stack = emit_event(
-            EventName.DAMAGE_PRE_APPLY,
-            pre_payload,
-            location=opponent.objectdb.location,
-        )
-        if stack.was_cancelled():
-            return OpponentDamageResult(
-                damage_dealt=0,
-                health_damaged=False,
-                probed=False,
-                probing_increment=0,
-                defeated=False,
-                kills=0,
-                opponent_id=opponent.pk,
+    # ALLY summons identically (#1584).
+    # bypass_pre_apply=True skips emit + mutation; the bounced-reflect path uses
+    # this to terminate re-emission (loop guard). ---
+    if not bypass_pre_apply:
+        if opponent.objectdb is not None and opponent.objectdb.location is not None:
+            damage_source = classify_source(
+                source_sheet.character if source_sheet is not None else None
             )
-        raw_damage = pre_payload.amount
-        if raw_damage <= 0:
-            return OpponentDamageResult(
-                damage_dealt=0,
-                health_damaged=False,
-                probed=False,
-                probing_increment=0,
-                defeated=False,
-                kills=0,
-                opponent_id=opponent.pk,
+            pre_payload = DamagePreApplyPayload(
+                target=opponent.objectdb,
+                amount=raw_damage,
+                damage_type=damage_type,
+                source=damage_source,
             )
+            stack = emit_event(
+                EventName.DAMAGE_PRE_APPLY,
+                pre_payload,
+                location=opponent.objectdb.location,
+            )
+            if stack.was_cancelled():
+                return OpponentDamageResult(
+                    damage_dealt=0,
+                    health_damaged=False,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    kills=0,
+                    opponent_id=opponent.pk,
+                )
+            raw_damage = pre_payload.amount
+            if raw_damage <= 0:
+                return OpponentDamageResult(
+                    damage_dealt=0,
+                    health_damaged=False,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    kills=0,
+                    opponent_id=opponent.pk,
+                )
 
     effective_soak = 0 if bypass_soak else opponent.soak_value
 
@@ -2539,6 +2543,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
     damage: int,
     *,
     force_death: bool = False,
+    bypass_pre_apply: bool = False,
     damage_type: DamageType | None = None,
     source: object | None = None,
     source_sheet: CharacterSheet | None = None,
@@ -2570,28 +2575,32 @@ def apply_damage_to_participant(  # noqa: PLR0913
     damage_source = classify_source(source)
 
     # --- DAMAGE_PRE_APPLY (cancellable, amount may be modified) ---
+    # bypass_pre_apply=True skips emit + interpose; the bounced-reflect path
+    # uses this to terminate re-emission (loop guard). pre_payload is still
+    # built so effective_damage derives from it regardless.
     pre_payload = DamagePreApplyPayload(
         target=character,
         amount=damage,
         damage_type=damage_type,
         source=damage_source,
     )
-    if room is not None:
-        stack = emit_event(
-            EventName.DAMAGE_PRE_APPLY,
-            pre_payload,
-            location=room,
-        )
-        if stack.was_cancelled():
-            return ParticipantDamageResult(
-                damage_dealt=0,
-                health_after=vitals.health,
-                knockout_eligible=False,
-                death_eligible=False,
-                permanent_wound_eligible=False,
+    if not bypass_pre_apply:
+        if room is not None:
+            stack = emit_event(
+                EventName.DAMAGE_PRE_APPLY,
+                pre_payload,
+                location=room,
             )
+            if stack.was_cancelled():
+                return ParticipantDamageResult(
+                    damage_dealt=0,
+                    health_after=vitals.health,
+                    knockout_eligible=False,
+                    death_eligible=False,
+                    permanent_wound_eligible=False,
+                )
 
-    _try_interpose(participant, pre_payload)
+        _try_interpose(participant, pre_payload)
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
             damage_dealt=0,
