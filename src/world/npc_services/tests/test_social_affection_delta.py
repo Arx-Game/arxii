@@ -15,6 +15,7 @@ from actions.definitions.social import PersuadeAction
 from actions.factories import ActionTemplateFactory
 from actions.models.action_templates import ActionTemplate
 from actions.types import ActionResult
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
@@ -119,3 +120,34 @@ class SocialAffectionDeltaTest(TestCase):
         bare = ActionResult(success=True)
         self.assertEqual(_success_level(bare), 0)
         self.assertEqual(_delta_for_tier(_success_level(bare)), 0)
+
+    def test_pc_target_is_noop(self) -> None:
+        """A successful social action aimed at a PC must not write an NPCStanding row."""
+        from world.scenes.action_services import _persona_is_npc
+
+        pc_target_character = CharacterFactory()
+        pc_target_character.db_account = AccountFactory()
+        pc_target_character.save()
+        pc_target_sheet = CharacterSheetFactory(character=pc_target_character)
+        pc_target_persona = PersonaFactory(
+            character_sheet=pc_target_sheet, persona_type=PersonaType.ESTABLISHED
+        )
+
+        self.assertFalse(_persona_is_npc(pc_target_persona))
+
+        success = CheckOutcomeFactory(name="Social Success PC Target", success_level=5)
+
+        with force_check_outcome(success):
+            result = PersuadeAction().run(
+                self.pc_character,
+                target_persona_id=pc_target_persona.pk,
+            )
+
+        self.assertIsNotNone(result.main_result)
+        self.assertGreater(result.main_result.check_result.success_level, 0)
+        self.assertFalse(
+            NPCStanding.objects.filter(
+                persona=self.pc_sheet.primary_persona,
+                npc_persona=pc_target_persona,
+            ).exists()
+        )

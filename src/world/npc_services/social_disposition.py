@@ -28,10 +28,11 @@ def apply_social_disposition_delta(actor, target_persona_id, result) -> None:
     if delta == 0 or target_persona_id is None:
         return
 
+    from world.scenes.action_services import _persona_is_npc  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
     target_persona = Persona.objects.filter(pk=target_persona_id).first()
-    if target_persona is None:
+    if target_persona is None or not _persona_is_npc(target_persona):
         return
 
     # Persona-bearing NPC → durable NPCStanding.
