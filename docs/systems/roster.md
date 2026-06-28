@@ -14,6 +14,7 @@ from world.roster.models import (
     ApplicationStatus,      # PENDING, APPROVED, DENIED, WITHDRAWN
     PlotInvolvement,        # HIGH, MEDIUM, LOW, NONE
     RosterType,             # ACTIVE, INACTIVE, AVAILABLE, RESTRICTED, FROZEN
+    CreationProvenance,     # STAFF, GM_TABLE, PLAYER (viewable quality/trust signal, #1506)
     ApprovalScope,          # ALL, HOUSE, STORY, NONE
     ValidationErrorCodes,   # Error code constants for DRF serializers
     ValidationMessages,     # User-friendly validation message constants
@@ -29,7 +30,7 @@ from world.roster.models import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Roster` | Character category groups (Active, Inactive, etc.) | `name` (unique), `description`, `is_active`, `is_public`, `allow_applications`, `sort_order` |
-| `RosterEntry` | Bridge linking characters to rosters (1:1 with ObjectDB) | `character` (OneToOne ObjectDB), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `frozen`, `gm_notes` |
+| `RosterEntry` | Bridge linking characters to rosters (1:1 with ObjectDB) | `character` (OneToOne ObjectDB), `roster` (FK), `profile_picture` (FK TenureMedia), `joined_roster`, `previous_roster`, `last_puppeted`, `frozen`, `gm_notes`, `creation_provenance` (`CreationProvenance`, #1506), `created_by_account` (FK AccountDB), `created_for_table` (FK gm.GMTable — set for GM_TABLE) |
 
 ### Tenures & Anonymity
 

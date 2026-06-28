@@ -123,7 +123,11 @@ application.is_editable   # True when revisions_requested
 
 ```python
 from world.character_creation.services import (
-    finalize_character,           # Create Character from completed draft (atomic)
+    finalize_character,           # Create Character from completed draft (atomic); stamps
+                                  #   RosterEntry provenance (STAFF if add_to_roster else
+                                  #   PLAYER) + created_by_account (#1506)
+    finalize_gm_character,        # GM path: full character + Available RosterEntry (GM_TABLE
+                                  #   provenance + created_for_table) + Story/StoryParticipation
     get_accessible_starting_areas,# Filter areas by account access
     can_create_character,         # Check eligibility (trust, limits)
     submit_draft_for_review,      # Create DraftApplication in SUBMITTED
@@ -162,6 +166,8 @@ from world.character_creation.services import (
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft
 - `GET /api/character-creation/drafts/{id}/cg-points/` - CG points breakdown
 - `POST /api/character-creation/drafts/{id}/select-tradition/` - Select/clear tradition
+- `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff: finalize directly to roster (STAFF provenance)
+- `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM: finalize onto the Available roster for a table they own (GM_TABLE provenance; body `target_table`, `story_title`, optional `story_description`) (#1506)
 
 ### Magic (Cantrip Selection)
 - `GET /api/character-creation/cantrips/?tradition_id=X` - List cantrips for a tradition

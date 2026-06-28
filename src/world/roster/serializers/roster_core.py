@@ -22,6 +22,13 @@ class RosterEntrySerializer(serializers.ModelSerializer):
     fullname = serializers.SerializerMethodField()
     quote = serializers.SerializerMethodField()
     description = serializers.SerializerMethodField()
+    # Provenance / quality signal (#1506): staff-vetted vs a player-GM's table character.
+    creation_provenance_display = serializers.CharField(
+        source="get_creation_provenance_display", read_only=True
+    )
+    created_for_table_name = serializers.CharField(
+        source="created_for_table.name", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = RosterEntry
@@ -34,6 +41,9 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             "fullname",
             "quote",
             "description",
+            "creation_provenance",
+            "creation_provenance_display",
+            "created_for_table_name",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
@@ -146,6 +156,13 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     )
     is_available = serializers.SerializerMethodField()
     trust_evaluation = serializers.SerializerMethodField()
+    # Provenance / quality signal (#1506): staff-vetted vs a player-GM's table character.
+    creation_provenance_display = serializers.CharField(
+        source="get_creation_provenance_display", read_only=True
+    )
+    created_for_table_name = serializers.CharField(
+        source="created_for_table.name", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = RosterEntry
@@ -158,6 +175,9 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
             "is_available",
             "trust_evaluation",
             "joined_roster",
+            "creation_provenance",
+            "creation_provenance_display",
+            "created_for_table_name",
         ]
 
     def get_is_available(self, obj):

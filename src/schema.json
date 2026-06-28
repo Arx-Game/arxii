@@ -2079,6 +2079,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/finalize-gm/:
+    post:
+      operationId: character_creation_drafts_finalize_gm_create
+      description: |-
+        Finalize a player-GM's character onto the Available roster for their table (#1506).
+
+        The requesting account must own the target GM table. Creates the character + a
+        Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
+        viewable quality/trust signal (the GM vouches for it for their table; apping is
+        never gated by it). Body: ``target_table`` (id, required), ``story_title``
+        (required), optional ``story_description``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterDraftRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterDraft'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -28028,6 +28061,16 @@ components:
           maxLength: 255
       required:
       - name
+    CreationProvenanceEnum:
+      enum:
+      - staff
+      - gm_table
+      - player
+      type: string
+      description: |-
+        * `staff` - Staff-created
+        * `gm_table` - GM-created (for a table)
+        * `player` - Player-created
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A
@@ -43337,9 +43380,29 @@ components:
         description:
           type: string
           readOnly: true
+        creation_provenance:
+          allOf:
+          - $ref: '#/components/schemas/CreationProvenanceEnum'
+          readOnly: true
+          description: |-
+            Who authored this character — a display-only quality/trust signal.
+
+            * `staff` - Staff-created
+            * `gm_table` - GM-created (for a table)
+            * `player` - Player-created
+        creation_provenance_display:
+          type: string
+          readOnly: true
+        created_for_table_name:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - can_apply
       - character
+      - created_for_table_name
+      - creation_provenance
+      - creation_provenance_display
       - description
       - fullname
       - id

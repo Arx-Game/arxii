@@ -220,6 +220,26 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         )
         assert willpower_value.value == 2
 
+    def test_staff_add_to_roster_stamps_staff_provenance(self):
+        """add_to_roster (staff direct-add) records STAFF provenance + the actor (#1506)."""
+        from world.roster.models.choices import CreationProvenance
+
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+        character = finalize_character(draft, add_to_roster=True, created_by_account=self.account)
+        entry = character.sheet_data.roster_entry
+        assert entry.creation_provenance == CreationProvenance.STAFF
+        assert entry.created_by_account == self.account
+
+    def test_player_finalize_stamps_player_provenance(self):
+        """The normal self-creation path records PLAYER provenance (an OC) (#1506)."""
+        from world.roster.models.choices import CreationProvenance
+
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+        character = finalize_character(draft)  # add_to_roster=False → Pending roster
+        entry = character.sheet_data.roster_entry
+        assert entry.creation_provenance == CreationProvenance.PLAYER
+        assert entry.created_by_account == draft.account
+
     def test_finalize_bulk_creates_trait_values(self):
         """Test that finalization uses bulk operations (no N+1)."""
         draft = self._create_complete_draft(
@@ -1319,6 +1339,17 @@ class FinalizeGMCharacterTests(TestCase):
         entry, _ = finalize_gm_character(draft)
         assert entry.pk is not None
         assert entry.roster.name == "Available"
+
+    def test_stamps_gm_table_provenance(self) -> None:
+        """The roster entry records GM_TABLE provenance + the authoring GM + table (#1506)."""
+        from world.character_creation.services import finalize_gm_character
+        from world.roster.models.choices import CreationProvenance
+
+        draft = self._make_gm_draft()
+        entry, _ = finalize_gm_character(draft)
+        assert entry.creation_provenance == CreationProvenance.GM_TABLE
+        assert entry.created_by_account == self.gm.account
+        assert entry.created_for_table == self.table
 
     def test_creates_story_linked_to_target_table(self) -> None:
         from world.character_creation.services import finalize_gm_character

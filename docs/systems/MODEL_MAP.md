@@ -729,7 +729,7 @@
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' — Claim a submitted application for staff review.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Deny an application.`
-- `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
+- `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' — Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from cantrip selection during finalization.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' — Get all starting areas accessible to an account.`
@@ -3553,6 +3553,8 @@
   - roster -> roster.Roster [FK]
   - profile_picture -> roster.TenureMedia [FK] (nullable)
   - previous_roster -> roster.Roster [FK] (nullable)
+  - created_by_account -> accounts.AccountDB [FK] (nullable)
+  - created_for_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
   - tenures <- roster.RosterTenure
   - random_scene_claimed_as <- progression.RandomSceneCompletion

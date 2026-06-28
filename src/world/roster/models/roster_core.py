@@ -18,7 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
-from world.roster.models.choices import ActivityRequirement
+from world.roster.models.choices import ActivityRequirement, CreationProvenance
 
 
 class Roster(NaturalKeyMixin, SharedMemoryModel):
@@ -126,6 +126,32 @@ class RosterEntry(SharedMemoryModel):
 
     # Staff notes
     gm_notes = models.TextField(blank=True)
+
+    # Creation provenance — a viewable quality/trust signal (#1506). Set at creation:
+    # self character-creation → PLAYER, staff add-to-roster → STAFF, a player-GM's
+    # table character → GM_TABLE (with the authoring account + the table it was made for).
+    creation_provenance = models.CharField(
+        max_length=16,
+        choices=CreationProvenance.choices,
+        default=CreationProvenance.PLAYER,
+        help_text="Who authored this character — a display-only quality/trust signal.",
+    )
+    created_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="authored_roster_entries",
+        help_text="Account that authored this character (the GM, the staffer, or the player).",
+    )
+    created_for_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="authored_roster_entries",
+        help_text="For GM_TABLE provenance: the GM table this character was created for.",
+    )
 
     # Custom manager
     objects = RosterEntryManager()
