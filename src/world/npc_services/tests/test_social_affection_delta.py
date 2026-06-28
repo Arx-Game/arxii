@@ -72,8 +72,9 @@ class SocialAffectionDeltaTest(TestCase):
                 target_persona_id=self.npc_persona.pk,
             )
 
-        self.assertIsNotNone(result.main_result)
-        self.assertGreater(result.main_result.check_result.success_level, 0)
+        resolution = result.data["resolution"]
+        self.assertIsNotNone(resolution.main_result)
+        self.assertGreater(resolution.main_result.check_result.success_level, 0)
         standing = NPCStanding.objects.get(
             persona=self.pc_sheet.primary_persona,
             npc_persona=self.npc_persona,
@@ -90,8 +91,9 @@ class SocialAffectionDeltaTest(TestCase):
                 target_persona_id=self.npc_persona.pk,
             )
 
-        self.assertIsNotNone(result.main_result)
-        self.assertLessEqual(result.main_result.check_result.success_level, 0)
+        resolution = result.data["resolution"]
+        self.assertIsNotNone(resolution.main_result)
+        self.assertLessEqual(resolution.main_result.check_result.success_level, 0)
         self.assertFalse(
             NPCStanding.objects.filter(
                 persona=self.pc_sheet.primary_persona,
@@ -106,8 +108,9 @@ class SocialAffectionDeltaTest(TestCase):
         with force_check_outcome(success):
             result = PersuadeAction().run(self.pc_character)
 
-        self.assertIsNotNone(result.main_result)
-        self.assertGreater(result.main_result.check_result.success_level, 0)
+        resolution = result.data["resolution"]
+        self.assertIsNotNone(resolution.main_result)
+        self.assertGreater(resolution.main_result.check_result.success_level, 0)
         self.assertFalse(NPCStanding.objects.exists())
 
     def test_success_level_fallback_for_unexpected_result_shape(self) -> None:
@@ -143,8 +146,9 @@ class SocialAffectionDeltaTest(TestCase):
                 target_persona_id=pc_target_persona.pk,
             )
 
-        self.assertIsNotNone(result.main_result)
-        self.assertGreater(result.main_result.check_result.success_level, 0)
+        resolution = result.data["resolution"]
+        self.assertIsNotNone(resolution.main_result)
+        self.assertGreater(resolution.main_result.check_result.success_level, 0)
         self.assertFalse(
             NPCStanding.objects.filter(
                 persona=self.pc_sheet.primary_persona,
