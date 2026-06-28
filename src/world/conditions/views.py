@@ -482,9 +482,9 @@ class TreatmentCandidateViewSet(CharacterContextMixin, viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-        scene = _get_active_scene(character.location)
+        scene = get_active_scene(character.location)
         if scene is None:
             return Response(
                 {"detail": "You are not in an active scene."},

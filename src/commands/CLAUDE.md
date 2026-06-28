@@ -192,7 +192,7 @@ actions, backends, and service functions.
   `poses <char>` lists endorseable poses in the current scene.
   `endorse pose/entry/style <char> resonance=<name> [confirm]` dispatches to the
   appropriate action. Both derive the active scene from the caller's room via
-  `_get_active_scene` (#1340).
+  `get_active_scene` (#1340).
 - **`fashion.py`**: `CmdJudgePresentation` (`judge`) — telnet face of
   `JudgePresentationAction`; parses `judge <presentation_id>` (#1340).
 - **`missions.py`**: `CmdMission` (`mission`, #1349) — the mission play namespace. Thin over the
@@ -213,7 +213,7 @@ actions, backends, and service functions.
   (the subverb IS the kind: `react kudos <char> #1`, `react entrance <char> #1 <resonance>`) →
   `ReactToWindowAction`; bare `react` lists open reactable events in the current scene. Pose
   targeting reuses `get_endorseable_poses_in_scene` (`<char> #N`, the same scheme as `endorse`);
-  the active scene derives from the caller's room via `_get_active_scene`. The entrance resonance
+  the active scene derives from the caller's room via `get_active_scene`. The entrance resonance
   name is resolved to `str(pk)` here (mirrors `CmdEndorse._resolve_resonance`) — the Action stays a
   thin slug-taking wrapper. Shared by telnet + the web viewsets; no business logic in the command.
 - **`gemit.py`**: `CmdGemit` (`gemit`, staff-only `perm(Admin)`, #1450) — the *push* face of the
