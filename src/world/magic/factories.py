@@ -358,6 +358,22 @@ class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
     uses_equipped_weapon = False
 
 
+class TechniqueVariantFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueVariant rows (gift-technique specialization, #1578)."""
+
+    class Meta:
+        model = "magic.TechniqueVariant"
+
+    parent_technique = factory.SubFactory(TechniqueFactory, damage_profile=False)
+    resonance = factory.SubFactory(ResonanceFactory)
+    unlock_thread_level = 3
+    name_override = ""
+    intensity_delta = 0
+    control_delta = 0
+    discovery_achievement = None
+    codex_entry = None
+
+
 # ---------------------------------------------------------------------------
 # Passive action archetypes (#874)
 #

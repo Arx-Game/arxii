@@ -20,6 +20,12 @@ from typing import TYPE_CHECKING
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.magic.models.techniques import (
+    AbstractAppliedCondition,
+    AbstractCapabilityGrant,
+    AbstractDamageProfile,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -162,3 +168,153 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         form prose). The base raises NotImplementedError to force an override.
         """
         raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# Concrete: TechniqueVariant (gift-technique specialization, #1578)
+# ---------------------------------------------------------------------------
+
+
+class TechniqueVariant(AbstractSpecializedVariant):
+    """A resonance-specialized variant of a Technique.
+
+    A parent ``Technique`` has variant rows keyed by ``(parent_technique,
+    resonance, unlock_thread_level)``. When a character's GIFT thread crosses a
+    variant's ``unlock_thread_level`` the resolver picks the variant (highest
+    matching ``level <= thread.level`` at the thread's resonance); its
+    name/intensity deltas + payload override or augment the parent's. Mirrors
+    covenant sub-roles (single-depth only).
+
+    The base ``_variant_queryset`` default resolves via ``parent.variants``
+    (the ``related_name`` below); no override is needed.
+    """
+
+    parent_technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.CASCADE,
+        related_name="variants",
+        help_text="The parent technique this variant specializes.",
+    )
+    name_override = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Display name for this variant; blank = inherit parent's name.",
+    )
+    intensity_delta = models.SmallIntegerField(
+        default=0,
+        help_text="Added to the parent technique's intensity when this variant resolves.",
+    )
+    control_delta = models.SmallIntegerField(
+        default=0,
+        help_text="Added to the parent technique's control when this variant resolves.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent_technique", "resonance", "unlock_thread_level"],
+                name="technique_variant_unique_parent_resonance_level",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        label = self.name_override or f"variant of {self.parent_technique_id}"
+        return f"{label} (res {self.resonance_id}, lvl {self.unlock_thread_level})"
+
+    def discovery_narrative(
+        self,
+        *,
+        is_first: bool,
+    ) -> tuple[Sequence[CharacterSheet], str]:
+        """Technique-form discovery copy + recipients.
+
+        ``is_first=True`` -> gamewide recipients via
+        ``active_player_character_sheets()`` + "first time" prose.
+        ``is_first=False`` -> empty recipients ``[]``: the ceremony caller
+        (``fire_variant_discoveries``) supplies ``[thread.owner]`` (mirrors
+        ``_notify`` in ``covenants/discovery.py:114``) plus personal prose.
+        """
+        name = self.name_override or self.parent_technique.name
+        if is_first:
+            from world.roster.selectors import (  # noqa: PLC0415
+                active_player_character_sheets,
+            )
+
+            recipients = active_player_character_sheets()
+            body = (
+                f"For the first time, a mage has manifested the {name} form — a "
+                f"convergence of {self.resonance.name} and gift no one has "
+                f"achieved before."
+            )
+        else:
+            # Personal: the discovering sheet is supplied by the ceremony
+            # caller (fire_variant_discoveries), which has thread.owner in
+            # scope; it appends [thread.owner] when this returns [].
+            recipients: list[CharacterSheet] = []
+            body = (
+                f"Your gift has deepened. You have manifested the {name} form, "
+                f"channelled through {self.resonance.name}."
+            )
+        return recipients, body
+
+
+class TechniqueVariantCapabilityGrant(AbstractCapabilityGrant):
+    """Capability granted by a TechniqueVariant (mirrors TechniqueCapabilityGrant)."""
+
+    variant = models.ForeignKey(
+        TechniqueVariant,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
+    )
+    prerequisite = models.ForeignKey(
+        "mechanics.Prerequisite",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_variant_grants",
+        help_text="Source-specific prerequisite.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["variant", "capability"],
+                name="technique_variant_cap_grant_unique",
+            ),
+        ]
+
+
+class TechniqueVariantDamageProfile(AbstractDamageProfile):
+    """Damage profile for a TechniqueVariant (mirrors TechniqueDamageProfile)."""
+
+    variant = models.ForeignKey(
+        TechniqueVariant,
+        on_delete=models.CASCADE,
+        related_name="damage_profiles",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["variant", "damage_type"],
+                name="technique_variant_damage_profile_unique",
+            ),
+        ]
+
+
+class TechniqueVariantAppliedCondition(AbstractAppliedCondition):
+    """Applied condition for a TechniqueVariant (mirrors TechniqueAppliedCondition)."""
+
+    variant = models.ForeignKey(
+        TechniqueVariant,
+        on_delete=models.CASCADE,
+        related_name="condition_applications",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["variant", "condition"],
+                name="technique_variant_applied_condition_unique",
+            ),
+        ]

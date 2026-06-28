@@ -140,6 +140,7 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "ARG001",  # unused function arguments - migration hooks accept schema_editor
     "S608",    # SQL injection - migration RunSQL uses safe, static SQL strings
     "PLR2004", # magic values - partition boundary constants in migration code
+    "FURB157", # verbose Decimal() in auto-generated DecimalField defaults
 ]
 
 # Settings files
