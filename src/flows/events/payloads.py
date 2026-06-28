@@ -122,6 +122,14 @@ class CharacterKilledPayload:
 
 
 @dataclass(frozen=True)
+class CombatRoundStartingPayload:
+    """ROOM scope, non-cancellable. Fires at the top of resolve_round."""
+
+    encounter_id: int
+    round_number: int
+
+
+@dataclass(frozen=True)
 class EncounterCompletedPayload:
     encounter: CombatEncounter
     outcome: str  # EncounterOutcome value
@@ -253,6 +261,7 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "damage_applied": DamageAppliedPayload,
     "character_incapacitated": CharacterIncapacitatedPayload,
     "character_killed": CharacterKilledPayload,
+    "combat_round_starting": CombatRoundStartingPayload,
     "encounter_completed": EncounterCompletedPayload,
     "move_pre_depart": MovePreDepartPayload,
     "moved": MovedPayload,

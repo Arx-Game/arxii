@@ -44,6 +44,7 @@ from flows.events.payloads import (
     AttackPreResolvePayload,
     CharacterIncapacitatedPayload,
     CharacterKilledPayload,
+    CombatRoundStartingPayload,
     DamageAppliedPayload,
     DamagePreApplyPayload,
     EncounterCompletedPayload,
@@ -4533,6 +4534,76 @@ def dispatch_interpose(
     )
 
 
+def _get_anima(character: ObjectDB) -> object:
+    """Return the CharacterAnima row for *character*.
+
+    Uses the ``anima`` reverse OneToOneField relation set by
+    ``CharacterAnima.character`` (``related_name="anima"``). Mirrors the
+    accessor used by ``CombatParticipant.available_strain``.
+    """
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    return CharacterAnima.objects.get(character=character)
+
+
+def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[AvailableCombo]:
+    """Emit COMBAT_ROUND_STARTING, drain upkeep, detect combos.
+
+    Called once at the top of ``resolve_round`` after the DECLARING→RESOLVING
+    transition.  Bundles three sequential steps so the caller contributes a
+    single statement toward the ``PLR0915`` limit.
+    """
+    emit_event(
+        EventName.COMBAT_ROUND_STARTING,
+        CombatRoundStartingPayload(
+            encounter_id=enc.pk,
+            round_number=round_number,
+        ),
+        location=enc.room,
+    )
+    drain_reactive_upkeep(enc)
+    return detect_available_combos(enc, round_number)
+
+
+def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
+    """Debit per-round upkeep from each active participant's sustained conditions.
+
+    For each ACTIVE participant, for each active (not suppressed, not resolved)
+    condition with ``upkeep_anima_per_round > 0``: spend that anima from the
+    participant's ``CharacterAnima`` pool. If the participant cannot pay in
+    full, the condition lapses — its ``ConditionInstance`` row is deleted and
+    any ``Trigger`` rows on it cascade.
+
+    Participants without a ``CharacterAnima`` row are skipped (defensive; they
+    cannot sustain reactive conditions without an anima pool).
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    parts = CombatParticipant.objects.filter(
+        encounter=encounter, status=ParticipantStatus.ACTIVE
+    ).select_related("character_sheet__character")
+    for part in parts:
+        char = part.character_sheet.character
+        try:
+            anima = CharacterAnima.objects.get(character=char)
+        except CharacterAnima.DoesNotExist:
+            continue
+        instances = ConditionInstance.objects.filter(
+            target=char,
+            is_suppressed=False,
+            resolved_at__isnull=True,
+            condition__upkeep_anima_per_round__gt=0,
+        ).select_related("condition")
+        for inst in instances:
+            cost = inst.condition.upkeep_anima_per_round
+            if anima.current >= cost:
+                anima.current -= cost
+                anima.save(update_fields=["current"])
+            else:
+                inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -4600,8 +4671,8 @@ def resolve_round(
     round_number = enc.round_number
     result = RoundResolutionResult(round_number=round_number)
 
-    # --- Combo detection (informational — upgrades happen in DECLARING) ---
-    result.available_combos = detect_available_combos(encounter, round_number)
+    # --- Round-start lifecycle: emit event, drain upkeep, detect combos ---
+    result.available_combos = _fire_round_start(enc, round_number)
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
