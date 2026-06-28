@@ -84,6 +84,7 @@ BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
 FORCE_FIELD_CONDITION_NAME: str = "Aegis Field"  # absorb_pool reactive handler (#1584)
 REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (#1584)
 BLINK_CONDITION_NAME: str = "Phase Step"  # blink_dodge reactive handler (#1584)
+SUMMONING_CONDITION_NAME: str = "Summoning"  # active CONDITION_APPLIED summon trigger (#1584)
 
 # Poison content identity keys (#1050). The DamageType, the staged acute
 # Poisoned ConditionTemplate, and the long-term Slow Poison variant are seeded

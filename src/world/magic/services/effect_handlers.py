@@ -240,6 +240,31 @@ def summon_ally(*, payload: Any) -> None:
         force_move_to_position(opp.objectdb, pos)
 
 
+def summon_ally_on_condition(
+    *, payload: Any, threat_pool_id: int, bond_rounds: int | None = None, max_health: int = 30
+) -> None:
+    """CONDITION_APPLIED adapter that bridges to ``summon_ally`` (#1584, Task 14a).
+
+    Seeded as the CALL_SERVICE_FUNCTION step of the Summoning condition's reactive
+    flow: casting a SELF summon technique applies the Summoning condition, whose
+    trigger fires this with the event's ``ConditionAppliedPayload`` plus the static
+    ``threat_pool_id`` / ``bond_rounds`` / ``max_health`` params from the flow step.
+
+    ``payload.target`` is the bearer of the condition, which — for a SELF condition —
+    is the caster. We repackage it into the bespoke namespace ``summon_ally`` reads.
+    """
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    summon_ally(
+        payload=SimpleNamespace(
+            caster=payload.target,
+            threat_pool_id=threat_pool_id,
+            bond_rounds=bond_rounds,
+            max_health=max_health,
+        )
+    )
+
+
 def blink_dodge(*, payload: Any) -> None:
     """Teleport the bearer to an alternate position, fully avoiding incoming damage.
 
