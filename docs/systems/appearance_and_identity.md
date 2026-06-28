@@ -145,6 +145,30 @@ Covered in Layer 2's "three real anchors." The key non-collapse: **natural basel
 (origin) ≠ true form (return point)** — washing out dye returns to *natural*;
 reverting a shapeshift returns to the *current real* (cosmetics included).
 
+## Alternate-self lifecycle (slice 4)
+
+The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled:
+**control is independent of the shift**.
+
+- **Assumption** — `world.forms.services.assume_alternate_self(sheet, alt)` swaps the
+  form and/or persona facets, creates the stat-suite (`ModifierSource` +
+  `CharacterModifier`) and ability-suite (`CharacterTechnique` rows tagged to that
+  source), and records return anchors on `ActiveAlternateSelf`. Assumption is **not**
+  gated by `in_control`; forced/inadvertent shifts (moon madness, rage) are the point.
+- **`CharacterSheet.in_control`** — a `@cached_property` derived from active conditions
+  whose `ConditionCategory.alters_behavior` is True (rage / possession / charm /
+  mind-control). It is **not** a stored flag and not a per-status name lookup.
+- **Revert** — `world.forms.services.revert_alternate_self(sheet)` restores the captured
+  form/persona anchors and deletes the granted modifier + technique rows. Revert is
+  **blocked** while `not sheet.in_control` and raises `RevertBlockedError`. Only
+  revert is blocked; assumption stays allowed.
+- **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
+  re-derives `in_control=True`, which unblocks a later self-revert. The form persists
+  after the condition clears.
+
+Service details and the stacking guard (permanently-known techniques are not
+overwritten) live in [`forms.md`](forms.md).
+
 ## The single render composition
 
 There is **one** resolution, used by telnet **and** web (today they diverge — telnet

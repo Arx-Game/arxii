@@ -124,7 +124,26 @@ apparent_build = get_apparent_build(character)  # None if band.hide_build
 # CG-selectable queries
 bands = get_cg_height_bands()  # HeightBand.objects.filter(is_cg_selectable=True)
 builds = get_cg_builds()       # Build.objects.filter(is_cg_selectable=True)
+
+# Alternate-self lifecycle (slice 4)
+active = assume_alternate_self(sheet, alt_self)  # Raises on wrong-character form
+revert_alternate_self(sheet)                     # Raises RevertBlockedError
 ```
+
+### Alternate-self services
+
+- `assume_alternate_self(sheet, alt)` — assume an `AlternateSelf` grant. Swaps form
+  and/or persona, creates one `ModifierSource` + `CharacterModifier` rows per profile
+  effect and `CharacterTechnique` rows per technique, and stores return anchors. Not
+  gated by `in_control`.
+- `revert_alternate_self(sheet)` — restore return anchors and delete the granted
+  modifier / technique rows. Blocked while `not sheet.in_control`; raises
+  `RevertBlockedError`.
+- `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
+  blocked.
+
+The decoupling of control from the shift and the stacking guard are documented in
+[`appearance_and_identity.md`](appearance_and_identity.md).
 
 ---
 

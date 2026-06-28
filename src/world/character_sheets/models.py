@@ -927,6 +927,24 @@ class CharacterSheet(SharedMemoryModel):
             current_stage__stage_order=5,
         ).exists()
 
+    @cached_property
+    def in_control(self) -> bool:
+        """Whether this character is in control of their own actions.
+
+        Derived from active conditions: False if any active condition's
+        category is ``alters_behavior`` (rage/possession/charm/mind-control).
+        Reuses the canonical consent signal (ADR-0024) — not a stored flag and
+        not a per-status name lookup. Cached for a read; condition mutation
+        services invalidate the handler, and callers that just changed
+        conditions should ``del sheet.in_control`` to force re-derivation.
+
+        A benign shift (bird-to-fly) has no alters_behavior conditions, so this
+        stays True and the form is self-revertible anytime.
+        """
+        return not any(
+            inst.condition.category.alters_behavior for inst in self.character.conditions.active()
+        )
+
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""
         return self.primary_persona.display_ic()

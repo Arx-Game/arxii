@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 
 from world.forms.models import (
+    ActiveAlternateSelf,
+    AlternateSelf,
     AppearanceChangeLog,
     Build,
     CharacterForm,
@@ -19,6 +22,8 @@ from world.forms.models import (
     TemporaryFormChange,
 )
 from world.forms.types import PresentedTrait
+from world.magic.models import CharacterTechnique
+from world.mechanics.models import CharacterModifier, ModifierSource
 from world.species.models import Species
 
 if TYPE_CHECKING:
@@ -33,6 +38,19 @@ class NonCosmeticTraitError(ValueError):
     """
 
     user_message = "That feature can't be changed cosmetically."
+
+
+class RevertBlockedError(ValueError):
+    """Raised when a character tries to revert an alternate self while not in
+    control (rage/possession/charm/mind-control — any ``alters_behavior``
+    condition is active). Carries a fixed ``user_message`` so the action/view
+    can surface a safe string without leaking internals.
+    """
+
+    user_message = "You can't revert while not in control of yourself."
+
+
+_NO_ACTIVE_ALT_SELF_MSG = "No active alternate self to revert"
 
 
 def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
@@ -93,6 +111,163 @@ def revert_to_true_form(character) -> None:
     """
     true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
     switch_form(character, true_form)
+
+
+@transaction.atomic
+def assume_alternate_self(sheet, alt: AlternateSelf) -> ActiveAlternateSelf:
+    """Assume an alternate self — swap in form/persona facets, create the
+    stat-suite (ModifierSource + CharacterModifier rows) and ability-suite
+    (source-tagged CharacterTechnique rows), set return anchors.
+
+    NOT gated by ``in_control`` — you can assume (or be forced into) an
+    alternate self while not in control. Idempotent on re-assume of the same
+    alt-self (no-op; preserves existing return anchors).
+
+    Source granularity: exactly one ``ModifierSource`` is created per
+    assumption (using ``form_combat_profile=alt.combat_profile``). It owns both
+    the stat ``CharacterModifier`` rows (CASCADE on source deletion) and any
+    granted ``CharacterTechnique`` rows (tagged with the same source). A
+    technique the character already permanently knows (existing
+    ``CharacterTechnique`` row with ``source=None``) is left untouched by the
+    stacking guard.
+
+    Args:
+        sheet: the character (CharacterSheet — the service convention).
+        alt: the AlternateSelf grant to assume (caller already validated the
+            repertoire gate).
+
+    Returns the ActiveAlternateSelf row.
+    """
+    from world.scenes.services import set_active_persona  # noqa: PLC0415
+
+    active, _ = ActiveAlternateSelf.objects.get_or_create(character=sheet)
+
+    # Idempotent: re-assuming the same alt-self is a no-op.
+    if active.alternate_self_id == alt.pk:
+        return active
+
+    # Capture current return anchors (active form / active persona) before
+    # overwriting them. If there's no active form state, default to true form.
+    try:
+        form_state = sheet.character.form_state
+        current_form = form_state.active_form
+    except CharacterFormState.DoesNotExist:
+        current_form = None
+
+    if current_form is not None:
+        active.return_form = current_form
+    else:
+        # Try to set return anchor to true form if an active form state is absent.
+        true_form = CharacterForm.objects.filter(
+            character=sheet.character, form_type=FormType.TRUE
+        ).first()
+        active.return_form = true_form
+
+    active.return_persona = sheet.active_persona
+
+    # Form facet.
+    if alt.form is not None:
+        switch_form(sheet.character, alt.form)
+
+    # Persona facet.
+    if alt.persona is not None:
+        set_active_persona(sheet, alt.persona)
+
+    # One source owns both the stat-suite and the ability-suite grants.
+    source = ModifierSource.objects.create(form_combat_profile=alt.combat_profile)
+
+    # Stat-suite.
+    profile = alt.combat_profile
+    if profile is not None:
+        for effect in profile.effects.all():
+            CharacterModifier.objects.create(
+                character=sheet,
+                target=effect.target,
+                value=effect.value,
+                source=source,
+            )
+
+    # Ability-suite with stacking guard: permanently-known techniques keep
+    # source=None and are not duplicated.
+    if alt.techniques.exists():
+        for technique in alt.techniques.all():
+            CharacterTechnique.objects.get_or_create(
+                character=sheet,
+                technique=technique,
+                defaults={"source": source},
+            )
+
+    active.alternate_self = alt
+    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
+    return active
+
+
+@transaction.atomic
+def revert_alternate_self(sheet) -> None:
+    """Revert the active alternate self — restore return anchors, delete the
+    granted stat-suite and ability-suite rows.
+
+    Blocked while ``not sheet.in_control`` (rage/possession/charm) — raises
+    ``RevertBlockedError``. Only revert is blocked; assumption stays allowed.
+    Removing an alters_behavior condition does NOT call this — it re-derives
+    ``in_control=True`` and unblocks a later self-revert.
+
+    Raises:
+        ValueError: if no active alternate self exists for this sheet.
+        RevertBlockedError: if the character is not in control.
+    """
+    from world.scenes.services import set_active_persona  # noqa: PLC0415
+
+    try:
+        active = ActiveAlternateSelf.objects.select_related("return_form").get(character=sheet)
+    except ActiveAlternateSelf.DoesNotExist as exc:
+        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG) from exc
+
+    if active.alternate_self_id is None:
+        raise ValueError(_NO_ACTIVE_ALT_SELF_MSG)
+
+    if not sheet.in_control:
+        raise RevertBlockedError
+
+    # Restore form facet.
+    if active.return_form is not None:
+        switch_form(sheet.character, active.return_form)
+    else:
+        revert_to_true_form(sheet.character)
+
+    # Restore persona facet.
+    if active.return_persona is not None:
+        set_active_persona(sheet, active.return_persona)
+
+    # Delete the assumption source(s). Because CharacterTechnique.source is
+    # SET_NULL, deleting the source alone would NULL out granted techniques and
+    # turn temporary grants permanent; delete granted rows first.
+    alt = active.alternate_self
+    if alt.combat_profile is not None:
+        sources = ModifierSource.objects.filter(form_combat_profile=alt.combat_profile).distinct()
+    elif alt.techniques.exists():
+        # Profile-less technique grants: identify the source by the
+        # techniques it granted to this character.
+        sources = (
+            ModifierSource.objects.filter(
+                granted_techniques__character=sheet,
+                granted_techniques__technique__in=alt.techniques.all(),
+            )
+            .distinct()
+            .iterator()
+        )
+    else:
+        sources = ModifierSource.objects.none()
+
+    for source in sources:
+        CharacterTechnique.objects.filter(source=source).delete()
+        source.delete()
+
+    # Clear the active alt-self placeholder.
+    active.alternate_self = None
+    active.return_form = None
+    active.return_persona = None
+    active.save(update_fields=["alternate_self", "return_form", "return_persona"])
 
 
 def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOption]]:

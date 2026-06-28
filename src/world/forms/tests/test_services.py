@@ -1,14 +1,18 @@
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
+    AlternateSelfFactory,
     BuildFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
     CharacterFormValueFactory,
+    FormCombatProfileEffectFactory,
+    FormCombatProfileFactory,
     FormTraitFactory,
     FormTraitOptionFactory,
     HeightBandFactory,
@@ -17,6 +21,7 @@ from world.forms.factories import (
     TemporaryFormChangeFactory,
 )
 from world.forms.models import (
+    ActiveAlternateSelf,
     AppearanceChangeLog,
     CharacterFormState,
     CharacterFormValue,
@@ -25,6 +30,8 @@ from world.forms.models import (
 )
 from world.forms.services import (
     NonCosmeticTraitError,
+    RevertBlockedError,
+    assume_alternate_self,
     calculate_weight,
     change_appearance,
     create_true_form,
@@ -37,9 +44,14 @@ from world.forms.services import (
     get_height_band,
     get_presented_appearance,
     reset_trait_to_natural,
+    revert_alternate_self,
     revert_to_true_form,
     switch_form,
 )
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+from world.mechanics.constants import SOURCE_TYPE_FORM
+from world.mechanics.models import CharacterModifier, ModifierSource
+from world.scenes.factories import PersonaFactory
 from world.species.factories import SpeciesFactory
 
 
@@ -476,3 +488,172 @@ class GetPresentedAppearanceTest(TestCase):
     def test_blank_descriptor_falls_back_to_normalized(self):
         presented = {p.trait_name: p for p in get_presented_appearance(self.character)}
         self.assertEqual(presented["hair_color"].display, "Red")
+
+
+class AssumeAlternateSelfTests(TestCase):
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.true_form = CharacterFormFactory(
+            character=self.character, name="True", form_type=FormType.TRUE
+        )
+        self.alt_form = CharacterFormFactory(
+            character=self.character, name="Beast", form_type=FormType.ALTERNATE
+        )
+        self.form_state = CharacterFormStateFactory(
+            character=self.character, active_form=self.true_form
+        )
+        self.persona = PersonaFactory(character_sheet=self.sheet)
+        self.profile = FormCombatProfileFactory(form=self.alt_form)
+        self.effect1 = FormCombatProfileEffectFactory(profile=self.profile)
+        self.effect2 = FormCombatProfileEffectFactory(profile=self.profile)
+        self.technique = TechniqueFactory()
+
+    def test_assume_swaps_form_and_sets_return_anchors(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, form=self.alt_form)
+
+        active = assume_alternate_self(self.sheet, alt_self)
+
+        state = CharacterFormState.objects.get(character=self.character)
+        self.assertEqual(state.active_form, self.alt_form)
+        self.assertEqual(active.return_form, self.true_form)
+        self.assertEqual(active.alternate_self, alt_self)
+
+    def test_assume_creates_stat_suite(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, combat_profile=self.profile)
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        source = ModifierSource.objects.get(form_combat_profile=self.profile)
+        self.assertEqual(source.source_type, SOURCE_TYPE_FORM)
+        mods = list(CharacterModifier.objects.filter(source=source))
+        self.assertEqual(len(mods), 2)
+
+    def test_assume_swaps_persona(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, persona=self.persona)
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        self.sheet.refresh_from_db()
+        self.assertEqual(self.sheet.active_persona, self.persona)
+
+    def test_assume_captures_return_persona(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, persona=self.persona)
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        # return_persona captures the active persona at assume time; the sheet
+        # was presenting its PRIMARY persona, so the stored anchor is None.
+        self.assertIsNone(active.return_persona)
+        self.sheet.refresh_from_db()
+        # The alt-self's persona is now active.
+        self.assertEqual(self.sheet.active_persona, self.persona)
+
+    def test_assume_grants_techniques_tagged_to_source(self):
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        ct = self.sheet.character_techniques.get(technique=self.technique)
+        self.assertIsNotNone(ct.source)
+
+    def test_assume_does_not_regrant_permanently_known_technique(self):
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique, source=None)
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        cts = list(self.sheet.character_techniques.filter(technique=self.technique))
+        self.assertEqual(len(cts), 1)
+        self.assertIsNone(cts[0].source)
+
+    def test_assume_is_idempotent_for_same_alt_self(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, form=self.alt_form)
+        assume_alternate_self(self.sheet, alt_self)
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        first_return_form = active.return_form
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        active.refresh_from_db()
+        self.assertEqual(active.return_form, first_return_form)
+
+
+class RevertAlternateSelfTests(TestCase):
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.true_form = CharacterFormFactory(
+            character=self.character, name="True", form_type=FormType.TRUE
+        )
+        self.alt_form = CharacterFormFactory(
+            character=self.character, name="Beast", form_type=FormType.ALTERNATE
+        )
+        self.form_state = CharacterFormStateFactory(
+            character=self.character, active_form=self.true_form
+        )
+        self.profile = FormCombatProfileFactory(form=self.alt_form)
+        FormCombatProfileEffectFactory(profile=self.profile)
+        self.technique = TechniqueFactory()
+
+    def test_revert_restores_return_anchors_and_deletes_grants(self):
+        alt_self = AlternateSelfFactory(
+            character=self.sheet,
+            form=self.alt_form,
+            combat_profile=self.profile,
+        )
+        alt_self.techniques.set([self.technique])
+        assume_alternate_self(self.sheet, alt_self)
+        active = ActiveAlternateSelf.objects.get(character=self.sheet)
+        self.assertEqual(active.return_form, self.true_form)
+
+        revert_alternate_self(self.sheet)
+
+        state = CharacterFormState.objects.get(character=self.character)
+        self.assertEqual(state.active_form, self.true_form)
+        self.assertFalse(ModifierSource.objects.filter(form_combat_profile=self.profile).exists())
+        self.assertFalse(self.sheet.character_techniques.filter(technique=self.technique).exists())
+        active.refresh_from_db()
+        self.assertIsNone(active.alternate_self)
+        self.assertIsNone(active.return_form)
+
+    def test_revert_leaves_permanently_known_technique_intact(self):
+        alt_self = AlternateSelfFactory(
+            character=self.sheet,
+            form=self.alt_form,
+        )
+        alt_self.techniques.set([self.technique])
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique, source=None)
+        assume_alternate_self(self.sheet, alt_self)
+
+        revert_alternate_self(self.sheet)
+
+        self.assertTrue(self.sheet.character_techniques.filter(technique=self.technique).exists())
+        ct = self.sheet.character_techniques.get(technique=self.technique)
+        self.assertIsNone(ct.source)
+
+    def test_revert_blocked_when_not_in_control(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, form=self.alt_form)
+        assume_alternate_self(self.sheet, alt_self)
+
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = True
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            with self.assertRaises(RevertBlockedError):
+                revert_alternate_self(self.sheet)
+
+        state = CharacterFormState.objects.get(character=self.character)
+        self.assertEqual(state.active_form, self.alt_form)
+
+    def test_assume_not_gated_by_in_control(self):
+        alt_self = AlternateSelfFactory(character=self.sheet, form=self.alt_form)
+
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = True
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            active = assume_alternate_self(self.sheet, alt_self)
+
+        self.assertEqual(active.alternate_self, alt_self)

@@ -358,11 +358,18 @@ Species/race definitions with stat bonuses and language assignments.
 - **Source:** `src/world/species/`
 - **Details:** [species.md](species.md)
 ### Forms
-Physical appearance options (height, build, hair/eye colors).
+Physical appearance options (height, build, hair/eye colors) and the alternate-self
+shapeshift lifecycle.
 
-- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`
-- **Enums:** `TraitType` (color/style)
-- **Integrates with:** character_sheets (appearance), species (height bands per species)
+- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`,
+  `FormCombatProfile`, `FormCombatProfileEffect`, `AlternateSelf`, `ActiveAlternateSelf`
+- **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
+- **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
+  `switch_form(character, target_form)`, `revert_to_true_form(character)`,
+  `get_presented_appearance(character)`
+- **Key Exceptions:** `RevertBlockedError`
+- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
+  mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)
 - **Source:** `src/world/forms/`
 - **Details:** [forms.md](forms.md)
 ### Appearance & Identity (architecture)
