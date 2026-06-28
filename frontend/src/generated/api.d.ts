@@ -2118,6 +2118,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/clues/held/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the clues held by the requesting player's characters (#1575).
+     *
+     *     Newest first. Always scoped to characters the requester plays — a foreign or unknown
+     *     ``character_sheet`` filter simply returns nothing (no existence leak).
+     */
+    get: operations['clues_held_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/codex/categories/': {
     parameters: {
       query?: never;
@@ -17710,6 +17732,15 @@ export interface components {
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
     };
+    /** @description One clue a character holds — the journal row (#1575). */
+    HeldClue: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly target_kind: string;
+      /** Format: date-time */
+      readonly found_at: string;
+    };
     /**
      * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
      *
@@ -20247,6 +20278,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['GroupStoryProgress'][];
+    };
+    PaginatedHeldClueList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['HeldClue'][];
     };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
@@ -28913,6 +28959,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ClockDetail'];
+        };
+      };
+    };
+  };
+  clues_held_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedHeldClueList'];
         };
       };
     };

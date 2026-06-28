@@ -2982,6 +2982,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClockDetail'
           description: ''
+  /api/clues/held/:
+    get:
+      operationId: clues_held_list
+      description: |-
+        List the clues held by the requesting player's characters (#1575).
+
+        Newest first. Always scoped to characters the requester plays — a foreign or unknown
+        ``character_sheet`` filter simply returns nothing (no existence leak).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - clues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHeldClueList'
+          description: ''
   /api/codex/categories/:
     get:
       operationId: codex_categories_list
@@ -31697,6 +31729,32 @@ components:
       - max_inches
       - min_inches
       - name
+    HeldClue:
+      type: object
+      description: One clue a character holds — the journal row (#1575).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        found_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - description
+      - found_at
+      - id
+      - name
+      - target_kind
     HighlightReel:
       type: object
       description: |-
@@ -36537,6 +36595,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GroupStoryProgress'
+    PaginatedHeldClueList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldClue'
     PaginatedInteractionFavoriteList:
       type: object
       required:
