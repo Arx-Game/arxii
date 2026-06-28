@@ -2070,6 +2070,8 @@ def select_npc_actions(
     # Unconscious PCs (awareness 0) are "down" and not picked as targets; a
     # dying-but-conscious PC remains in the fight and is targetable. can_act is
     # the same coarse agency gate used for declaration eligibility.
+    # Intangible PCs (incorporeal, sunk, phased) are also excluded (#1584 Task 8).
+    from world.conditions.services import is_untargetable  # noqa: PLC0415
     from world.vitals.services import can_act  # noqa: PLC0415
 
     candidate_participants = list(
@@ -2078,7 +2080,11 @@ def select_npc_actions(
             status=ParticipantStatus.ACTIVE,
         ).select_related("character_sheet__character")
     )
-    active_participants = [p for p in candidate_participants if can_act(p.character_sheet)]
+    active_participants = [
+        p
+        for p in candidate_participants
+        if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
+    ]
 
     actions: list[CombatOpponentAction] = []
 
@@ -2139,14 +2145,25 @@ def _npc_action_target_pool(
     splitting is a follow-up). ``combatants_hostile_to`` already filters on
     ACTIVE; the participant intersection re-applies the can_act gate.
 
+    Intangible opponents (objectdb set, grants_intangibility condition active) are
+    excluded from the opponent pool (#1584 Task 8). Opponents with no objectdb are
+    kept (they cannot be queried for intangibility).
+
     Returns ``(target_pool, targeting_participants)``.
     """
+    from world.conditions.services import is_untargetable  # noqa: PLC0415
+
     hostile = combatants_hostile_to(opponent)
     hostile_pks = {p.pk for p in hostile["participants"]}
     participant_pool = [p for p in active_participants if p.pk in hostile_pks]
     if participant_pool:
         return participant_pool, True
-    return hostile["opponents"], False
+    opponent_pool = [
+        opp
+        for opp in hostile["opponents"]
+        if opp.objectdb_id is None or not is_untargetable(opp.objectdb)
+    ]
+    return opponent_pool, False
 
 
 def _set_npc_action_targets(
