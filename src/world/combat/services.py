@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
+    from world.magic.models.anima import CharacterAnima
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -4534,16 +4535,22 @@ def dispatch_interpose(
     )
 
 
-def _get_anima(character: ObjectDB) -> object:
-    """Return the CharacterAnima row for *character*.
+def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_PARAM
+    """Return the CharacterAnima row for *character*, or None if absent.
 
     Uses the ``anima`` reverse OneToOneField relation set by
     ``CharacterAnima.character`` (``related_name="anima"``). Mirrors the
     accessor used by ``CombatParticipant.available_strain``.
+
+    Returns None when no CharacterAnima row exists (defensive; characters
+    without an anima pool cannot sustain reactive conditions).
     """
     from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
 
-    return CharacterAnima.objects.get(character=character)
+    try:
+        return CharacterAnima.objects.get(character=character)
+    except CharacterAnima.DoesNotExist:
+        return None
 
 
 def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[AvailableCombo]:
@@ -4576,18 +4583,19 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
 
     Participants without a ``CharacterAnima`` row are skipped (defensive; they
     cannot sustain reactive conditions without an anima pool).
+
+    Anima is written at most once per participant (after the inner loop) so that
+    a round with N sustained conditions produces a single UPDATE rather than N.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
 
     parts = CombatParticipant.objects.filter(
         encounter=encounter, status=ParticipantStatus.ACTIVE
     ).select_related("character_sheet__character")
     for part in parts:
         char = part.character_sheet.character
-        try:
-            anima = CharacterAnima.objects.get(character=char)
-        except CharacterAnima.DoesNotExist:
+        anima = _get_anima(char)
+        if anima is None:
             continue
         instances = ConditionInstance.objects.filter(
             target=char,
@@ -4595,13 +4603,16 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
             resolved_at__isnull=True,
             condition__upkeep_anima_per_round__gt=0,
         ).select_related("condition")
+        remaining = anima.current
         for inst in instances:
             cost = inst.condition.upkeep_anima_per_round
-            if anima.current >= cost:
-                anima.current -= cost
-                anima.save(update_fields=["current"])
+            if remaining >= cost:
+                remaining -= cost
             else:
                 inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+        if remaining != anima.current:
+            anima.current = remaining
+            anima.save(update_fields=["current"])
 
 
 @transaction.atomic
