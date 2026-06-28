@@ -19,6 +19,7 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.magic.factories import ResonanceFactory, TechniqueFactory
+from world.magic.models.techniques import ConditionTargetKind
 from world.magic.specialization.models import (
     TechniqueVariant,
 )
@@ -146,6 +147,63 @@ class TechniqueVariantResolutionTests(TestCase):
         self.assertEqual(v.capability_grants.get(), grant)
         self.assertEqual(v.damage_profiles.get(), profile)
         self.assertEqual(v.condition_applications.get(), cond)
+
+    # --- tightened constraint semantics (Task 4 review fix) ---
+    # These mirror the parent Technique* constraints: typed/untyped split for
+    # damage profiles, and target_kind in the key for applied conditions.
+
+    def test_two_untyped_damage_profiles_on_variant_rejected(self) -> None:
+        # The untyped split: at most ONE untyped (damage_type=None) profile per
+        # variant. Mirrors unique_untyped_damage_profile_per_technique.
+        v = self._make_variant(unlock_level=3)
+        TechniqueVariantDamageProfileFactory(variant=v, damage_type=None)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TechniqueVariantDamageProfileFactory(variant=v, damage_type=None)
+
+    def test_two_typed_damage_profiles_same_type_rejected(self) -> None:
+        # Typed side of the split: one profile per (variant, damage_type).
+        v = self._make_variant(unlock_level=3)
+        dtype = DamageTypeFactory()
+        TechniqueVariantDamageProfileFactory(variant=v, damage_type=dtype)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TechniqueVariantDamageProfileFactory(variant=v, damage_type=dtype)
+
+    def test_typed_and_untyped_damage_profiles_coexist(self) -> None:
+        # The split allows one typed + one untyped on the same variant.
+        v = self._make_variant(unlock_level=3)
+        typed = TechniqueVariantDamageProfileFactory(variant=v)
+        untyped = TechniqueVariantDamageProfileFactory(variant=v, damage_type=None)
+        self.assertEqual(set(v.damage_profiles.all()), {typed, untyped})
+
+    def test_same_condition_different_target_kinds_allowed(self) -> None:
+        # A variant may apply the same condition at different target_kinds
+        # (e.g. vs ENEMY and vs ALLY). target_kind is part of the key, mirroring
+        # unique_applied_condition_per_technique.
+        v = self._make_variant(unlock_level=3)
+        cond = ConditionTemplateFactory()
+        TechniqueVariantAppliedConditionFactory(
+            variant=v, condition=cond, target_kind=ConditionTargetKind.ENEMY
+        )
+        # Different target_kind — allowed (no IntegrityError).
+        TechniqueVariantAppliedConditionFactory(
+            variant=v, condition=cond, target_kind=ConditionTargetKind.ALLY
+        )
+        self.assertEqual(v.condition_applications.count(), 2)
+
+    def test_same_condition_same_target_kind_rejected(self) -> None:
+        # Same condition + same target_kind on one variant is a duplicate.
+        v = self._make_variant(unlock_level=3)
+        cond = ConditionTemplateFactory()
+        TechniqueVariantAppliedConditionFactory(
+            variant=v, condition=cond, target_kind=ConditionTargetKind.ENEMY
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TechniqueVariantAppliedConditionFactory(
+                    variant=v, condition=cond, target_kind=ConditionTargetKind.ENEMY
+                )
 
 
 # --- payload-child factories (local; only the variant rows need a real factory) ---

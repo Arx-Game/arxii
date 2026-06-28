@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.models.techniques import (
@@ -297,7 +298,13 @@ class TechniqueVariantDamageProfile(AbstractDamageProfile):
         constraints = [
             models.UniqueConstraint(
                 fields=["variant", "damage_type"],
-                name="technique_variant_damage_profile_unique",
+                condition=Q(damage_type__isnull=False),
+                name="technique_variant_damage_profile_per_type",
+            ),
+            models.UniqueConstraint(
+                fields=["variant"],
+                condition=Q(damage_type__isnull=True),
+                name="technique_variant_untyped_damage_profile",
             ),
         ]
 
@@ -314,7 +321,7 @@ class TechniqueVariantAppliedCondition(AbstractAppliedCondition):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["variant", "condition"],
+                fields=["variant", "condition", "target_kind"],
                 name="technique_variant_applied_condition_unique",
             ),
         ]
