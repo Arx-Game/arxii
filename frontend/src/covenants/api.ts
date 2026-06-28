@@ -10,6 +10,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 import type { components } from '@/generated/api';
 
 // ---------------------------------------------------------------------------
@@ -128,19 +129,6 @@ function jsonHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json' };
 }
 
-async function parseErrorDetail(res: Response, fallback: string): Promise<never> {
-  let detail = fallback;
-  try {
-    const data = (await res.json()) as { detail?: string };
-    if (typeof data.detail === 'string' && data.detail.trim()) {
-      detail = data.detail;
-    }
-  } catch {
-    // body wasn't JSON; keep generic
-  }
-  throw new Error(detail);
-}
-
 // ---------------------------------------------------------------------------
 // Covenant reads
 // ---------------------------------------------------------------------------
@@ -187,7 +175,7 @@ export async function engageMembership(id: number): Promise<CharacterCovenantRol
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to engage covenant role');
+  if (!res.ok) await readErrorDetail(res, 'Failed to engage covenant role');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -201,7 +189,7 @@ export async function disengageMembership(id: number): Promise<CharacterCovenant
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to disengage covenant role');
+  if (!res.ok) await readErrorDetail(res, 'Failed to disengage covenant role');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -219,7 +207,7 @@ export async function leaveMembership(id: number): Promise<CharacterCovenantRole
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to leave covenant');
+  if (!res.ok) await readErrorDetail(res, 'Failed to leave covenant');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -233,7 +221,7 @@ export async function kickMember(id: number): Promise<CharacterCovenantRole> {
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to remove member');
+  if (!res.ok) await readErrorDetail(res, 'Failed to remove member');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -266,7 +254,7 @@ export async function standDownCovenant(covenantId: number): Promise<StandDownRe
     headers: jsonHeaders(),
     body: JSON.stringify({}),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to stand down covenant');
+  if (!res.ok) await readErrorDetail(res, 'Failed to stand down covenant');
   return res.json() as Promise<StandDownResult>;
 }
 
@@ -288,7 +276,7 @@ export async function promoteMembership(
     headers: jsonHeaders(),
     body: JSON.stringify({ target_subrole: targetSubroleId }),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to promote covenant role');
+  if (!res.ok) await readErrorDetail(res, 'Failed to promote covenant role');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -352,7 +340,7 @@ export async function createCovenantRank(data: {
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to create rank');
+  if (!res.ok) await readErrorDetail(res, 'Failed to create rank');
   return res.json() as Promise<CovenantRank>;
 }
 
@@ -375,7 +363,7 @@ export async function updateCovenantRank(
     headers: jsonHeaders(),
     body: JSON.stringify(data),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to update rank');
+  if (!res.ok) await readErrorDetail(res, 'Failed to update rank');
   return res.json() as Promise<CovenantRank>;
 }
 
@@ -389,7 +377,7 @@ export async function deleteCovenantRank(id: number, reassignTo: number): Promis
     headers: jsonHeaders(),
     body: JSON.stringify({ reassign_to: reassignTo }),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to delete rank');
+  if (!res.ok) await readErrorDetail(res, 'Failed to delete rank');
 }
 
 /**
@@ -405,7 +393,7 @@ export async function assignMemberToRank(
     headers: jsonHeaders(),
     body: JSON.stringify({ membership: membershipId }),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to assign member to rank');
+  if (!res.ok) await readErrorDetail(res, 'Failed to assign member to rank');
   return res.json() as Promise<CharacterCovenantRole>;
 }
 
@@ -422,6 +410,6 @@ export async function reorderRanks(
     headers: jsonHeaders(),
     body: JSON.stringify({ covenant: covenantId, ordered_rank_ids: orderedRankIds }),
   });
-  if (!res.ok) await parseErrorDetail(res, 'Failed to reorder ranks');
+  if (!res.ok) await readErrorDetail(res, 'Failed to reorder ranks');
   return res.json() as Promise<CovenantRank[]>;
 }
