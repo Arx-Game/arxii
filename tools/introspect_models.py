@@ -86,18 +86,29 @@ def get_field_info(field: object) -> tuple[str | None, str | None]:
             return "field", field.name  # type: ignore[attr-defined]
         return None, None
 
-    if field.one_to_many or field.many_to_many:  # type: ignore[attr-defined]
-        if hasattr(field, "field"):
-            app = field.related_model._meta.app_label  # type: ignore[attr-defined]  # noqa: SLF001
-            source = f"{app}.{field.related_model.__name__}"  # type: ignore[attr-defined]
-            accessor = field.get_accessor_name()  # type: ignore[attr-defined]
-            return "reverse", f"{accessor} <- {source}"
-    elif field.many_to_one or field.one_to_one:  # type: ignore[attr-defined]
+    # Reverse relations (ManyToOneRel / OneToOneRel / ManyToManyRel) are auto-created by
+    # Django on the *target* side and are non-concrete; they expose ``get_accessor_name()``.
+    # Classify ALL of them as reverse pointers — crucially including reverse OneToOne, which
+    # has ``one_to_one=True`` and so was previously mis-read as a forward FK on the target
+    # model (#1204). ``auto_created and not concrete`` excludes auto-created *forward*
+    # fields (the ``id`` PK, multi-table-inheritance parent-link OneToOnes), which are
+    # concrete columns and must stay on the forward side.
+    if field.auto_created and not field.concrete:  # type: ignore[attr-defined]
+        app = field.related_model._meta.app_label  # type: ignore[attr-defined]  # noqa: SLF001
+        source = f"{app}.{field.related_model.__name__}"  # type: ignore[attr-defined]
+        accessor = field.get_accessor_name()  # type: ignore[attr-defined]
+        return "reverse", f"{accessor} <- {source}"
+
+    # Forward relations.
+    if field.many_to_one or field.one_to_one:  # type: ignore[attr-defined]
         target = get_fk_info(field)
         fk_type = "OneToOne" if field.one_to_one else "FK"  # type: ignore[attr-defined]
         null = " (nullable)" if field.null else ""  # type: ignore[attr-defined]
         return "fk", f"{field.name} -> {target} [{fk_type}]{null}"  # type: ignore[attr-defined]
-    elif hasattr(field, "m2m_field"):
+    if field.many_to_many:  # type: ignore[attr-defined]
+        # Forward ManyToManyField was silently dropped before: ``many_to_many`` was caught
+        # by the reverse branch first, then failed its inner guard and fell through to
+        # ``return None``. The map emitted zero forward M2M edges despite many in code (#1204).
         target = get_fk_info(field)
         return "fk", f"{field.name} -> {target} [M2M]"  # type: ignore[attr-defined]
 
