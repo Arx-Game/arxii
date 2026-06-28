@@ -12,7 +12,7 @@ Character lifecycle management with web-first applications and player anonymity.
 ### `scenes/` - Roleplay Session Recording & Identity
 Captures roleplay sessions with participant tracking, interaction recording, and the unified Persona identity system.
 
-**Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY), `PersonaDiscovery`, `Interaction`, `InteractionFavorite`, `InteractionReaction`
+**Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE), `PersonaDiscovery`, `Interaction`, `InteractionFavorite`, `InteractionReaction`
 
 ### `stories/` - Narrative Campaign System
 Player-driven storytelling with hierarchical structure and trust-based participation.

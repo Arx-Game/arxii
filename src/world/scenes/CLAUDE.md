@@ -8,7 +8,7 @@ the unified Persona identity system, and non-combat scene rounds.
 ### `models.py`
 - **`Scene`**: Primary scene entity with title, status, location, summary, privacy_mode
 - **`SceneParticipation`**: Account participation tracking in scenes
-- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY). FK to CharacterSheet
+- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). FK to CharacterSheet
   (source of truth); partial unique constraint ensures one PRIMARY per sheet
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person
 - **`Block`** (#1278): one player blocking another, persona-scoped by default (`blocker_persona` ↔
@@ -165,7 +165,7 @@ Key service functions for scene round lifecycle:
 
 - **`Scene`**: Contains participants and interactions
 - **`SceneParticipation`**: Tracks account involvement in scenes
-- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY). Has
+- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). Has
   `character_sheet` FK to CharacterSheet (the source-of-truth anchor). `is_established_or_primary`
   property for permission checks. Hosts `display_ic` / `display_with_history` / `display_to_staff` helpers
 - **`PersonaDiscovery`**: Stores raw discovery pairs; service functions handle resolution logic

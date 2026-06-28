@@ -7451,6 +7451,112 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/forms/alternate-selves/:
+    get:
+      operationId: forms_alternate_selves_list
+      description: |-
+        Read + actions over a character's alternate selves (#1111 slice 4).
+
+        Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+        player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+        and telnet share one ``action.run()`` seam.
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlternateSelfList'
+          description: ''
+  /api/forms/alternate-selves/{id}/:
+    get:
+      operationId: forms_alternate_selves_retrieve
+      description: |-
+        Read + actions over a character's alternate selves (#1111 slice 4).
+
+        Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+        player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+        and telnet share one ``action.run()`` seam.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alternate self.
+        required: true
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlternateSelf'
+          description: ''
+  /api/forms/alternate-selves/revert/:
+    post:
+      operationId: forms_alternate_selves_revert_create
+      description: '#1111 — revert the active alternate self (blocked while not in
+        control).'
+      tags:
+      - alternate-selves
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlternateSelfRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveAlternateSelfResult'
+          description: ''
+  /api/forms/alternate-selves/shift/:
+    post:
+      operationId: forms_alternate_selves_shift_create
+      description: '#1111 — assume an alternate self owned by the played character.'
+      tags:
+      - alternate-selves
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftFormRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveAlternateSelfResult'
+          description: ''
   /api/forms/builds/:
     get:
       operationId: forms_builds_list
@@ -23831,6 +23937,16 @@ components:
       - default_delivery
       - id
       - name
+    ActiveAlternateSelfResult:
+      type: object
+      description: Result of a successful shift or revert — the now-active alternate-self
+        id.
+      properties:
+        active_alternate_self_id:
+          type: integer
+          nullable: true
+      required:
+      - active_alternate_self_id
     ActivePersonaResult:
       type: object
       description: 'Result of the #981 set-active-persona endpoint — the now-worn
@@ -23936,6 +24052,55 @@ components:
       required:
       - event_id
       - status
+    AlternateSelf:
+      type: object
+      description: |-
+        Read shape for the alternate-self switcher (#1111 slice 4).
+
+        Includes the active alt-self flag for the played character so the switcher can
+        highlight the currently-assumed form without a second round-trip.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        display_name:
+          type: string
+          maxLength: 100
+        persona_name:
+          type: string
+          nullable: true
+          readOnly: true
+        form_name:
+          type: string
+          nullable: true
+          readOnly: true
+        has_combat_profile:
+          type: boolean
+          readOnly: true
+        has_techniques:
+          type: boolean
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - form_name
+      - has_combat_profile
+      - has_techniques
+      - id
+      - is_active
+      - persona_name
+    AlternateSelfRequest:
+      type: object
+      description: |-
+        Read shape for the alternate-self switcher (#1111 slice 4).
+
+        Includes the active alt-self flag for the played character so the switcher can
+        highlight the currently-assumed form without a second round-trip.
+      properties:
+        display_name:
+          type: string
+          maxLength: 100
     AnchorOption:
       type: object
       description: Read-only representation of one eligible bonded fury anchor (#1543).
@@ -35944,6 +36109,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AggregateBeatContribution'
+    PaginatedAlternateSelfList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlternateSelf'
     PaginatedAreaListList:
       type: object
       required:
@@ -40992,11 +41180,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/PersonaTypeEnum'
           description: |-
-            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
 
             * `primary` - Primary
             * `established` - Established
             * `temporary` - Temporary
+            * `alternate` - Alternate
         description:
           type: string
           description: Physical description text
@@ -41055,11 +41244,13 @@ components:
       - primary
       - established
       - temporary
+      - alternate
       type: string
       description: |-
         * `primary` - Primary
         * `established` - Established
         * `temporary` - Temporary
+        * `alternate` - Alternate
     PhaseEnum:
       enum:
       - dawn
@@ -44320,6 +44511,15 @@ components:
           minimum: 0
         per_target_repeat_lock:
           type: boolean
+    ShiftFormRequestRequest:
+      type: object
+      description: POST body for the alternate-self shift endpoint.
+      properties:
+        alternate_self_id:
+          type: integer
+          minimum: 1
+      required:
+      - alternate_self_id
     SignEnum:
       enum:
       - positive

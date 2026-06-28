@@ -927,6 +927,34 @@ class CharacterSheet(SharedMemoryModel):
             current_stage__stage_order=5,
         ).exists()
 
+    @property
+    def in_control(self) -> bool:
+        """Whether this character is in control of their own actions.
+
+        Derived from active conditions on each read: False if any active
+        condition's category is ``alters_behavior`` (rage/possession/charm/
+        mind-control). Reuses the canonical consent signal (ADR-0024) — not a
+        stored flag and not a per-status name lookup.
+
+        Deliberately NOT a ``@cached_property``. The active-condition list is
+        already cached on the character's ``CharacterConditionHandler``
+        (``character.conditions`` — a ``cached_property`` whose ``invalidate()``
+        is called by every condition mutation service), so this property reads
+        that cache and never issues its own query. Caching the *derived boolean*
+        here would create a second, uncoordinated cache that the conditions
+        handler cannot invalidate — exactly the stale-control bug that surfaced
+        in PR #1605 review, where ``revert_alternate_self`` had to manually
+        ``pop`` the cached value to see a freshly-cleared rage condition. As a
+        plain property it always reflects the freshest conditions the handler
+        knows, and no caller needs to invalidate it.
+
+        A benign shift (bird-to-fly) has no alters_behavior conditions, so this
+        stays True and the form is self-revertible anytime.
+        """
+        return not any(
+            inst.condition.category.alters_behavior for inst in self.character.conditions.active()
+        )
+
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""
         return self.primary_persona.display_ic()

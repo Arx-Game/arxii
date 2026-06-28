@@ -674,6 +674,18 @@ class CharacterTechnique(SharedMemoryModel):
         auto_now_add=True,
         help_text="When this technique was acquired.",
     )
+    source = models.ForeignKey(
+        "mechanics.ModifierSource",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="granted_techniques",
+        help_text=(
+            "If set, this technique is GRANTED by a modifier source (e.g. an active "
+            "alternate self's ability-suite) and is deleted when that source's rows are "
+            "cleaned up. Null = permanently learned."
+        ),
+    )
 
     class Meta:
         unique_together = ["character", "technique"]

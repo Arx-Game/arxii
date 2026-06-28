@@ -47,7 +47,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative` |
+| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative`, `alters_behavior` |
 | `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description` |
 | `CheckType` | Check types that receive bonuses/penalties | `name`, `description` |
 | `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierTarget`), `color_hex`, `icon` |
@@ -273,6 +273,15 @@ See ADR-0048 for the rationale behind the custom-action-resolver registry.
 - **Bidirectional modifiers**: Conditions can be good or bad depending on context.
 - **Abstract base effects**: `ConditionOrStageEffect` uses mutually exclusive FKs for condition-level vs stage-specific effects.
 - **Batch queries**: Views aggregate effects in 3 queries instead of N per condition type.
+
+## Behavior-altering categories
+
+`ConditionCategory.alters_behavior` marks conditions that change how a character
+*behaves* (compulsion, charm, fear, rage) rather than only their capabilities or
+stats. It is the consent signal used by cast targeting and by
+`CharacterSheet.in_control`. The canonical seeded behavior-altering category is
+`Control` (`alters_behavior=True`), and the `Berserk` condition created by the fury
+system belongs to it.
 
 ---
 

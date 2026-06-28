@@ -7,11 +7,14 @@ from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.factories import (
+    ActiveAlternateSelfFactory,
+    AlternateSelfFactory,
     AppearanceChangeLogFactory,
     BuildFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
     CharacterFormValueFactory,
+    FormCombatProfileFactory,
     FormTraitFactory,
     FormTraitOptionFactory,
     HeightBandFactory,
@@ -244,6 +247,43 @@ class PersonaTraitDescriptorModelTest(TestCase):
 
     def test_str_includes_text(self):
         self.assertIn("Crimson", str(self.descriptor))
+
+
+def test_form_combat_profile_owned_by_form():
+    form = CharacterFormFactory(form_type=FormType.ALTERNATE)
+    profile = FormCombatProfileFactory(form=form, display_name="Wolf Stats")
+    assert profile.form == form
+    assert str(profile) == "Wolf Stats"
+
+
+def test_alternate_self_optional_facets_default_none():
+    """An AlternateSelf with only a form set: no persona, no combat profile, no techniques."""
+    form = CharacterFormFactory(form_type=FormType.ALTERNATE)
+    alt = AlternateSelfFactory(form=form)
+    assert alt.persona is None
+    assert alt.combat_profile is None
+    assert list(alt.techniques.all()) == []
+
+
+def test_active_alternate_self_holds_return_anchors():
+    alt = AlternateSelfFactory()
+    true_form = CharacterFormFactory(character=alt.character.character, form_type=FormType.TRUE)
+    active = ActiveAlternateSelfFactory(
+        character=alt.character, alternate_self=alt, return_form=true_form
+    )
+    assert active.return_form == true_form
+    assert active.return_persona is None  # persona facet optional
+
+
+def test_modifier_source_form_type_when_profile_set():
+    """A ModifierSource pointing at a FormCombatProfile reports SOURCE_TYPE_FORM."""
+    from world.mechanics.constants import SOURCE_TYPE_FORM
+    from world.mechanics.models import ModifierSource
+
+    profile = FormCombatProfileFactory()
+    src = ModifierSource.objects.create(form_combat_profile=profile)
+    assert src.source_type == SOURCE_TYPE_FORM
+    assert "Form:" in src.source_display
 
     def test_unique_per_persona_and_trait(self):
         with self.assertRaises(IntegrityError):

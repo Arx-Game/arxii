@@ -4813,6 +4813,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/forms/alternate-selves/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + actions over a character's alternate selves (#1111 slice 4).
+     *
+     *     Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+     *     player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+     *     and telnet share one ``action.run()`` seam.
+     */
+    get: operations['forms_alternate_selves_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + actions over a character's alternate selves (#1111 slice 4).
+     *
+     *     Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+     *     player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+     *     and telnet share one ``action.run()`` seam.
+     */
+    get: operations['forms_alternate_selves_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/revert/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1111 — revert the active alternate self (blocked while not in control). */
+    post: operations['forms_alternate_selves_revert_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/shift/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1111 — assume an alternate self owned by the played character. */
+    post: operations['forms_alternate_selves_shift_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/forms/builds/': {
     parameters: {
       query?: never;
@@ -14126,6 +14206,10 @@ export interface components {
       readonly name: string;
       readonly default_delivery: string;
     };
+    /** @description Result of a successful shift or revert — the now-active alternate-self id. */
+    ActiveAlternateSelfResult: {
+      active_alternate_self_id: number | null;
+    };
     /** @description Result of the #981 set-active-persona endpoint — the now-worn face id. */
     ActivePersonaResult: {
       readonly active_persona_id: number;
@@ -14167,6 +14251,30 @@ export interface components {
     AlterationResolutionResponse: {
       status: string;
       event_id: number;
+    };
+    /**
+     * @description Read shape for the alternate-self switcher (#1111 slice 4).
+     *
+     *     Includes the active alt-self flag for the played character so the switcher can
+     *     highlight the currently-assumed form without a second round-trip.
+     */
+    AlternateSelf: {
+      readonly id: number;
+      display_name?: string;
+      readonly persona_name: string | null;
+      readonly form_name: string | null;
+      readonly has_combat_profile: boolean;
+      readonly has_techniques: boolean;
+      readonly is_active: boolean;
+    };
+    /**
+     * @description Read shape for the alternate-self switcher (#1111 slice 4).
+     *
+     *     Includes the active alt-self flag for the played character so the switcher can
+     *     highlight the currently-assumed form without a second round-trip.
+     */
+    AlternateSelfRequest: {
+      display_name?: string;
     };
     /** @description Read-only representation of one eligible bonded fury anchor (#1543). */
     AnchorOption: {
@@ -19869,6 +19977,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AggregateBeatContribution'][];
     };
+    PaginatedAlternateSelfList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlternateSelf'][];
+    };
     PaginatedAreaListList: {
       /** @example 123 */
       count: number;
@@ -22941,11 +23064,12 @@ export interface components {
       /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
       /**
-       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
        *
        *     * `primary` - Primary
        *     * `established` - Established
        *     * `temporary` - Temporary
+       *     * `alternate` - Alternate
        */
       persona_type?: components['schemas']['PersonaTypeEnum'];
       /** @description Physical description text */
@@ -22977,9 +23101,10 @@ export interface components {
      * @description * `primary` - Primary
      *     * `established` - Established
      *     * `temporary` - Temporary
+     *     * `alternate` - Alternate
      * @enum {string}
      */
-    PersonaTypeEnum: 'primary' | 'established' | 'temporary';
+    PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -24479,6 +24604,10 @@ export interface components {
       advance_quorum_pct?: number;
       max_actions_per_round?: number;
       per_target_repeat_lock?: boolean;
+    };
+    /** @description POST body for the alternate-self shift endpoint. */
+    ShiftFormRequestRequest: {
+      alternate_self_id: number;
     };
     /**
      * @description * `positive` - Positive
@@ -32905,6 +33034,99 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  forms_alternate_selves_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlternateSelfList'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this alternate self. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlternateSelf'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_revert_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['AlternateSelfRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActiveAlternateSelfResult'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_shift_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ShiftFormRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActiveAlternateSelfResult'];
+        };
       };
     };
   };

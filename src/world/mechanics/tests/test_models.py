@@ -78,6 +78,15 @@ class ModifierTargetTests(TestCase):
         self.assertTrue(modifier_target.is_active)
 
 
+def test_modifier_source_form_type_default_and_set():
+    """A ModifierSource with nothing set is UNKNOWN; with form_combat_profile set is FORM."""
+    from world.mechanics.constants import SOURCE_TYPE_UNKNOWN
+
+    src = ModifierSource.objects.create()
+    assert src.source_type == SOURCE_TYPE_UNKNOWN
+    # positive case (form set) is covered in forms test_models once FormCombatProfile factory exists
+
+
 class ModifierSourceTests(TestCase):
     """Test ModifierSource model."""
 

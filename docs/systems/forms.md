@@ -40,6 +40,10 @@ from world.forms.models import (
 | `CharacterFormValue` | Single trait value within a form | `form` (FK), `trait` (FK), `option` (FK) |
 | `CharacterFormState` | Tracks active form (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable) |
 | `TemporaryFormChange` | Temporary override on top of active form | `character` (FK), `trait` (FK), `option` (FK), `source_type`, `source_id`, `duration_type`, `expires_at`, `expires_after_scenes` |
+| `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name` |
+| `FormCombatProfileEffect` | One stat modifier inside a profile | `profile` (FK), `target` (FK mechanics.ModifierTarget), `value` |
+| `AlternateSelf` | A character's access to an alternate self/facet bundle | `character` (FK CharacterSheet), `form` (FK CharacterForm, nullable), `persona` (FK scenes.Persona, nullable), `combat_profile` (FK FormCombatProfile, nullable), `techniques` (M2M magic.Technique), `tuning_value`, `display_name` |
+| `ActiveAlternateSelf` | Currently-assumed alternate self + return anchors | `character` (OneToOne CharacterSheet), `alternate_self` (FK AlternateSelf, nullable), `return_form` (FK CharacterForm, nullable), `return_persona` (FK scenes.Persona, nullable) |
 
 ---
 
@@ -98,7 +102,7 @@ apparent = get_apparent_form(character)
 # Returns: dict[FormTrait, FormTraitOption]
 
 # Switch a character to a different form
-switch_form(character, target_form)  # Raises ValueError if wrong character
+switch_form(character, target_form)  # Raises FormOwnershipError if wrong character
 
 # Revert to true form
 revert_to_true_form(character)
@@ -120,7 +124,77 @@ apparent_build = get_apparent_build(character)  # None if band.hide_build
 # CG-selectable queries
 bands = get_cg_height_bands()  # HeightBand.objects.filter(is_cg_selectable=True)
 builds = get_cg_builds()       # Build.objects.filter(is_cg_selectable=True)
+
+# Alternate-self lifecycle (slice 4)
+active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveError if
+                                                 # a different alt-self is active;
+                                                 # FormOwnershipError / ActivePersonaError
+                                                 # on a cross-sheet form/persona FK.
+revert_alternate_self(sheet)                     # Raises RevertBlockedError while not
+                                                 # in_control; ValueError if none active.
 ```
+
+### Alternate-self services
+
+- `assume_alternate_self(sheet, alt)` — assume an `AlternateSelf` grant. Swaps form
+  and/or persona, creates one `ModifierSource` + `CharacterModifier` rows per profile
+  effect and `CharacterTechnique` rows per technique, and stores return anchors. Not
+  gated by `in_control`. **Strictly-one-active**: raises `AlternateSelfActiveError`
+  if a *different* alt-self is already active (assumption over an active one would
+  orphan its grants with no revert path) — revert the active one first. The same call
+  raises `FormOwnershipError` / `ActivePersonaError` (both `ValueError` subclasses)
+  if the alt-self's `form` or `persona` FK points at another sheet (bad seed/admin
+  edit — neither FK has a cross-sheet DB guard).
+- `revert_alternate_self(sheet)` — restore return anchors and delete the granted
+  modifier / technique rows. Blocked while `not sheet.in_control`; raises
+  `RevertBlockedError`. The canonical blocker is the fury `Berserk` condition,
+  whose `Control` category has `alters_behavior=True`; it is cleared by the existing
+  `RestoreSenseAction` (`restore_sense`) calm-down action.
+- `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
+  blocked.
+- `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
+  already active (strictly-one-active).
+- `FormOwnershipError(user_message=...)` — raised by `switch_form` on a cross-sheet
+  `CharacterForm` FK; surfaced as a safe failure by the actions.
+
+### Alternate-self actions
+
+Both verbs are thin REGISTRY actions in `actions/definitions/forms.py` so telnet
+and the web share the same `action.run()` path:
+
+- `ShiftFormAction` (key `"shift_form"`) — wraps `assume_alternate_self`. Receives
+  kwarg `alternate_self_id`; validates the grant belongs to the actor's sheet.
+  **Not `in_control`-gated**. Catches `AlternateSelfActiveError`,
+  `ActivePersonaError`, and `FormOwnershipError` and surfaces each `user_message`
+  as a failure result — a cross-sheet `form`/`persona` FK never propagates uncaught
+  (`Action.run` calls `execute` bare, so an uncaught exception would 500 on web).
+- `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
+  Catches `RevertBlockedError`, `ActivePersonaError`, `FormOwnershipError`, and
+  `AlternateSelfActiveError` (each → `exc.user_message`); the no-active case uses a
+  safe constant. Never surfaces `str(exc)` — the viewset maps every failure to a
+  safe 400 via `detail.message`.
+
+### Web surface
+
+`frontend/src/game/components/FormSwitcher.tsx` mirrors `PersonaSwitcher.tsx`: a
+ top-bar control next to the face switcher that shows the active alternate self (or
+"True self") and lets the player shift or revert. `frontend/src/game/formQueries.ts`
+holds the React Query hooks (`useAlternateSelvesQuery`, `useShiftFormMutation`,
+`useRevertFormMutation`) that hit the endpoints above. Revert errors from the action
+(e.g. "You can't revert while not in control of yourself.") are surfaced inline.
+
+### Telnet surface
+
+- `form` / `form list` — status hub: shows current alternate self (or true self),
+  available alternate selves, and whether revert is blocked while not in control.
+- `form shift <name|id>` — assume a named alternate self.
+- `form revert` — revert to the true self.
+
+Implemented in `commands/form.py` as `CmdForm`; routes through
+`dispatch_player_action` to the same REGISTRY actions the web uses.
+
+The decoupling of control from the shift and the stacking guard are documented in
+[`appearance_and_identity.md`](appearance_and_identity.md).
 
 ---
 
@@ -142,6 +216,23 @@ builds = get_cg_builds()       # Build.objects.filter(is_cg_selectable=True)
 ### Builds
 - `GET /api/forms/builds/` - List CG-selectable builds (all for staff)
 - `GET /api/forms/builds/{id}/` - Get single build
+
+### Alternate Selves
+- `GET /api/forms/alternate-selves/` - List the played character's alternate selves
+  (`character_sheet` filter required at the API level; the viewset scopes results to the
+  caller's played character). Response is paginated; each entry carries `id`,
+  `display_name`, `persona_name`, `form_name`, `has_combat_profile`, `has_techniques`,
+  and `is_active`.
+- `GET /api/forms/alternate-selves/{id}/` - Get a single alternate self (caller-owned
+  via the viewset queryset scoping).
+- `POST /api/forms/alternate-selves/shift/` - Assume an alternate self; body is
+  `{"alternate_self_id": <id>}`. Dispatches `ShiftFormAction` (key `"shift_form"`)
+  through `dispatch_player_action` → `action.run()`. A foreign/unknown id returns 400
+  with a uniform safe message (no repertoire leak).
+- `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
+  Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
+  Returns 400 with `RevertBlockedError.user_message` while `not in_control` (rage,
+  possession, charm, mind-control).
 
 All endpoints require `IsAuthenticated`.
 

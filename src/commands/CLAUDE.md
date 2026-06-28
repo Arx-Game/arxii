@@ -243,6 +243,14 @@ actions, backends, and service functions.
   creation) call the validated `scenes.services.create_persona`/`create_mask` directly (#1127) — the
   same services the web `create-established`/`create-mask` actions use; staff bypass the
   ESTABLISHED cap. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
+- **`form.py`**: `CmdForm` (`form`, #1111 slice 4) — list, shift into, or revert
+  your alternate selves. Bare `form`/`form list` renders the active alt-self
+  (`true self` if none) and the available list. `form shift <name|id>` resolves the
+  owned `AlternateSelf` and dispatches `ShiftFormAction` (key `"shift_form"`, REGISTRY
+  backend). `form revert` dispatches `RevertFormAction` (key `"revert_form"`). Both
+  route through `dispatch_player_action` — the same seam the web form dispatcher uses.
+  Namespaced subverbs (`shift`/`revert`) avoid top-level key collisions with exits/channels/
+  aliases. No business logic in the command.
 - **`where.py`**: `CmdWhere` (`where`, #1463) — the public presence/navigation surface.
   Thin read over `world.areas.services.where_listing`: characters in **public** rooms,
   each with their coloured area-hierarchy path (`colored_area_path` walks `AreaClosure`,

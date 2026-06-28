@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0052_remove_sanctum_personal_unique_constraint"),
+        ("magic", "0053_charactertechnique_source"),
     ]
 
     operations = [

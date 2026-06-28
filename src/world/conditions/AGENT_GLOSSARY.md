@@ -13,7 +13,7 @@ One step in a progressive condition (`ConditionStage`), ordered within its templ
 _Avoid_: phase, level, step
 
 **alters_behavior**:
-A boolean flag on `ConditionCategory` marking conditions that change how a character BEHAVES (compulsion, charm, fear) rather than only their capabilities or stats. It is the consent gate: a behavior-altering effect on another PC requires that PC's consent; pure capability/stat effects do not.
+A boolean flag on `ConditionCategory` marking conditions that change how a character BEHAVES (compulsion, charm, fear, rage) rather than only their capabilities or stats. It is the consent gate: a behavior-altering effect on another PC requires that PC's consent; pure capability/stat effects do not. The canonical behavior-altering category is `Control`, seeded with `alters_behavior=True`, and the fury `Berserk` condition belongs to it.
 _Avoid_: is_mental, is_control, hostile (the flag is about behavior-change, not harm)
 
 **DoT**:

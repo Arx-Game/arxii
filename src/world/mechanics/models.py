@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 from world.mechanics.constants import (
     SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
+    SOURCE_TYPE_FORM,
     SOURCE_TYPE_RESIDENCE_COMFORT,
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
@@ -268,6 +269,18 @@ class ModifierSource(SharedMemoryModel):
         help_text="Marks the shared source for residence-comfort AP-regen modifiers (#1514).",
     )
 
+    # === Form Combat Profile Source (slice 4 — alternate self) ===
+    form_combat_profile = models.ForeignKey(
+        "forms.FormCombatProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="modifier_sources",
+        help_text=(
+            "The form combat profile this source's modifiers come from (alt-self stat-suite)."
+        ),
+    )
+
     # === Achievement Reward Source (#1522) ===
     # Marks the shared source for BONUS rewards granted by achievements (e.g. a +5 allure title).
     # Like residence comfort it carries no effect template — the granted ``CharacterModifier``
@@ -289,6 +302,8 @@ class ModifierSource(SharedMemoryModel):
             return SOURCE_TYPE_DISTINCTION
         if self.residence_comfort:
             return SOURCE_TYPE_RESIDENCE_COMFORT
+        if self.form_combat_profile_id:
+            return SOURCE_TYPE_FORM
         if self.achievement_reward:
             return SOURCE_TYPE_ACHIEVEMENT_REWARD
         return SOURCE_TYPE_UNKNOWN
@@ -307,6 +322,8 @@ class ModifierSource(SharedMemoryModel):
             return f"Distinction: {self.distinction_effect.distinction.name}"
         if self.residence_comfort:
             return "Residence comfort"
+        if self.form_combat_profile:
+            return f"Form: {self.form_combat_profile}"
         if self.achievement_reward:
             return "Achievement reward"
         return SOURCE_TYPE_UNKNOWN.capitalize()

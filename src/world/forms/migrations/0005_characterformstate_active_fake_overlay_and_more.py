@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("forms", "0002_characterformvalue_natural_option_and_more"),
+        ("forms", "0004_alter_activealternateself_options"),
     ]
 
     operations = [

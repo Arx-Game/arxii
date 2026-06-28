@@ -9,6 +9,7 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import CantripArchetype, GiftKind
 from world.magic.factories import (
+    CharacterTechniqueFactory,
     EffectTypeFactory,
     FacetFactory,
     GiftFactory,
@@ -532,3 +533,9 @@ class MishapPoolTierCleanTests(TestCase):
         tier2 = MishapPoolTier(min_deficit=5, max_deficit=None, consequence_pool=self.pool2)
         with self.assertRaises(ValidationError):
             tier2.clean()
+
+
+def test_character_technique_source_default_null():
+    ct = CharacterTechniqueFactory()
+    ct.refresh_from_db()
+    assert ct.source is None  # learned techniques have no source

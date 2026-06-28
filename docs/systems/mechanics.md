@@ -44,16 +44,16 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE) |
+| `ModifierSource` | Encapsulates where a modifier originated; links effect template to character instance | `distinction_effect` (FK DistinctionEffect), `character_distinction` (FK CharacterDistinction, CASCADE), `residence_comfort` (bool), `form_combat_profile` (FK forms.FormCombatProfile, SET_NULL) |
 | `CharacterModifier` | Materialized modifier value on a character for fast lookup (SharedMemoryModel) | `character` (FK CharacterSheet), `value` (int, can be negative), `source` (FK ModifierSource, CASCADE), `expires_at` (nullable datetime), `created_at` |
 
 ### Key Model Properties
 
 ```python
 # ModifierSource
-source.source_type     # "distinction" or "unknown"
+source.source_type     # "distinction", "residence_comfort", "form", or "unknown"
 source.modifier_target   # ModifierTarget from source.distinction_effect.target
-source.source_display  # "Distinction: Strong" (human-readable)
+source.source_display  # "Distinction: Strong", "Residence comfort", "Form: ...", or "Unknown"
 
 # CharacterModifier
 modifier.modifier_target  # Derived from source.modifier_target (not stored directly)

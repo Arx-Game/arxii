@@ -26,3 +26,13 @@ class BerserkTemplateTests(TestCase):
         BerserkConditionTemplateFactory()
         BerserkConditionTemplateFactory()
         self.assertEqual(ConditionTemplate.objects.filter(name="Berserk").count(), 1)
+
+    def test_factory_category_alters_behavior(self):
+        """Berserk is a behavior-altering condition — its category must carry
+        alters_behavior=True so rage drives CharacterSheet.in_control=False
+        (#1111 slice-4: revert blocked while raging)."""
+        tpl = BerserkConditionTemplateFactory()
+        self.assertTrue(
+            tpl.category.alters_behavior,
+            "Berserk's ConditionCategory must have alters_behavior=True.",
+        )

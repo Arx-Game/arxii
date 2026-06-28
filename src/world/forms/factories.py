@@ -4,12 +4,16 @@ import factory
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.models import (
+    ActiveAlternateSelf,
+    AlternateSelf,
     AppearanceChangeLog,
     Build,
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
     DurationType,
+    FormCombatProfile,
+    FormCombatProfileEffect,
     FormTrait,
     FormTraitOption,
     FormType,
@@ -161,3 +165,50 @@ class AppearanceChangeLogFactory(factory.django.DjangoModelFactory):
     to_text = "Crimson"
     actor_persona = factory.SelfAttribute("persona")
     note = ""
+
+
+class FormCombatProfileFactory(factory.django.DjangoModelFactory):
+    """Factory for creating FormCombatProfile instances."""
+
+    class Meta:
+        model = FormCombatProfile
+
+    form = factory.SubFactory(CharacterFormFactory)
+    display_name = ""
+
+
+class FormCombatProfileEffectFactory(factory.django.DjangoModelFactory):
+    """Factory for creating FormCombatProfileEffect instances."""
+
+    class Meta:
+        model = FormCombatProfileEffect
+
+    profile = factory.SubFactory(FormCombatProfileFactory)
+    target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
+    value = 1
+
+
+class AlternateSelfFactory(factory.django.DjangoModelFactory):
+    """Factory for creating AlternateSelf instances."""
+
+    class Meta:
+        model = AlternateSelf
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    form = None
+    persona = None
+    combat_profile = None
+    tuning_value = None
+    display_name = ""
+
+
+class ActiveAlternateSelfFactory(factory.django.DjangoModelFactory):
+    """Factory for creating ActiveAlternateSelf instances."""
+
+    class Meta:
+        model = ActiveAlternateSelf
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    alternate_self = None
+    return_form = None
+    return_persona = None
