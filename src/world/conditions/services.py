@@ -209,6 +209,20 @@ def get_condition_instance(
     ).first()
 
 
+def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """True if *target* holds any active intangibility condition.
+
+    Mirrors the derive-on-read pattern: aggregate over the bearer's active,
+    non-suppressed, unresolved ConditionInstances whose category grants
+    intangibility. Gates target resolution in cast + combat.
+    """
+    return target.condition_instances.filter(
+        condition__category__grants_intangibility=True,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+    ).exists()
+
+
 @dataclass
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
