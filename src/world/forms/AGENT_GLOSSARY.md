@@ -32,6 +32,16 @@ _Avoid_: self-control flag, dominated flag.
 To activate an alternate self, swapping in its form/persona facets and granting its
 stat and ability suites. Not gated by `in_control`. _Avoid_: shift, activate.
 
+**Shift Form**:
+Player-facing verb for the assume action (registry key `"shift_form"`,
+`ShiftFormAction`). The backend canonical term remains **Assume**; this is the
+surface label shown to players. _Avoid_: activate, transform.
+
 **Revert**:
 To restore the return anchors captured at assume time and remove the granted stat/ability
 rows. Blocked while `not in_control` (`RevertBlockedError`). _Avoid_: shift back.
+
+**Revert Form**:
+Player-facing verb for the revert action (registry key `"revert_form"`,
+`RevertFormAction`). The backend canonical term remains **Revert**. _Avoid_:
+shift back, return to normal.

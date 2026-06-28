@@ -215,6 +215,8 @@ class ActionRegistryTests(TestCase):
             "remove_encounter_participant",
             "resolve_encounter_round",
             "set_active_persona",
+            "shift_form",
+            "revert_form",
             "set_social_consent_preference",
             "set_social_consent_category_rule",
             "add_social_consent_whitelist",

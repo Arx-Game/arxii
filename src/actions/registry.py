@@ -64,6 +64,7 @@ from actions.definitions.events import (
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
+from actions.definitions.forms import RevertFormAction, ShiftFormAction
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -199,6 +200,8 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     SetActivePersonaAction(),
+    ShiftFormAction(),
+    RevertFormAction(),
     SetSocialConsentPreferenceAction(),
     SetSocialConsentCategoryRuleAction(),
     AddSocialConsentWhitelistAction(),

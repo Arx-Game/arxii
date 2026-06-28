@@ -142,6 +142,17 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError
 - `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
   blocked.
 
+### Alternate-self actions
+
+Both verbs are thin REGISTRY actions in `actions/definitions/forms.py` so telnet
+and the web share the same `action.run()` path:
+
+- `ShiftFormAction` (key `"shift_form"`) — wraps `assume_alternate_self`. Receives
+  kwarg `alternate_self_id`; validates the grant belongs to the actor's sheet.
+  **Not `in_control`-gated**.
+- `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
+  Catches `RevertBlockedError` and surfaces `exc.user_message` as a failure result.
+
 The decoupling of control from the shift and the stacking guard are documented in
 [`appearance_and_identity.md`](appearance_and_identity.md).
 

@@ -166,6 +166,24 @@ The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled
   re-derives `in_control=True`, which unblocks a later self-revert. The form persists
   after the condition clears.
 
+## Player-facing action seam
+
+The two alternate-self verbs are real `actions.base.Action`s on the shared
+`action.run()` seam (ADR-0001):
+
+- **`ShiftFormAction`** (`actions/definitions/forms.py`, key `"shift_form"`) —
+  assumes an `AlternateSelf` owned by the actor's sheet. `target_type=SELF`, kwarg
+  `alternate_self_id`. **Not gated by `in_control`**; forced/inadvertent shifts
+  (moon madness, rage) use the same path. A foreign or unknown id returns a
+  uniform failure message to avoid leaking repertoire information.
+- **`RevertFormAction`** (`actions/definitions/forms.py`, key `"revert_form"`) —
+  reverts the active alternate self. `target_type=SELF`, no kwargs. Catches
+  `RevertBlockedError` while `not sheet.in_control` and surfaces it as a failure
+  `ActionResult`. No active alt-self also returns a failure result.
+
+Both wrap `world.forms.services.assume_alternate_self` / `revert_alternate_self`;
+  telnet and the web dispatcher converge on the same action path.
+
 Service details and the stacking guard (permanently-known techniques are not
 overwritten) live in [`forms.md`](forms.md).
 
