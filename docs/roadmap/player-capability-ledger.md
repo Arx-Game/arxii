@@ -94,7 +94,7 @@ in-fiction trigger is plausible.
 | **Learn / train / buy** an existing technique | ❌ → DESIGNED | **ADR-0056** (signature thread for one technique) + **ADR-0053** (unlock gate) | MVP |
 | **Leveling grants magical power** (unlocks gifts/techniques) | ❌ → DESIGNED | **ADR-0053** (XP-unlock) + **ADR-0051** (thread strength); `Gift` docstring "powers unlock as you level" is not implemented | **now (foundational)** |
 | Trainer / teaching system | ❌ ABSENT | (`MentorBond` is a combat bond, not teaching) | soon |
-| Path-crossing (Audere Majora) — change path in play | 🟨 WIRED-UNPROVEN | resolution built, **offer never created in live code → unreachable** | fix+prove |
+| Path-crossing (Audere Majora) — change path in play | ✅ PROVEN | offer created by cast hook `maybe_create_audere_majora_offer` (`world/magic/services/techniques.py` Step 8c); journey driven E2E in `test_audere_telnet_e2e.py` | done |
 | Ritual of the Durance level-up | 🟨 WIRED-UNPROVEN | works via generic machinery but **unseeded** | fix |
 | Codex teaching / learning | 🟧 BUILT-NOT-WIRED | `CodexTeachingOffer.accept` has no player surface | soon |
 
@@ -136,7 +136,13 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
 
 ### Fix (integrity / foundational holes)
 - `CharacterGiftViewSet` unguarded `ModelViewSet` (mints gift bindings, bypasses `action.run`).
-- Audere Majora offer never created in live code (climax unreachable).
+- Audere Majora: verify the private DB seed of `AudereMajoraThreshold` rows
+  (boundary levels 5/10/15/20) exists in the live DB. The offer-creation cast
+  hook (`techniques.py:950`) is wired and E2E-tested, but the gate returns
+  `None` at gate 2 unless those threshold rows are present. Ceremony text
+  (`vision_text`/`manifestation_text`) is intentionally DB-authored only, never
+  committed (see `world/magic/CLAUDE.md`, Audere & Audere Majora). No code
+  change; an ops/seed-verification check.
 - Ritual of the Durance unseeded.
 
 ### Cut (sludge — close, per "no rare permutations")
