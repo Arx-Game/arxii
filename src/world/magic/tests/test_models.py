@@ -7,7 +7,7 @@ from django.test import TestCase
 from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import CantripArchetype
+from world.magic.constants import CantripArchetype, GiftKind
 from world.magic.factories import (
     EffectTypeFactory,
     FacetFactory,
@@ -158,6 +158,19 @@ class GiftModelTests(TestCase):
         """Test that gift can have resonances."""
         self.assertEqual(self.gift.resonances.count(), 1)
         self.assertIn(self.shadows, self.gift.resonances.all())
+
+    def test_gift_kind_defaults_to_major(self) -> None:
+        """A Gift defaults to GiftKind.MAJOR (the CG-chosen taxonomy)."""
+        gift = GiftFactory()
+        assert gift.kind == GiftKind.MAJOR
+        assert gift.get_kind_display() == "Major (CG-chosen)"
+
+    def test_gift_kind_minor_persists(self) -> None:
+        """A Gift can be marked MINOR (shared/acquirable, ADR-0050)."""
+        gift = GiftFactory(kind=GiftKind.MINOR)
+        gift.refresh_from_db()
+        assert gift.kind == GiftKind.MINOR
+        assert gift.get_kind_display() == "Minor (shared, acquirable)"
 
 
 class CharacterGiftModelTests(TestCase):
