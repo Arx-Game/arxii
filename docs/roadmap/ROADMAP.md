@@ -74,7 +74,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 | Domain | Status | Summary |
 |--------|--------|---------|
-| [Character Creation & Identity](character-creation.md) | skeleton | 11-stage CG flow, backstory, appearance, species, paths |
+| [Character Creation & Identity](character-creation.md) | skeleton | 11-stage CG flow, backstory, appearance, species, paths. CG-world content now seedable (#1333); admin Game Setup hub for clone hosts. |
 | [Character Progression & XP](character-progression.md) | in-progress | XP, skills, path steps, Audere Majora, power tiers, the Durance |
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |

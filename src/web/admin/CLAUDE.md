@@ -8,6 +8,25 @@ Custom Django admin interface with game data export/import functionality.
 
 **Location:** Links at top of Django admin header (Export / Import) leading to dedicated pages.
 
+## Game Setup Hub (#1333)
+
+**Purpose:** Superuser-only landing page for a freshly-cloned Arx instance — the "can I configure an Arx pls ty??" entry point. Wayfinding for the clone→seed→tweak→export flow plus a per-cluster content inventory so a new host can see what their game contains and where the gaps are.
+
+**Location:** Header link ("Game Setup") visible to superusers, next to the "Load sane defaults" Big Button. The Big Button's post-seed redirect lands here.
+
+- `game_setup_views.py` — `game_setup` view; `@staff_member_required` + superuser gate (same gate as the Big Button, ADR-0022). Read-only.
+- `templates/admin/game_setup.html` — extends `base_site.html`. Three regions: (1) the flow (Seed defaults → Author content → Tune mechanics [coming soon, #1221] → Export/Import), (2) a per-cluster content inventory table with live row counts (via `seeded_models_by_cluster()`), (3) "Jump to authoring" links to the World apps.
+- URL: `_game_setup/` → name `admin_game_setup`.
+
+**When Asked About**
+
+If an agent is asked about any of these topics, this is the system:
+- "the admin landing page for a new game"
+- "where do I configure a fresh Arx instance"
+- "content inventory / what's seeded"
+- "Game Setup button at the top of Django admin"
+
+
 ### Key Files
 
 - `services.py` - `analyze_fixture()` dry-run analysis and `execute_import()` atomic pipeline
@@ -64,6 +83,9 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 - `_excluded/` - Check exclusion status
 - `_pin/` - Toggle model pinning
 - `_pinned/` - Check pin status
+- `_seed/` - "Load sane defaults" confirm page (superuser; #651)
+- `_seed_run/` - POST: runs `seed_dev_database()` then redirects to the Game Setup hub (superuser)
+- `_game_setup/` - "Game Setup" hub: wayfinding + per-cluster content inventory (superuser; #1333)
 
 ### When Asked About
 
