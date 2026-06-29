@@ -1054,6 +1054,14 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         related_name="combat_pull_grants",
     )
     narrative_snippet = models.TextField(blank=True)
+    resistance_damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="combat_pull_resistances",
+        help_text="Damage type a RESISTANCE effect mitigates. Null = all damage types (#1580).",
+    )
 
     class Meta:
         # String literals match EffectKind.choices values; constraint coverage in
@@ -1127,6 +1135,21 @@ class CombatPullResolvedEffect(SharedMemoryModel):
                 ),
                 name="combatpullresolvedeffect_narrative_only_payload",
             ),
+            # RESISTANCE: requires scaled_value (resistance_amount × level_multiplier),
+            # forbids capability/narrative/vital_target. resistance_damage_type is
+            # optional (null = all damage types) (#1580).
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="RESISTANCE")
+                    | (
+                        models.Q(scaled_value__isnull=False)
+                        & models.Q(granted_capability__isnull=True)
+                        & models.Q(narrative_snippet="")
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="combatpullresolvedeffect_resistance_payload",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -1143,6 +1166,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             EffectKind.VITAL_BONUS: self._clean_vital_bonus,
             EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
             EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+            EffectKind.RESISTANCE: self._clean_resistance,
         }
         validator = validators.get(self.kind)
         if validator is not None:
@@ -1198,6 +1222,11 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"granted_capability": "Must be null for NARRATIVE_ONLY."})
         if self.vital_target:
             raise ValidationError({"vital_target": "Must be null for NARRATIVE_ONLY."})
+
+    def _clean_resistance(self) -> None:
+        # RESISTANCE shape mirrors FLAT_BONUS (scaled_value only); resistance_damage_type
+        # is optional (null = all damage types) so it is not validated here (#1580).
+        self._require_scaled_value_only()
 
 
 # =============================================================================

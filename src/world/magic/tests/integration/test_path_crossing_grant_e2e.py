@@ -115,3 +115,42 @@ class PathCrossingGrantE2ETests(TestCase):
         self.assertEqual(
             CharacterGift.objects.filter(character=self.sheet, gift=self.gift).count(), 1
         )
+
+    def test_crossing_keeps_old_gift_and_grants_new_for_it_plus_the_new_gift(self) -> None:
+        """An advanced branch keeps the old gift+techniques, deepens the old gift with
+        NEW techniques, AND grants the new path's new gift+techniques."""
+        # The character already holds a gift (from CG / their prospect path) with one
+        # already-known technique — these must survive the crossing untouched.
+        old_gift = GiftFactory(name="Geomancy_e2e")
+        old_gift.resonances.add(ResonanceFactory(name="Stone_e2e"))
+        old_known = TechniqueFactory(name="Stone Skin_e2e", gift=old_gift)
+        new_for_old = TechniqueFactory(name="Quake Step_e2e", gift=old_gift)
+        CharacterGift.objects.create(character=self.sheet, gift=old_gift)
+        CharacterTechnique.objects.create(character=self.sheet, technique=old_known)
+
+        # The warrior path deepens the EXISTING gift (a new technique of it) in addition
+        # to introducing the new gift (self.gift, granted via the setUp PathGiftGrant).
+        deepen = PathGiftGrant.objects.create(path=self.warrior_path, gift=old_gift)
+        deepen.starter_techniques.add(new_for_old)
+
+        resolve_audere_majora_offer(
+            self.offer.pk,
+            accept=True,
+            path_id=self.warrior_path.pk,
+            declaration_text="I take up the burning blade.",
+        )
+
+        # Old gift retained; new gift acquired.
+        self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=old_gift).exists())
+        self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())
+        # Techniques: the old one is kept, the existing gift is deepened with a new one,
+        # and the new gift's set is added — all at once.
+        self.assertEqual(
+            self._owned_technique_ids(),
+            {
+                old_known.pk,  # retained
+                new_for_old.pk,  # new technique for the EXISTING gift
+                self.warrior_attack.pk,  # new gift's set
+                self.warrior_defense.pk,
+            },
+        )

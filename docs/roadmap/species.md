@@ -11,6 +11,14 @@ Code wins over this doc.
 
 - `Species` (stat-bonuses + name hierarchy), applied to traits at character finalize.
 - `CharacterDistinction` (effects→modifiers, trust gating; can grant *rituals*).
+- **Species-gift grant + provisioning (#1580)** [BUILT & WIRED]: `SpeciesGiftGrant`
+  (through-model: `species → MINOR Gift + optional drawback_condition`) +
+  `provision_species_gifts(sheet, *, resonance=None)` called from `finalize_magic_data`.
+  Mints the `CharacterGift`, the latent GIFT thread (via `provision_latent_gift_thread`),
+  and applies any drawback idempotently. GIFT anchor cap built: `path_stage × 10`.
+  The gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE`
+  that nets against the drawback vulnerability at the combat-damage seam (`apply_damage_to_participant`).
+  ADR-0062. E2E: `world/magic/tests/integration/test_species_gift_e2e.py`.
 
 ## The design (ADR-0050): species abilities are Minor Gifts
 
@@ -24,11 +32,15 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
 
 ## Gaps
 
-- **khati / vampire / lycan / lineage** — no model or data today (lore-only). → Minor Gifts (ADR-0050);
-  the Major/Minor taxonomy keystone landed in #1577 (`Gift.kind`); species-grant plumbing remains.
-- **Species abilities beyond stat-bonuses** — ❌ → DESIGNED as Minor Gifts (ADR-0050).
-- **Species vulnerabilities** (e.g. vampire ↔ sunlight) + an immunity/vulnerability framework — ❌ ABSENT,
-  **no ADR yet** (vulnerability is per-condition only, never tied to identity).
+- **khati / vampire / lycan / lineage** — no game data yet (lore-only). The plumbing is now
+  built (#1580: `SpeciesGiftGrant` + `provision_species_gifts`). Seed a MINOR Gift per species
+  + an optional drawback `ConditionTemplate` to bring abilities live.
+- **Species abilities beyond stat-bonuses** — [BUILT & WIRED] for the infrastructure (#1580);
+  pending species data (no species → Minor Gift rows seeded yet; see ADR-0050).
+- **Species vulnerabilities** (e.g. vampire ↔ sunlight) + broad immunity/vulnerability framework —
+  minimum substrate built (#1580): `EffectKind.RESISTANCE` + `ConditionResistanceModifier` net
+  at `apply_damage_to_participant`. Broad framework + environmental triggers (sunlight as a
+  world-driven damage event) → **#1588** (ADR-0062).
 - **Racial languages** — `Language` model + a `grants_species_languages` flag exist, but nothing grants
   or stores them (no `CharacterLanguage`). 🟡 SUBSTRATE.
 

@@ -65,6 +65,7 @@ from world.magic.services.threads import (
     compute_thread_weaving_xp_cost,
     cross_thread_xp_lock,
     get_thread_survivability_tuning,
+    gift_thread_resistance,
     imbue_ready_threads,
     near_xp_lock_threads,
     recompute_max_health_with_threads,
@@ -105,6 +106,7 @@ __all__ = [
     "get_runtime_technique_stats",
     "get_soulfray_warning",
     "get_thread_survivability_tuning",
+    "gift_thread_resistance",
     # resonance
     "grant_resonance",
     "has_pending_alterations",

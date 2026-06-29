@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
-    from world.conditions.models import CapabilityType
+    from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
     from world.magic.models import Resonance, Thread
 
@@ -54,6 +54,8 @@ class ResolvedPullEffect:
     inactive: bool = False
     inactive_reason: str | None = None
     target_form: CharacterForm | None = None
+    # RESISTANCE only: the damage type this resistance mitigates (null = all types) (#1580).
+    resistance_damage_type: DamageType | None = None
 
 
 @dataclass(frozen=True)

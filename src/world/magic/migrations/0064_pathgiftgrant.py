@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("classes", "0005_classstagehealthrate"),
-        ("magic", "0061_threadpulleffect_target_form_and_more"),
+        ("magic", "0063_remove_threadpulleffect_threadpulleffect_flat_bonus_payload_and_more"),
     ]
 
     operations = [

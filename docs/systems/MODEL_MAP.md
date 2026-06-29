@@ -134,6 +134,7 @@
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
+  - thread_pull_resistances <- magic.ThreadPullEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -141,6 +142,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - combat_pull_resistances <- combat.CombatPullResolvedEffect
 
 ### ConditionTemplate
 **Foreign Keys:**
@@ -152,6 +154,7 @@
   - reactive_triggers -> flows.TriggerDefinition [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
@@ -996,7 +999,6 @@
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - ritual_grants <- magic.PathRitualGrant
-  - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - codex_grants <- codex.PathCodexGrant
 
@@ -1197,6 +1199,7 @@
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
+  - thread_pull_resistances <- magic.ThreadPullEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -1204,6 +1207,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - combat_pull_resistances <- combat.CombatPullResolvedEffect
 
 ### ConditionTemplate
 **Foreign Keys:**
@@ -1215,6 +1219,7 @@
   - reactive_triggers -> flows.TriggerDefinition [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
@@ -2126,11 +2131,12 @@
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
 **Pointed to by:**
+  - species_grants <- species.SpeciesGiftGrant
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
-  - path_grants <- magic.PathGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
+  - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
 
@@ -2204,7 +2210,6 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
-  - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
@@ -2411,12 +2416,6 @@
 **Foreign Keys:**
   - path -> classes.Path [FK]
   - ritual -> magic.Ritual [FK]
-
-### PathGiftGrant
-**Foreign Keys:**
-  - path -> classes.Path [FK]
-  - gift -> magic.Gift [FK]
-  - starter_techniques -> magic.Technique [M2M]
 
 ### DistinctionRitualGrant
 **Foreign Keys:**
@@ -2702,6 +2701,8 @@
   - resonance -> magic.Resonance [FK]
   - capability_grant -> conditions.CapabilityType [FK] (nullable)
   - target_form -> forms.CharacterForm [FK] (nullable)
+  - resistance_damage_type -> conditions.DamageType [FK] (nullable)
+  - target_gift -> magic.Gift [FK] (nullable)
 
 ### ThreadSurvivabilityTuning
 
@@ -2772,6 +2773,7 @@
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
+- `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
 - `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`

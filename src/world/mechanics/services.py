@@ -487,6 +487,7 @@ def _thread_pull_effects_for(
             resonance=resonance,
             tier=tier,
             effect_kind=EffectKind.FLAT_BONUS,
+            target_gift__isnull=True,  # FACET/MANTLE kinds only; exclude gift-specific rows
         ).exclude(flat_bonus_amount__isnull=True)
     )
 

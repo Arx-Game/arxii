@@ -542,6 +542,77 @@ class ComboOpeningPassiveTechniqueFactory(TechniqueFactory):
         )
 
 
+class BraceTechniqueFactory(TechniqueFactory):
+    """A SELF secondary-action resistance buff: the brace/steel counterplay pattern (#1580).
+
+    Authors a technique that a player can declare in the passive (secondary-action) slot
+    to apply a scene-length resistance buff — the active counterplay layered on top of
+    the species GIFT-thread's passive RESISTANCE pull-effect.
+
+    Built around the REAL damage-mitigation path: a ``ConditionResistanceModifier`` row
+    (positive ``modifier_value``) on the applied ``ConditionTemplate``, which
+    ``apply_damage_to_participant`` reads via
+    ``character.conditions.resistance_modifier(damage_type)``. The condition uses
+    ``UNTIL_END_OF_COMBAT`` (the closest available scene-length duration; a dedicated
+    ``SCENE`` tier is tracked as a deferred follow-up).
+
+    ``combo_opening_probing=None`` marks this technique secondary-action eligible
+    (it grants no probing when used in the passive slot, so it does not open combos).
+
+    Tunables are passed via the ``brace_condition`` post-generation hook:
+    - ``resist_amount=<int>``  — positive modifier_value for the resistance buff
+      (default: 25)
+    - ``damage_type=<DamageType>`` — specific damage type scoped resistance, or
+      ``None`` for all-types (default: None)
+
+    Usage::
+
+        BraceTechniqueFactory(gift=species_minor_gift, name="Fireborn Brace")
+        BraceTechniqueFactory(
+            gift=gift,
+            name="Scaled Brace",
+            brace_condition__resist_amount=40,
+            brace_condition__damage_type=fire_damage_type,
+        )
+
+    Pass ``brace_condition=<template>`` to attach the resistance to a pre-built
+    ``ConditionTemplate`` rather than creating a fresh one.
+    """
+
+    combo_opening_probing = None  # secondary-action eligible: no combo probing
+
+    @factory.post_generation
+    def brace_condition(self, create, extracted, **kwargs):
+        if not create:
+            return
+        from world.conditions.constants import DurationType
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+        )
+
+        resist_amount = kwargs.get("resist_amount", 25)
+        damage_type = kwargs.get("damage_type")
+        # Create a fresh ConditionTemplate with UNTIL_END_OF_COMBAT duration when
+        # no pre-built template is supplied. Scene-length (SCENE) does not exist
+        # today; UNTIL_END_OF_COMBAT is the correct reuse (deferred follow-up).
+        condition = extracted or ConditionTemplateFactory(
+            default_duration_type=DurationType.UNTIL_END_OF_COMBAT,
+        )
+        ConditionResistanceModifierFactory(
+            condition=condition,
+            stage=None,
+            damage_type=damage_type,
+            modifier_value=resist_amount,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self,
+            condition=condition,
+            target_kind="self",
+            base_severity=1,
+            minimum_success_level=1,
+        )
+
+
 class IntensityTierFactory(factory.django.DjangoModelFactory):
     """Factory for IntensityTier - configurable power thresholds."""
 

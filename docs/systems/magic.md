@@ -294,7 +294,7 @@ All SharedMemoryModel lookups.
 | `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `spend_resonance_for_pull`; this table only holds the per-tier numbers |
 | `ThreadXPLockedLevel` | XP-locked-boundary price list | `level` (unique; 20/30/40 on the internal scale), `xp_cost` |
 | `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_level_mult`, `per_scene_cap_base`, `hollow_max_level_mult`. Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
-| `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast). Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; all other kinds require `target_form__isnull=True` |
+| `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload |
 | `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, `item_template` FK, `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
@@ -436,11 +436,13 @@ on every thread advance; also standalone-callable for ceremony-direct testing.
 - **`Gift.resonances`** is repurposed to the **supported set** (a weave constraint, not the
   cast-time value) per ADR-0052.
 
-The GIFT anchor cap (`compute_anchor_cap` has no `GIFT` case → returns 0) is a deferred
-needs-design follow-up; until it lands, GIFT-thread advancement is exercised by setting
-`level` directly + calling the ceremony explicitly (see `test_gift_specialization_e2e.py`).
+**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
+`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10,
+`world/magic/services/threads.py`). GIFT threads are always in-action (intrinsic species
+gift — added to `_ALWAYS_IN_ACTION_KINDS`). The frontend CG resonance picker remains a
+needs-design follow-up.
 
-Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py`:
+Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578):
 CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the thread's
 resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
@@ -450,20 +452,35 @@ deltas) → discovery beat fires (achievement + codex).
 The complement to the resonance engine above: #1578 specializes *how* a known technique
 manifests; #1579 grants *which* techniques you get when you advance into a new Path. This is
 ADR-0055's "(Gift × Path) sets the base technique set" leg, realized as an **acquisition** on
-crossing (not a derive-on-read), honoring ADR-0053 (advancement *gates*; the grant is a
+advancement (not a derive-on-read), honoring ADR-0053 (advancement *gates*; the grant is a
 consequence of Path membership per ADR-0050, not an XP purchase).
 
 | Surface | Role | Notes |
 |---|---|---|
-| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
-| `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via `provision_latent_gift_thread`) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Latent-thread resonance = a claimed supported resonance, else the gift's first supported. |
-| `cross_threshold` hook (`audere_majora.py`) | Wiring | Calls `grant_path_magic(sheet, chosen_path)` right after the `CharacterPathHistory` write — so *which* levels grant is authored data (`AudereMajoraThreshold` rows); a level-3 POTENTIAL "pre-crossing" reuses the same machinery with lesser-ceremony wording. |
+| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
+| `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via the shared `grant_gift_to_character` primitive) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Already-owned gifts/techniques are skipped (kept), so the character retains everything and only *gains*. |
+| Path-change seam `cross_into_path(sheet, path)` (`world/progression/services/advancement.py`) | Wiring | Writes `CharacterPathHistory` + fires `grant_path_magic`. Used by **both** `cross_threshold` (Audere Majora, levels 5/10/15/20 → PUISSANT+) **and** the **Ritual of the Durance** when it advances into the POTENTIAL stage (level 3 — the "semi-crossing", no Audere Majora). So *which* levels grant is authored data; the level-3 rite reuses the identical grant machinery with no crossing ceremony. |
 
-Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`: real
-`resolve_audere_majora_offer → cross_threshold` into the warrior path grants only the warrior
-technique set from a shared gift (spy set absent), provisions the latent thread, and the granted
-technique resolves through the specialization path. **Out of scope → #1581:** the within-tier
-gift-thread *strength* axis (`compute_anchor_cap` GIFT case + imbue-driven growth).
+Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`: the real
+Audere Majora `resolve_audere_majora_offer → cross_threshold` into the warrior path grants only
+the warrior technique set from a shared gift (spy set absent), keeps the character's prior
+gift+techniques while deepening that existing gift and adding the new one, and the granted
+technique resolves through the specialization path; plus the level-3 Durance semi-crossing
+journey. **Out of scope → #1581:** the within-tier gift-thread *strength* growth (imbue-driven
+more/stronger techniques) + per-target-kind cost tuning. (The GIFT anchor cap itself —
+`path_stage × 10` — shipped in #1580.)
+
+**Species gift extension (#1580) [BUILT & WIRED]:** `SpeciesGiftGrant` (`world/species/models.py`;
+natural key `(species, gift)`) is the through-model that links a species to one or more MINOR
+`Gift`s with an optional `drawback_condition` FK to `conditions.ConditionTemplate`.
+`provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) is called
+from `finalize_magic_data` after the Major-gift block; it mints the MINOR `CharacterGift`
+(via the shared `grant_gift_to_character` primitive) and applies any drawback idempotently. The
+gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets
+against the drawback vulnerability at the combat-damage seam. `gift_thread_resistance(character,
+damage_type) -> int` (services/threads.py) returns the aggregate resistance (passive +
+active paid-pull snapshots). See ADR-0050, ADR-0062. E2E:
+`world/magic/tests/integration/test_species_gift_e2e.py`.
 
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
