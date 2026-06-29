@@ -70,14 +70,6 @@ class Captivity(SharedMemoryModel):
             " phase. Today it is a recorded intent only.  TODO(#931 followup)."
         ),
     )
-    ransom_contract = models.ForeignKey(
-        "currency.Contract",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="ransom_captivities",
-        help_text="The one-shot demand contract surfaced on the captor-debtor's books.",
-    )
     ransom_project = models.ForeignKey(
         "projects.Project",
         on_delete=models.SET_NULL,

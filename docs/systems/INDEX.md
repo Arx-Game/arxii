@@ -964,9 +964,10 @@ A character can be held captive (#931): captured into an instanced cell by an NP
 captor org, freed by escape, rescue, ransom, or release. #1500 reframes ransom as a
 **crowdfundable RANSOM Project** standing in the cell.
 
-- **Models:** `Captivity` (captive + cell + captor_organization + status; `ransom_contract`
-  legacy treasury path, `ransom_project` FK → the crowdfundable RANSOM Project #1500),
-  `CaptivityConfig` (singleton authored cell/clue/mission defaults)
+- **Models:** `Captivity` (captive + cell + captor_organization + status; `ransom_project`
+  FK → the crowdfundable RANSOM Project #1500 — the single ransom route since the
+  org-treasury Contract path was retired), `CaptivityConfig` (singleton authored
+  cell/clue/mission defaults)
 - **Constants:** `CaptivityStatus` (HELD / ESCAPED / RESCUED / RANSOMED / RELEASED)
 - **Ransom-as-project (#1500):** `demand_ransom_project` (GM surface creates the RANSOM
   project in the cell), `resolve_ransom_project` (kind handler — frees the captive on full
@@ -976,9 +977,9 @@ captor org, freed by escape, rescue, ransom, or release. #1500 reframes ransom a
   (`POST /api/gm/demand-ransom/`, `IsGMOrStaff`), both converging on `demand_ransom_project`.
 - **Other services (`world.captivity.services`):** `capture_character` / `capture_party`,
   `resolve_captivity`, `rescue_captive`, `escape_captivity`
-- **Integrates with:** projects (RANSOM kind + instant-completion), currency (legacy
-  treasury ransom), missions (escape/rescue loops), clues (rescue-clue planting),
-  instances (the cell), typeclasses (`return_appearance` captive banner)
+- **Integrates with:** projects (RANSOM kind + instant-completion), missions
+  (escape/rescue loops), clues (rescue-clue planting), instances (the cell),
+  typeclasses (`return_appearance` captive banner)
 - **Source:** `src/world/captivity/`
 
 ### Buildings (Permits + Construction + Materials)
