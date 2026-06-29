@@ -195,7 +195,8 @@ and the web share the same `action.run()` path:
 
 Transformation is normally driven by a technique cast or an involuntary trigger,
 not by the at-will command above. All three paths converge on the
-`trigger_transformation` seam (and thus on `assume_alternate_self`):
+`trigger_transformation` seam (and thus on `assume_alternate_self`) — the at-will
+command routes through it too (`cause="command"`, default `instance_value=1.0`):
 
 1. **Technique (primary).** A weave/technique carries an `EffectKind.ASSUME_ALTERNATE_SELF`
    pull effect (in `world/magic/models/threads.py`), whose `target_form` FK names

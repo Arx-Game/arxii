@@ -573,6 +573,13 @@ def _persist_combat_pull(  # noqa: PLR0913
     )
     pull.threads.set(threads)
     for r in resolved:
+        # ``ASSUME_ALTERNATE_SELF`` is applied at cast resolution (a transformative
+        # side-effect of the technique), never at combat-pull commit time, and
+        # ``CombatPullResolvedEffect`` has no ``target_form`` column — snapshotting
+        # it here would silently drop the form reference and write dead data. Skip
+        # it from the combat snapshot (#1604).
+        if r.kind == EffectKind.ASSUME_ALTERNATE_SELF:
+            continue
         CombatPullResolvedEffect.objects.create(
             pull=pull,
             kind=r.kind,
