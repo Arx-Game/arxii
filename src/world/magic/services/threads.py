@@ -170,6 +170,15 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             return max_level * 10
         case TargetKind.SANCTUM:
             return thread.target_sanctum_details.feature_instance.level * 10
+        case TargetKind.GIFT:
+            # Interim cap for gift-anchored threads: the highest-level technique
+            # in the gift sets the ceiling. This will be refined once the gift
+            # thread tuning design lands (ADR-0051 follow-up).
+            gift = thread.target_gift
+            max_level = (
+                gift.techniques.order_by("-level").values_list("level", flat=True).first() or 0
+            )
+            return max_level * 10
     return 0
 
 
