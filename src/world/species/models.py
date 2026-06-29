@@ -7,6 +7,7 @@ This module contains:
 - Language: Languages available in the game
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -139,6 +140,57 @@ class SpeciesStatBonus(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self):
         sign = "+" if self.value >= 0 else ""
         return f"{self.species.name}: {sign}{self.value} {self.get_stat_display()}"
+
+
+class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
+    """A Minor Gift (and optional drawback) a species grants its members (ADR-0050).
+
+    FK direction specific→general (ADR-0010): the grant lives on the species side and
+    points into world/magic + world/conditions; those apps never import species.
+    """
+
+    species = models.ForeignKey(
+        Species,
+        on_delete=models.CASCADE,
+        related_name="gift_grants",
+        help_text="The species (or subspecies) that grants this Minor Gift.",
+    )
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        related_name="species_grants",
+        help_text="The Minor Gift granted. Must have kind=MINOR.",
+    )
+    drawback_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="species_gift_drawbacks",
+        help_text="Optional drawback condition applied at finalize (frenzy/sunlight-vuln).",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["species", "gift"]
+        dependencies = ["species.Species", "magic.Gift"]
+
+    class Meta:
+        verbose_name = "Species Gift Grant"
+        verbose_name_plural = "Species Gift Grants"
+        unique_together = [["species", "gift"]]
+        ordering = ["species", "gift"]
+
+    def __str__(self) -> str:
+        return f"{self.species.name} → {self.gift.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        from world.magic.constants import GiftKind  # noqa: PLC0415
+
+        if self.gift.kind != GiftKind.MINOR:
+            raise ValidationError({"gift": "Species grants must reference a MINOR gift."})
 
 
 class Language(NaturalKeyMixin, SharedMemoryModel):

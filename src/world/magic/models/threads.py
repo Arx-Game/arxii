@@ -66,6 +66,11 @@ class ThreadPullEffect(SharedMemoryModel):
     paid pulls. Lookup row keyed (target_kind, resonance, tier, min_thread_level).
     Payload columns are mutually exclusive per effect_kind; clean() enforces
     the legal combinations and DB CheckConstraints mirror the validation.
+
+    ``target_gift`` scopes a row to a specific Gift (GIFT target_kind only).
+    Resolvers prefer gift-specific rows over null-target_gift rows (universal
+    fallback) when both exist for the same base key. Null = applies to all
+    threads matching the key (existing covenant/sanctum behavior unchanged).
     """
 
     target_kind = models.CharField(max_length=32, choices=TargetKind.choices)
@@ -103,15 +108,47 @@ class ThreadPullEffect(SharedMemoryModel):
         related_name="pull_effect_targets",
         help_text="The form whose combat profiles are selected for ASSUME_ALTERNATE_SELF.",
     )
+    resistance_amount = models.SmallIntegerField(null=True, blank=True)
+    resistance_damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_pull_resistances",
+        help_text="Damage type this resistance applies to. Null = all damage types.",
+    )
+    target_gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_pull_effects",
+        help_text=(
+            "Gift-specific pull effect (GIFT target_kind only). Null = applies to all "
+            "threads matching the lookup key (existing covenant/sanctum behavior)."
+        ),
+    )
 
     class Meta:
         indexes = [
             models.Index(fields=["target_kind", "resonance", "tier"]),
         ]
         constraints = [
+            # Two partial UniqueConstraints replace the original single constraint so
+            # that Postgres treats NULL target_gift rows as unique (one per base key)
+            # while also allowing one row per (base key, specific gift). Without the
+            # condition= split, Postgres would treat NULLs as DISTINCT and allow
+            # duplicate null-target_gift rows — silently breaking covenant lookups.
+            # Pattern mirrors the per-kind partial constraints on Thread in this file.
             models.UniqueConstraint(
                 fields=["target_kind", "resonance", "tier", "min_thread_level"],
-                name="threadpulleffect_lookup_key",
+                condition=models.Q(target_gift__isnull=True),
+                name="threadpulleffect_lookup_key",  # keep name: existing rows unchanged
+            ),
+            models.UniqueConstraint(
+                fields=["target_kind", "resonance", "tier", "min_thread_level", "target_gift"],
+                condition=models.Q(target_gift__isnull=False),
+                name="threadpulleffect_lookup_key_gift",
             ),
             # FLAT_BONUS: requires flat_bonus_amount, forbids other payloads.
             models.CheckConstraint(
@@ -124,6 +161,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_flat_bonus_payload",
@@ -139,6 +177,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_intensity_bump_payload",
@@ -154,6 +193,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(intensity_bump_amount__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_vital_bonus_payload",
@@ -169,6 +209,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_capability_grant_payload",
@@ -185,6 +226,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_narrative_only_payload",
@@ -201,6 +243,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(target_form__isnull=True)
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_corruption_resistance_payload",
@@ -217,9 +260,27 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
                         & models.Q(narrative_snippet="")
+                        & models.Q(resistance_amount__isnull=True)
                     )
                 ),
                 name="threadpulleffect_assume_alternate_self_payload",
+            ),
+            # RESISTANCE: requires resistance_amount; forbids all other exclusive payloads.
+            # resistance_damage_type is optional (null = all damage types).
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="RESISTANCE")
+                    | (
+                        models.Q(resistance_amount__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_resistance_payload",
             ),
         ]
 
@@ -243,6 +304,7 @@ class ThreadPullEffect(SharedMemoryModel):
             EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
             EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
             EffectKind.ASSUME_ALTERNATE_SELF: self._clean_assume_alternate_self,
+            EffectKind.RESISTANCE: self._clean_resistance,
             # CORRUPTION_RESISTANCE: no payload validator needed — runtime value
             # derives from CharacterResonance.lifetime_helped (Spec B §15.3).
             # The DB CheckConstraint enforces all payload columns are null.
@@ -253,14 +315,20 @@ class ThreadPullEffect(SharedMemoryModel):
 
     def _clean_flat_bonus(self, numeric_fields: dict[str, int | None]) -> None:
         self._require_only("flat_bonus_amount", numeric_fields, self.capability_grant)
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for FLAT_BONUS."})
 
     def _clean_intensity_bump(self, numeric_fields: dict[str, int | None]) -> None:
         self._require_only("intensity_bump_amount", numeric_fields, self.capability_grant)
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for INTENSITY_BUMP."})
 
     def _clean_vital_bonus(self, numeric_fields: dict[str, int | None]) -> None:
         self._require_only("vital_bonus_amount", numeric_fields, self.capability_grant)
         if not self.vital_target:
             raise ValidationError({"vital_target": "VITAL_BONUS requires vital_target."})
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for VITAL_BONUS."})
 
     def _clean_capability_grant(self, numeric_fields: dict[str, int | None]) -> None:
         if self.capability_grant is None:
@@ -270,6 +338,8 @@ class ThreadPullEffect(SharedMemoryModel):
         for name, val in numeric_fields.items():
             if val is not None:
                 raise ValidationError({name: "Must be null for CAPABILITY_GRANT."})
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for CAPABILITY_GRANT."})
 
     def _clean_narrative_only(self, numeric_fields: dict[str, int | None]) -> None:
         if not self.narrative_snippet.strip():
@@ -279,6 +349,8 @@ class ThreadPullEffect(SharedMemoryModel):
         for name, val in numeric_fields.items():
             if val is not None:
                 raise ValidationError({name: "Must be null for NARRATIVE_ONLY."})
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for NARRATIVE_ONLY."})
 
     def _clean_assume_alternate_self(self, numeric_fields: dict[str, int | None]) -> None:
         if self.target_form is None:
@@ -290,6 +362,20 @@ class ThreadPullEffect(SharedMemoryModel):
         for name, val in numeric_fields.items():
             if val is not None:
                 raise ValidationError({name: "Must be null for ASSUME_ALTERNATE_SELF."})
+        if self.resistance_amount is not None:
+            raise ValidationError({"resistance_amount": "Must be null for ASSUME_ALTERNATE_SELF."})
+
+    def _clean_resistance(self, numeric_fields: dict[str, int | None]) -> None:
+        if self.resistance_amount is None:
+            raise ValidationError({"resistance_amount": "RESISTANCE requires resistance_amount."})
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for RESISTANCE."})
+        if self.capability_grant is not None:
+            raise ValidationError({"capability_grant": "Must be null for RESISTANCE."})
+        if self.target_form is not None:
+            raise ValidationError({"target_form": "Must be null for RESISTANCE."})
+        # resistance_damage_type is optional (null = all damage types) — no check needed.
 
     @staticmethod
     def _require_only(

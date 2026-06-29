@@ -340,6 +340,7 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
                 tier=0,
                 effect_kind=EffectKind.CAPABILITY_GRANT,
                 resonance_id__in=resonance_ids,
+                target_gift__isnull=True,  # COVENANT_ROLE path; exclude gift-specific rows
             ).select_related("capability_grant"):
                 effects_by_resonance[effect.resonance_id] = effect
 

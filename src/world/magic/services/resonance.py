@@ -24,8 +24,8 @@ from world.magic.models import (
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
-    ThreadPullEffect,
 )
+from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.threads import (
     compute_anchor_cap,
     compute_effective_cap,
@@ -334,6 +334,9 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
         TargetKind.RELATIONSHIP_TRACK,
         TargetKind.RELATIONSHIP_CAPSTONE,
         TargetKind.FACET,
+        # A species GIFT thread is intrinsic to the character — always available to
+        # pull (no anchor target in the action graph to validate against) (#1580).
+        TargetKind.GIFT,
     }
 )
 
@@ -381,15 +384,17 @@ def resolve_pull_effects(
     for t in threads:
         multiplier = max(1, t.level // 10)
         for effect_tier in range(tier + 1):
-            rows = ThreadPullEffect.objects.filter(
-                target_kind=t.target_kind,
-                resonance=t.resonance,
+            rows = get_pull_effects_for_thread(
+                t,
                 tier=effect_tier,
                 min_thread_level__lte=t.level,
             )
             for row in rows:
                 authored = (
-                    row.flat_bonus_amount or row.intensity_bump_amount or row.vital_bonus_amount
+                    row.flat_bonus_amount
+                    or row.intensity_bump_amount
+                    or row.vital_bonus_amount
+                    or row.resistance_amount
                 )
                 # ASSUME_ALTERNATE_SELF, CAPABILITY_GRANT, NARRATIVE_ONLY, and
                 # CORRUPTION_RESISTANCE have no numeric payload; their scaled_value
@@ -433,7 +438,13 @@ def resolve_pull_effects(
                 else:
                     base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
 
-                inactive = row.effect_kind == EffectKind.VITAL_BONUS and not in_combat
+                # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
+                # lives on CombatPullResolvedEffect and is read on the combat damage
+                # path, so ephemeral (RP) pulls flag them inactive (cost still paid).
+                inactive = (
+                    row.effect_kind in (EffectKind.VITAL_BONUS, EffectKind.RESISTANCE)
+                    and not in_combat
+                )
                 resolved.append(
                     ResolvedPullEffect(
                         kind=row.effect_kind,
@@ -449,6 +460,7 @@ def resolve_pull_effects(
                         inactive=inactive,
                         inactive_reason=("requires combat context" if inactive else None),
                         target_form=row.target_form,
+                        resistance_damage_type=row.resistance_damage_type,
                     )
                 )
     return resolved
@@ -592,6 +604,7 @@ def _persist_combat_pull(  # noqa: PLR0913
             source_tier=r.source_tier,
             granted_capability=r.granted_capability,
             narrative_snippet=r.narrative_snippet,
+            resistance_damage_type=r.resistance_damage_type,
         )
 
 

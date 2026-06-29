@@ -365,6 +365,21 @@ The baseline is injected at these call sites:
   and traps — funnels its threshold rolls through this one function, hazard/DoT saves are
   covered for free.
 
+**Damage-type RESISTANCE pull-effect (#1580):** distinct from the damage-type-agnostic DR
+above. `EffectKind.RESISTANCE` (+ `resistance_amount`, `resistance_damage_type` FK; null =
+all types) is the species-gift thread's mitigation that offsets the species drawback's
+negative `ConditionResistanceModifier` (a vulnerability). `gift_thread_resistance(character,
+damage_type) -> int` (services/threads.py) returns the POSITIVE total — passive tier-0
+(flat `resistance_amount`, gated by `min_thread_level`, via
+`CharacterThreadHandler.passive_damage_type_resistance`) plus active paid-pull snapshots
+(`scaled_value = resistance_amount × level_multiplier`, via
+`CharacterCombatPullHandler.active_pull_resistance`). It is summed with
+`character.conditions.resistance_modifier(damage_type)` into the SAME clamped subtraction in
+`apply_damage_to_participant` (combat) — the one seam where the drawback vulnerability is
+read — so drawback and gift resistance net. GIFT threads are pullable (added to
+`_ALWAYS_IN_ACTION_KINDS`: a species gift is intrinsic, always in-action). The DoT/trap seams
+apply neither condition resistance nor this gift resistance, so they stay byte-identical.
+
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
   Unique per (participant, round_number). M2M to Thread for the threads
@@ -372,7 +387,8 @@ The baseline is injected at these call sites:
   `world/combat/pull_helpers.commit_combat_pull` (not called directly).
 - `CombatPullResolvedEffect` - Frozen snapshot of one resolved effect from
   a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
-  `vital_target`, `source_thread`, `source_thread_level`, `source_tier`,
+  `vital_target`, `resistance_damage_type` (RESISTANCE only; null = all types, #1580),
+  `source_thread`, `source_thread_level`, `source_tier`,
   `granted_capability`, `narrative_snippet`. Cascades from CombatPull;
   edits to authoring or Thread.level mid-round cannot retroactively alter
   what a committed pull granted.
@@ -446,9 +462,22 @@ also standalone-callable for ceremony-direct testing.
 - `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
   cast-time value) per ADR-0052.
 
-**Deferred:** the GIFT anchor cap (`compute_anchor_cap` has no `GIFT` case → returns 0) and
-the frontend CG resonance picker are needs-design follow-ups. Proven end-to-end by
-`world/magic/tests/integration/test_gift_specialization_e2e.py`.
+**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
+`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10). GIFT threads are
+always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
+resonance picker remains a needs-design follow-up. Proven end-to-end by
+`world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578) and
+`world/magic/tests/integration/test_species_gift_e2e.py` (#1580).
+- **Species gift provisioning** — `SpeciesGiftGrant` (`world/species/models.py`; natural key
+  `(species, gift)`) is the through-model linking a species to MINOR Gifts with an optional
+  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonance=None)`
+  (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
+  block; mints the MINOR `CharacterGift`, calls `provision_latent_gift_thread`, applies any
+  drawback idempotently. See ADR-0062.
+- **Gift-specific pull-effect lookup** — `get_pull_effects_for_thread(thread, **filters)`
+  (`world/magic/services/pull_effects.py`): for `TargetKind.GIFT` threads, tries rows where
+  `target_gift == thread.target_gift` first, falls back to `target_gift IS NULL`; all other
+  kinds get only `target_gift IS NULL` rows.
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 

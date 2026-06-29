@@ -128,6 +128,7 @@ class EffectKind(models.TextChoices):
     NARRATIVE_ONLY = "NARRATIVE_ONLY", "Narrative Only"
     CORRUPTION_RESISTANCE = "CORRUPTION_RESISTANCE", "Corruption Resistance"
     ASSUME_ALTERNATE_SELF = "ASSUME_ALTERNATE_SELF", "Assume Alternate Self"
+    RESISTANCE = "RESISTANCE", "Damage-Type Resistance"
 
 
 class VitalBonusTarget(models.TextChoices):
@@ -213,6 +214,13 @@ ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE: int = 20
 path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10).
 At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
 extreme tail of lifetime accumulation.
+"""
+
+ANCHOR_CAP_GIFT_PER_STAGE: int = 10
+"""GIFT thread anchor cap per path stage (#1580).
+
+path_stage × 10 = GIFT anchor cap. At stage 2, cap = 20 (matches path cap of 20).
+A species gift thread can grow in lockstep with the character's path progression.
 """
 
 

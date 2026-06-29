@@ -2736,12 +2736,18 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # (see Phase 13 Open Item 3). Reads handler caches; near-zero cost.
     from world.magic.services import (  # noqa: PLC0415
         apply_damage_reduction_from_threads,
+        gift_thread_resistance,
     )
 
     effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
 
     if damage_type is not None:
+        # Damage-type-specific resistance: the species drawback's negative
+        # ConditionResistanceModifier (vulnerability) and the species-gift thread's
+        # positive RESISTANCE pull-effect are summed into one clamped subtraction so
+        # they net correctly (#1580).
         resistance = character.conditions.resistance_modifier(damage_type)
+        resistance += gift_thread_resistance(character, damage_type)
         effective_damage = max(0, effective_damage - resistance)
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn

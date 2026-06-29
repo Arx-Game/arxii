@@ -131,10 +131,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Cap helpers: `compute_anchor_cap(thread) -> int` (FACET uses
     `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
     COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
-    `sanctum.feature_instance.level × 10`),
+    `sanctum.feature_instance.level × 10`; GIFT: `path_stage × ANCHOR_CAP_GIFT_PER_STAGE`
+    (=10) — built #1580),
     `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
-    (note: `compute_anchor_cap` has no `GIFT` case — returns 0; the GIFT anchor cap is a
-    deferred needs-design follow-up, #1578)
   - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
     `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
     `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
@@ -239,7 +238,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `ThreadWeavingUnlock.display_name`
 - **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — values: TRAIT,
   TECHNIQUE, FACET, RELATIONSHIP_TRACK, RELATIONSHIP_CAPSTONE, COVENANT_ROLE,
-  MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect),
+  MANTLE, SANCTUM; bare ROOM removed), `EffectKind` (ThreadPullEffect — includes
+  `RESISTANCE`: species-gift drawback mitigation, #1580; `resistance_amount` +
+  optional `resistance_damage_type` FK; `target_gift` FK on `ThreadPullEffect` scopes
+  passives to a specific gift; `get_pull_effects_for_thread` resolves gift-specific
+  then generic rows),
   `VitalBonusTarget`, `RitualExecutionKind`, `AnimaRitualCategory`,
   `PendingAlterationStatus`, `AlterationTier`,
   `ConditionTargetKind` (SELF/ALLY/ENEMY — `world/magic/models/techniques.py`; derived
@@ -389,11 +392,19 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
-Species/race definitions with stat bonuses and language assignments.
+Species/race definitions with stat bonuses, language assignments, and species-gift provisioning.
 
-- **Models:** `Species`, `SpeciesStatBonus`, `Language`
+- **Models:** `Species`, `SpeciesStatBonus`, `Language`,
+  `SpeciesGiftGrant` (through-model: species → MINOR `Gift` + optional `drawback_condition`
+  FK to `conditions.ConditionTemplate`; natural key `(species, gift)`; `clean()` asserts
+  `gift.kind=MINOR`; FK direction specific→general per ADR-0010)
+- **Key Services:** `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) —
+  mints the MINOR `CharacterGift`, the latent level-0 GIFT thread (via
+  `provision_latent_gift_thread`), and applies any drawback idempotently; called from
+  `finalize_magic_data` (CG, after the Major-gift block). See ADR-0062.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
-- **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits)
+- **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits),
+  magic (GIFT thread via `provision_latent_gift_thread`), conditions (drawback application)
 - **Source:** `src/world/species/`
 - **Details:** [species.md](species.md)
 ### Forms

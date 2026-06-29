@@ -117,3 +117,4 @@ treat those names as hints to confirm, not gospel.
 - [0054 — Falling gains power; redemption is lossy (asymmetric resonance conversion)](0054-falling-gains-power-redemption-is-lossy.md)
 - [0055 — One specialization engine: resonance × entity → customized techniques (Gift, Path, Covenant Role)](0055-one-specialization-engine-resonance-times-entity.md)
 - [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)
+- [0062 — Species-gift drawbacks are conditions the gift's own thread mitigates](0062-species-gift-drawbacks-mitigated-by-gift-thread.md)

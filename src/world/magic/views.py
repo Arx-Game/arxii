@@ -557,7 +557,15 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
     filterset_class = CharacterGiftFilter
 
     def get_queryset(self):
-        """Filter to characters the current user plays (or all if staff)."""
+        """Filter to characters the current user plays (or all if staff).
+
+        Scoped to the requesting account's own characters — a viewer cannot read
+        another character's gifts, including species Minor Gifts (GiftKind.MINOR).
+        This scope is the ADR-0033 concealment gate for #1580.  The broader
+        per-gift visibility hardening (staff-readable species gifts, public gift
+        catalog vs. character-held gifts, etc.) is owned by #1587 — do NOT widen
+        this queryset without coordinating with that issue.
+        """
         user = self.request.user
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             Prefetch(
