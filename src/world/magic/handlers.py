@@ -20,6 +20,7 @@ from world.magic.services.pull_effects import get_pull_effects_for_thread
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.conditions.models import DamageType
     from world.magic.models import Facet, Resonance
 
 
@@ -167,6 +168,79 @@ class CharacterThreadHandler:
                 continue
             multiplier = max(1, level // 10)
             total += row.vital_bonus_amount * multiplier
+        return total
+
+    def passive_damage_type_resistance(self, damage_type: DamageType) -> int:
+        """Sum flat tier-0 RESISTANCE for one damage type across owned threads (#1580).
+
+        The species-gift thread's RESISTANCE effect offsets the species drawback's
+        ``ConditionResistanceModifier`` vulnerability on the same incoming-damage
+        subtraction in ``apply_damage_to_participant``. Unlike VITAL_BONUS, the
+        passive contribution is FLAT (not scaled by ``level_multiplier``) — the
+        ``min_thread_level`` gate is the level mechanism (the resistance switches on
+        at a threshold). A null ``resistance_damage_type`` matches any damage type
+        (parity with null ``ConditionResistanceModifier`` rows).
+
+        Mirrors ``passive_vital_bonuses``: GIFT threads use gift-specific preference
+        (a gift-specific row wins over a null-gift fallback) and are resolved
+        per-thread; non-GIFT threads are batched in a single query.
+        """
+        threads = self._all
+        if not threads:
+            return 0
+        gift_threads = [t for t in threads if t.target_kind == TargetKind.GIFT]
+        non_gift_threads = [t for t in threads if t.target_kind != TargetKind.GIFT]
+        return self._gift_resistance_total(gift_threads, damage_type) + (
+            self._non_gift_resistance_total(non_gift_threads, damage_type)
+        )
+
+    @staticmethod
+    def _resistance_matches(row: ThreadPullEffect, damage_type: DamageType) -> bool:
+        """True iff a RESISTANCE row covers ``damage_type`` (null = all types)."""
+        return row.resistance_damage_type_id in (damage_type.pk, None)
+
+    def _gift_resistance_total(self, gift_threads: list[Thread], damage_type: DamageType) -> int:
+        """Flat RESISTANCE total from GIFT threads (gift-specific preference, per-thread)."""
+        total = 0
+        for t in gift_threads:
+            rows = get_pull_effects_for_thread(t, tier=0, effect_kind=EffectKind.RESISTANCE)
+            for row in rows:
+                if row.min_thread_level > t.level or row.resistance_amount is None:
+                    continue
+                if self._resistance_matches(row, damage_type):
+                    total += row.resistance_amount
+        return total
+
+    def _non_gift_resistance_total(
+        self, non_gift_threads: list[Thread], damage_type: DamageType
+    ) -> int:
+        """Flat RESISTANCE total from non-GIFT threads (single batched query)."""
+        if not non_gift_threads:
+            return 0
+
+        from django.db.models import Q  # noqa: PLC0415
+
+        thread_level: dict[tuple[str, int], int] = {}
+        for t in non_gift_threads:
+            key = (t.target_kind, t.resonance_id)
+            thread_level[key] = max(thread_level.get(key, 0), t.level)
+
+        q = Q()
+        for target_kind, resonance_id in thread_level:
+            q |= Q(target_kind=target_kind, resonance_id=resonance_id)
+        rows = ThreadPullEffect.objects.filter(
+            q,
+            tier=0,
+            effect_kind=EffectKind.RESISTANCE,
+            target_gift__isnull=True,
+        ).exclude(resistance_amount__isnull=True)
+
+        total = 0
+        for row in rows:
+            level = thread_level.get((row.target_kind, row.resonance_id), 0)
+            if row.min_thread_level > level or not self._resistance_matches(row, damage_type):
+                continue
+            total += row.resistance_amount
         return total
 
     def passive_capability_grants(self) -> set[int]:

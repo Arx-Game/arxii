@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.conditions.models import DamageType
 
 
 class CharacterCombatPullHandler:
@@ -87,6 +88,26 @@ class CharacterCombatPullHandler:
                     eff.kind == EffectKind.VITAL_BONUS
                     and eff.vital_target == vital_target
                     and eff.scaled_value
+                ):
+                    total += eff.scaled_value
+        return total
+
+    def active_pull_resistance(self, damage_type: DamageType) -> int:
+        """Sum scaled RESISTANCE values across active pulls for one damage type (#1580).
+
+        Reads paid-pull RESISTANCE snapshots (``scaled_value`` already equals
+        ``resistance_amount × level_multiplier``) whose ``resistance_damage_type``
+        matches ``damage_type`` or is null (all types). Added alongside the passive
+        gift-thread resistance on the combat damage path so paid pulls stack on top
+        of the always-on passive.
+        """
+        total = 0
+        for pull in self._active:
+            for eff in pull.resolved_effects_cached:
+                if (
+                    eff.kind == EffectKind.RESISTANCE
+                    and eff.scaled_value
+                    and eff.resistance_damage_type_id in (damage_type.pk, None)
                 ):
                     total += eff.scaled_value
         return total

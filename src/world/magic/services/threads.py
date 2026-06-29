@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import DamageType
     from world.magic.models import (
         Resonance as ResonanceModel,
         ThreadWeavingTeachingOffer,
@@ -826,3 +827,28 @@ def apply_damage_reduction_from_threads(
     )
     baseline = survivability_baseline(character, VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
     return max(0, incoming_damage - (passive + pulled + baseline))
+
+
+def gift_thread_resistance(character: ObjectDB, damage_type: DamageType) -> int:
+    """Total damage-type-specific resistance from gift threads (#1580).
+
+    Mirrors ``conditions.resistance_modifier(damage_type)``: returns a POSITIVE
+    value that is subtracted on the SAME incoming-damage computation in
+    ``apply_damage_to_participant`` where the species drawback's negative
+    ``ConditionResistanceModifier`` is applied, so the drawback vulnerability and
+    the gift resistance net correctly. Combines:
+
+    - passive tier-0 RESISTANCE rows on owned threads (flat ``resistance_amount``,
+      gated by ``min_thread_level``); and
+    - active paid-pull RESISTANCE snapshots (``scaled_value`` =
+      ``resistance_amount × level_multiplier``), stronger at higher thread level.
+
+    This is the damage-type-specific counterpart to
+    ``apply_damage_reduction_from_threads`` (which is damage-type-agnostic). It is
+    wired only at the combat damage seam — the same seam where the drawback
+    vulnerability is read — because that is where the two must net; the DoT/trap
+    seams apply neither the condition resistance nor this gift resistance.
+    """
+    passive = character.threads.passive_damage_type_resistance(damage_type)
+    pulled = character.combat_pulls.active_pull_resistance(damage_type)
+    return passive + pulled

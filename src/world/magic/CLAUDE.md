@@ -365,6 +365,21 @@ The baseline is injected at these call sites:
   and traps — funnels its threshold rolls through this one function, hazard/DoT saves are
   covered for free.
 
+**Damage-type RESISTANCE pull-effect (#1580):** distinct from the damage-type-agnostic DR
+above. `EffectKind.RESISTANCE` (+ `resistance_amount`, `resistance_damage_type` FK; null =
+all types) is the species-gift thread's mitigation that offsets the species drawback's
+negative `ConditionResistanceModifier` (a vulnerability). `gift_thread_resistance(character,
+damage_type) -> int` (services/threads.py) returns the POSITIVE total — passive tier-0
+(flat `resistance_amount`, gated by `min_thread_level`, via
+`CharacterThreadHandler.passive_damage_type_resistance`) plus active paid-pull snapshots
+(`scaled_value = resistance_amount × level_multiplier`, via
+`CharacterCombatPullHandler.active_pull_resistance`). It is summed with
+`character.conditions.resistance_modifier(damage_type)` into the SAME clamped subtraction in
+`apply_damage_to_participant` (combat) — the one seam where the drawback vulnerability is
+read — so drawback and gift resistance net. GIFT threads are pullable (added to
+`_ALWAYS_IN_ACTION_KINDS`: a species gift is intrinsic, always in-action). The DoT/trap seams
+apply neither condition resistance nor this gift resistance, so they stay byte-identical.
+
 **Combat-side models (live in `world/combat`, not magic):**
 - `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
   Unique per (participant, round_number). M2M to Thread for the threads
@@ -372,7 +387,8 @@ The baseline is injected at these call sites:
   `world/combat/pull_helpers.commit_combat_pull` (not called directly).
 - `CombatPullResolvedEffect` - Frozen snapshot of one resolved effect from
   a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
-  `vital_target`, `source_thread`, `source_thread_level`, `source_tier`,
+  `vital_target`, `resistance_damage_type` (RESISTANCE only; null = all types, #1580),
+  `source_thread`, `source_thread_level`, `source_tier`,
   `granted_capability`, `narrative_snippet`. Cascades from CombatPull;
   edits to authoring or Thread.level mid-round cannot retroactively alter
   what a committed pull granted.
