@@ -31,6 +31,7 @@ Recommended: run `polytoken config ui` and add a provider. Umans is reached as a
 ```yaml
 defaults:
   full: umans-glm-5.2              # a full-class model must be the default
+  mini: umans-flash               # fast/cheap model for compaction + permission classifier
 providers:
   umans:
     kind:
@@ -47,14 +48,35 @@ models:
     provider_name: umans-glm-5.2
     class: full                            # required for custom models
     context_window: 405504                 # umans-side cap; Z.ai native is 1M
-    max_tokens: 131072                     # umans max_completion_tokens for GLM-5.2
+    max_tokens: 131071                     # recommended_max_tokens (must be < the 131072 cap)
+  umans-flash:                             # mini default — silences mini-fallback warnings
+    provider: umans
+    provider_name: umans-flash
+    class: mini
+    context_window: 262144
+    max_tokens: 32768                      # recommended_max_tokens for flash
+  umans-kimi-k2.7:                         # used by the cross-model review subagents below
+    provider: umans
+    provider_name: umans-kimi-k2.7
+    class: full
+    context_window: 262144
+    max_tokens: 32768                      # recommended_max_tokens for kimi
 ```
 
-The `context_window` / `max_tokens` above are umans's own caps for `umans-glm-5.2`
-(below Z.ai's native 1M), read from the authoritative
+The `context_window` / `max_tokens` above are umans's own caps per model (GLM-5.2's
+context is below Z.ai's native 1M), read from the authoritative
 `GET https://api.code.umans.ai/v1/models/info` endpoint — query it for the current
 per-model `context_window`, `max_completion_tokens`, and reasoning levels rather
-than guessing.
+than guessing. **`max_tokens` must be strictly *less than* the model's
+`max_completion_tokens`** — umans rejects a request where they're equal
+(`max_tokens (131072) is at or above the model's max output tokens`), which is why
+each value uses the published `recommended_max_tokens` (one under the cap for
+GLM-5.2; 32768 for flash/kimi).
+
+**Models live in the global (user) config only** — polytoken forbids `models` and
+`defaults` in the project config layer (`ProjectLayerModelsAndDefaultsForbidden`),
+so this block can't be committed to the repo. It lives on the `arxii-polytoken-config`
+volume (persists across rebuilds) and is reproduced here as the recovery recipe.
 
 Validate with `polytoken config validate --user` before relying on it.
 Polytoken also ships a built-in `umans_messages` protocol, so a catalog-based
@@ -65,6 +87,32 @@ resistance.
 (`api_token`). Reference it via the `${UMANS_API_TOKEN}` env substitution (set
 the var in your local, gitignored env) or paste it through `polytoken config ui`.
 Never commit the token.
+
+## Cross-model review subagents (Kimi reviews GLM)
+
+Polytoken has no built-in "adversarial reviewer model" knob — model roles are only
+`full` / `mini` / `nano`. Cross-model review is done with **subagents that pin their
+own model** via `polytoken.model`. The default full model (`umans-glm-5.2`) does the
+work; a reviewer subagent runs on a *different* model (`umans-kimi-k2.7`) so the
+critique isn't the author grading itself.
+
+Two project-level subagents ship in the repo at **`.polytoken/subagents/`** (this
+directory is in version control and bind-mounted into the container, so it is durable
+across rebuilds and shared with every contributor — unlike the global model config
+above):
+
+- **`plan-reviewer.md`** — shadows polytoken's built-in plan reviewer (same name →
+  project layer wins) but pinned to Kimi. The `plan` facet auto-runs it at the
+  plan→execution handoff, so planning gets a cross-model critique for free.
+- **`code-reviewer.md`** — an adversarial code/diff reviewer (no shipped equivalent).
+  Nothing auto-runs it; invoke it via the `subagent` tool / a session prompt
+  ("use the code-reviewer subagent on the current diff"). Read-only; emits
+  severity-classified findings.
+
+Both declare `fallback_models: [default_model:full]`, so on any machine where the
+global config lacks `umans-kimi-k2.7` they degrade gracefully to the default full
+model instead of erroring. Confirm discovery with
+`polytoken --working-dir /workspaces/arxii doctor` (look for the subagent count).
 
 ## Verified at first `dc-build` (2026-06-29)
 
