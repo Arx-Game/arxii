@@ -17,6 +17,7 @@ from world.magic.constants import TargetKind
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.covenants.models import CovenantRole
     from world.magic.models import Thread
     from world.magic.models.affinity import Resonance
     from world.magic.models.gifts import Gift
@@ -98,13 +99,16 @@ def resolve_specialized_variant(*, entity, character):
     For a Technique: finds the character's active GIFT thread on the technique's
     gift, reads resonance + level, and returns a ``ResolvedTechnique`` wrapping
     the parent + matching variant (or just the parent). For a CovenantRole:
-    delegates to the existing sub-role resolution (one-line shim, Task 8).
+    reads the active COVENANT_ROLE thread via the cached ``character.threads``
+    handler and returns the matching sub-role variant (proven path, #1578).
     """
+    from world.covenants.models import CovenantRole  # noqa: PLC0415
     from world.magic.models import Technique  # noqa: PLC0415
 
     if isinstance(entity, Technique):
         return _resolve_technique_variant(entity, character)
-    # CovenantRole and other entities: handled by their own shims (Task 8).
+    if isinstance(entity, CovenantRole):
+        return _resolve_covenant_role_variant(entity, character)
     return entity
 
 
@@ -140,6 +144,37 @@ def _resolve_technique_variant(technique: Technique, character) -> object:
     if variant is None:
         return technique
     return _ResolvedTechnique(technique, variant=variant)
+
+
+def _resolve_covenant_role_variant(role, character) -> CovenantRole:
+    """Resonance-specialized sub-role for a base ``role`` (proven path, #1578).
+
+    Single-depth: a role that is already a sub-role (has ``parent_role``) is
+    returned unchanged — never re-promote. Reads the active COVENANT_ROLE
+    thread via the cached ``character.threads`` handler (same read mechanism as
+    the legacy ``resolve_effective_role``) to preserve cache coherence.
+    """
+    from world.covenants.models import CovenantRole  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if role.parent_role_id is not None:
+        return role  # already a sub-role; never re-promote (single-depth)
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.COVENANT_ROLE
+            and t.target_covenant_role_id == role.pk
+            and t.retired_at is None
+        ),
+        None,
+    )
+    if thread is None:
+        return role
+    variant = CovenantRole.matching_variant(
+        role, resonance=thread.resonance, thread_level=thread.level
+    )
+    return variant if variant is not None else role
 
 
 class _ResolvedTechnique:
