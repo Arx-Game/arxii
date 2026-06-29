@@ -78,7 +78,9 @@ def _parents_for(thread: Thread) -> Iterable:
         return []
     if thread.target_kind == TargetKind.GIFT:
         if thread.target_gift_id is not None:
-            return thread.target_gift.techniques.all()
+            # Read the gift's cached techniques list rather than
+            # ``gift.techniques.all()`` per project cached-property rule.
+            return thread.target_gift.cached_techniques
         return []
     return []
 

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from django.db import models
 from django.db.models import Q
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.models.techniques import (
@@ -148,14 +149,18 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         resonance: Resonance | None = None,
         resonance_id: int | None = None,
     ):
-        """Return the variant rows for ``parent``. Subclasses bind the parent FK name.
+        """Return the variant rows for ``parent`` at ``resonance``. Subclasses bind
+        the parent FK name.
 
-        The default assumes a ``variants`` reverse relation (the related_name
-        subclasses set on their parent self-FK). Subclasses may override if
-        their parent FK uses a different related_name.
+        Reads the parent's single ``cached_<variants>`` list (the convention in
+        techniques.py / gifts.py) and filters by resonance via a list-comp —
+        no ``.filter()`` query per project cached-property rule. The default
+        assumes a ``cached_variants`` property (the ``variants`` related_name
+        subclasses set on their parent self-FK). Subclasses may override to
+        read a differently-named cached property.
         """
         rid = resonance.pk if resonance is not None else resonance_id
-        return parent.variants.filter(resonance_id=rid)
+        return [v for v in parent.cached_variants if v.resonance_id == rid]
 
     def discovery_narrative(
         self,
@@ -221,6 +226,30 @@ class TechniqueVariant(AbstractSpecializedVariant):
     def __str__(self) -> str:
         label = self.name_override or f"variant of {self.parent_technique_id}"
         return f"{label} (res {self.resonance_id}, lvl {self.unlock_thread_level})"
+
+    @cached_property
+    def cached_damage_profiles(self) -> list:
+        """Damage profiles for this variant. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_damage_profiles``.
+        """
+        return list(self.damage_profiles.all())
+
+    @cached_property
+    def cached_capability_grants(self) -> list:
+        """Capability grants for this variant. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_capability_grants``.
+        """
+        return list(self.capability_grants.all())
+
+    @cached_property
+    def cached_condition_applications(self) -> list:
+        """Applied conditions for this variant. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_condition_applications``.
+        """
+        return list(self.condition_applications.all())
 
     def discovery_narrative(
         self,

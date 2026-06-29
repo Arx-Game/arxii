@@ -235,6 +235,14 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         help_text="Null for primary roles. Set for sub-roles.",
     )
 
+    @cached_property
+    def cached_sub_roles(self) -> list:
+        """Sub-roles for this role. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_sub_roles``.
+        """
+        return list(self.sub_roles.all())
+
     @classmethod
     def _variant_queryset(
         cls,
@@ -242,14 +250,15 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         *,
         resonance: Resonance | None = None,
         resonance_id: int | None = None,
-    ) -> models.QuerySet[CovenantRole]:
+    ) -> list[CovenantRole]:
         """CovenantRole binds the parent self-FK ``parent_role`` -> reverse
-        ``sub_roles``. The base default expects ``parent.variants``
-        (``TechniqueVariant``); override so the shared classmethods query the
-        existing ``sub_roles`` reverse relation.
+        ``sub_roles``. Override so the shared classmethods read the parent's
+        ``cached_sub_roles`` list (the convention in techniques.py / gifts.py)
+        and filter by resonance via a list-comp — no ``.filter()`` query per
+        project cached-property rule.
         """
         rid = resonance.pk if resonance is not None else resonance_id
-        return parent.sub_roles.filter(resonance_id=rid)
+        return [r for r in parent.cached_sub_roles if r.resonance_id == rid]
 
     def discovery_narrative(
         self,

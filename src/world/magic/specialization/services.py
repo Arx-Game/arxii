@@ -40,16 +40,23 @@ def provision_latent_gift_thread(
     Glimpse. Weaving (Rite of Weaving) commits a resonance; imbuing raises the
     level; crossing a variant's unlock_thread_level resolves the variant.
     """
-    from world.magic.models import Thread  # noqa: PLC0415
-
-    existing = Thread.objects.filter(
-        owner=sheet,
-        target_kind=TargetKind.GIFT,
-        target_gift=gift,
-        retired_at__isnull=True,
-    ).first()
+    # Read the active thread through the cached ``character.threads`` handler
+    # (the same cached queryset the resolver + passive bonuses read), not a
+    # fresh ``Thread.objects.filter()`` — per project cached-property rule.
+    # The handler's list is already filtered to retired_at__isnull=True.
+    character = sheet.character
+    existing = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+        ),
+        None,
+    )
     if existing is not None:
         return existing
+
+    from world.magic.models import Thread  # noqa: PLC0415
 
     thread = Thread(
         owner=sheet,
@@ -61,38 +68,48 @@ def provision_latent_gift_thread(
     thread.full_clean()
     with transaction.atomic():
         thread.save()
+    # Invalidate the cached thread list so the new row is visible to the next
+    # read through ``character.threads`` (mirrors the covenant-role invalidation
+    # contract in covenants/services._invalidate_role_caches).
+    character.threads.invalidate()
     return thread
 
 
 def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     """The resonance(s) this gift manifests as FOR THIS character.
 
-    Derived on read from the character's active GIFT thread on ``gift``. Falls
-    back to ``gift.resonances`` (the supported set) when no thread exists
-    (e.g. unowned gift, or pre-provisioning). Replaces
-    ``technique.gift.resonances.all()`` at the four cast sites (#1578).
+    Derived on read from the character's active GIFT thread on ``gift``: the
+    thread's resonance if one exists, else ``gift.resonances`` (the supported
+    set). Replaces ``technique.gift.resonances.all()`` at the four cast sites
+    (#1578).
+
+    Reads the thread through the cached ``character.threads`` handler (the
+    single cached queryset for a character's threads) with a list-comp filter,
+    not a fresh ``Thread.objects.filter()`` — per project cached-property rule.
+
+    A sheetless ``Character`` (e.g. an NPC) has no GIFT thread, so it manifests
+    the supported set; the sheet guard handles that precondition rather than
+    catching the ``sheet_data`` raise from the handler. A non-Character object
+    (no ``.threads``) is a caller bug and is left to raise ``AttributeError``
+    rather than papered over with a ``hasattr`` check.
     """
-    from world.magic.models import Thread  # noqa: PLC0415
     from world.magic.services.techniques import (  # noqa: PLC0415
         _get_character_sheet,
     )
 
-    sheet = _get_character_sheet(character)
-    if sheet is not None:
-        thread = (
-            Thread.objects.filter(
-                owner=sheet,
-                target_kind=TargetKind.GIFT,
-                target_gift=gift,
-                retired_at__isnull=True,
-            )
-            .select_related("resonance__affinity")
-            .first()
-        )
-        if thread is not None:
-            return [thread.resonance]
-    # Fallback: the gift's supported set (authored M2M).
-    return list(gift.resonances.select_related("affinity").all())
+    if _get_character_sheet(character) is None:
+        return gift.cached_resonances
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+        ),
+        None,
+    )
+    if thread is not None:
+        return [thread.resonance]
+    return gift.cached_resonances
 
 
 def resolve_specialized_variant(*, entity, character):
@@ -115,26 +132,29 @@ def resolve_specialized_variant(*, entity, character):
     return entity
 
 
-def _resolve_technique_variant(technique: Technique, character) -> object:
-    from world.magic.models import Thread  # noqa: PLC0415
+def _resolve_technique_variant(technique: Technique, character) -> Technique | _ResolvedTechnique:
     from world.magic.services.techniques import (  # noqa: PLC0415
         _get_character_sheet,
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
-    sheet = _get_character_sheet(character)
-    if sheet is None:
+    # Read the active GIFT thread through the cached ``character.threads``
+    # handler (the same cached queryset the covenant path reads), not a fresh
+    # ``Thread.objects.filter()`` — per project cached-property rule. A sheetless
+    # Character (e.g. an NPC) has no GIFT thread, so it gets the parent technique
+    # unchanged; the sheet guard handles that precondition rather than catching
+    # the handler's ``sheet_data`` raise. A non-Character object has no
+    # ``.threads`` and is left to raise ``AttributeError``.
+    if _get_character_sheet(character) is None:
         return technique
 
-    thread = (
-        Thread.objects.filter(
-            owner=sheet,
-            target_kind=TargetKind.GIFT,
-            target_gift=technique.gift_id,
-            retired_at__isnull=True,
-        )
-        .select_related("resonance")
-        .first()
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == technique.gift_id
+        ),
+        None,
     )
     if thread is None:
         return technique
@@ -211,24 +231,34 @@ class _ResolvedTechnique:
             return base + self.variant.control_delta
         return base
 
-    # Payload accessors: variant's payload if it has any, else parent's.
+    # Payload accessors: variant's payload if it has any, else parent's. Each
+    # reads its source's single ``cached_<payload>`` list once (mirrors the
+    # ``cached_restrictions`` convention in techniques.py) rather than issuing a
+    # ``.exists()`` + ``.all()`` pair per access. To invalidate after a payload
+    # mutation: ``del instance.cached_<payload>`` on the mutated owner.
     @property
-    def damage_profiles(self):
-        if self.variant is not None and self.variant.damage_profiles.exists():
-            return self.variant.damage_profiles.all()
-        return self.technique.damage_profiles.all()
+    def damage_profiles(self) -> list:
+        if self.variant is not None:
+            payload = self.variant.cached_damage_profiles
+            if payload:
+                return payload
+        return self.technique.cached_damage_profiles
 
     @property
-    def capability_grants(self):
-        if self.variant is not None and self.variant.capability_grants.exists():
-            return self.variant.capability_grants.all()
-        return self.technique.capability_grants.all()
+    def capability_grants(self) -> list:
+        if self.variant is not None:
+            payload = self.variant.cached_capability_grants
+            if payload:
+                return payload
+        return self.technique.cached_capability_grants
 
     @property
-    def condition_applications(self):
-        if self.variant is not None and self.variant.condition_applications.exists():
-            return self.variant.condition_applications.all()
-        return self.technique.condition_applications.all()
+    def condition_applications(self) -> list:
+        if self.variant is not None:
+            payload = self.variant.cached_condition_applications
+            if payload:
+                return payload
+        return self.technique.cached_condition_applications
 
     # Pass-through for the cast pipeline's other technique reads.
     def __getattr__(self, item):

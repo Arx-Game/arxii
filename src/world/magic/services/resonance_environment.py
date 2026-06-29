@@ -199,7 +199,7 @@ def _working_affinities_for_raw(
     technique: Technique | None,
     working_affinity: Affinity,
     *,
-    caster: object,
+    caster: DefaultObject,
 ) -> list[Affinity]:
     """Return the ordered list of working affinities for the enriched raw sum.
 
@@ -255,7 +255,7 @@ def _working_affinity_cast_time(
     technique: Technique,
     place_affinity: Affinity,
     *,
-    caster: object,
+    caster: DefaultObject,
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for cast-time evaluation.
 

@@ -407,15 +407,22 @@ regeneration step.
 (`world/magic/specialization/services.py`): the single specialization resolver.
 `Technique` → `_ResolvedTechnique` value object (wraps parent + matching variant,
 exposing `name`/`intensity`/`control` with deltas; raw parent `Technique` when no variant
-matches). `CovenantRole` → reads the cached `character.threads` handler (preserves the
-proven `resolve_effective_role` cache coherence — canary tests call `.invalidate()`).
-`resolve_effective_role` is now a one-line shim over this resolver; no parallel
-specialization systems (ADR-0016).
+matches). `CovenantRole` → the matching sub-role variant. Both paths read the active
+thread through the cached `character.threads` handler (the same cached queryset the
+passive bonuses read), never a fresh `Thread.objects.filter()`; a character with no
+`CharacterSheet` degrades gracefully (returns the parent entity / supported set). The
+GIFT-thread write-paths (`provision_latent_gift_thread`, `_weave_gift_thread`) call
+`character.threads.invalidate()` after mutation, mirroring the covenant-role
+invalidation contract. `_ResolvedTechnique`'s payload accessors
+(`damage_profiles`/`capability_grants`/`condition_applications`) read their source's
+single `cached_<payload>` list (on `Technique`/`TechniqueVariant`) rather than issuing a
+`.exists()` + `.all()` pair. `resolve_effective_role` is now a one-line shim over this
+resolver; no parallel specialization systems (ADR-0016).
 
 **Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
 (`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
 dispatch on `thread.target_kind` — `COVENANT_ROLE` → single parent role; `GIFT` → iterate
-`gift.techniques.all()`. For each variant whose `unlock_thread_level` falls in
+`gift.cached_techniques`. For each variant whose `unlock_thread_level` falls in
 `(starting_level, new_level]` at the thread's resonance: grants `discovery_achievement`
 (gamewide-first `Discovery` on first crossing), unlocks `codex_entry`, sends
 `discovery_narrative`. Called from `spend_resonance_for_imbuing` on every thread advance;
@@ -425,16 +432,17 @@ also standalone-callable for ceremony-direct testing.
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift. One
   active GIFT thread per `(owner, gift)` for now (multi-resonance chooser deferred).
 - `provision_latent_gift_thread(sheet, gift, *, resonance)` — idempotent level-0 GIFT
-  thread at CG finalization (`finalize_magic_data`), write-once on resonance. Reads the
-  chosen `selected_gift_resonance_id` from `draft.draft_data` (frontend picker deferred;
-  falls back to `gift.resonances.first()`).
+  thread at CG finalization (`finalize_magic_data`), write-once on resonance. The
+  resonance is chosen at the provisioning call (a frontend CG picker is deferred;
+  the E2E test passes `resonance=` directly).
 - `weave_thread(target_kind=GIFT)` — commits/chooses a resonance onto the existing latent
   thread rather than creating a new one (validates the resonance is in the gift's
   supported set, else `UnsupportedGiftResonanceError`, caught by `WeaveThreadAction`).
 - `gift_resonances_for(character, gift) -> list[Resonance]` — the derive-on-read seam
   replacing `technique.gift.resonances.all()` at the four cast sites (`power_terms`,
-  `techniques` ×2, `resonance_environment` ×2). Returns the active GIFT thread's
-  resonance; falls back to the authored `Gift.resonances` supported set when no thread.
+  `techniques` ×2, `resonance_environment` ×2). Reads the active GIFT thread through the
+  cached `character.threads` handler; returns `[thread.resonance]`, falling back to
+  `gift.cached_resonances` (the authored supported set) when no thread or no sheet.
 - `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
   cast-time value) per ADR-0052.
 

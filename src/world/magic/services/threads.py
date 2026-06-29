@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         ThreadWeavingTeachingOffer,
         ThreadWeavingUnlock,
     )
+    from world.magic.models.gifts import Gift
 
 
 def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
@@ -269,7 +270,7 @@ def cross_thread_xp_lock(
 
 def _weave_gift_thread(
     character_sheet: CharacterSheet,
-    gift: object,
+    gift: Gift,
     resonance: ResonanceModel,
     *,
     name: str = "",
@@ -282,17 +283,27 @@ def _weave_gift_thread(
     it (validating the resonance is in the gift's supported set). Does not
     create a second thread (#1578 decision 7: one active GIFT thread per gift).
     """
-    if not gift.resonances.filter(pk=resonance.pk).exists():
+    # Resonance-in-supported-set check: read the gift's cached resonance list
+    # (list-comp) rather than ``gift.resonances.filter(pk=…).exists()`` per
+    # project cached-property rule.
+    if not any(r.pk == resonance.pk for r in gift.cached_resonances):
         from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
 
         raise UnsupportedGiftResonanceError
 
-    thread = Thread.objects.filter(
-        owner=character_sheet,
-        target_kind=TargetKind.GIFT,
-        target_gift=gift,
-        retired_at__isnull=True,
-    ).first()
+    # Read the existing latent thread through the cached ``character.threads``
+    # handler (same cached queryset the resolver reads), not a fresh
+    # ``Thread.objects.filter()``. The handler's list is already filtered to
+    # retired_at__isnull=True.
+    character = character_sheet.character
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+        ),
+        None,
+    )
     if thread is None:
         # No latent thread (e.g. post-CG acquisition, #1587 future): create one.
         # For now (CG-provisioned), this branch is rare; provision on demand.
@@ -310,6 +321,9 @@ def _weave_gift_thread(
             thread.description = description
         thread.full_clean()
         thread.save(update_fields=["resonance", "name", "description"])
+        # Resonance change mutates the cached thread list; invalidate so the
+        # next read through ``character.threads`` sees the new resonance.
+        character.threads.invalidate()
     return thread
 
 
