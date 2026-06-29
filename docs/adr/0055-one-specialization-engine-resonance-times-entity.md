@@ -17,4 +17,4 @@ state, never snapshotted (ADR-0014) — so a change of resonance (a Fall or Rede
 instantly re-specializes every affected technique to the new resonance's version, with no
 regeneration step.
 
-> Status: accepted · Source: design discussion 2026-06-27 · Confidence: verify against code — generalizes `resolve_effective_role` (`world/covenants/services.py`); Gift×Path and resonance technique-specialization are ABSENT today
+> Status: accepted · Source: design discussion 2026-06-27 · **Realized in #1578** — `AbstractSpecializedVariant` shared base + `TechniqueVariant` (Gift techniques) + `CovenantRole` (refactored to inherit); `resolve_specialized_variant(entity, character)` is the one resolver (`resolve_effective_role` is now a shim); `fire_variant_discoveries` generalizes the discovery ceremony across `target_kind`. The GIFT thread substrate (`TargetKind.GIFT` + `Thread.target_gift` + latent provisioning + `gift_resonances_for`) is proven end-to-end by `test_gift_specialization_e2e.py`. · Confidence: built and wired
