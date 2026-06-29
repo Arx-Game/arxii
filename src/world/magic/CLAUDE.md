@@ -462,9 +462,22 @@ also standalone-callable for ceremony-direct testing.
 - `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
   cast-time value) per ADR-0052.
 
-**Deferred:** the GIFT anchor cap (`compute_anchor_cap` has no `GIFT` case → returns 0) and
-the frontend CG resonance picker are needs-design follow-ups. Proven end-to-end by
-`world/magic/tests/integration/test_gift_specialization_e2e.py`.
+**GIFT anchor cap (#1580):** `compute_anchor_cap` now handles `TargetKind.GIFT`:
+`_current_path_stage(thread.owner) × ANCHOR_CAP_GIFT_PER_STAGE` (=10). GIFT threads are
+always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
+resonance picker remains a needs-design follow-up. Proven end-to-end by
+`world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578) and
+`world/magic/tests/integration/test_species_gift_e2e.py` (#1580).
+- **Species gift provisioning** — `SpeciesGiftGrant` (`world/species/models.py`; natural key
+  `(species, gift)`) is the through-model linking a species to MINOR Gifts with an optional
+  `drawback_condition` FK. `provision_species_gifts(sheet, *, resonance=None)`
+  (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
+  block; mints the MINOR `CharacterGift`, calls `provision_latent_gift_thread`, applies any
+  drawback idempotently. See ADR-0062.
+- **Gift-specific pull-effect lookup** — `get_pull_effects_for_thread(thread, **filters)`
+  (`world/magic/services/pull_effects.py`): for `TargetKind.GIFT` threads, tries rows where
+  `target_gift == thread.target_gift` first, falls back to `target_gift IS NULL`; all other
+  kinds get only `target_gift IS NULL` rows.
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 
