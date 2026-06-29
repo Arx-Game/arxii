@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import re
 from typing import TYPE_CHECKING
 
@@ -68,6 +69,59 @@ def parse_targets_from_text(
     return remaining, targets
 
 
+@dataclass
+class _KvParseState:
+    """Mutable accumulator for ``parse_kv_and_flags`` as it walks the tokens."""
+
+    kwargs: dict[str, str] = field(default_factory=dict)
+    flags: set[str] = field(default_factory=set)
+    key: str = ""
+    value_parts: list[str] = field(default_factory=list)
+
+    def flush_key(self) -> None:
+        """Commit the active key's accumulated value into ``kwargs`` (if any key)."""
+        if self.key:
+            self.kwargs[self.key] = " ".join(self.value_parts).strip()
+
+
+def _consume_bare_token(
+    token: str,
+    state: _KvParseState,
+    multiword_keys: frozenset[str],
+    known_flags: frozenset[str],
+) -> None:
+    """Apply a token with no leading ``key=`` to *state*, mutating it in place.
+
+    A bare known flag ends an active multi-word key (flushing it) and is
+    recorded; otherwise it is appended to a multi-word value, recorded as a flag
+    for a non-multiword key, or rejected.
+    """
+    key = state.key
+    if key and key in multiword_keys:
+        if token in known_flags:
+            state.flush_key()
+            state.flags.add(token)
+            state.key = ""
+            state.value_parts = []
+        else:
+            state.value_parts.append(token)
+        return
+    if key:
+        if token not in known_flags:
+            msg = (
+                f"Unexpected argument '{token}' after '{key}='. "
+                "Multi-word values are only allowed for the multi-word keys."
+            )
+            raise CommandError(msg)
+        state.flags.add(token)
+        return
+    if token in known_flags:
+        state.flags.add(token)
+        return
+    msg = f"Unexpected argument '{token}'."
+    raise CommandError(msg)
+
+
 def parse_kv_and_flags(
     rest: str,
     *,
@@ -82,38 +136,13 @@ def parse_kv_and_flags(
     rather than absorbing the flag into the body. Bare tokens with no ``=`` are
     flags (if known) or an error.
     """
-    tokens = rest.split()
-    kwargs: dict[str, str] = {}
-    flags: set[str] = set()
-    key = ""
-    value_parts: list[str] = []
-    for token in tokens:
+    state = _KvParseState()
+    for token in rest.split():
         if "=" in token and not token.startswith("="):
-            if key:
-                kwargs[key] = " ".join(value_parts).strip()
-            key, _, value = token.partition("=")
-            value_parts = [value] if value else []
-        elif key and key in multiword_keys and token in known_flags:
-            kwargs[key] = " ".join(value_parts).strip()
-            key = ""
-            value_parts = []
-            flags.add(token)
-        elif key and key in multiword_keys:
-            value_parts.append(token)
-        elif key:
-            if token in known_flags:
-                flags.add(token)
-            else:
-                msg = (
-                    f"Unexpected argument '{token}' after '{key}='. "
-                    "Multi-word values are only allowed for the multi-word keys."
-                )
-                raise CommandError(msg)
-        elif token in known_flags:
-            flags.add(token)
+            state.flush_key()
+            state.key, _, value = token.partition("=")
+            state.value_parts = [value] if value else []
         else:
-            msg = f"Unexpected argument '{token}'."
-            raise CommandError(msg)
-    if key:
-        kwargs[key] = " ".join(value_parts).strip()
-    return kwargs, flags
+            _consume_bare_token(token, state, multiword_keys, known_flags)
+    state.flush_key()
+    return state.kwargs, state.flags

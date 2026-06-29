@@ -8,6 +8,8 @@ on demand. The frontend renders the same `current_conditions` data as a widget.
 
 from __future__ import annotations
 
+from typing import Any
+
 from commands.command import ArxCommand
 
 
@@ -48,22 +50,7 @@ class CmdTime(ArxCommand):
             return
 
         conditions = current_conditions(room)
-        lines: list[str] = []
-        if conditions.ic_time is None:
-            lines.append("|xThe world's clock isn't running yet.|n")
-        else:
-            descriptor = conditions.phase.label if conditions.phase is not None else "an hour"
-            if conditions.season is not None:
-                descriptor = f"{descriptor} in {conditions.season.label}"
-            stamp = conditions.ic_time.strftime("%H:%M, %B %d, %Y")
-            lines.append(f"|wIt is {descriptor} — {stamp}.|n")
-
-        if conditions.weather_type is not None:
-            lines.append(f"|wWeather here:|n {conditions.weather_type.name}")
-            if conditions.emit_text:
-                lines.append(f"  |x{conditions.emit_text}|n")
-        else:
-            lines.append("|xThe weather here is unremarkable.|n")
+        lines: list[str] = [self._time_line(conditions), *self._weather_lines(conditions)]
 
         if account is not None and is_category_muted(
             account=account, category=NarrativeCategory.WEATHER
@@ -71,3 +58,24 @@ class CmdTime(ArxCommand):
             lines.append("|x(weather echoes squelched — `weather unsquelch` to resume)|n")
 
         self.msg("\n".join(lines))
+
+    @staticmethod
+    def _time_line(conditions: Any) -> str:
+        """One line for the IC clock (time/phase/season), or a not-running notice."""
+        if conditions.ic_time is None:
+            return "|xThe world's clock isn't running yet.|n"
+        descriptor = conditions.phase.label if conditions.phase is not None else "an hour"
+        if conditions.season is not None:
+            descriptor = f"{descriptor} in {conditions.season.label}"
+        stamp = conditions.ic_time.strftime("%H:%M, %B %d, %Y")
+        return f"|wIt is {descriptor} — {stamp}.|n"
+
+    @staticmethod
+    def _weather_lines(conditions: Any) -> list[str]:
+        """The room's effective weather and its emit line, or an unremarkable notice."""
+        if conditions.weather_type is None:
+            return ["|xThe weather here is unremarkable.|n"]
+        lines = [f"|wWeather here:|n {conditions.weather_type.name}"]
+        if conditions.emit_text:
+            lines.append(f"  |x{conditions.emit_text}|n")
+        return lines

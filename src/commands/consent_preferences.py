@@ -209,7 +209,6 @@ class CmdConsent(DispatchCommand):
 
     def _show_summary(self, category_key: str | None = None) -> None:
         """Render the caller's social-consent summary."""
-        from world.consent.models import SocialConsentCategory  # noqa: PLC0415
         from world.consent.services import get_social_consent_summary  # noqa: PLC0415
 
         tenure = self._active_tenure()
@@ -229,13 +228,20 @@ class CmdConsent(DispatchCommand):
         else:
             lines.append("  No per-category rules set (all categories use the global preference).")
 
-        whitelist = summary["whitelist"]
+        self._append_whitelist_summary(lines, summary["whitelist"], category_key)
+        self.msg("\n".join(lines))
+
+    def _append_whitelist_summary(
+        self, lines: list[str], whitelist: Any, category_key: str | None
+    ) -> None:
+        """Append the whitelist section (optionally scoped to one category) to *lines*."""
+        from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+
         if category_key:
             try:
                 category = SocialConsentCategory.objects.get_by_natural_key(category_key)
             except SocialConsentCategory.DoesNotExist:
                 lines.append(f"  No category named '{category_key}'.")
-                self.msg("\n".join(lines))
                 return
             filtered = [entry for entry in whitelist if entry.category_id == category.pk]
             if filtered:
@@ -250,5 +256,3 @@ class CmdConsent(DispatchCommand):
             )
         else:
             lines.append("  No whitelist entries.")
-
-        self.msg("\n".join(lines))

@@ -39,6 +39,8 @@ from world.relationships.serializers import (
     WriteupKudosWriteSerializer,
 )
 
+NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
+
 
 class RelationshipConditionViewSet(ReadOnlyModelViewSet):
     """List and retrieve relationship conditions."""
@@ -199,13 +201,13 @@ class RelationshipUpdateViewSet(GenericViewSet):
         """Return the caller's active puppet ObjectDB if they own its sheet."""
         actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
         if actor is None:
-            return None, "No active character."
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return None, "No active character."
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
         if sheet.character.db_account_id != request.user.pk:
-            return None, "No active character."
+            return None, NO_ACTIVE_CHARACTER_MESSAGE
         return actor, ""
 
     def _resolve_track(self, track_id: int, label: str):

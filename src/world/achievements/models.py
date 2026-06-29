@@ -17,6 +17,11 @@ from world.achievements.constants import (
     RewardType,
 )
 
+# String model reference for the CharacterSheet FK target. Using a single
+# constant keeps the lazy "app_label.ModelName" reference consistent across the
+# several models in this file that link to a character.
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+
 
 class StatDefinition(SharedMemoryModel):
     """
@@ -57,7 +62,7 @@ class StatTracker(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="stat_trackers",
         help_text="The character this stat belongs to",
@@ -268,7 +273,7 @@ class CharacterAchievement(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="achievements",
         help_text="The character who earned this achievement",
@@ -430,7 +435,7 @@ class CharacterTitle(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="titles",
     )

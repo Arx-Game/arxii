@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 _MSG_NO_CHARACTER = "You must have an active character with a persona to manage events."
 _MSG_WHICH_EVENT = "Which event? Provide an event id."
 _MSG_WHICH_INVITATION = "Which invitation? Provide an invitation id."
+_MSG_HOST_OR_STAFF_ONLY = "Only the event host or staff can do that."
 
 
 @dataclass
@@ -252,7 +253,7 @@ class ScheduleEventAction(_HostLifecycleAction):
         if event is None:
             return ActionResult(success=False, message=_MSG_WHICH_EVENT)
         if account is None or not (_is_host(account, event) or _is_staff(account)):
-            return ActionResult(success=False, message="Only the event host or staff can do that.")
+            return ActionResult(success=False, message=_MSG_HOST_OR_STAFF_ONLY)
         try:
             schedule_event(event)
         except EventError as exc:
@@ -289,7 +290,7 @@ class StartEventAction(_HostLifecycleAction):
         if event is None:
             return ActionResult(success=False, message=_MSG_WHICH_EVENT)
         if account is None or not (_is_host(account, event) or _is_staff(account)):
-            return ActionResult(success=False, message="Only the event host or staff can do that.")
+            return ActionResult(success=False, message=_MSG_HOST_OR_STAFF_ONLY)
         try:
             start_event(event)
         except EventError as exc:
@@ -366,7 +367,7 @@ class CancelEventAction(_HostLifecycleAction):
         if event is None:
             return ActionResult(success=False, message=_MSG_WHICH_EVENT)
         if account is None or not (_is_host(account, event) or _is_staff(account)):
-            return ActionResult(success=False, message="Only the event host or staff can do that.")
+            return ActionResult(success=False, message=_MSG_HOST_OR_STAFF_ONLY)
         try:
             cancel_event(event)
         except EventError as exc:

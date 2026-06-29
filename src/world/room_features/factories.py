@@ -17,6 +17,8 @@ from world.room_features.models import (
     Trap,
 )
 
+ROOM_PROFILE_FACTORY = "evennia_extensions.factories.RoomProfileFactory"
+
 
 class RoomFeatureKindFactory(DjangoModelFactory):
     class Meta:
@@ -53,7 +55,7 @@ class RoomFeatureInstanceFactory(DjangoModelFactory):
     class Meta:
         model = RoomFeatureInstance
 
-    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    room_profile = factory.SubFactory(ROOM_PROFILE_FACTORY)
     feature_kind = factory.SubFactory(RoomFeatureKindFactory)
     level = 1
 
@@ -63,7 +65,7 @@ class RoomFeatureProgressionDetailsFactory(DjangoModelFactory):
         model = RoomFeatureProgressionDetails
 
     project = factory.SubFactory("world.projects.factories.ProjectFactory")
-    target_room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    target_room_profile = factory.SubFactory(ROOM_PROFILE_FACTORY)
     target_feature_kind = factory.SubFactory(RoomFeatureKindFactory)
     target_level = 1
 
@@ -72,7 +74,7 @@ class TrapFactory(DjangoModelFactory):
     class Meta:
         model = Trap
 
-    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    room_profile = factory.SubFactory(ROOM_PROFILE_FACTORY)
     name = factory.Sequence(lambda n: f"trap-{n}")
     consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
     detect_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")

@@ -51,6 +51,8 @@ from world.conditions.services import (
 )
 from world.conditions.types import CapabilitySummary, EffectLookups
 
+_NO_CHARACTER_FOUND_DETAIL = "No character found."
+
 # =============================================================================
 # Lookup Table ViewSets
 # =============================================================================
@@ -271,7 +273,7 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -295,7 +297,7 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -471,7 +473,7 @@ class TreatmentCandidateViewSet(CharacterContextMixin, viewsets.ViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

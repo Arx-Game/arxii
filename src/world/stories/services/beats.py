@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from actions.models.consequence_pools import ConsequencePool
     from world.scenes.models import Persona
-    from world.stories.models import Episode
+    from world.stories.models import Episode, Story
 
 
 def evaluate_auto_beats(progress: AnyStoryProgress) -> None:
@@ -222,59 +222,14 @@ def record_aggregate_contribution(
         if beat.outcome != BeatOutcome.SUCCESS:
             new_outcome = _evaluate_aggregate_beat(beat)
             if new_outcome == BeatOutcome.SUCCESS:
-                beat.outcome = new_outcome
-                beat.save(update_fields=["outcome", "updated_at"])
-
-                # BeatCompletion for aggregate threshold crossing is scope-aware:
-                # - CHARACTER: attribute to the character who crossed it.
-                # - GROUP: attribute to the group (gm_table); individual contributions
-                #   are already in the AggregateBeatContribution ledger.
-                # - GLOBAL: no FK required.
-                completion_kwargs: dict = {
-                    "beat": beat,
-                    "outcome": new_outcome,
-                    "era": era,
-                }
-                if scope == StoryScope.CHARACTER:
-                    completion_kwargs["character_sheet"] = character_sheet
-                    completion_kwargs["roster_entry"] = roster_entry
-                elif scope == StoryScope.GROUP:
-                    from world.stories.services.progress import (  # noqa: PLC0415
-                        get_active_progress_for_story,
-                    )
-
-                    group_progress = get_active_progress_for_story(story)
-                    if group_progress is not None:
-                        completion_kwargs["gm_table"] = group_progress.gm_table
-                # GLOBAL: no scope-specific FK
-
-                aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
-
-                # Fire consequence pool for the aggregate threshold crossing.
-                # Participants are auto-derived from contribution rows.
-                # For GROUP scope, group_progress may be None if no active progress exists
-                # (defined in the elif block above); other scopes always pass None.
-                _agg_pool_progress = (
-                    group_progress  # type: ignore[possibly-undefined]
-                    if scope == StoryScope.GROUP
-                    else None
+                _finalize_aggregate_crossing(
+                    beat=beat,
+                    story=story,
+                    scope=scope,
+                    character_sheet=character_sheet,
+                    roster_entry=roster_entry,
+                    era=era,
                 )
-                _maybe_fire_pool_on_completion(
-                    completion=aggregate_completion,
-                    progress=_agg_pool_progress,
-                    scope=story.scope,
-                    explicit_participants=None,
-                )
-
-                # Narrative notification for the aggregate threshold crossing.
-                # Resolve an active progress to fan out recipients per scope.
-                from world.stories.services.progress import (  # noqa: PLC0415
-                    get_active_progress_for_story,
-                )
-
-                agg_progress = get_active_progress_for_story(story)
-                if agg_progress is not None:
-                    _notify_beat_completion(aggregate_completion, agg_progress)
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Walk beat -> episode -> chapter -> story to
@@ -287,6 +242,69 @@ def record_aggregate_contribution(
             maybe_create_session_request(progress)
 
     return contrib
+
+
+def _finalize_aggregate_crossing(  # noqa: PLR0913
+    *,
+    beat: Beat,
+    story: Story,
+    scope: str,
+    character_sheet: CharacterSheet,
+    roster_entry: RosterEntry | None,
+    era: Era | None,
+) -> None:
+    """Flip an aggregate beat to SUCCESS and fire its completion side effects.
+
+    Called by record_aggregate_contribution only after the contribution ledger
+    has crossed the beat's required_points threshold. Must run inside the
+    caller's atomic transaction. Persists the outcome, writes a scope-aware
+    BeatCompletion, fires the consequence pool, and fans out the narrative
+    notification.
+
+    BeatCompletion attribution is scope-aware:
+      - CHARACTER: attribute to the character who crossed it.
+      - GROUP: attribute to the group (gm_table); individual contributions are
+        already in the AggregateBeatContribution ledger.
+      - GLOBAL: no FK required.
+    """
+    from world.stories.services.progress import (  # noqa: PLC0415
+        get_active_progress_for_story,
+    )
+
+    beat.outcome = BeatOutcome.SUCCESS
+    beat.save(update_fields=["outcome", "updated_at"])
+
+    completion_kwargs: dict = {
+        "beat": beat,
+        "outcome": BeatOutcome.SUCCESS,
+        "era": era,
+    }
+    group_progress = None
+    if scope == StoryScope.CHARACTER:
+        completion_kwargs["character_sheet"] = character_sheet
+        completion_kwargs["roster_entry"] = roster_entry
+    elif scope == StoryScope.GROUP:
+        group_progress = get_active_progress_for_story(story)
+        if group_progress is not None:
+            completion_kwargs["gm_table"] = group_progress.gm_table
+    # GLOBAL: no scope-specific FK
+
+    aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
+
+    # Fire consequence pool for the aggregate threshold crossing. Participants are
+    # auto-derived from contribution rows. For GROUP scope, group_progress may be
+    # None when no active progress exists; other scopes always pass None.
+    _maybe_fire_pool_on_completion(
+        completion=aggregate_completion,
+        progress=group_progress if scope == StoryScope.GROUP else None,
+        scope=scope,
+        explicit_participants=None,
+    )
+
+    # Narrative notification: resolve an active progress to fan out recipients per scope.
+    agg_progress = get_active_progress_for_story(story)
+    if agg_progress is not None:
+        _notify_beat_completion(aggregate_completion, agg_progress)
 
 
 def expire_overdue_beats(now: datetime | None = None) -> int:
@@ -721,40 +739,68 @@ def _resolve_participants_for_pool(
         otherwise (will raise LegendAwardParticipantMissingError if pool needs it).
     GLOBAL scope: always empty (raises LegendAwardScopeError if pool needs it).
     """
+    if scope == StoryScope.CHARACTER:
+        return _character_scope_participants(progress, explicit_participants)
+    if scope == StoryScope.GROUP:
+        return _group_scope_participants(completion, explicit_participants)
+    # GLOBAL: no auto-derived participants.
+    return []
+
+
+def _character_scope_participants(
+    progress: AnyStoryProgress | None,
+    explicit_participants: list[Persona] | None,
+) -> list[Persona]:
+    """Resolve CHARACTER-scope pool participants: primary persona plus optional extras."""
+    if progress is None:
+        return list(explicit_participants) if explicit_participants else []
+    participants: list[Persona] = [progress.character_sheet.primary_persona]
+    if explicit_participants:
+        participants.extend(explicit_participants)
+    return participants
+
+
+def _group_scope_participants(
+    completion: BeatCompletion,
+    explicit_participants: list[Persona] | None,
+) -> list[Persona]:
+    """Resolve GROUP-scope pool participants.
+
+    Uses explicit_participants when provided; otherwise auto-derives from the
+    AggregateBeatContribution ledger for AGGREGATE_THRESHOLD beats; otherwise
+    returns an empty list (the pool guard raises later if it needs participants).
+    """
+    if explicit_participants is not None:
+        return list(explicit_participants)
+    # Auto-derive for AGGREGATE_THRESHOLD: all contributors → primary personas.
+    if completion.beat.predicate_type == BeatPredicateType.AGGREGATE_THRESHOLD:
+        return _derive_aggregate_participants(completion.beat)
+    # GM_MARKED without explicit list → empty (pool guard checks later).
+    return []
+
+
+def _derive_aggregate_participants(beat: Beat) -> list[Persona]:
+    """Map every distinct contributing character sheet to its PRIMARY persona.
+
+    Sheets without a primary persona are skipped. Used for GROUP-scope
+    AGGREGATE_THRESHOLD pools where participants are not explicitly supplied.
+    """
     from world.scenes.constants import PersonaType  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    if scope == StoryScope.CHARACTER:
-        if progress is None:
-            return list(explicit_participants) if explicit_participants else []
-        participants: list[Persona] = [progress.character_sheet.primary_persona]
-        if explicit_participants:
-            participants.extend(explicit_participants)
-        return participants
-
-    if scope == StoryScope.GROUP:
-        if explicit_participants is not None:
-            return list(explicit_participants)
-        # Auto-derive for AGGREGATE_THRESHOLD: all contributors → primary personas.
-        if completion.beat.predicate_type == BeatPredicateType.AGGREGATE_THRESHOLD:
-            sheet_ids = list(
-                AggregateBeatContribution.objects.filter(beat=completion.beat)
-                .values_list("character_sheet_id", flat=True)
-                .distinct()
-            )
-            derived: list[Persona] = []
-            for sid in sheet_ids:
-                persona = Persona.objects.filter(
-                    character_sheet_id=sid, persona_type=PersonaType.PRIMARY
-                ).first()
-                if persona is not None:
-                    derived.append(persona)
-            return derived
-        # GM_MARKED without explicit list → empty (pool guard checks later).
-        return []
-
-    # GLOBAL: no auto-derived participants.
-    return []
+    sheet_ids = list(
+        AggregateBeatContribution.objects.filter(beat=beat)
+        .values_list("character_sheet_id", flat=True)
+        .distinct()
+    )
+    derived: list[Persona] = []
+    for sid in sheet_ids:
+        persona = Persona.objects.filter(
+            character_sheet_id=sid, persona_type=PersonaType.PRIMARY
+        ).first()
+        if persona is not None:
+            derived.append(persona)
+    return derived
 
 
 def _maybe_fire_pool_on_completion(

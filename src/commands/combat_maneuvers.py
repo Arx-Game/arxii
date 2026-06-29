@@ -143,41 +143,66 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         CombatRoundAction (or None). Fury/Berserk are suppressed when
         ``participant`` is None (outside an encounter).
         """
-        from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
-
-        lines: list[str] = []
         character = self.caller.puppet if hasattr(self.caller, "puppet") else self.caller
+        lines: list[str] = []
+        lines.extend(self._anima_lines(character))
+        lines.extend(self._soulfray_lines(character))
+        if participant is not None:
+            lines.extend(self._fury_and_berserk_lines(character, action))
+        return lines
+
+    @staticmethod
+    def _anima_lines(character: Any) -> list[str]:
+        """Current/maximum anima, or nothing when there's no anima row yet."""
         try:
             anima = character.anima
-            lines.append(f"Anima: {anima.current}/{anima.maximum}")
         except (AttributeError, ObjectDoesNotExist):
-            pass  # No anima row yet — omit rather than mislead with 0/0.
+            return []  # No anima row yet — omit rather than mislead with 0/0.
+        return [f"Anima: {anima.current}/{anima.maximum}"]
+
+    @staticmethod
+    def _soulfray_lines(character: Any) -> list[str]:
+        """Soulfray stage (with death-risk marker), or nothing when none."""
+        from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
         warning = get_soulfray_warning(character)
-        if warning is not None:
-            risk = " — |rdeath risk|n" if warning.has_death_risk else ""
-            lines.append(f"Soulfray: {warning.stage_name}{risk}")
+        if warning is None:
+            return []
+        risk = " — |rdeath risk|n" if warning.has_death_risk else ""
+        return [f"Soulfray: {warning.stage_name}{risk}"]
 
-        if participant is not None:
-            berserk = self._berserk_instance(character)
-            control = "lost" if berserk is not None else "retained"
-            if action is not None and action.fury_commitment_id:
-                anchor_name = "unknown"
-                if action.fury_anchor_id and action.fury_anchor is not None:
-                    anchor_char = action.fury_anchor.character
-                    if anchor_char is not None:
-                        anchor_name = anchor_char.db_key
-                lines.append(
-                    f"Fury: committed (depth {action.fury_commitment.depth}, "
-                    f"anchored to {anchor_name}) — control {control}"
-                )
-            if berserk is not None:
-                rounds = ""
-                if berserk.rounds_remaining is not None:
-                    unit = "round" if berserk.rounds_remaining == 1 else "rounds"
-                    rounds = f" ({berserk.rounds_remaining} {unit} left)"
-                lines.append(f"Berserk: active{rounds}")
+    def _fury_and_berserk_lines(self, character: Any, action: Any) -> list[str]:
+        """Fury-commitment and Berserk lines for an in-encounter participant."""
+        berserk = self._berserk_instance(character)
+        lines: list[str] = []
+        if action is not None and action.fury_commitment_id:
+            lines.append(self._fury_line(action, berserk))
+        if berserk is not None:
+            lines.append(self._berserk_line(berserk))
         return lines
+
+    @staticmethod
+    def _fury_line(action: Any, berserk: Any) -> str:
+        """One line describing the committed fury and whether control is held."""
+        control = "lost" if berserk is not None else "retained"
+        anchor_name = "unknown"
+        if action.fury_anchor_id and action.fury_anchor is not None:
+            anchor_char = action.fury_anchor.character
+            if anchor_char is not None:
+                anchor_name = anchor_char.db_key
+        return (
+            f"Fury: committed (depth {action.fury_commitment.depth}, "
+            f"anchored to {anchor_name}) — control {control}"
+        )
+
+    @staticmethod
+    def _berserk_line(berserk: Any) -> str:
+        """One line describing the active Berserk condition and rounds left."""
+        rounds = ""
+        if berserk.rounds_remaining is not None:
+            unit = "round" if berserk.rounds_remaining == 1 else "rounds"
+            rounds = f" ({berserk.rounds_remaining} {unit} left)"
+        return f"Berserk: active{rounds}"
 
     def _berserk_instance(self, character: Any) -> Any:
         """The active Berserk ConditionInstance on *character*, or None."""

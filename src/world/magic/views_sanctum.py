@@ -43,6 +43,9 @@ from world.magic.serializers_sanctum import (
 if TYPE_CHECKING:
     from world.scenes.models import Persona
 
+#: Error detail returned when the request has no active character to act as.
+NO_ACTIVE_CHARACTER_DETAIL = "No active character."
+
 
 def _active_persona_for_request(request) -> Persona:
     """Resolve the request user's ACTIVE persona — the face they're on (#981).
@@ -158,7 +161,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         result = SanctumHomecomingAction().run(
             actor=actor,
             sanctum=sanctum,
@@ -176,7 +181,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         new_resonance = get_object_or_404(
             Resonance, pk=serializer.validated_data["new_resonance_id"]
         )
@@ -197,7 +204,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         result = SanctumWeaveAction().run(
             actor=actor,
             sanctum=sanctum,
@@ -224,7 +233,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         room_profile = get_object_or_404(
             RoomProfile, pk=serializer.validated_data["room_profile_id"]
         )
@@ -261,7 +272,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         sanctum = self.get_object()
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         result = SanctumDissolveAction().run(actor=actor, sanctum=sanctum)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -272,7 +285,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         sanctum = self.get_object()
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         result = SanctumAbsorbAction().run(actor=actor, sanctum=sanctum)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -283,7 +298,9 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         sanctum = self.get_object()
         actor = self._resolve_actor(request)
         if actor is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
         thread = get_object_or_404(
             Thread,
             pk=thread_id,

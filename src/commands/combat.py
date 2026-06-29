@@ -715,9 +715,6 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         When ``secondary`` was parsed, ``action_slot`` is forwarded so
         ``CastTechniqueAction.round_declaration`` routes to the passive slot.
         """
-        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
-        from world.magic.services.targeting import derive_target_relationship  # noqa: PLC0415
-
         self._parse_args()
         kwargs: dict[str, Any] = {"effort_level": self._effort}
 
@@ -737,8 +734,21 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # CombatRoundAction, where resolve_combat_technique consumes them.
         self._inject_fury_kwargs(kwargs)
 
-        if not self._target_name:
-            return kwargs
+        if self._target_name:
+            self._inject_target_kwargs(kwargs)
+
+        return kwargs
+
+    def _inject_target_kwargs(self, kwargs: dict[str, Any]) -> None:
+        """Resolve ``at <target>`` into the right kwarg based on combat context.
+
+        In a DECLARING combat round the technique's authored target relationship
+        decides the kwarg (``ENEMY`` → ``focused_opponent_target_id``;
+        ``ALLY``/``SELF`` → ``focused_ally_target_id``). Outside combat it
+        resolves as ``target_persona_id``.
+        """
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+        from world.magic.services.targeting import derive_target_relationship  # noqa: PLC0415
 
         # Check whether we're in a DECLARING combat round to decide how to
         # resolve the target name. Cache the participant for later helpers.
@@ -761,8 +771,6 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             persona_id = self._resolve_target_persona_id()
             if persona_id is not None:
                 kwargs["target_persona_id"] = persona_id
-
-        return kwargs
 
 
 class CmdClashCommit(_CombatCommandMixin, DispatchCommand):

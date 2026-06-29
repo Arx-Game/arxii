@@ -110,10 +110,27 @@ class CmdForm(DispatchCommand):
 
     def _show_hub(self) -> None:
         """Render the caller's active alternate self + available list."""
-        from world.forms.models import ActiveAlternateSelf, AlternateSelf  # noqa: PLC0415
+        from world.forms.models import AlternateSelf  # noqa: PLC0415
 
         sheet = self.caller.sheet_data
-        lines: list[str] = []
+        lines: list[str] = [self._active_self_line(sheet)]
+
+        alts = list(AlternateSelf.objects.filter(character_id=sheet.pk).order_by("display_name"))
+        if alts:
+            lines.append("Available alternate selves:")
+            lines.extend(f"  {self._alt_label(alt)}" for alt in alts)
+        else:
+            lines.append("You have no alternate selves.")
+
+        if not sheet.in_control:
+            lines.append("You are not in control — revert is blocked.")
+
+        self.msg("\n".join(lines))
+
+    @staticmethod
+    def _active_self_line(sheet: Any) -> str:
+        """One line naming the active alternate self, or the true self."""
+        from world.forms.models import ActiveAlternateSelf  # noqa: PLC0415
 
         active = (
             ActiveAlternateSelf.objects.filter(character=sheet)
@@ -122,29 +139,20 @@ class CmdForm(DispatchCommand):
         )
         if active is not None and active.alternate_self is not None:
             name = active.alternate_self.display_name or "an alternate self"
-            lines.append(f"You are in {name}.")
-        else:
-            lines.append("You are in your true self.")
+            return f"You are in {name}."
+        return "You are in your true self."
 
-        alts = list(AlternateSelf.objects.filter(character_id=sheet.pk).order_by("display_name"))
-        if alts:
-            lines.append("Available alternate selves:")
-            for alt in alts:
-                label = alt.display_name or "unnamed"
-                facets: list[str] = []
-                if alt.persona is not None:
-                    facets.append(f"persona {alt.persona.name}")
-                if alt.form_id is not None:
-                    facets.append("form")
-                if alt.combat_profile_id is not None:
-                    facets.append("combat profile")
-                if facets:
-                    label += f" ({', '.join(facets)})"
-                lines.append(f"  {label}")
-        else:
-            lines.append("You have no alternate selves.")
-
-        if not sheet.in_control:
-            lines.append("You are not in control — revert is blocked.")
-
-        self.msg("\n".join(lines))
+    @staticmethod
+    def _alt_label(alt: Any) -> str:
+        """Display label for one alternate self, annotated with its facets."""
+        label = alt.display_name or "unnamed"
+        facets: list[str] = []
+        if alt.persona is not None:
+            facets.append(f"persona {alt.persona.name}")
+        if alt.form_id is not None:
+            facets.append("form")
+        if alt.combat_profile_id is not None:
+            facets.append("combat profile")
+        if facets:
+            label += f" ({', '.join(facets)})"
+        return label

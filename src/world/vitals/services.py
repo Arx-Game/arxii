@@ -38,7 +38,12 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType as CheckTypeHint, Consequence, ConsequenceEffect
     from world.checks.types import ModifierBreakdown, PendingResolution
-    from world.conditions.models import ConditionInstance, ConditionTemplate, DamageType
+    from world.conditions.models import (
+        ConditionInstance,
+        ConditionStage,
+        ConditionTemplate,
+        DamageType,
+    )
     from world.conditions.types import RoundTickResult
     from world.scenes.models import Interaction
     from world.vitals.models import VitalsConsequenceConfig
@@ -763,6 +768,27 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
     return _resolve_peril_via_pool(character_sheet, instance, pool)
 
 
+def _advance_to_next_stage(instance: ConditionInstance, stage: ConditionStage) -> None:
+    """Advance ``instance`` to the next higher bleed-out stage, if one exists.
+
+    No-op when ``stage`` is already the highest authored ``stage_order`` for the
+    condition (the caller resolves the terminal stage separately).
+    """
+    from world.conditions.models import ConditionStage  # noqa: PLC0415
+
+    next_stage = (
+        ConditionStage.objects.filter(
+            condition=instance.condition,
+            stage_order__gt=stage.stage_order,
+        )
+        .order_by("stage_order")
+        .first()
+    )
+    if next_stage is not None:
+        instance.current_stage = next_stage
+        instance.save(update_fields=["current_stage"])
+
+
 def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
     """Advance staged bleed-out conditions toward death.
 
@@ -782,7 +808,6 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
         BLEED_OUT_CONDITION_NAME,
     )
     from world.conditions.models import (  # noqa: PLC0415
-        ConditionStage,
         ConditionTemplate,
     )
     from world.conditions.services import (  # noqa: PLC0415
@@ -830,17 +855,7 @@ def advance_bleed_out(character_sheet: CharacterSheet | None) -> bool:
 
         if int(result.success_level) < 0:
             # Failed resist on a non-terminal stage: advance to the next stage.
-            next_stage = (
-                ConditionStage.objects.filter(
-                    condition=instance.condition,
-                    stage_order__gt=stage.stage_order,
-                )
-                .order_by("stage_order")
-                .first()
-            )
-            if next_stage is not None:
-                instance.current_stage = next_stage
-                instance.save(update_fields=["current_stage"])
+            _advance_to_next_stage(instance, stage)
 
     return False
 

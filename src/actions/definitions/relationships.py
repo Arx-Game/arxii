@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
 
 
+_MSG_INVALID_POINTS = "Invalid points value."
+
+
 @dataclass
 class BaseRelationshipAction(Action):
     """Shared base for relationship-building verbs."""
@@ -165,7 +168,7 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
                 linked_scene=self._active_scene_for(actor, target_sheet),
             )
         except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid points value.")
+            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
@@ -211,7 +214,7 @@ class CreateDevelopmentAction(BaseRelationshipAction):
         try:
             points = int(kwargs.get("points", 0))
         except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid points value.")
+            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
 
         try:
             xp_awarded = int(kwargs.get("xp_awarded", 0))
@@ -277,7 +280,7 @@ class CreateCapstoneAction(BaseRelationshipAction):
         try:
             points = int(kwargs.get("points", 0))
         except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid points value.")
+            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
 
         try:
             capstone = create_capstone(
@@ -341,7 +344,7 @@ class RedistributePointsAction(BaseRelationshipAction):
         try:
             points = int(kwargs.get("points", 0))
         except (TypeError, ValueError):
-            return ActionResult(success=False, message="Invalid points value.")
+            return ActionResult(success=False, message=_MSG_INVALID_POINTS)
 
         try:
             change = redistribute_points(

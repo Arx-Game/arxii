@@ -65,6 +65,12 @@ from world.magic.seeds_cast import get_standalone_cast_template
 # Identity keys (module-level constants for stable naming)
 # ---------------------------------------------------------------------------
 
+#: Flow-step parameter placeholder substituted with the live event payload at runtime.
+PAYLOAD_PLACEHOLDER: str = "@payload"
+
+#: Shared TechniqueStyle name for the space-bending translocation techniques.
+TRANSLOCATION_STANCE_STYLE_NAME: str = "Translocation Stance"
+
 # --- Task 14a: Summon ---
 
 #: Name of the ThreatPool the summoned ally draws its attacks from.
@@ -218,7 +224,7 @@ def ensure_summon_content() -> None:
         defaults={
             "parent_id": None,
             "parameters": {
-                "payload": "@payload",
+                "payload": PAYLOAD_PLACEHOLDER,
                 "threat_pool_id": pool.pk,
                 "bond_rounds": _SUMMON_BOND_ROUNDS,
                 "max_health": _SUMMON_MAX_HEALTH,
@@ -377,7 +383,7 @@ def _seed_call_service_flow(
     that need static ids (e.g. ``destination_position_id``) alongside the payload.
     """
     flow, _created = FlowDefinition.objects.get_or_create(name=flow_name)
-    params: dict[str, object] = {"payload": "@payload"}
+    params: dict[str, object] = {"payload": PAYLOAD_PLACEHOLDER}
     if extra_params:
         params.update(extra_params)
     root_step, _created = FlowStepDefinition.objects.get_or_create(
@@ -498,7 +504,7 @@ def ensure_force_field_content() -> None:
         variable_name=_INIT_ABSORB_BUFFER_PATH,
         defaults={
             "parent_id": None,
-            "parameters": {"payload": "@payload", "buffer": _FORCE_FIELD_INIT_BUFFER},
+            "parameters": {"payload": PAYLOAD_PLACEHOLDER, "buffer": _FORCE_FIELD_INIT_BUFFER},
         },
     )
     ca_trigger, _created = TriggerDefinition.objects.get_or_create(
@@ -818,7 +824,7 @@ def ensure_teleport_content() -> None:
     _seed_technique(
         TELEPORT_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name="Translocation Stance",
+        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Teleport",
         description="Techniques that bend space to move the caster instantly.",
         technique_description=(
@@ -887,7 +893,7 @@ def ensure_obstacle_content() -> None:
     _seed_technique(
         OBSTACLE_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name="Translocation Stance",
+        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Obstacle",
         description="Techniques that reshape the battlefield with barriers and blockades.",
         technique_description=(
@@ -926,7 +932,7 @@ def ensure_incorporeal_content() -> None:
     _seed_technique(
         INCORPOREAL_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name="Translocation Stance",
+        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Incorporeal Form",
         description="Techniques that phase the caster out of the physical plane.",
         technique_description=(
@@ -965,7 +971,7 @@ def ensure_sink_content() -> None:
     _seed_technique(
         SINK_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name="Translocation Stance",
+        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Earth Sink",
         description="Techniques that merge the caster with the earth for a fleeting moment.",
         technique_description=(
@@ -1032,7 +1038,7 @@ def ensure_telekinesis_content() -> None:
     _seed_technique(
         TELEKINESIS_TECHNIQUE_NAME,
         gift_name="Translocation",
-        style_name="Translocation Stance",
+        style_name=TRANSLOCATION_STANCE_STYLE_NAME,
         effect_type_name="Telekinesis",
         description="Techniques that move objects and enemies with invisible force.",
         technique_description=(

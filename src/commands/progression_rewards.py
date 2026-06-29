@@ -33,6 +33,10 @@ _KUDOS_CLAIM_ARGC = 3
 _VOTE_TARGET_ARGC = 2
 _RANDOMSCENE_ARGC = 2
 
+# Shared command lock + error wording (kept single-sourced for consistency).
+_LOCK_ALL = "cmd:all()"
+_NO_ACTIVE_CHARACTER_MSG = "You have no active character on the roster."
+
 
 class CmdKudos(ArxCommand):
     """Claim kudos for XP.
@@ -44,7 +48,7 @@ class CmdKudos(ArxCommand):
 
     key = "kudos"
     aliases: ClassVar[list[str]] = []
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     help_category = "Progression"
     action = None
 
@@ -80,7 +84,7 @@ class CmdKudos(ArxCommand):
 
         account = get_account_for_character(self.caller)
         if account is None:
-            msg = "You have no active character on the roster."
+            msg = _NO_ACTIVE_CHARACTER_MSG
             raise CommandError(msg)
         points = KudosPointsData.objects.filter(account=account).first()
         available = points.current_available if points else 0
@@ -103,7 +107,7 @@ class CmdVote(ArxCommand):
 
     key = "vote"
     aliases: ClassVar[list[str]] = []
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     help_category = "Progression"
     action = None
 
@@ -153,7 +157,7 @@ class CmdVote(ArxCommand):
 
         account = get_account_for_character(self.caller)
         if account is None:
-            msg = "You have no active character on the roster."
+            msg = _NO_ACTIVE_CHARACTER_MSG
             raise CommandError(msg)
         budget = get_or_create_vote_budget(account)
         votes = get_votes_by_voter(account)
@@ -174,7 +178,7 @@ class CmdRandomScene(ArxCommand):
 
     key = "randomscene"
     aliases: ClassVar[list[str]] = ["rscene"]
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     help_category = "Progression"
     action = None
 
@@ -209,7 +213,7 @@ class CmdRandomScene(ArxCommand):
 
         account = get_account_for_character(self.caller)
         if account is None:
-            msg = "You have no active character on the roster."
+            msg = _NO_ACTIVE_CHARACTER_MSG
             raise CommandError(msg)
         targets = (
             RandomSceneTarget.objects.filter(account=account, game_week=get_current_game_week())
@@ -239,7 +243,7 @@ class CmdPathIntent(ArxCommand):
 
     key = "pathintent"
     aliases: ClassVar[list[str]] = []
-    locks = "cmd:all()"
+    locks = _LOCK_ALL
     help_category = "Progression"
     action = None
 

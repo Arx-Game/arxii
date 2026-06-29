@@ -55,6 +55,12 @@ interface PersonaOption {
   name: string;
 }
 
+/** Drop personas already chosen so the search dropdown only offers new picks. */
+function filterUnselected(results: PersonaOption[], selected: PersonaOption[]): PersonaOption[] {
+  const selectedIds = new Set(selected.map((p) => p.id));
+  return results.filter((r) => !selectedIds.has(r.id));
+}
+
 interface InviteePickerProps {
   selected: PersonaOption[];
   onAdd: (persona: PersonaOption) => void;
@@ -77,11 +83,7 @@ function InviteePicker({ selected, onAdd, onRemove, disabled }: InviteePickerPro
     debounceRef.current = setTimeout(() => {
       setSearching(true);
       searchPersonas(query.trim())
-        .then((res) => {
-          // Filter out already-selected personas
-          const selectedIds = new Set(selected.map((p) => p.id));
-          setResults(res.filter((r) => !selectedIds.has(r.id)));
-        })
+        .then((res) => setResults(filterUnselected(res, selected)))
         .catch(() => setResults([]))
         .finally(() => setSearching(false));
     }, 300);

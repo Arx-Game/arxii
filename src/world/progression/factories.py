@@ -29,6 +29,10 @@ from world.progression.models import (
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 
+# Module path imported lazily inside LazyFunctions to fetch the current game week;
+# extracted to a single constant to satisfy S1192.
+_WEEK_SERVICES_MODULE = "world.game_clock.week_services"
+
 
 class ExperiencePointsDataFactory(factory_django.DjangoModelFactory):
     """Factory for ExperiencePointsData."""
@@ -204,7 +208,7 @@ class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
     game_week = factory.LazyFunction(
         lambda: __import__(
-            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+            _WEEK_SERVICES_MODULE, fromlist=["get_current_game_week"]
         ).get_current_game_week()
     )
     points_earned = 0
@@ -242,7 +246,7 @@ class WeeklySocialEngagementFactory(factory_django.DjangoModelFactory):
     account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     game_week = factory.LazyFunction(
         lambda: __import__(
-            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+            _WEEK_SERVICES_MODULE, fromlist=["get_current_game_week"]
         ).get_current_game_week()
     )
     pending_points = Decimal(0)
@@ -259,7 +263,7 @@ class RandomSceneTargetFactory(factory_django.DjangoModelFactory):
     target_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     game_week = factory.LazyFunction(
         lambda: __import__(
-            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+            _WEEK_SERVICES_MODULE, fromlist=["get_current_game_week"]
         ).get_current_game_week()
     )
     slot_number = 1

@@ -37,7 +37,38 @@ class SpreadTaleAction(Action):
     category: str = "social"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: C901, PLR0911
+    @staticmethod
+    def _resolve_account(actor: ObjectDB, scene: Any, kwargs: dict[str, Any]) -> Any:
+        """Resolve the requesting account, or None if it isn't a scene participant."""
+        account = actor.account
+        if account is None:
+            requester_id = kwargs.get("requester_account_id")
+            if requester_id is not None:
+                from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+                account = AccountDB.objects.filter(pk=requester_id).first()
+        if account is None or not scene.participants.filter(pk=account.pk).exists():
+            return None
+        return account
+
+    @staticmethod
+    def _resolve_specialization(kwargs: dict[str, Any]) -> tuple[Any, str]:
+        """Return (specialization, error_message); specialization is None when not chosen."""
+        specialization_id = kwargs.get("specialization_id")
+        if specialization_id is None:
+            return None, ""
+
+        from world.skills.models import Specialization  # noqa: PLC0415
+        from world.societies.spread_services import (  # noqa: PLC0415
+            get_spread_specializations,
+        )
+
+        valid_ids = set(get_spread_specializations().values_list("pk", flat=True))
+        if specialization_id not in valid_ids:
+            return None, "That form cannot be used to spread a tale."
+        return Specialization.objects.get(pk=specialization_id), ""
+
+    def execute(  # noqa: PLR0911
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -53,7 +84,6 @@ class SpreadTaleAction(Action):
         from world.societies.spread_services import (  # noqa: PLC0415
             SPREAD_TALE_ACTION_KEY,
             get_or_create_spread_a_tale_template,
-            get_spread_specializations,
             get_spreadable_deeds,
             spread_check_modifiers,
         )
@@ -73,14 +103,8 @@ class SpreadTaleAction(Action):
         if scene_id is None:
             return ActionResult(success=False, message="You must be in a scene.")
         scene = get_object_or_404(Scene, pk=scene_id)
-        account = actor.account
+        account = self._resolve_account(actor, scene, kwargs)
         if account is None:
-            requester_id = kwargs.get("requester_account_id")
-            if requester_id is not None:
-                from evennia.accounts.models import AccountDB  # noqa: PLC0415
-
-                account = AccountDB.objects.filter(pk=requester_id).first()
-        if account is None or not scene.participants.filter(pk=account.pk).exists():
             return ActionResult(success=False, message="You are not a participant in that scene.")
 
         deed_id = kwargs.get("deed_id")
@@ -93,18 +117,9 @@ class SpreadTaleAction(Action):
                 message="This persona is not aware of that deed.",
             )
 
-        specialization = None
-        specialization_id = kwargs.get("specialization_id")
-        if specialization_id is not None:
-            from world.skills.models import Specialization  # noqa: PLC0415
-
-            valid_ids = set(get_spread_specializations().values_list("pk", flat=True))
-            if specialization_id not in valid_ids:
-                return ActionResult(
-                    success=False,
-                    message="That form cannot be used to spread a tale.",
-                )
-            specialization = Specialization.objects.get(pk=specialization_id)
+        specialization, spec_error = self._resolve_specialization(kwargs)
+        if spec_error:
+            return ActionResult(success=False, message=spec_error)
 
         extra_modifiers = spread_check_modifiers(sheet.character, specialization)
         template = get_or_create_spread_a_tale_template()

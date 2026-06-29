@@ -282,11 +282,7 @@ class CmdSanctum(DispatchCommand):
 
     def _show_status_hub(self) -> None:
         """List the caller's standing Sanctums and note any local Sanctum."""
-        from django.db.models import Q  # noqa: PLC0415
-
         from actions.definitions.sanctum import sanctum_in_room  # noqa: PLC0415
-        from world.magic.constants import TargetKind  # noqa: PLC0415
-        from world.magic.models import SanctumDetails, Thread  # noqa: PLC0415
 
         lines = [
             "|wSanctum actions|n: install, homecoming, purging, weave, dissolve, absorb, sever"
@@ -295,43 +291,54 @@ class CmdSanctum(DispatchCommand):
         # getattr avoids AttributeError on objects that don't carry a sheet.
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is not None:
-            from world.locations.models import LocationOwnership  # noqa: PLC0415
-            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-            persona = active_persona_for_sheet(sheet)
-            if persona is not None:
-                woven_ids = Thread.objects.filter(
-                    owner=sheet,
-                    target_kind=TargetKind.SANCTUM,
-                    retired_at__isnull=True,
-                ).values_list("target_sanctum_details_id", flat=True)
-                owned_room_ids = LocationOwnership.objects.filter(
-                    holder_persona=persona,
-                    ended_at__isnull=True,
-                ).values_list("room_profile_id", flat=True)
-                sanctums = (
-                    SanctumDetails.objects.select_related(
-                        "feature_instance__room_profile",
-                        "resonance_type",
-                    )
-                    .filter(
-                        Q(feature_instance_id__in=woven_ids)
-                        | Q(feature_instance__room_profile_id__in=owned_room_ids)
-                    )
-                    .filter(feature_instance__dissolved_at__isnull=True)
-                    .distinct()
-                )
-                if sanctums.exists():
-                    lines.append("Your standing Sanctums:")
-                    for s in sanctums:
-                        rtype = s.resonance_type
-                        res_name = rtype.name if rtype is not None else "Unknown"
-                        lines.append(f"  #{s.pk} — {res_name} Sanctum")
-                else:
-                    lines.append("You have no standing Sanctums.")
+            lines.extend(self._standing_sanctum_lines(sheet))
 
         local_sanctum = sanctum_in_room(self.caller.location)
         if local_sanctum is not None:
             lines.append("A Sanctum stands here.")
 
         self.msg("\n".join(lines))
+
+    def _standing_sanctum_lines(self, sheet: Any) -> list[str]:
+        """Lines listing the standing Sanctums the caller has woven into or owns."""
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.locations.models import LocationOwnership  # noqa: PLC0415
+        from world.magic.constants import TargetKind  # noqa: PLC0415
+        from world.magic.models import SanctumDetails, Thread  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        persona = active_persona_for_sheet(sheet)
+        if persona is None:
+            return []
+
+        woven_ids = Thread.objects.filter(
+            owner=sheet,
+            target_kind=TargetKind.SANCTUM,
+            retired_at__isnull=True,
+        ).values_list("target_sanctum_details_id", flat=True)
+        owned_room_ids = LocationOwnership.objects.filter(
+            holder_persona=persona,
+            ended_at__isnull=True,
+        ).values_list("room_profile_id", flat=True)
+        sanctums = (
+            SanctumDetails.objects.select_related(
+                "feature_instance__room_profile",
+                "resonance_type",
+            )
+            .filter(
+                Q(feature_instance_id__in=woven_ids)
+                | Q(feature_instance__room_profile_id__in=owned_room_ids)
+            )
+            .filter(feature_instance__dissolved_at__isnull=True)
+            .distinct()
+        )
+        if not sanctums.exists():
+            return ["You have no standing Sanctums."]
+
+        lines = ["Your standing Sanctums:"]
+        for s in sanctums:
+            rtype = s.resonance_type
+            res_name = rtype.name if rtype is not None else "Unknown"
+            lines.append(f"  #{s.pk} — {res_name} Sanctum")
+        return lines

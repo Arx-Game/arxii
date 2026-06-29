@@ -82,6 +82,9 @@ MAX_TRANSACTION_LIMIT = 200
 # Repeated 404 detail message, extracted to satisfy S1192.
 NO_CHARACTER_FOUND_MESSAGE = "No character found."
 
+# Repeated 400 detail message when no active character can act, extracted to satisfy S1192.
+NO_ACTIVE_CHARACTER_MESSAGE = "No active character to act as."
+
 
 class TransactionPagination(LimitOffsetPagination):
     """Pagination for progression transaction lists."""
@@ -202,7 +205,7 @@ class ClaimKudosView(APIView):
         actor = _actor_for_account(account)
         if actor is None:
             return Response(
-                {"detail": "No active character to act as."},
+                {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = ClaimKudosAction().run(
@@ -248,7 +251,7 @@ class VoteViewSet(
         actor = _actor_for_account(voter)
         if actor is None:
             return Response(
-                {"detail": "No active character to act as."},
+                {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -277,7 +280,7 @@ class VoteViewSet(
         actor = _actor_for_account(voter)
         if actor is None:
             return Response(
-                {"detail": "No active character to act as."},
+                {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = RemoveVoteAction().run(
@@ -333,7 +336,7 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         actor = _actor_for_account(account)
         if actor is None:
             return Response(
-                {"detail": "No active character to act as."},
+                {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         result = ClaimRandomSceneAction().run(actor=actor, target_id=pk)
@@ -365,7 +368,7 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         actor = _actor_for_account(account)
         if actor is None:
             return Response(
-                {"detail": "No active character to act as."},
+                {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

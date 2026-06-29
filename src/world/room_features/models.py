@@ -20,6 +20,8 @@ from world.room_features.constants import (
     RoomFeatureServiceStrategy,
 )
 
+ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
+
 
 class RoomFeatureKind(SharedMemoryModel):
     """Catalog row for a kind of installable room feature.
@@ -190,7 +192,7 @@ class RoomFeatureInstance(SharedMemoryModel):
     """
 
     room_profile = models.OneToOneField(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="feature_instance",
         primary_key=True,
@@ -248,7 +250,7 @@ class RoomFeatureProgressionDetails(SharedMemoryModel):
         primary_key=True,
     )
     target_room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="feature_progression_projects",
         help_text="The room the feature will be installed in or upgraded.",
@@ -296,7 +298,7 @@ class Trap(SharedMemoryModel):
     """
 
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="traps",
         help_text="The room this trap is set in. A room may hold several traps.",

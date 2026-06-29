@@ -72,6 +72,9 @@ _KEY_BY = "by"
 # stay single-token so the "exactly one target" check stays unambiguous.
 _MULTIWORD_KEYS = frozenset({_KEY_NAME, _KEY_DESC, _KEY_ROOM, _KEY_WHEN})
 
+# Parse-error labels (shared so the wording stays identical across call sites).
+_LABEL_EVENT_ID = "event id"
+
 # Invite target-type tokens → InvitationTargetType values.
 _INVITE_TARGET_TOKENS: dict[str, str] = {
     "persona": "persona",
@@ -269,7 +272,7 @@ class CmdEvent(ArxCommand):
         if len(parts) < 2 or "=" not in parts[1]:  # noqa: PLR2004
             msg = "Usage: event invite <id> persona=<name|id> [by=<persona>]  (or org= / society=)"
             raise CommandError(msg)
-        event_id = self._parse_id(parts[0], "event id")
+        event_id = self._parse_id(parts[0], _LABEL_EVENT_ID)
         kwargs = _parse_kwargs(parts[1])
         target_type, target_id = self._resolve_invite_target(kwargs)
         invited_by_id: int | None = None
@@ -330,7 +333,7 @@ class CmdEvent(ArxCommand):
         from world.events.models import Event  # noqa: PLC0415
         from world.events.services import get_visible_events  # noqa: PLC0415
 
-        event_id = self._parse_id(rest, "event id")
+        event_id = self._parse_id(rest, _LABEL_EVENT_ID)
         persona = self._actor_persona_or_none()
         event = get_visible_events(persona).filter(pk=event_id).first()
         if event is None:
@@ -433,7 +436,7 @@ class CmdEvent(ArxCommand):
         if not rest:
             msg = f"Usage: event {subverb} <id>"
             raise CommandError(msg)
-        return self._parse_id(rest, "event id")
+        return self._parse_id(rest, _LABEL_EVENT_ID)
 
     def _parse_id(self, value: str, label: str) -> int:
         value = value.strip().removeprefix("#")

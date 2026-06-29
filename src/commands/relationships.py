@@ -87,28 +87,17 @@ _KEY_XP = "xp"
 _MULTIWORD_KEYS = frozenset({_KEY_TITLE, _KEY_WRITEUP})
 
 
-def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
-    """Split ``<name> key=value ...`` into the leading target name + a kwargs dict.
+def _parse_kwargs_tokens(tokens: list[str]) -> dict[str, str]:
+    """Parse ``key=value ...`` tokens into a kwargs dict.
 
-    The target name is positional (may be multi-word until the first ``key=``).
-    A key's value extends to the next ``key=`` token for the free-text keys
-    (``title`` / ``writeup``); other keys take exactly one value token, and a
-    bare token following a completed single-word value is an error.
+    A free-text key (``title`` / ``writeup``) extends to the next ``key=`` token;
+    other keys take exactly one value token, and a bare token following a
+    completed single-word value is an error.
     """
-    tokens = rest.split()
-    name_parts: list[str] = []
-    idx = 0
-    while idx < len(tokens) and "=" not in tokens[idx]:
-        name_parts.append(tokens[idx])
-        idx += 1
-    name = " ".join(name_parts).strip()
-    if idx == len(tokens):
-        return name, {}
-
     kwargs: dict[str, str] = {}
     key = ""
     value_parts: list[str] = []
-    for token in tokens[idx:]:
+    for token in tokens:
         if "=" in token and not token.startswith("="):
             if key:
                 kwargs[key] = " ".join(value_parts).strip()
@@ -127,7 +116,25 @@ def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
             raise CommandError(msg)
     if key:
         kwargs[key] = " ".join(value_parts).strip()
-    return name, kwargs
+    return kwargs
+
+
+def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
+    """Split ``<name> key=value ...`` into the leading target name + a kwargs dict.
+
+    The target name is positional (may be multi-word until the first ``key=``).
+    Remaining ``key=value`` tokens are parsed by ``_parse_kwargs_tokens``.
+    """
+    tokens = rest.split()
+    name_parts: list[str] = []
+    idx = 0
+    while idx < len(tokens) and "=" not in tokens[idx]:
+        name_parts.append(tokens[idx])
+        idx += 1
+    name = " ".join(name_parts).strip()
+    if idx == len(tokens):
+        return name, {}
+    return name, _parse_kwargs_tokens(tokens[idx:])
 
 
 def _require_int(value: str | None, name: str) -> int:
