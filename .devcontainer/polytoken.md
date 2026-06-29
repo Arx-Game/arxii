@@ -37,7 +37,7 @@ providers:
     kind:
       type: custom_anthropic_compatible   # tagged object, not a bare string
     url: https://api.code.umans.ai
-    protocol: anthropic_messages
+    protocol: umans_messages                 # NOT anthropic_messages — see note below
     auth:
       type: static_key                     # required discriminator
       key: ${UMANS_API_TOKEN}              # do NOT hardcode the sk-... token here
@@ -79,9 +79,14 @@ so this block can't be committed to the repo. It lives on the `arxii-polytoken-c
 volume (persists across rebuilds) and is reproduced here as the recovery recipe.
 
 Validate with `polytoken config validate --user` before relying on it.
-Polytoken also ships a built-in `umans_messages` protocol, so a catalog-based
-provider may be even simpler — `polytoken config ui` is the path of least
-resistance.
+
+**Use `protocol: umans_messages`, not `anthropic_messages`.** umans's endpoint
+*does* answer generic Anthropic Messages calls (a raw `curl` to `/v1/messages`
+works), but polytoken's agentic tool-use flow needs its dedicated umans dialect.
+With `anthropic_messages`, tool calls get mangled and every model reflexively
+fires `web_search` on each prompt — even "what is 2+2" comes back as web results
+instead of an answer. Switching the provider to `umans_messages` fixes it for all
+models at once (the protocol is set once on the provider, not per model).
 
 **Token handling:** the umans token already lives in `~/.umans/config.json`
 (`api_token`). Reference it via the `${UMANS_API_TOKEN}` env substitution (set
