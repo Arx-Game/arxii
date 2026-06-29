@@ -277,3 +277,54 @@ class PartialUniqueConstraintTests(TestCase):
         self.assertIsNotNone(null_row.pk)
         self.assertIsNotNone(gift_row.pk)
         self.assertNotEqual(null_row.pk, gift_row.pk)
+
+
+class GiftLookupIdColumnTests(TestCase):
+    """Regression guard: get_pull_effects_for_thread must not access thread.target_gift object.
+
+    Filtering on the FK *object* (``target_gift=thread.target_gift``) triggers a
+    lazy Gift DB fetch when the FK object is absent from the thread's ``__dict__``
+    (i.e. whenever the cached ``_all`` queryset didn't include a
+    ``select_related("target_gift")``). This test pins that the filter uses the
+    integer column ``target_gift_id=thread.target_gift_id`` instead.
+
+    Implementation: a ``SimpleNamespace`` stub has ``target_gift_id`` but
+    deliberately has no ``target_gift`` attribute. Accessing the attribute would
+    raise ``AttributeError``, catching any regression to the FK-object form.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.resonance = ResonanceFactory()
+        cls.gift = GiftFactory()
+        cls.pull_row = ThreadPullEffectFactory(
+            target_kind=TargetKind.GIFT,
+            resonance=cls.resonance,
+            tier=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+            target_gift=cls.gift,
+        )
+
+    def test_resolves_via_id_column_not_related_object(self) -> None:
+        """Stub thread with target_gift_id but no target_gift attr resolves correctly.
+
+        If get_pull_effects_for_thread touches ``thread.target_gift`` (the FK
+        object), this test raises ``AttributeError``, catching the regression.
+        """
+        from types import SimpleNamespace
+
+        # Minimal thread-like stub: carries the three fields the function reads
+        # (target_kind, resonance, target_gift_id) but deliberately exposes no
+        # ``target_gift`` attribute. Any attempt to access it will raise
+        # AttributeError, which is the regression signal.
+        stub = SimpleNamespace(
+            target_kind=TargetKind.GIFT,
+            resonance=self.resonance,
+            target_gift_id=self.gift.pk,
+        )
+
+        rows = get_pull_effects_for_thread(stub, tier=0, effect_kind=EffectKind.FLAT_BONUS)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].pk, self.pull_row.pk)

@@ -47,6 +47,7 @@ class CharacterThreadHandler:
                 "target_capstone",
                 "target_facet",
                 "target_covenant_role",
+                "target_gift",
             )
         )
 

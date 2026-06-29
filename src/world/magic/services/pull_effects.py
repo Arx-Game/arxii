@@ -17,10 +17,10 @@ from world.magic.constants import TargetKind
 from world.magic.models import ThreadPullEffect
 
 if TYPE_CHECKING:
-    pass
+    from world.magic.models import Thread
 
 
-def get_pull_effects_for_thread(thread: object, **filters: object) -> list[ThreadPullEffect]:
+def get_pull_effects_for_thread(thread: Thread, **filters: object) -> list[ThreadPullEffect]:
     """Return ThreadPullEffect rows for ``thread`` with gift-specific preference.
 
     For ``TargetKind.GIFT`` threads:
@@ -47,7 +47,7 @@ def get_pull_effects_for_thread(thread: object, **filters: object) -> list[Threa
         **filters,
     )
     if thread.target_kind == TargetKind.GIFT:
-        gift_rows = list(base_qs.filter(target_gift=thread.target_gift))
+        gift_rows = list(base_qs.filter(target_gift_id=thread.target_gift_id))
         if gift_rows:
             return gift_rows
         return list(base_qs.filter(target_gift__isnull=True))
