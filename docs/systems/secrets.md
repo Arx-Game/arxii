@@ -10,9 +10,12 @@ loop.
 > **Build status:** Slices 1–3 built — content model + authoring (slice 1), **discovery**
 > (slice 2: the held/partial-knowledge record + the SECRET clue-target), and the **secret-tab
 > display** (slice 3: the known-secrets API + the React tab, locked layers shown as "Unknown").
-> The **#1269 distinction migration** is built (see *Originating systems* below).
-> Action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the Deed↔Secret
-> cross-link, the PersonaDiscovery subsumption, and the CG nudge are **later slices** of #1334.
+> The **#1269 distinction migration** is built (see *Originating systems* below). The
+> **act-anchor cross-link** (#1573 — a secret references the recorded act it is the truth behind:
+> legend deed / mission deed / scene) is built (see *The act anchor* below).
+> Action-anchored minting (blackmail/murder/affair/crime → Secret + Evidence), the **blackmail
+> loop** (the consent-gated raw-`Interaction` link + leverage mechanic), the PersonaDiscovery
+> subsumption, and the CG nudge are **later slices** of #1334.
 
 ---
 
@@ -38,6 +41,9 @@ A hidden fact, anchored to a subject.
 | `content` | The secret as narrated (player- or GM-authored prose) |
 | `provenance` | `SecretProvenance` ∈ GM / action / player-flavor |
 | `author_persona` | FK `Persona`, null — the narrating persona (OOC attribution); null for GM |
+| `legend_deed` | FK `societies.LegendEntry`, null — the public legend telling of the act this secret is the truth behind (#1573) |
+| `mission_deed` | FK `missions.MissionDeedRecord`, null — the recorded mission act (#1573) |
+| `scene` | FK `scenes.Scene`, null — the scene the act happened in (freeform/blackmail context) (#1573) |
 
 ### `SecretCategory`
 Staff-editable lookup (`SharedMemoryModel`) so the taxonomy grows without a migration. A
@@ -70,6 +76,13 @@ player-flavor).
   — record that a character knows a secret, unlocking layers (idempotent, monotonic). The single
   entry point discovery surfaces call.
 - `secret_known_to(secret, roster_entry)` — whether a character holds the fact of a secret.
+- `set_secret_act_anchor(secret, *, legend_deed=None, mission_deed=None, scene=None)` — the sole
+  mutator for the act anchor (#1573); sets the **complete** anchor state (a record not passed is
+  cleared), validates via `clean` (an anchored secret can't be player-flavor). `author_secret`
+  takes the same three optional anchors for mint-time anchoring.
+- `secrets_explaining(*, roster_entry, legend_deed|mission_deed|scene)` — the "vice-versa"
+  direction (#1573): the secrets a viewer **already knows** that are the truth behind a given
+  record. Gated by `SecretKnowledge`, so the backlink never leaks an unearned secret's existence.
 
 ## Discovery (the clue loop)
 
@@ -109,13 +122,40 @@ The section and the web viewset share one query path (`known_secrets_for` / `sec
 so they can't drift. Future sections (renown, relationships, society standings, covenant, magic)
 join the same `sheet/<section>` registry.
 
+## The act anchor — the truth behind a recorded act (#1573)
+
+A secret can be **the hidden truth behind a recorded act** — Bob's "legendary duel" was actually a
+cold murder. The act surfaces through several *records* — its public **legend telling**
+(`legend_deed → societies.LegendEntry`), the mechanical **mission deed** (`mission_deed →
+missions.MissionDeedRecord`), and/or the **scene** it happened in (`scene → scenes.Scene`) — but
+these are **co-facets of one act**, so they live as three independent optional FKs on the **single
+`Secret`**. The load-bearing rule: **one act = one secret**. It is never fragmented into a
+secret-per-record — a knower holds *one* secret ("the duel was a murder"), and that one truth merely
+has several **revelation vectors** (the records above) and several **consequence vectors** (legend
+contradiction, criminal exposure, society disapproval — which ride the #1429 reputation payload,
+not these links). Fragmenting would leave a player thinking they hold three secrets about one event.
+
+`is_act_anchored` is true when any record is set; an anchored secret can never be `PLAYER_FLAVOR`
+(it is evidenced — "true because it happened" — so it mints as `ACTION_ANCHORED`). Both directions
+are navigable: forward (the secret tab shows "the truth behind …", web + telnet) and reverse
+(`secrets_explaining` — from a record, the secrets a viewer already knows that explain it, gated by
+`SecretKnowledge`).
+
+**FK direction here reverses the back-reference pattern below — deliberately (see ADR-0062).** The
+act records are reusable primitives in the `societies` / `missions` / foundational `scenes` apps;
+the secret (the dependent consumer) points *at* them, so those apps never import `secrets`, and the
+cardinality is right: **many secrets → one act**, and one act surfaces through several records. A
+back-reference (`Scene.explaining_secret → Secret`) would force one secret per record *and* make the
+foundational `scenes` app import the `secrets` consumer — both wrong.
+
 ## Originating systems — the back-reference pattern
 
 A `Secret` is a **uniform free-text fact about one `subject_sheet`**; it carries no knowledge of
-*which* system produced it. Instead, each originating system holds a **back-reference FK pointing
-into `Secret`** — dependency flows *specific → general*, so the `secrets` app stays
-dependency-free while consumers (distinctions, later personas/deeds) point in. This is why
-`Secret` has no `kind`/polymorphic-content discriminator: the "different content types, one
+*which* system produced it. For systems **more specific than `secrets`** (e.g. distinctions), each
+originating system holds a **back-reference FK pointing into `Secret`** — dependency flows
+*specific → general*, so those consumers point in. The act anchor above is the deliberate exception
+(the records are the *general* side there, so the FK lives on the secret — see ADR-0062); apart from
+it, `Secret` has no `kind`/polymorphic-content discriminator, and the "different content types, one
 ledger, one loop" goal (spec §6) is met by the back-reference, not by widening `Secret`.
 
 ### Distinctions (#1269/#1334) — built
@@ -200,8 +240,14 @@ FK into `Secret`; `Secret` stays uniform):
 
 - **Action-anchored minting:** blackmail / murder / affair / crime mints a Secret + its evidence
   clue(s) — "true because it happened."
-- **Deeds:** cross-link a Secret to its sibling `MissionDeedRecord` — one act, two tellings
-  (public embellished deed vs. private true secret); earning the secret recontextualizes the legend.
+- **Deeds — BUILT (#1573):** a Secret cross-links to the act it's the truth behind via
+  `legend_deed` / `mission_deed` (and `scene`) — one act, two tellings (public embellished deed
+  vs. private true secret); earning the secret recontextualizes the legend. See *The act anchor*
+  above. The FK reverses the back-reference pattern (ADR-0062).
+- **Blackmail loop (follow-up):** the act anchor's `scene` link carries a blackmailer-authored
+  summary (in `content`) for comfort/context; a **direct raw-`Interaction` link** is the next
+  slice and is **gated by the blackmailee's OOC approval** (out-of-context raw RP is uncomfortable
+  and would push players to over-flag private scenes), alongside the leverage mechanic.
 - **Scenes:** `PersonaDiscovery` (a wired persona-link system) folds into a Secret it points at —
   reconciling its two-identity shape with the single-owner invariant is its own design slice, and
   it overlaps TehomCD's appearance/identity work (#1107).

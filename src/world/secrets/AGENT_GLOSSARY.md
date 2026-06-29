@@ -15,3 +15,7 @@ _Avoid_: source, origin, trust level.
 **SecretKnowledge**:
 A roster-scoped record that one character holds a given secret, so knowledge follows the character across players. Holding the row is the fact layer; `knows_category` and `knows_consequences` are partial-knowledge layers that unlock independently and monotonically, so a secret's Unknown layers can persist per-knower even after the fact is out.
 _Avoid_: known secret, CharacterSecret, secret grant.
+
+**Act anchor**:
+The recorded act a secret is the hidden truth behind (#1573) — held as optional FKs on the `Secret` itself (`legend_deed` → `LegendEntry`, `mission_deed` → `MissionDeedRecord`, `scene` → `Scene`). One act = one secret: the act may surface through several of these records at once, but they are co-facets of a single truth, never separate secrets. The distinct *consequences* (legend / criminal / society) are not the anchor — they ride the #1429 reputation payload. The FK lives on the secret (not a back-reference on the record) per ADR-0062.
+_Avoid_: deed link, deed discriminator, one-secret-per-deed, evidence record (the raw-`Interaction` blackmail link is a later slice).

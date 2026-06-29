@@ -63,6 +63,7 @@ treat those names as hints to confirm, not gospel.
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
 - [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
 - [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
+- [0062 — The Secret↔act anchor puts the FK on the Secret, reversing the back-reference pattern](0062-secret-act-anchor-reverses-the-back-reference-fk.md)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)

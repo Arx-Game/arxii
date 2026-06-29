@@ -29,6 +29,14 @@ function SecretCard({ secret, viewerId }: { secret: KnownSecret; viewerId: numbe
       <p>{secret.content}</p>
       <Layer label="Category" value={secret.category} />
       <Layer label="Consequences" value={secret.consequences} />
+      {secret.anchored_to.length > 0 && (
+        <div className="text-sm">
+          <span className="font-medium">The truth behind: </span>
+          <span className="text-muted-foreground">
+            {secret.anchored_to.map((anchor) => anchor.label).join(', ')}
+          </span>
+        </div>
+      )}
       {secret.can_grieve && (
         <div className="pt-1">
           <GrievancePrompt secretId={secret.id} viewerId={viewerId} />

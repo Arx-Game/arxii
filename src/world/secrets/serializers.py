@@ -30,9 +30,26 @@ class KnownSecretSerializer(serializers.Serializer):
     category = serializers.SerializerMethodField()
     consequences = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
+    # #1573 — the recorded act(s) this secret is the hidden truth behind. One secret = one act;
+    # the list holds the act's several records (mission deed / public legend / scene) as context
+    # links ("the truth behind …"). Empty for an unanchored secret. Shown to the holder only —
+    # the serializer renders a SecretKnowledge row, so seeing the anchor already means you know it.
+    anchored_to = serializers.SerializerMethodField()
 
     def get_subject(self, obj: SecretKnowledge) -> str:
         return obj.secret.subject_sheet.character.db_key
+
+    def get_anchored_to(self, obj: SecretKnowledge) -> list[dict[str, str]]:
+        secret = obj.secret
+        anchors: list[dict[str, str]] = []
+        if secret.legend_deed_id is not None:
+            anchors.append({"kind": "legend", "label": secret.legend_deed.title})
+        if secret.mission_deed_id is not None:
+            anchors.append({"kind": "mission_deed", "label": "a recorded mission deed"})
+        if secret.scene_id is not None:
+            label = secret.scene.name or f"scene #{secret.scene_id}"
+            anchors.append({"kind": "scene", "label": label})
+        return anchors
 
     def get_category(self, obj: SecretKnowledge) -> str:
         secret = obj.secret

@@ -18602,6 +18602,9 @@ export interface components {
       readonly category: string;
       readonly consequences: string;
       readonly author: string;
+      readonly anchored_to: {
+        [key: string]: string;
+      }[];
     };
     LedgerRow: {
       id: number;

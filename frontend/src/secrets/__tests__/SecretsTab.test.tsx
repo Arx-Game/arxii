@@ -46,6 +46,7 @@ function secret(overrides: Partial<KnownSecret>): KnownSecret {
     consequences: 'Execution if proven.',
     author: 'GM/Staff',
     can_grieve: false,
+    anchored_to: [],
     ...overrides,
   };
 }
@@ -94,5 +95,12 @@ describe('SecretsTab', () => {
     mockResults([secret({ can_grieve: false })]);
     render(<SecretsTab subjectId={5} viewerId={7} />);
     expect(screen.queryByText(/respond to this wrong/i)).toBeNull();
+  });
+
+  it('shows the act a secret is the truth behind (#1573)', () => {
+    mockResults([secret({ anchored_to: [{ kind: 'legend', label: 'the Duel at Dawn' }] })]);
+    render(<SecretsTab subjectId={5} viewerId={7} />);
+    expect(screen.getByText(/truth behind/i)).toBeInTheDocument();
+    expect(screen.getByText(/Duel at Dawn/)).toBeInTheDocument();
   });
 });
