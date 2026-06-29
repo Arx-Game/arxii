@@ -1,7 +1,7 @@
 """Check resolution service functions."""
 
 import random
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -79,50 +79,22 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             specialization=specialization,
         )
 
-    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
-    level = _get_character_level(character)
-
-    effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
-
-    trait_points = _calculate_trait_points(handler, check_type)
-    specialization_points = _calculate_specialization_points(character, check_type, specialization)
-    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = (
-        trait_points
-        + specialization_points
-        + aspect_bonus
-        + extra_modifiers
-        + effort_modifier
-        + fatigue_penalty
+    breakdown = _compute_check_breakdown(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
+        fatigue_penalty=fatigue_penalty,
+        specialization=specialization,
     )
-
-    roller_rank = CheckRank.get_rank_for_points(total_points)
-    target_rank = CheckRank.get_rank_for_points(target_difficulty)
-
-    roller_rank_value = roller_rank.rank if roller_rank else 0
-    target_rank_value = target_rank.rank if target_rank else 0
-    rank_difference = roller_rank_value - target_rank_value
-
-    chart = ResultChart.get_chart_for_difference(rank_difference)
 
     roll = random.randint(1, 100)  # noqa: S311
     rollmod = get_rollmod(character)
     effective_roll = max(1, min(100, roll + rollmod))
+    outcome = _get_outcome_for_roll(breakdown.chart, effective_roll) if breakdown.chart else None
 
-    outcome = _get_outcome_for_roll(chart, effective_roll) if chart else None
-
-    return CheckResult(
-        check_type=check_type,
-        outcome=outcome,
-        chart=chart,
-        roller_rank=roller_rank,
-        target_rank=target_rank,
-        rank_difference=rank_difference,
-        trait_points=trait_points,
-        aspect_bonus=aspect_bonus,
-        total_points=total_points,
-        specialization_points=specialization_points,
-    )
+    return _check_result(check_type, outcome, breakdown)
 
 
 def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signature for test seam
@@ -141,9 +113,48 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     inspect ranks see something reasonable. Skips the dice roll entirely.
     NOT a production code path — only reached inside force_check_outcome().
     """
+    breakdown = _compute_check_breakdown(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
+        fatigue_penalty=fatigue_penalty,
+        specialization=specialization,
+    )
+    return _check_result(check_type, forced_outcome, breakdown)
+
+
+class _CheckBreakdown(NamedTuple):
+    """The point/rank/chart breakdown shared by the rolled and forced check paths (#1688)."""
+
+    trait_points: int
+    specialization_points: int
+    aspect_bonus: int
+    total_points: int
+    roller_rank: "CheckRank | None"
+    target_rank: "CheckRank | None"
+    rank_difference: int
+    chart: "ResultChart | None"
+
+
+def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirror perform_check
+    character: "ObjectDB",
+    check_type: "CheckType",
+    *,
+    target_difficulty: int,
+    extra_modifiers: int,
+    effort_level: str | None,
+    fatigue_penalty: int,
+    specialization: "Specialization | None",
+) -> _CheckBreakdown:
+    """Compute stat + skill + specialization + aspect points, ranks, and chart (no dice roll).
+
+    Shared by ``perform_check`` (which then rolls) and the forced-outcome test path (which
+    supplies the outcome directly) — the single source of the check's point math.
+    """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     level = _get_character_level(character)
-
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
@@ -160,24 +171,38 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
 
     roller_rank = CheckRank.get_rank_for_points(total_points)
     target_rank = CheckRank.get_rank_for_points(target_difficulty)
-
-    roller_rank_value = roller_rank.rank if roller_rank else 0
-    target_rank_value = target_rank.rank if target_rank else 0
-    rank_difference = roller_rank_value - target_rank_value
-
+    rank_difference = (roller_rank.rank if roller_rank else 0) - (
+        target_rank.rank if target_rank else 0
+    )
     chart = ResultChart.get_chart_for_difference(rank_difference)
 
-    return CheckResult(
-        check_type=check_type,
-        outcome=forced_outcome,
-        chart=chart,
+    return _CheckBreakdown(
+        trait_points=trait_points,
+        specialization_points=specialization_points,
+        aspect_bonus=aspect_bonus,
+        total_points=total_points,
         roller_rank=roller_rank,
         target_rank=target_rank,
         rank_difference=rank_difference,
-        trait_points=trait_points,
-        aspect_bonus=aspect_bonus,
-        total_points=total_points,
-        specialization_points=specialization_points,
+        chart=chart,
+    )
+
+
+def _check_result(
+    check_type: "CheckType", outcome: "CheckOutcome | None", breakdown: _CheckBreakdown
+) -> CheckResult:
+    """Assemble a CheckResult from a breakdown + the resolved (rolled or forced) outcome."""
+    return CheckResult(
+        check_type=check_type,
+        outcome=outcome,
+        chart=breakdown.chart,
+        roller_rank=breakdown.roller_rank,
+        target_rank=breakdown.target_rank,
+        rank_difference=breakdown.rank_difference,
+        trait_points=breakdown.trait_points,
+        aspect_bonus=breakdown.aspect_bonus,
+        total_points=breakdown.total_points,
+        specialization_points=breakdown.specialization_points,
     )
 
 
