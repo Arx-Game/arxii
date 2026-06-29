@@ -133,7 +133,11 @@ from actions.definitions.progression_rewards import (
     RerollRandomSceneAction,
     SetPathIntentAction,
 )
-from actions.definitions.projects import DonateToProjectAction
+from actions.definitions.projects import (
+    CheckContributeAction,
+    DonateToProjectAction,
+    StoryContributeAction,
+)
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -201,6 +205,8 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     RoomEditAction(),
     DonateToProjectAction(),
+    CheckContributeAction(),
+    StoryContributeAction(),
     SetActivePersonaAction(),
     ShiftFormAction(),
     RevertFormAction(),

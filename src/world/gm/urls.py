@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.gm.views import (
+    DemandRansomView,
     GMApplicationActionView,
     GMApplicationQueueView,
     GMApplicationViewSet,
@@ -37,4 +38,5 @@ urlpatterns = [
         GMApplicationActionView.as_view(),
         name="gm-application-action",
     ),
+    path("demand-ransom/", DemandRansomView.as_view(), name="gm-demand-ransom"),
 ]

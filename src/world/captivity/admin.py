@@ -17,5 +17,5 @@ class CaptivityAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "offscreen_loss_allowed")
     search_fields = ("captive__character__db_key", "captor_organization__name")
-    raw_id_fields = ("captive", "cell", "captor_organization", "ransom_contract")
+    raw_id_fields = ("captive", "cell", "captor_organization", "ransom_project")
     list_select_related = ("captive__character", "captor_organization")
