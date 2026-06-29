@@ -124,6 +124,11 @@ resolve_and_add "statsig.com"
 resolve_and_add "pypi.org"
 # SonarCloud — public-project API for fetching code-quality findings on PRs.
 resolve_and_add "sonarcloud.io"
+# Umans Code — Anthropic-compatible model endpoint (https://api.code.umans.ai).
+# Backs two harnesses: Claude Code via its ANTHROPIC_BASE_URL override, and
+# polytoken's custom Anthropic-compatible provider. Two stable AWS EIPs
+# (eu-west-3); dig-resolved like the other small/stable hosts above.
+resolve_and_add "api.code.umans.ai"
 
 # ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
 echo "Fetching GitHub IP ranges via meta API..."
