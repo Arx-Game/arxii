@@ -40,6 +40,141 @@ class Migration(migrations.Migration):
                 max_length=32,
             ),
         ),
+        # Existing payload constraints predate ``target_form``.  Re-create them so
+        # non-ASSUME_ALTERNATE_SELF kinds also forbid an orphaned ``target_form``.
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_flat_bonus_payload",
+        ),
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_intensity_bump_payload",
+        ),
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_vital_bonus_payload",
+        ),
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_capability_grant_payload",
+        ),
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_narrative_only_payload",
+        ),
+        migrations.RemoveConstraint(
+            model_name="threadpulleffect",
+            name="threadpulleffect_corruption_resistance_payload",
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "FLAT_BONUS"), _negated=True),
+                    models.Q(
+                        ("flat_bonus_amount__isnull", False),
+                        ("intensity_bump_amount__isnull", True),
+                        ("vital_bonus_amount__isnull", True),
+                        ("vital_target__isnull", True),
+                        ("capability_grant__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_flat_bonus_payload",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "INTENSITY_BUMP"), _negated=True),
+                    models.Q(
+                        ("intensity_bump_amount__isnull", False),
+                        ("flat_bonus_amount__isnull", True),
+                        ("vital_bonus_amount__isnull", True),
+                        ("vital_target__isnull", True),
+                        ("capability_grant__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_intensity_bump_payload",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "VITAL_BONUS"), _negated=True),
+                    models.Q(
+                        ("vital_bonus_amount__isnull", False),
+                        ("vital_target__isnull", False),
+                        ("flat_bonus_amount__isnull", True),
+                        ("intensity_bump_amount__isnull", True),
+                        ("capability_grant__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_vital_bonus_payload",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "CAPABILITY_GRANT"), _negated=True),
+                    models.Q(
+                        ("capability_grant__isnull", False),
+                        ("flat_bonus_amount__isnull", True),
+                        ("intensity_bump_amount__isnull", True),
+                        ("vital_bonus_amount__isnull", True),
+                        ("vital_target__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_capability_grant_payload",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "NARRATIVE_ONLY"), _negated=True),
+                    models.Q(
+                        models.Q(("narrative_snippet", ""), _negated=True),
+                        ("flat_bonus_amount__isnull", True),
+                        ("intensity_bump_amount__isnull", True),
+                        ("vital_bonus_amount__isnull", True),
+                        ("vital_target__isnull", True),
+                        ("capability_grant__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_narrative_only_payload",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="threadpulleffect",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(("effect_kind", "CORRUPTION_RESISTANCE"), _negated=True),
+                    models.Q(
+                        ("flat_bonus_amount__isnull", True),
+                        ("intensity_bump_amount__isnull", True),
+                        ("vital_bonus_amount__isnull", True),
+                        ("vital_target__isnull", True),
+                        ("capability_grant__isnull", True),
+                        ("target_form__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="threadpulleffect_corruption_resistance_payload",
+            ),
+        ),
         migrations.AddConstraint(
             model_name="threadpulleffect",
             constraint=models.CheckConstraint(

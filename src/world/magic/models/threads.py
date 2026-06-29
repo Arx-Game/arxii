@@ -123,6 +123,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_flat_bonus_payload",
@@ -137,6 +138,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_intensity_bump_payload",
@@ -151,6 +153,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(flat_bonus_amount__isnull=True)
                         & models.Q(intensity_bump_amount__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_vital_bonus_payload",
@@ -165,6 +168,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(intensity_bump_amount__isnull=True)
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_capability_grant_payload",
@@ -180,6 +184,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_narrative_only_payload",
@@ -195,6 +200,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_corruption_resistance_payload",
@@ -279,7 +285,7 @@ class ThreadPullEffect(SharedMemoryModel):
             raise ValidationError({"target_form": "ASSUME_ALTERNATE_SELF requires target_form."})
         if self.capability_grant is not None:
             raise ValidationError({"capability_grant": "Must be null for ASSUME_ALTERNATE_SELF."})
-        if self.narrative_snippet:
+        if self.narrative_snippet.strip():
             raise ValidationError({"narrative_snippet": "Must be blank for ASSUME_ALTERNATE_SELF."})
         for name, val in numeric_fields.items():
             if val is not None:

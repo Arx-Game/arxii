@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import logging
 from typing import TYPE_CHECKING
 
 from evennia_extensions.models import RoomProfile
@@ -56,6 +57,9 @@ if TYPE_CHECKING:
     from world.magic.types import MishapResult, SoulfrayResult
     from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
@@ -604,9 +608,10 @@ def _apply_technique_fatigue_step(
     )
 
 
-# Success-level thresholds for mapping a cast outcome onto a form's combat profiles.
-# These are tuned so ordinary successes land on the middle profile and high/critical
-# successes land on the deepest profile.
+# TODO: Move the mid-band ceiling into a staff-tunable config singleton
+# (e.g. TechniqueBudgetConfig-style) if tuning proves volatile after shipping.
+# Keeping it as a module constant avoids scope-creep for the ASSUME_ALTERNATE_SELF
+# bugfix (#1604).
 _SUCCESS_BAND_MID_CEILING = 5
 
 
@@ -618,25 +623,22 @@ def _select_profile_by_success_band(
 
     Profiles are ordered by ``depth`` ascending.  The success band maps to
     index: failure/marginal -> lowest, ordinary success -> middle, crit ->
-    highest.  ``instance_value`` scales with the selected index so deeper,
-    higher-band profiles grant stronger stat-suites.
-
-    Mapping (deterministic):
-      success_level <= 0            -> lowest depth (index 0), instance_value 1.0
-      1 <= success_level <= 5       -> middle depth (index n // 2), instance_value 1.5
-      success_level >= 6            -> highest depth (index n - 1), instance_value 2.0
+    highest.  ``instance_value`` is mapped directly from the success band
+    regardless of how many profiles the form has: 1.0 / 1.5 / 2.0.
     """
     ordered = sorted(profiles, key=lambda p: p.depth)
     n = len(ordered)
     if success_level <= 0:
         index = 0
+        instance_value = 1.0
     elif success_level <= _SUCCESS_BAND_MID_CEILING:
         index = n // 2
+        instance_value = 1.5
     else:
         index = n - 1
+        instance_value = 2.0
     index = max(0, min(index, n - 1))
-    instance_values: list[float] = [1.0, 1.5, 2.0]
-    return ordered[index], instance_values[min(index, len(instance_values) - 1)]
+    return ordered[index], instance_value
 
 
 def _apply_assume_alternate_self_effects(
@@ -663,6 +665,9 @@ def _apply_assume_alternate_self_effects(
     for eff in resolved_effects:
         if eff.kind != EffectKind.ASSUME_ALTERNATE_SELF:
             continue
+        if eff.inactive:
+            # Combat-context-only effects pulled outside combat stay dormant.
+            continue
         target_form = eff.target_form
         if target_form is None:
             continue
@@ -676,8 +681,13 @@ def _apply_assume_alternate_self_effects(
             combat_profile=selected_profile,
         ).first()
         if alt is None:
-            # No repertoire grant for this form/profile combination; the authored
-            # effect is dormant here.
+            logger.warning(
+                "ASSUME_ALTERNATE_SELF pull effect references form %r profile %r "
+                "but character %s has no matching AlternateSelf grant; effect no-ops.",
+                target_form.id,
+                selected_profile.id,
+                sheet.id,
+            )
             continue
         trigger_transformation(
             sheet,

@@ -225,3 +225,49 @@ class AssumeAlternateSelfEffectTests(TestCase):
         assert high_value is not None
         self.assertLess(low_value, mid_value)
         self.assertLess(mid_value, high_value)
+
+    def test_two_profile_form_crit_uses_full_instance_value(self) -> None:
+        """A 2-profile form has identical mid/high profile selection but the crit
+        band still grants the full 2.0 ``instance_value``.
+
+        With only two profiles, both the mid and high bands select the deeper
+        profile (index 1).  The scaling factor must still map to the success band,
+        not to the profile index — otherwise a crit would incorrectly grant 1.5x.
+        """
+        two_profile_form = CharacterFormFactory(
+            character=self.character,
+            name="Hybrid",
+            form_type=FormType.ALTERNATE,
+        )
+        shallow = FormCombatProfileFactory(form=two_profile_form, depth=1, display_name="shallow")
+        deep = FormCombatProfileFactory(form=two_profile_form, depth=2, display_name="deep")
+        for profile in (shallow, deep):
+            FormCombatProfileEffectFactory(profile=profile, target=self.target, value=20)
+        AlternateSelfFactory(
+            character=self.sheet,
+            form=two_profile_form,
+            combat_profile=shallow,
+            tuning_value=2,
+        )
+        AlternateSelfFactory(
+            character=self.sheet,
+            form=two_profile_form,
+            combat_profile=deep,
+            tuning_value=2,
+        )
+        # Reuse the existing thread; only one Technique-targeted thread is allowed
+        # per (owner, resonance, technique).
+        self.pull_effect.target_form = two_profile_form
+        self.pull_effect.save()
+
+        self._cast_with_success_level(3)
+        mid_value = self._modifier_value()
+        revert_alternate_self(self.sheet)  # type: ignore[arg-type]
+
+        self._cast_with_success_level(7)
+        crit_value = self._modifier_value()
+
+        self.assertIsNotNone(mid_value)
+        self.assertEqual(mid_value, 6)  # round(20 * 2 * 1.5 / 10)
+        self.assertIsNotNone(crit_value)
+        self.assertEqual(crit_value, 8)  # round(20 * 2 * 2.0 / 10)
