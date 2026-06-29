@@ -6,6 +6,8 @@ Database-defined check types with weighted trait and aspect composition, resolve
 
 The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) and resolves them. Each check type specifies which traits contribute and at what weight, plus which aspects (from the classes system) are relevant. At resolution time, trait points + path-based aspect bonuses + caller-provided modifiers flow through the existing PointConversionRange/CheckRank/ResultChart pipeline.
 
+**Composition guideline (design tenet).** A `CheckType` defaults to **stat + the relevant skill**, plus a **specialization when the character owns one** (e.g. Charm + Persuasion + Seduction). **stat + stat is the rare exception, not the default** — character identity (trained skill, owned specialization) should almost always matter to the roll. Specializations compose as parent-skill + specialization and **cannot participate in a check until the #1688 foundation lands** (`CheckTypeTrait` only references `Trait` today; `Specialization` has no Trait). Auto-scaffolded stat+stat seeds (the social `CheckType`s) are PLACEHOLDER pending a real composition pass. See `docs/roadmap/design-tenets.md` → "Checks are stat + skill (+ specialization)".
+
 ## Key Files
 
 ### `models.py`
@@ -13,6 +15,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`CheckType`**: Named check definition with trait weights and aspect weights. SharedMemoryModel.
 - **`CheckTypeTrait`**: Links CheckType to Trait with a weight multiplier. SharedMemoryModel.
 - **`CheckTypeAspect`**: Links CheckType to Aspect (from classes app) with a weight multiplier. SharedMemoryModel.
+- **`CheckTypeSpecialization`** (#1688): Links CheckType to a `skills.Specialization` with a weight — the third leg of stat + skill + specialization. The parent skill rides a `CheckTypeTrait` (a skill is Trait-backed); this folds in the owned specialization (0 when unowned). Social-check compositions are seeded in `world/seeds/social_checks.py` (authoritative). SharedMemoryModel.
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.

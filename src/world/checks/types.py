@@ -40,6 +40,7 @@ class CheckResult:
     trait_points: int
     aspect_bonus: int
     total_points: int
+    specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
 
     @property
     def outcome_name(self) -> str:

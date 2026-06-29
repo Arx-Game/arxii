@@ -33,6 +33,12 @@ def _seed_checks() -> None:
     seed_check_resolution_tables()
 
 
+def _seed_social() -> None:
+    from world.seeds.social_checks import seed_social_check_content  # noqa: PLC0415
+
+    seed_social_check_content()
+
+
 def _seed_consent() -> None:
     from world.seeds.consent import seed_social_consent_categories  # noqa: PLC0415
 
@@ -50,6 +56,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # so the canonical rows exist before the other clusters run. (Idempotency
     # holds regardless of order — magic also ensures the spine itself.)
     "checks": _seed_checks,
+    # Social checks: retrofit the social CheckTypes to stat + skill (+ spec) and seed the
+    # Persuasion/Performance skills + their specializations (#1688). After "checks" so the
+    # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
+    "social": _seed_social,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
@@ -98,11 +108,15 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.skills.models import Specialization  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
 
     return {
         "checks": [CheckType, ResultChart],
+        # Social: seeds Persuasion/Performance skills + their specializations + the
+        # stat+skill(+spec) social CheckType compositions (#1688).
+        "social": [Specialization],
         "magic": [Affinity, Resonance],
         "items": [ItemTemplate],
         # Combat seeds check-types used by the resolution spine, not standalone
