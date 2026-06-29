@@ -111,6 +111,46 @@ the handler for backward compatibility.
 
 Since StatDefinition is a SharedMemoryModel, `.get()` hits the in-memory cache after first access.
 
+## DiscoverableContent abstract base (#1606)
+
+`DiscoverableContent` (`achievements/models.py`) is a Django abstract base (no table) that adds a
+single nullable `discovery_achievement` FK (→ `Achievement`, `on_delete=PROTECT`, `related_name="+"`)
+to any content model whose instances can trigger a first-ever Discovery ceremony. Inherited by:
+- `world.magic.Technique` — a technique can be marked discoverable (first character ever to gain it)
+- `world.covenants.CovenantRole` — a sub-role can be marked discoverable at its thread threshold
+
+`discovery_achievement = None` means the content is not discoverable and `announce_access_change`
+skips the Discovery path for it. See **ADR-0061** for the architectural decision (GenericFK and
+per-model duplication were both rejected).
+
+## Access-change + discovery surface (`discovery.py`, #1606)
+
+Two public functions in `achievements/discovery.py` form the shared announcement surface:
+
+### `announce_access_change(character_sheet, *, gained, lost, source)`
+
+Called whenever any mechanism changes what techniques/capabilities a character can use:
+
+- Sends one `NarrativeCategory.ABILITY` message listing what was gained/lost.
+- For each gained item with a non-null `discovery_achievement`, calls `grant_achievement` and then
+  `announce_achievement` (gamewide first-ever body if it's a Discovery, personal otherwise).
+- **Never branches on source** — covenant, form shapeshift, and CG cantrip are all identical.
+- `source` is an `AccessChangeSource` TextChoices value (drives the lead-in text label).
+
+Current callers:
+- `world/forms/services.py` — assume / revert alternate self
+- `world/covenants/services.py` — `_announce_capability_diff` (engage / disengage covenant role)
+- `world/character_creation/services.py` — CG cantrip grant
+
+### `announce_achievement(earners, *, is_first, first_body, personal_body, category)`
+
+Sends one `NarrativeMessage`:
+- `is_first=True` → **gamewide** to all active player sheets via `active_player_character_sheets()`,
+  using `first_body` (which must NOT name the discoverer).
+- `is_first=False` → **personal** to the `earners` list, using `personal_body`.
+
+Also used directly by `world/covenants/discovery.py::_notify` (sub-role discovery ceremony).
+
 ## Key Rules
 
 - Achievements are hidden by default — surprise and delight
@@ -121,3 +161,5 @@ Since StatDefinition is a SharedMemoryModel, `.get()` hits the in-memory cache a
 - Service functions accept StatDefinition instances, not string keys
 - All achievements are hand-crafted by staff (no auto-generation)
 - Character ownership queries use RosterTenure chain, NOT db_account
+- **`announce_access_change` is source-agnostic** — never add a source branch inside it;
+  place source-specific pre/post logic in the caller instead

@@ -266,6 +266,21 @@ _Avoid_: blanket-avoiding "renown"; fame, reputation.
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.
 
+## Achievements & discovery
+
+**DiscoverableContent**:
+A Django abstract base (`world.achievements.models.DiscoverableContent`) that adds one
+nullable `discovery_achievement` FK (→ `Achievement`) to any content model whose instances
+can be discovered for the first time. Inherited by `Technique` (magic app) and `CovenantRole`
+(covenants app); null FK means the content is not discoverable. Chosen over GenericFK (rejected per
+ADR-0015) and per-model field duplication (rejected per ADR-0016). _Avoid_: discoverable mixin, achievement holder.
+
+**Access change**:
+The event of a character gaining or losing access to techniques or capabilities, regardless of
+source (alternate-self shapeshift, covenant role, character creation). Handled by the single surface
+`announce_access_change` in `achievements/discovery.py`; callers never branch on source.
+_Avoid_: ability grant, capability notification, technique change.
+
 ## Public-event vectors
 
 **Scene**:
