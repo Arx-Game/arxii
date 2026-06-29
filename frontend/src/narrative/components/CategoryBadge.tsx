@@ -15,6 +15,7 @@ const CATEGORY_LABELS: Record<NarrativeCategory, string> = {
   covenant: 'Covenant',
   renown: 'Renown',
   weather: 'Weather',
+  ability: 'Ability',
 };
 
 const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
@@ -26,6 +27,7 @@ const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
   covenant: 'bg-emerald-600 text-white border-transparent',
   renown: 'bg-red-700 text-white border-transparent',
   weather: 'bg-sky-600 text-white border-transparent',
+  ability: 'bg-indigo-600 text-white border-transparent',
 };
 
 interface CategoryBadgeProps {
