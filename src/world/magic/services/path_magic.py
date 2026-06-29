@@ -51,13 +51,12 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     ``PathGiftGrant`` rows is a no-op).
     """
     from world.magic.models import (  # noqa: PLC0415
-        CharacterGift,
         CharacterResonance,
         CharacterTechnique,
         PathGiftGrant,
     )
     from world.magic.specialization.services import (  # noqa: PLC0415
-        provision_latent_gift_thread,
+        grant_gift_to_character,
     )
 
     grants = PathGiftGrant.objects.filter(path=path).select_related("gift")
@@ -72,12 +71,10 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     granted_techniques: list = []
     for grant in grants:
         gift = grant.gift
-        _, gift_created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
+        resonance = _grant_resonance_for(gift, claimed_ids)
+        _, gift_created = grant_gift_to_character(sheet, gift, resonance=resonance)
         if gift_created:
             granted_gifts.append(gift)
-        resonance = _grant_resonance_for(gift, claimed_ids)
-        if resonance is not None:
-            provision_latent_gift_thread(sheet, gift, resonance=resonance)
         for technique in grant.starter_techniques.all():
             _, tech_created = CharacterTechnique.objects.get_or_create(
                 character=sheet, technique=technique
