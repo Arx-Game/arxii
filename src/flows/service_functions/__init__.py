@@ -7,6 +7,7 @@ from flows.helpers.hooks import get_package_hooks
 
 SERVICE_MODULES = [
     "flows.service_functions.communication",
+    "flows.service_functions.forms",
     "flows.service_functions.movement",
     "flows.service_functions.perception",
     "flows.service_functions.packages",
