@@ -954,18 +954,53 @@ Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 
 ### Projects (delayed multi-tick endeavors)
 Project framework: kind-discriminated long-running endeavors with contributions and
-outcome rolls. Plan 1 shipped the framework + two kinds (BUILDING_CONSTRUCTION,
-ROOM_FEATURE_PROGRESSION).
+outcome rolls. Kinds: BUILDING_CONSTRUCTION, ROOM_FEATURE_PROGRESSION, RESEARCH, and
+RANSOM (#1500).
 
 - **Models:** `Project` (kind discriminator + status + completion_mode), `Contribution`
-  (per-actor per-project contribution log; privacy-aware), per-kind details models
-  (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
+  (per-actor per-project contribution log; privacy-aware; `contribution_method` FK on
+  CHECK rows), `ContributionMethod` (#1574 — admin-authorable, per-`ProjectKind`
+  check-based method: `check_type` + `ap_cost` + `progress_on_success`), per-kind details
+  models (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
 - **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
   `ContributionPrivacy`
+- **Contribution surface (#1574):** `donate_to_project` (money → progress at 1/100c),
+  `contribute_check_to_project` (spends a method's AP, rolls its check, advances on
+  success), `set_contribution_story`. Telnet `CmdProject` (`+project`, `project/donate`,
+  `project/check`, `project/story`); web via `DonateToProjectAction` /
+  `CheckContributeAction` / `StoryContributeAction`.
+- **Instant-completion kinds (#1500):** `register_instant_completion_kind` marks a kind
+  (RANSOM) that resolves the moment its threshold is funded — `maybe_complete_immediately`
+  fires the kind handler post-contribution instead of waiting for the cron resolver. (The
+  generic RESOLVING→COMPLETED cron driver is not built yet; `scan_active_projects` only
+  marks projects RESOLVING.)
 - **Stat definitions:** Project achievement stats are created lazily on first
   contribution (same pattern as combat achievement counters)
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
+
+### Captivity (held characters + crowdfundable ransom)
+A character can be held captive (#931): captured into an instanced cell by an NPC
+captor org, freed by escape, rescue, ransom, or release. #1500 reframes ransom as a
+**crowdfundable RANSOM Project** standing in the cell.
+
+- **Models:** `Captivity` (captive + cell + captor_organization + status; `ransom_project`
+  FK → the crowdfundable RANSOM Project #1500 — the single ransom route since the
+  org-treasury Contract path was retired), `CaptivityConfig` (singleton authored
+  cell/clue/mission defaults)
+- **Constants:** `CaptivityStatus` (HELD / ESCAPED / RESCUED / RANSOMED / RELEASED)
+- **Ransom-as-project (#1500):** `demand_ransom_project` (GM surface creates the RANSOM
+  project in the cell), `resolve_ransom_project` (kind handler — frees the captive on full
+  funding via `resolve_captivity(RANSOMED)`; idempotent). Anyone pays via the generic
+  `project/donate`; the cell-room appearance shows a red OOC captive-status banner. GM
+  demand surfaces: telnet `CmdDemandRansom` (staff) + web `DemandRansomView`
+  (`POST /api/gm/demand-ransom/`, `IsGMOrStaff`), both converging on `demand_ransom_project`.
+- **Other services (`world.captivity.services`):** `capture_character` / `capture_party`,
+  `resolve_captivity`, `rescue_captive`, `escape_captivity`
+- **Integrates with:** projects (RANSOM kind + instant-completion), missions
+  (escape/rescue loops), clues (rescue-clue planting), instances (the cell),
+  typeclasses (`return_appearance` captive banner)
+- **Source:** `src/world/captivity/`
 
 ### Buildings (Permits + Construction + Materials)
 Plan 3 (#668). Permits authorize **(ward × kind)** building construction via the

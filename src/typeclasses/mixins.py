@@ -166,6 +166,9 @@ class ObjectParent:
         ranking = _maybe_render_ranking_display(self, looker)
         if ranking is not None:
             sections = [*sections, ranking]
+        captivity = _maybe_render_captivity_status(self)
+        if captivity is not None:
+            sections = [*sections, captivity]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
@@ -197,3 +200,42 @@ def _maybe_render_ranking_display(obj, looker) -> str | None:
         with contextlib.suppress(AttributeError, Persona.DoesNotExist):
             viewer_persona = active_persona_for_sheet(looker.sheet_data)
     return render_ranking_display(display, viewer_persona)
+
+
+def _maybe_render_captivity_status(obj) -> str | None:
+    """Render the red OOC captive-status banner for a holding cell (#1500).
+
+    When ``obj`` is a room holding one or more HELD captives, return a red,
+    OOC-styled line per captive — naming them and, where a crowdfundable RANSOM
+    project stands in the cell, its funding progress plus the project id to
+    ``project/donate`` toward. Returns None for anything that is not a holding
+    cell (the common case); gated on rooms (``location is None``) so examining a
+    character or item runs no query.
+    """
+    # Only rooms hold captives — skip the query for characters/items/exits.
+    if getattr(obj, "location", None) is not None:  # noqa: GETATTR_LITERAL
+        return None
+    from world.captivity.constants import CaptivityStatus
+    from world.captivity.models import Captivity
+
+    held = list(
+        Captivity.objects.filter(cell__room=obj, status=CaptivityStatus.HELD).select_related(
+            "captive", "ransom_project"
+        )
+    )
+    if not held:
+        return None
+
+    lines: list[str] = []
+    for cap in held:
+        name = cap.captive.character.key
+        project = cap.ransom_project
+        if project is not None and project.threshold_target:
+            lines.append(
+                f"|r(OOC) {name} is held captive here. Ransom: "
+                f"{project.current_progress}/{project.threshold_target} funded — "
+                f"`project/donate {project.pk}=<coppers>` to help free them.|n"
+            )
+        else:
+            lines.append(f"|r(OOC) {name} is held captive here.|n")
+    return "\n".join(lines)

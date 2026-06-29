@@ -30,19 +30,7 @@ class NotHeldError(CaptivityError):
     user_message = "That captivity has already ended."
 
 
-class NoCaptorError(CaptivityError):
-    """A ransom needs a captor org to demand it; this captivity has none."""
+class AlreadyDemandedError(CaptivityError):
+    """A crowdfundable ransom is already standing for this captive (#1500)."""
 
-    user_message = "No captor is holding this character to ransom."
-
-
-class NoRansomError(CaptivityError):
-    """There is no ransom demand to pay on this captivity."""
-
-    user_message = "There is no ransom demand to pay."
-
-
-class InsufficientTreasuryError(CaptivityError):
-    """The paying organization's treasury cannot cover the ransom."""
-
-    user_message = "The treasury cannot cover that ransom."
+    user_message = "A ransom is already demanded for that captive."

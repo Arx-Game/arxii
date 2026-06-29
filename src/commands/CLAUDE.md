@@ -238,6 +238,13 @@ actions, backends, and service functions.
   no check path). `project/story <id>=<text>` (`StoryContributeAction`, key `project_story`)
   records the narrative on the caller's latest contribution. The ransom flow reuses
   `donate` — a Ransom is a money-threshold Project (#1500).
+- **`captivity.py`**: `CmdDemandRansom` (`demandransom`, staff-only `perm(Admin)`, #1500) — the
+  GM demand surface for the crowdfundable ransom. `demandransom <captive>` (default amount) or
+  `demandransom <captive> = <coppers>` finds the captive's held `Captivity` and calls
+  `world.captivity.ransom_project.demand_ransom_project`, raising a RANSOM `Project` in the cell
+  that anyone may `project/donate` toward (freed the instant it's funded). The same service backs
+  the web `DemandRansomView` (`POST /api/gm/demand-ransom/`). Thin over the service — no business
+  logic in the command (mirrors `gemit`).
 - **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
   `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
