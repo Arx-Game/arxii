@@ -5,7 +5,8 @@ Factory definitions for species system tests.
 import factory
 import factory.django as factory_django
 
-from world.species.models import Language, Species, SpeciesStatBonus
+from world.magic.constants import GiftKind
+from world.species.models import Language, Species, SpeciesGiftGrant, SpeciesStatBonus
 
 
 class LanguageFactory(factory_django.DjangoModelFactory):
@@ -55,3 +56,14 @@ class SpeciesStatBonusFactory(factory_django.DjangoModelFactory):
     species = factory.SubFactory(SpeciesFactory)
     stat = "strength"
     value = 1
+
+
+class SpeciesGiftGrantFactory(factory_django.DjangoModelFactory):
+    """Factory for creating SpeciesGiftGrant instances (kind=MINOR enforced by clean())."""
+
+    class Meta:
+        model = SpeciesGiftGrant
+
+    species = factory.SubFactory(SpeciesFactory)
+    gift = factory.SubFactory("world.magic.factories.GiftFactory", kind=GiftKind.MINOR)
+    drawback_condition = None
