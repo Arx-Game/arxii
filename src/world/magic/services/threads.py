@@ -267,6 +267,53 @@ def cross_thread_xp_lock(
 # =============================================================================
 
 
+def _weave_gift_thread(
+    character_sheet: CharacterSheet,
+    gift: object,
+    resonance: ResonanceModel,
+    *,
+    name: str = "",
+    description: str = "",
+) -> Thread:
+    """GIFT weave: commit/choose a resonance onto the existing latent thread.
+
+    Unlike other thread kinds (create-on-weave), a GIFT thread pre-exists (the
+    latent level-0 thread provisioned at CG). Weaving commits a resonance onto
+    it (validating the resonance is in the gift's supported set). Does not
+    create a second thread (#1578 decision 7: one active GIFT thread per gift).
+    """
+    if not gift.resonances.filter(pk=resonance.pk).exists():
+        from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
+
+        raise UnsupportedGiftResonanceError
+
+    thread = Thread.objects.filter(
+        owner=character_sheet,
+        target_kind=TargetKind.GIFT,
+        target_gift=gift,
+        retired_at__isnull=True,
+    ).first()
+    if thread is None:
+        # No latent thread (e.g. post-CG acquisition, #1587 future): create one.
+        # For now (CG-provisioned), this branch is rare; provision on demand.
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            provision_latent_gift_thread,
+        )
+
+        return provision_latent_gift_thread(character_sheet, gift, resonance=resonance)
+
+    if thread.resonance_id != resonance.pk:
+        thread.resonance = resonance
+        if name:
+            thread.name = name
+        if description:
+            thread.description = description
+        thread.full_clean()
+        thread.save(update_fields=["resonance", "name", "description"])
+    return thread
+
+
+@transaction.atomic
 def _has_weaving_unlock(
     character_sheet: CharacterSheet,
     target_kind: str,
@@ -328,6 +375,10 @@ def weave_thread(  # noqa: PLR0913
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
+    if target_kind == TargetKind.GIFT:
+        return _weave_gift_thread(
+            character_sheet, target, resonance, name=name, description=description
+        )
     if target_kind == TargetKind.COVENANT_ROLE:
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 
