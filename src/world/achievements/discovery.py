@@ -77,8 +77,14 @@ def announce_access_change(character_sheet, *, gained, lost, source):
         ach = getattr(item, "discovery_achievement", None)  # noqa: GETATTR_LITERAL
         if ach is None:
             continue
-        results = grant_achievement(ach, [character_sheet])
-        is_first = bool(results and results[0].discovery_id is not None)
+        from world.achievements.models import CharacterAchievement  # noqa: PLC0415
+
+        if CharacterAchievement.objects.filter(
+            achievement=ach, character_sheet=character_sheet
+        ).exists():
+            continue
+        is_first = not CharacterAchievement.objects.filter(achievement=ach).exists()
+        grant_achievement(ach, [character_sheet])
         name = getattr(item, "name", str(item))  # noqa: GETATTR_LITERAL
         announce_achievement(
             [character_sheet],
@@ -86,6 +92,6 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             first_body=(
                 f"For the first time in recorded history, a character has manifested {name}."
             ),
-            personal_body=f"You are among the first to manifest {name}.",
+            personal_body=f"You have manifested {name}.",
             category=NarrativeCategory.ABILITY,
         )
