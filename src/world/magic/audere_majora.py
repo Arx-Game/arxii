@@ -493,6 +493,13 @@ def cross_threshold(
 
     CharacterPathHistory.objects.create(character=character, path=chosen_path)
 
+    # Crossing into the new path grants its authored gift(s) + curated starter
+    # technique set (#1579, ADR-0055). Idempotent; a no-op for paths with no
+    # PathGiftGrant rows.
+    from world.magic.services.path_magic import grant_path_magic  # noqa: PLC0415
+
+    grant_path_magic(sheet, chosen_path)
+
     crossing = AudereMajoraCrossing.objects.create(
         character_sheet=sheet,
         threshold=threshold,

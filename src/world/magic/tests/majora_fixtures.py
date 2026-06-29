@@ -14,6 +14,7 @@ from __future__ import annotations
 from django.contrib.contenttypes.models import ContentType
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, PathFactory
 from world.classes.models import CharacterClassLevel, PathStage
@@ -129,7 +130,11 @@ def build_majora_world(  # noqa: PLR0913 — fixture knobs are keyword-only by d
     puissant_path = PathFactory(name=f"Puissant_{boundary_level}{suffix}", stage=PathStage.PUISSANT)
     puissant_path.parent_paths.add(prospect_path)
 
-    character = ObjectDB.objects.create(db_key=f"majora_char_{boundary_level}{suffix}")
+    # Real Character typeclass (not a bare ObjectDB) so the ``threads`` handler
+    # exists — cross_threshold now provisions a latent GIFT thread via the
+    # path-magic grant (#1579), and production crossings always run on real
+    # Characters.
+    character = CharacterFactory(db_key=f"majora_char_{boundary_level}{suffix}")
     sheet = CharacterSheetFactory(character=character)
 
     char_class = CharacterClassFactory(name=f"Mage_{boundary_level}{suffix}")
