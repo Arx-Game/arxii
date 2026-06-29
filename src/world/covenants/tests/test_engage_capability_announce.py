@@ -164,3 +164,8 @@ class EngageCapabilityAnnounceTests(TestCase):
         self.assertEqual(msgs.count(), 1)
         msg = msgs.first()
         self.assertIn(cap.name, msg.body)
+        self.assertTrue(
+            NarrativeMessageDelivery.objects.filter(
+                message=msg, recipient_character_sheet=sheet
+            ).exists()
+        )
