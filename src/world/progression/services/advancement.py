@@ -19,7 +19,7 @@ from world.progression.exceptions import (
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.classes.models import CharacterClassLevel, Path
-    from world.magic.models.sessions import RitualSession
+    from world.magic.models.sessions import RitualSession, RitualSessionParticipant
     from world.magic.types.path_magic import PathMagicGrantResult
     from world.progression.models import ClassLevelAdvancement
     from world.scenes.models import Interaction, Scene
@@ -177,6 +177,60 @@ def _post_testament(
     return _post_declaration(inductee_sheet.character, text)
 
 
+def _resolve_declared_advanced_path(
+    inductee: CharacterSheet, participant: RitualSessionParticipant, target_stage: int
+) -> Path | None:
+    """The eligible advanced path the inductee chose for a semi-crossing.
+
+    Explicit ``participant_kwargs["path_id"]`` wins; else the character's declared
+    ``PathIntent``. Validated as an active child of the current path at
+    ``target_stage``. Returns the Path, or None when unset/ineligible (then the
+    advance is level-only — no path switch, non-breaking).
+    """
+    from world.progression.models import PathIntent
+    from world.progression.selectors import current_path_for_character
+
+    current = current_path_for_character(inductee.character)
+    if current is None:
+        return None
+    eligible = {p.pk: p for p in current.child_paths.filter(stage=target_stage, is_active=True)}
+    if not eligible:
+        return None
+    path_id = participant.participant_kwargs.get("path_id")
+    if path_id is None:
+        intent = PathIntent.objects.filter(character_sheet=inductee).first()
+        path_id = intent.intended_path_id if intent is not None else None
+    if path_id is None:
+        return None
+    return eligible.get(int(path_id))
+
+
+def _maybe_semi_cross_into_potential_path(
+    inductee: CharacterSheet,
+    participant: RitualSessionParticipant,
+    *,
+    level_before: int,
+    target_level: int,
+) -> None:
+    """The level-3 POTENTIAL "semi-crossing" (#1579) — no Audere Majora.
+
+    When a Durance advance enters a new path stage (past the Audere Majora
+    tier-boundary refusal, that is the PROSPECT→POTENTIAL transition) and the
+    inductee has declared an eligible advanced path, switch onto it and grant its
+    gift+techniques through the shared ``cross_into_path`` seam — the same machinery
+    a crossing uses. No-op when the advance stays within a stage or no path was
+    declared.
+    """
+    from world.classes.services import stage_for_level
+
+    new_stage = stage_for_level(target_level)
+    if new_stage == stage_for_level(level_before):
+        return
+    new_path = _resolve_declared_advanced_path(inductee, participant, new_stage)
+    if new_path is not None:
+        cross_into_path(inductee, new_path)
+
+
 def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLevelAdvancement]:
     """Advance each ACCEPTED inductee one class level via the Ritual of the Durance.
 
@@ -250,6 +304,13 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
         scene, interaction = _post_testament(inductee, testament=testament)
 
         apply_class_level_advance(inductee, level_after=target_level)
+
+        # Level-3 POTENTIAL semi-crossing: if this advance enters a new path stage and
+        # the inductee declared an eligible advanced path, switch onto it + grant its
+        # magic (the same seam Audere Majora uses; no crossing ceremony) (#1579).
+        _maybe_semi_cross_into_potential_path(
+            inductee, participant, level_before=level_before, target_level=target_level
+        )
 
         receipt = ClassLevelAdvancement.objects.create(
             character_sheet=inductee,
