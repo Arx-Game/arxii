@@ -96,6 +96,7 @@ function RoleFieldsCard({ roleId }: { roleId: number }) {
   const [template, setTemplate] = useState('');
   const [rapport, setRapport] = useState('');
   const [faction, setFaction] = useState('');
+  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
     if (!role) return;
@@ -104,6 +105,7 @@ function RoleFieldsCard({ roleId }: { roleId: number }) {
     setTemplate(role.default_description_template ?? '');
     setRapport(role.default_rapport_starting_value?.toString() ?? '');
     setFaction(role.faction_affiliation?.toString() ?? '');
+    setIsActive(role.is_active ?? true);
   }, [role]);
 
   const save = () => {
@@ -115,6 +117,7 @@ function RoleFieldsCard({ roleId }: { roleId: number }) {
         default_description_template: template,
         default_rapport_starting_value: numOrNull(rapport) ?? 0,
         faction_affiliation: numOrNull(faction),
+        is_active: isActive,
       },
     });
   };
@@ -152,6 +155,10 @@ function RoleFieldsCard({ roleId }: { roleId: number }) {
             />
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={isActive} onCheckedChange={setIsActive} />
+          Active (offered to players)
+        </label>
         {patch.isError && (
           <p className="text-sm text-destructive">{errText(patch.error, 'Could not save.')}</p>
         )}
@@ -233,6 +240,15 @@ function OfferCard({
   );
   const [roleCooldown, setRoleCooldown] = useState(details?.role_cooldown_duration ?? '');
   const [drawPriority, setDrawPriority] = useState(details?.draw_priority?.toString() ?? '');
+  const [rapportDeltaSuccess, setRapportDeltaSuccess] = useState(
+    offer.rapport_delta_success?.toString() ?? ''
+  );
+  const [rapportDeltaFailure, setRapportDeltaFailure] = useState(
+    offer.rapport_delta_failure?.toString() ?? ''
+  );
+  const [checkType, setCheckType] = useState(offer.check_type?.toString() ?? '');
+  const [checkDifficulty, setCheckDifficulty] = useState(offer.check_difficulty?.toString() ?? '');
+  const [offerCooldown, setOfferCooldown] = useState(offer.cooldown ?? '');
 
   // Only validate/coerce once the predicate-leaf catalog has loaded — otherwise
   // every leaf reads as "unknown" and a valid persisted rule becomes un-saveable.
@@ -248,6 +264,11 @@ function OfferCard({
         draw_mode: drawMode,
         rapport_requirement: numOrNull(rapportReq) ?? 0,
         is_final: isFinal,
+        rapport_delta_success: numOrNull(rapportDeltaSuccess) ?? 0,
+        rapport_delta_failure: numOrNull(rapportDeltaFailure) ?? 0,
+        check_type: numOrNull(checkType),
+        check_difficulty: numOrNull(checkDifficulty) ?? 0,
+        cooldown: offerCooldown.trim() || null,
         eligibility_rule: leavesQuery.isSuccess ? coercePredicate(rule, leaves) : rule,
       },
     });
@@ -306,6 +327,50 @@ function OfferCard({
         <Switch checked={isFinal} onCheckedChange={setIsFinal} />
         Final action (ends the interaction)
       </label>
+
+      <div className="space-y-3 rounded-md border border-dashed p-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          Rapport &amp; check (non-final actions)
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Rapport Δ on success">
+            <Input
+              type="number"
+              value={rapportDeltaSuccess}
+              onChange={(e) => setRapportDeltaSuccess(e.target.value)}
+            />
+          </Field>
+          <Field label="Rapport Δ on failure">
+            <Input
+              type="number"
+              value={rapportDeltaFailure}
+              onChange={(e) => setRapportDeltaFailure(e.target.value)}
+            />
+          </Field>
+          <Field label="Check type (id)">
+            <Input
+              type="number"
+              value={checkType}
+              onChange={(e) => setCheckType(e.target.value)}
+              placeholder="optional — gates a perform_check"
+            />
+          </Field>
+          <Field label="Check difficulty">
+            <Input
+              type="number"
+              value={checkDifficulty}
+              onChange={(e) => setCheckDifficulty(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Offer cooldown (e.g. 7 00:00:00)">
+          <Input
+            value={offerCooldown}
+            onChange={(e) => setOfferCooldown(e.target.value)}
+            placeholder="blank → no cooldown"
+          />
+        </Field>
+      </div>
 
       {offer.kind === 'mission' &&
         (details ? (
