@@ -10,6 +10,7 @@ directly (the same services the web ``create-established`` / ``create-mask`` act
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
 _LIST = "list"
 _CREATE = "create"
 _MASK = "mask"
+_PROFILE = "profile"
+_GUISE_FIELDS = ("concept", "quote", "personality", "background")
+_GUISE_KEY_RE = re.compile(r"\b(concept|quote|personality|background)=")
 
 
 class CmdPersona(DispatchCommand):
@@ -33,6 +37,8 @@ class CmdPersona(DispatchCommand):
         persona list          — same as bare ``persona``
         persona create <name> — create a new established (durable) identity
         persona mask <name>   — create a temporary anonymous mask and wear it
+        persona profile <name> [concept=… quote=… personality=… background=…]
+                              — view or author a cover identity's own (fabricated) bio
         persona <name>        — switch your active face to the named persona
         wear-face <name>      — alias for persona <name>
     """
@@ -55,6 +61,9 @@ class CmdPersona(DispatchCommand):
             return
         if verb.lower() == _MASK:
             self._create_mask(rest.strip())
+            return
+        if verb.lower() == _PROFILE:
+            self._handle_profile(rest.strip())
             return
         self._name = raw
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
@@ -91,6 +100,85 @@ class CmdPersona(DispatchCommand):
             self.msg(exc.user_message)
             return
         self.msg(f"You don a mask: '{mask.name}'. You are now presenting as it.")
+
+    def _handle_profile(self, rest: str) -> None:
+        """``persona profile <name> [field=value ...]`` — view or author a guise bio (#1270).
+
+        A cover identity carries its own fabricated bio so its *absence* doesn't out it as fake.
+        With no fields, shows the named persona's current guise bio; with ``concept=`` /
+        ``quote=`` / ``personality=`` / ``background=`` (free text to the next key), authors them.
+        """
+        if not rest:
+            self.msg(
+                "Usage: persona profile <name> "
+                "[concept=... quote=... personality=... background=...]"
+            )
+            return
+        match = _GUISE_KEY_RE.search(rest)
+        if match is None:
+            name, fields = rest, {}
+        else:
+            name = rest[: match.start()].strip()
+            fields = self._parse_guise_fields(rest[match.start() :])
+        if not name:
+            self.msg("Usage: persona profile <name> [field=value ...]")
+            return
+        persona = self._resolve_own_persona(name)
+        if persona is None:
+            return
+        if not fields:
+            self._show_guise(persona)
+            return
+        from world.scenes.services import GuiseProfileError, set_persona_profile  # noqa: PLC0415
+
+        try:
+            set_persona_profile(persona, **fields)
+        except GuiseProfileError as exc:
+            self.msg(exc.user_message)
+            return
+        self.msg(f"Updated the guise bio for '{persona.name}': {', '.join(fields)}.")
+
+    @staticmethod
+    def _parse_guise_fields(text: str) -> dict[str, str]:
+        """Split ``field=value …`` where each value runs free until the next known key."""
+        parts = _GUISE_KEY_RE.split(text)
+        # parts = ['', key1, val1, key2, val2, …] — pre-first-key chunk is empty (we sliced there).
+        fields: dict[str, str] = {}
+        for index in range(1, len(parts) - 1, 2):
+            fields[parts[index]] = parts[index + 1].strip()
+        return fields
+
+    def _resolve_own_persona(self, name: str) -> Any:
+        """Resolve a name to one of the caller's own personas, or None (already messaged)."""
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        sheet = self.caller.sheet_data
+        matches = list(Persona.objects.filter(character_sheet_id=sheet.pk, name__iexact=name))
+        if not matches:
+            available = ", ".join(
+                p.name for p in Persona.objects.filter(character_sheet_id=sheet.pk)
+            )
+            self.msg(f"No persona named '{name}'. Available: {available}.")
+            return None
+        if len(matches) > 1:
+            self.msg(f"Multiple personas match '{name}'. Be more specific.")
+            return None
+        return matches[0]
+
+    def _show_guise(self, persona: Any) -> None:
+        """Render a persona's current guise bio (or a prompt to author one)."""
+        profile = persona.profile
+        if profile is None:
+            self.msg(
+                f"'{persona.name}' has no guise bio yet. Author one with: "
+                f"persona profile {persona.name} concept=..."
+            )
+            return
+        lines = [f"|wGuise bio for {persona.name}:|n"]
+        for field_name in _GUISE_FIELDS:
+            value = getattr(profile, field_name)
+            lines.append(f"  {field_name.title()}: {value or '(unset)'}")
+        self.msg("\n".join(lines))
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for ``set_active_persona``."""

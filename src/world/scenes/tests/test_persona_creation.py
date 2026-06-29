@@ -22,7 +22,13 @@ from world.forms.factories import (
 from world.forms.models import CharacterFormState, FormType, PersonaTraitDescriptor
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
-from world.scenes.services import PersonaCreationError, create_mask, create_persona
+from world.scenes.services import (
+    GuiseProfileError,
+    PersonaCreationError,
+    create_mask,
+    create_persona,
+    set_persona_profile,
+)
 from world.scenes.views import PersonaViewSet
 
 
@@ -111,6 +117,42 @@ class CreateMaskTests(TestCase):
 
         state = CharacterFormState.objects.get(character=self.character)
         assert state.active_fake_overlay_id == disguise.id
+
+
+class SetPersonaProfileTests(TestCase):
+    """Authoring a cover identity's own (fabricated) bio — the Guise Sheet (#1270)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.cover = create_persona(cls.sheet, name="Robert D'Vile", persona_type="established")
+
+    def test_attaches_a_profile_the_first_time(self):
+        assert self.cover.profile is None
+        profile = set_persona_profile(
+            self.cover, concept="A jovial wine merchant", quote="In vino veritas."
+        )
+        self.cover.refresh_from_db()
+        assert self.cover.profile_id == profile.pk
+        assert profile.concept == "A jovial wine merchant"
+        assert profile.quote == "In vino veritas."
+
+    def test_partial_update_leaves_other_fields_untouched(self):
+        set_persona_profile(self.cover, concept="Merchant", background="Born in the river-ward.")
+        # A later edit of one field must not blank the others.
+        set_persona_profile(self.cover, concept="Spice merchant")
+        self.cover.refresh_from_db()
+        assert self.cover.profile.concept == "Spice merchant"
+        assert self.cover.profile.background == "Born in the river-ward."
+
+    def test_reuses_the_same_profile_on_re_edit(self):
+        first = set_persona_profile(self.cover, concept="One")
+        second = set_persona_profile(self.cover, quote="Two")
+        assert first.pk == second.pk  # one guise profile per persona, not a new row each edit
+
+    def test_rejects_primary_persona(self):
+        with self.assertRaises(GuiseProfileError):
+            set_persona_profile(self.sheet.primary_persona, concept="not allowed")
 
 
 class CreatePersonaEndpointTests(TestCase):

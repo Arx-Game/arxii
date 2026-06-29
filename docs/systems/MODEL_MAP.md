@@ -929,6 +929,7 @@
   - aspects <- checks.CheckTypeAspect
   - item_check_modifiers <- items.ItemCheckModifier
   - escalation_curves <- combat.EscalationCurve
+  - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
   - disarm_traps <- room_features.Trap
 
@@ -3481,6 +3482,7 @@
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
   - research_details <- clues.ResearchProjectDetails
+  - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_construction_details <- buildings.BuildingConstructionDetails
@@ -3493,14 +3495,27 @@
   - contributor_persona -> scenes.Persona [FK]
   - item_instance -> items.ItemInstance [FK] (nullable)
   - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - contribution_method -> projects.ContributionMethod [FK] (nullable)
+
+### ContributionMethod
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - contributions <- projects.Contribution
 
 ### Service Functions
-- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `contribute_check_to_project(project: 'Project', *, actor: 'ObjectDB', contributor_persona: 'Persona', method: 'ContributionMethod') -> 'Contribution' — Make a check-based contribution: spend AP, roll the check, advance on success (#1574).`
+- `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' — Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `maybe_complete_immediately(project: 'Project') -> 'bool' — Resolve an instant-completion project the moment its threshold is funded (#1500).`
+- `register_instant_completion_kind(kind: 'str') -> 'None' — Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
+- `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
 
 
 ## world.realms
@@ -4070,6 +4085,7 @@
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`
+- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, personality: 'str | None' = None, background: 'str | None' = None) -> 'Profile' — Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 
 
 ## world.secrets

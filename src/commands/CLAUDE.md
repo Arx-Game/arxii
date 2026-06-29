@@ -268,7 +268,10 @@ actions, backends, and service functions.
   <name>` (durable ESTABLISHED) and `persona mask <name>` (TEMPORARY anonymous mask, worn on
   creation) call the validated `scenes.services.create_persona`/`create_mask` directly (#1127) — the
   same services the web `create-established`/`create-mask` actions use; staff bypass the
-  ESTABLISHED cap. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
+  ESTABLISHED cap. `persona profile <name> [concept=… quote=… personality=… background=…]` (#1270)
+  views or authors a non-primary persona's **Guise Sheet** (its own fabricated bio) via
+  `scenes.services.set_persona_profile` (sole mutator; PRIMARY rejected); values run free to the
+  next key. Pose/sdesc reflection of the presented persona is #1109's scope, not this command.
 - **`form.py`**: `CmdForm` (`form`, #1111 slice 4) — list, shift into, or revert
   your alternate selves. Bare `form`/`form list` renders the active alt-self
   (`true self` if none) and the available list. `form shift <name|id>` resolves the

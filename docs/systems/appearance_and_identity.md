@@ -66,6 +66,17 @@ artist changes persona with an *identical* body; a curse changes the body and
   `PersonaViewSet` `create-established` / `create-mask` actions. The raw `ModelViewSet` create was
   removed — these are the only creation surfaces. They create the persona and **nothing else**, so
   the *Privacy invariant* below holds structurally (no descriptor is ever copied from a sibling).
+- **Guise Sheet — the cover's own bio (#1270).** An established/cover persona carries its OWN
+  fabricated bio (`Persona.profile → character_sheets.Profile`: concept / quote / personality /
+  background) so the *absence* of a bio doesn't instantly out it as fake; the sheet's `true_profile`
+  stays the real face's bio (presented by PRIMARY). `scenes.services.set_persona_profile` is the
+  **sole mutator** (PRIMARY rejected; narrative text only — **lineage stays display-only**, every
+  *mechanical* lineage read pinned to `true_profile` via the sheet's forwarding properties).
+  Authored on telnet via `persona profile <name> [concept=… quote=… personality=… background=…]`;
+  the web profile serializer already renders the *presented* face's profile cover-aware (slices
+  1–3), so a guise authored anywhere shows correctly — a dedicated **web authoring form** is the
+  remaining follow-up. (Telnet `@sheet` is self/staff-only, so a non-privileged viewer never sees
+  another's cover there; the `<cover> (<real>)` reveal is a web-profile concern.)
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a
