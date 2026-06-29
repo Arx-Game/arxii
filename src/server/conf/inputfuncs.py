@@ -93,7 +93,7 @@ def _build_action_ref(kwargs: dict) -> object:
     return "No action specified."
 
 
-def _resolve_registry_kwargs(ref: object, raw_kwargs: dict) -> "dict | str":
+def _resolve_registry_kwargs(ref: object, raw_kwargs: dict, actor: object) -> "dict | str":
     """Resolve ObjectDB ``*_id`` kwargs for a REGISTRY ref.
 
     For REGISTRY refs the ``Action`` object is interrogated for its
@@ -101,8 +101,15 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict) -> "dict | str":
     resolved to ``ObjectDB`` instances.  Non-REGISTRY refs pass kwargs through
     unchanged (no contract).
 
+    Resolution is **scoped to objects the actor can perceive** — the same
+    same-location proxy the actions' prerequisites enforce (``_is_visible_to``,
+    #1024). A pk the actor can't perceive returns the *same* "Object not found"
+    error as a non-existent pk, so a client cannot probe arbitrary object
+    existence by pk (#1226). Every registry objectdb-target is a co-located or
+    held object, so this rejects nothing a prerequisite would have let through.
+
     Returns the resolved kwargs dict on success, or an error string on failure
-    (action not found or ObjectDB lookup failed).
+    (action not found, or a target pk that doesn't exist / isn't perceivable).
 
     ``ref`` is typed as ``object`` because all ``actions.*`` imports are deferred
     in this Evennia conf module; the concrete type is ``ActionRef``.
@@ -110,6 +117,7 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict) -> "dict | str":
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     from actions.constants import ActionBackend  # noqa: PLC0415
+    from actions.prerequisites import _is_visible_to  # noqa: PLC0415
     from actions.registry import get_action  # noqa: PLC0415
     from actions.types import ActionRef  # noqa: PLC0415
 
@@ -126,10 +134,11 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict) -> "dict | str":
     resolved: dict = {}
     for key, value in raw_kwargs.items():
         if key.endswith("_id") and isinstance(value, int) and key[:-3] in objectdb_targets:
-            try:
-                resolved[key[:-3]] = ObjectDB.objects.get(pk=value)
-            except ObjectDB.DoesNotExist:
+            obj = ObjectDB.objects.filter(pk=value).first()
+            # Out-of-scope and non-existent collapse to one error — no existence probe.
+            if obj is None or not _is_visible_to(actor, obj):
                 return f"Object not found: {key}={value}."
+            resolved[key[:-3]] = obj
         else:
             resolved[key] = value
     return resolved
@@ -202,7 +211,7 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
     ref = ref_or_err
 
     raw_kwargs: dict = kwargs.get("kwargs") or {}
-    resolved_or_err = _resolve_registry_kwargs(ref, raw_kwargs)
+    resolved_or_err = _resolve_registry_kwargs(ref, raw_kwargs, actor)
     if isinstance(resolved_or_err, str):
         _send(False, resolved_or_err)
         return
