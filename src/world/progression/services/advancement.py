@@ -18,8 +18,9 @@ from world.progression.exceptions import (
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.classes.models import CharacterClassLevel
+    from world.classes.models import CharacterClassLevel, Path
     from world.magic.models.sessions import RitualSession
+    from world.magic.types.path_magic import PathMagicGrantResult
     from world.progression.models import ClassLevelAdvancement
     from world.scenes.models import Interaction, Scene
 
@@ -60,6 +61,23 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
         from world.magic.services.threads import recompute_max_health_with_threads
 
         recompute_max_health_with_threads(sheet)
+
+
+def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
+    """Switch ``sheet`` onto ``path`` and grant that path's magic (#1579).
+
+    The single in-play path-change seam: writes the ``CharacterPathHistory`` row and
+    fires ``grant_path_magic`` so a path change always carries its gift + technique
+    grants (you cannot switch path and forget to grant). Used by both the Audere
+    Majora crossing (``cross_threshold``, levels 5/10/15/20) and the Ritual of the
+    Durance POTENTIAL-stage semi-crossing (level 3, no Audere Majora). Returns the
+    ``PathMagicGrantResult``.
+    """
+    from world.magic.services.path_magic import grant_path_magic
+    from world.progression.models import CharacterPathHistory
+
+    CharacterPathHistory.objects.create(character=sheet.character, path=path)
+    return grant_path_magic(sheet, path)
 
 
 # =============================================================================

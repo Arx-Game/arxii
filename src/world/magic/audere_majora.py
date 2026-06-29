@@ -471,9 +471,9 @@ def cross_threshold(
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.audere import corruption_advisory_for_character  # noqa: PLC0415
-    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
     from world.progression.services.advancement import (  # noqa: PLC0415
         apply_class_level_advance,
+        cross_into_path,
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
@@ -491,14 +491,11 @@ def cross_threshold(
 
     apply_class_level_advance(sheet, level_after=level_after)
 
-    CharacterPathHistory.objects.create(character=character, path=chosen_path)
-
-    # Crossing into the new path grants its authored gift(s) + curated starter
-    # technique set (#1579, ADR-0055). Idempotent; a no-op for paths with no
+    # Switch onto the chosen path and grant its gift(s) + curated starter techniques
+    # (#1579, ADR-0055) through the shared path-change seam — the same seam the
+    # Durance level-3 semi-crossing uses. Idempotent; a no-op for paths with no
     # PathGiftGrant rows.
-    from world.magic.services.path_magic import grant_path_magic  # noqa: PLC0415
-
-    grant_path_magic(sheet, chosen_path)
+    cross_into_path(sheet, chosen_path)
 
     crossing = AudereMajoraCrossing.objects.create(
         character_sheet=sheet,

@@ -97,6 +97,20 @@ class GrantPathMagicTests(TestCase):
         thread = self._latent_thread(sheet)
         self.assertIn(thread.resonance_id, {self.r1.pk, self.r2.pk})
 
+    def test_cross_into_path_writes_history_and_grants(self):
+        from world.progression.models import CharacterPathHistory
+        from world.progression.services.advancement import cross_into_path
+
+        sheet = CharacterSheetFactory()
+        result = cross_into_path(sheet, self.path)
+
+        self.assertTrue(
+            CharacterPathHistory.objects.filter(character=sheet.character, path=self.path).exists()
+        )
+        self.assertEqual(
+            {t.pk for t in result.granted_techniques}, {self.tech_a.pk, self.tech_b.pk}
+        )
+
     def test_path_without_grant_is_noop(self):
         sheet = CharacterSheetFactory()
         empty_path = PathFactory(name="Pathless")
