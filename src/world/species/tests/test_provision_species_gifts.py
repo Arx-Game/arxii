@@ -128,35 +128,38 @@ class ProvisionSpeciesGiftsTests(TestCase):
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
     """Integration: finalize_magic_data wires provision_species_gifts (SQLite-safe)."""
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.resonance = ResonanceFactory()
+        cls.minor_gift = GiftFactory(name="Test Elven Sight", kind=GiftKind.MINOR)
+        cls.minor_gift.resonances.add(cls.resonance)
+        cls.species = SpeciesFactory(name="TestFinalizeElven")
+        SpeciesGiftGrantFactory(species=cls.species, gift=cls.minor_gift, drawback_condition=None)
+        cls.cantrip = CantripFactory()
+
     def test_finalize_grants_minor_gift_at_cg_resonance(self):
         """finalize_magic_data provisions species Minor Gift at the CG-chosen resonance."""
-        resonance = ResonanceFactory()
-        minor_gift = GiftFactory(name="Test Elven Sight", kind=GiftKind.MINOR)
-        minor_gift.resonances.add(resonance)
-        species = SpeciesFactory(name="TestFinalizeElven")
-        SpeciesGiftGrantFactory(species=species, gift=minor_gift, drawback_condition=None)
-        cantrip = CantripFactory()
-        sheet = CharacterSheetFactory(species=species)
+        sheet = CharacterSheetFactory(species=self.species)
         draft = CharacterDraftFactory(
             draft_data={
-                "selected_cantrip_id": cantrip.id,
-                "selected_gift_resonance_id": resonance.id,
+                "selected_cantrip_id": self.cantrip.id,
+                "selected_gift_resonance_id": self.resonance.id,
             },
         )
         finalize_magic_data(draft, sheet)
         self.assertTrue(
-            CharacterGift.objects.filter(character=sheet, gift=minor_gift).exists(),
+            CharacterGift.objects.filter(character=sheet, gift=self.minor_gift).exists(),
             "finalize_magic_data should provision the species Minor Gift",
         )
         thread = Thread.objects.filter(
             owner=sheet,
             target_kind=TargetKind.GIFT,
-            target_gift=minor_gift,
+            target_gift=self.minor_gift,
         ).first()
         self.assertIsNotNone(thread, "Latent GIFT thread for species gift should be created")
         self.assertEqual(
             thread.resonance,
-            resonance,
+            self.resonance,
             "Species gift thread should use the CG-chosen resonance",
         )
 
@@ -168,25 +171,69 @@ class ProvisionSpeciesGiftsDrawbackTest(TestCase):
     Run on CI's postgres shard. Do NOT run on the SQLite fast tier.
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        from world.conditions.factories import ConditionTemplateFactory
+
+        cls.drawback = ConditionTemplateFactory(name="Test Sunlight Vulnerability")
+        cls.resonance = ResonanceFactory()
+        cls.minor_gift = GiftFactory(name="Test Vampiric Gift", kind=GiftKind.MINOR)
+        cls.minor_gift.resonances.add(cls.resonance)
+        cls.species = SpeciesFactory(name="TestVampireDrawback")
+        SpeciesGiftGrantFactory(
+            species=cls.species, gift=cls.minor_gift, drawback_condition=cls.drawback
+        )
+
     def test_drawback_applied_when_set(self):
         """A grant with drawback_condition applies a ConditionInstance to the character."""
-        from world.conditions.factories import ConditionTemplateFactory
         from world.conditions.models import ConditionInstance
 
-        drawback = ConditionTemplateFactory(name="Test Sunlight Vulnerability")
-        resonance = ResonanceFactory()
-        minor_gift = GiftFactory(name="Test Vampiric Gift", kind=GiftKind.MINOR)
-        minor_gift.resonances.add(resonance)
-        species = SpeciesFactory(name="TestVampireDrawback")
-        SpeciesGiftGrantFactory(species=species, gift=minor_gift, drawback_condition=drawback)
-        sheet = CharacterSheetFactory(species=species)
-
-        provision_species_gifts(sheet, resonance=resonance)
+        sheet = CharacterSheetFactory(species=self.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
 
         self.assertTrue(
             ConditionInstance.objects.filter(
                 target=sheet.character,
-                condition=drawback,
+                condition=self.drawback,
             ).exists(),
             "Drawback condition should be applied to the character when the grant has one",
+        )
+
+    def test_drawback_idempotent_for_stackable_template(self):
+        """Re-calling provision_species_gifts does not stack a stackable drawback condition.
+
+        Guard: only apply when no active ConditionInstance (resolved_at__isnull=True) already
+        exists for (target, condition). Without the guard a stackable template would increment
+        stacks on every finalize call.
+        """
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionInstance
+
+        stackable_drawback = ConditionTemplateFactory(
+            name="Test Stackable Species Drawback",
+            is_stackable=True,
+            max_stacks=5,
+        )
+        resonance = ResonanceFactory()
+        minor_gift = GiftFactory(name="Test Gift With Stackable Drawback", kind=GiftKind.MINOR)
+        minor_gift.resonances.add(resonance)
+        species = SpeciesFactory(name="TestStackableDrawbackSpecies")
+        SpeciesGiftGrantFactory(
+            species=species, gift=minor_gift, drawback_condition=stackable_drawback
+        )
+        sheet = CharacterSheetFactory(species=species)
+
+        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonance=resonance)
+
+        instances = ConditionInstance.objects.filter(
+            target=sheet.character,
+            condition=stackable_drawback,
+            resolved_at__isnull=True,
+        )
+        self.assertEqual(instances.count(), 1, "Guard must prevent a second ConditionInstance")
+        self.assertEqual(
+            instances.first().stacks,
+            1,
+            "Guard must prevent stacks from incrementing on re-finalize",
         )

@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 
 def _species_and_ancestors(species):
-    """Return [species, parent, grandparent, ...] walking the parent chain."""
+    """Return [species, parent, grandparent, ...] walking the parent chain.
+
+    Assumes an acyclic parent chain (data-hygiene invariant); the while is bounded.
+    """
     chain, node = [], species
     while node is not None:
         chain.append(node)
@@ -48,5 +51,13 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
         if res is not None:
             provision_latent_gift_thread(sheet, grant.gift, resonance=res)
         if grant.drawback_condition_id is not None:
-            apply_condition(sheet.character, grant.drawback_condition)
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+            already_applied = ConditionInstance.objects.filter(
+                target=sheet.character,
+                condition=grant.drawback_condition,
+                resolved_at__isnull=True,
+            ).exists()
+            if not already_applied:
+                apply_condition(sheet.character, grant.drawback_condition)
     return minted
