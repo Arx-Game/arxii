@@ -406,12 +406,18 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         # Beat 4: paid RESISTANCE pull snapshots scale with thread level. Levels > 10
         # are XP-locked + expensive, so set level directly (documented #1578 pattern).
         # Anima (10/10) is already seeded by finalize; top up the resonance bucket the
-        # imbue drained (the CharacterResonance row already exists — update, don't create).
+        # imbue drained. Use an INSTANCE save, not a queryset .update(): CharacterResonance
+        # is a SharedMemoryModel (idmapper), and a bulk .update() writes the DB row but
+        # leaves the cached instance that spend_resonance_for_pull reads stale at its
+        # post-imbue balance of 0 (the #1111 stale-idmapper lesson) → ResonanceInsufficient.
         from world.magic.models import CharacterResonance
 
-        CharacterResonance.objects.filter(character_sheet=sheet, resonance=self.resonance).update(
-            balance=20, lifetime_earned=20
+        cr, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sheet, resonance=self.resonance
         )
+        cr.balance = 20
+        cr.lifetime_earned = 20
+        cr.save(update_fields=["balance", "lifetime_earned"])
         low = self._commit_pull_at_level(sheet, thread, 10)
         high = self._commit_pull_at_level(sheet, thread, 30)
         # active_pull_resistance sums BOTH RESISTANCE snapshots a tier-1 pull writes:
