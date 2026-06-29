@@ -78,6 +78,19 @@ class Captivity(SharedMemoryModel):
         related_name="ransom_captivities",
         help_text="The one-shot demand contract surfaced on the captor-debtor's books.",
     )
+    ransom_project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ransom_captivities",
+        help_text=(
+            "The crowdfundable RANSOM Project standing in the cell (#1500). Anyone may"
+            " donate toward it; the instant it's fully funded the captive is freed."
+            " The FK lives here (the consumer), keeping the projects app free of any"
+            " captivity dependency (ADR-0010)."
+        ),
+    )
     rescue_template = models.ForeignKey(
         _MISSION_TEMPLATE_FK,
         on_delete=models.SET_NULL,

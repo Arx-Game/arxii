@@ -636,6 +636,7 @@
   - cell -> instances.InstancedRoom [FK] (nullable)
   - captor_organization -> societies.Organization [FK] (nullable)
   - ransom_contract -> currency.Contract [FK] (nullable)
+  - ransom_project -> projects.Project [FK] (nullable)
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 **Pointed to by:**
   - rescue_clues <- clues.Clue

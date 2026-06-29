@@ -129,12 +129,17 @@ def donate_to_project(project: Project, *, donor_persona: Persona, amount: int) 
     with transaction.atomic():
         purse = get_or_create_purse(donor_persona.character_sheet)
         transfer(amount=amount, reason="project_donation", from_purse=purse)
-        return add_contribution(
+        contribution = add_contribution(
             project=project,
             contributor_persona=donor_persona,
             kind=ContributionKind.MONEY,
             money_amount=amount,
         )
+
+    # Post-commit: an instant-completion kind (RANSOM) resolves the moment it's
+    # fully funded — frees the captive now rather than on the next cron tick.
+    maybe_complete_immediately(project)
+    return contribution
 
 
 class ContributionMethodError(ValueError):
@@ -189,6 +194,9 @@ def contribute_check_to_project(
             project.current_progress += method.progress_on_success
             project.save(update_fields=["current_progress", "updated_at"])
 
+    # Post-commit: instant-completion kinds resolve the moment their threshold is
+    # met (no RANSOM check methods today, but keep the seam uniform across paths).
+    maybe_complete_immediately(project)
     return contribution
 
 
@@ -264,6 +272,57 @@ def get_kind_handler(kind: str) -> KindHandler:
 def clear_kind_handlers() -> None:
     """Test-only: clear the handler registry."""
     _KIND_HANDLERS.clear()
+
+
+# ---------------------------------------------------------------------------
+# Instant-completion kinds (#1500)
+# ---------------------------------------------------------------------------
+# Most kinds resolve on a cron tick (scan_active_projects -> RESOLVING -> a
+# generic resolver). A few — RANSOM — must resolve the *instant* their
+# threshold is funded: a ransom that's fully paid frees the captive now, not on
+# the next 15-minute tick. A kind registered here is checked after every
+# progress-advancing contribution; when it crosses its SINGLE_THRESHOLD it runs
+# its kind handler immediately and is marked COMPLETED. The handler gets
+# ``outcome_tier=None`` (a funded threshold *is* the success — there is no
+# check roll to tier).
+
+_INSTANT_COMPLETION_KINDS: set[str] = set()
+
+
+def register_instant_completion_kind(kind: str) -> None:
+    """Mark a ProjectKind as completing immediately on threshold (re-register safe)."""
+    _INSTANT_COMPLETION_KINDS.add(kind)
+
+
+def clear_instant_completion_kinds() -> None:
+    """Test-only: clear the instant-completion registry."""
+    _INSTANT_COMPLETION_KINDS.clear()
+
+
+def maybe_complete_immediately(project: Project) -> bool:
+    """Resolve an instant-completion project the moment its threshold is funded (#1500).
+
+    A no-op unless ``project.kind`` is registered via
+    :func:`register_instant_completion_kind`, the project is still ACTIVE, and its
+    SINGLE_THRESHOLD progress has reached ``threshold_target``. When all hold, runs
+    the kind handler (``outcome_tier=None``) and marks the project COMPLETED. Returns
+    ``True`` if it completed the project. Call this **after** the contribution's
+    transaction commits — the handler may have heavy side effects (the RANSOM handler
+    relocates the freed captive and tears down their cell).
+    """
+    if project.kind not in _INSTANT_COMPLETION_KINDS:
+        return False
+    if project.status != ProjectStatus.ACTIVE:
+        return False
+    if project.completion_mode != CompletionMode.SINGLE_THRESHOLD:
+        return False
+    if project.threshold_target is None or project.current_progress < project.threshold_target:
+        return False
+
+    get_kind_handler(project.kind)(project, None)
+    project.status = ProjectStatus.COMPLETED
+    project.save(update_fields=["status", "updated_at"])
+    return True
 
 
 # ---------------------------------------------------------------------------

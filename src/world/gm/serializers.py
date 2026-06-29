@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
+
+if TYPE_CHECKING:
+    from world.projects.models import Project
 
 from world.gm.constants import GMApplicationStatus, GMTableViewerRole
 from world.gm.models import (
@@ -427,3 +432,41 @@ class GMApplicationQueueSerializer(serializers.ModelSerializer):
             "application_text",
         ]
         read_only_fields = fields
+
+
+class DemandRansomSerializer(serializers.Serializer):
+    """Validate + execute a GM ransom demand for a held captive (#1500).
+
+    ``captivity_id`` must point at a currently-held captivity; ``amount`` (coppers)
+    is optional and falls through to the captor's default demand. ``save`` raises
+    the crowdfundable RANSOM project via ``demand_ransom_project`` and returns it.
+    """
+
+    captivity_id = serializers.IntegerField()
+    amount = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+    def validate(self, attrs: dict) -> dict:
+        from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+        from world.captivity.models import Captivity  # noqa: PLC0415
+
+        captivity = Captivity.objects.filter(pk=attrs["captivity_id"]).first()
+        if captivity is None:
+            msg = "No such captivity."
+            raise serializers.ValidationError(msg)
+        if captivity.status != CaptivityStatus.HELD:
+            msg = "That captivity has already ended."
+            raise serializers.ValidationError(msg)
+        attrs["captivity"] = captivity
+        return attrs
+
+    def save(self, **kwargs: object) -> Project:  # noqa: ARG002
+        from world.captivity.exceptions import CaptivityError  # noqa: PLC0415
+        from world.captivity.ransom_project import demand_ransom_project  # noqa: PLC0415
+
+        try:
+            return demand_ransom_project(
+                self.validated_data["captivity"],
+                amount=self.validated_data.get("amount"),
+            )
+        except CaptivityError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc

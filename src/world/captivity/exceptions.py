@@ -42,6 +42,12 @@ class NoRansomError(CaptivityError):
     user_message = "There is no ransom demand to pay."
 
 
+class AlreadyDemandedError(CaptivityError):
+    """A crowdfundable ransom is already standing for this captive (#1500)."""
+
+    user_message = "A ransom is already demanded for that captive."
+
+
 class InsufficientTreasuryError(CaptivityError):
     """The paying organization's treasury cannot cover the ransom."""
 
