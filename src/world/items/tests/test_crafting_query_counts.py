@@ -170,8 +170,10 @@ class CraftAttachFacetQueryCountTests(TestCase):
     def test_craft_attach_facet_query_count(self) -> None:
         """craft_attach_facet must not scale queries with consequence/cap/material row count.
 
-        Pinned at 64 queries (measured on SQLite; #1031 baseline 63 + 1 for the #1243
-        symmetric anima-sufficiency guard in consume_cost). Breakdown:
+        Pinned at 65 queries (measured on SQLite; #1031 baseline 63 + 1 for the #1243
+        symmetric anima-sufficiency guard in consume_cost + 1 for the #1688
+        specialization-composition lookup in perform_check / _build_forced_check_result —
+        an unconditional sibling of the existing trait/aspect composition queries). Breakdown:
           - ~14 SAVEPOINT/RELEASE pairs from @transaction.atomic nesting
           - ~12 Django cascade collect queries before material DELETE (batched IN-lists
             per FK-related model; O(related_models) not O(material_count))
@@ -186,7 +188,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
         consequence row (3 rows) would push the count up by ≥3, exceeding this ceiling.
         """
         with force_check_outcome(self.success_outcome):
-            with self.assertNumQueries(64):
+            with self.assertNumQueries(65):
                 result = craft_attach_facet(
                     crafter_account=self.account,
                     crafter_character=self.character,
