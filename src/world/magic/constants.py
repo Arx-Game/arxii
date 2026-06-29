@@ -128,6 +128,7 @@ class EffectKind(models.TextChoices):
     NARRATIVE_ONLY = "NARRATIVE_ONLY", "Narrative Only"
     CORRUPTION_RESISTANCE = "CORRUPTION_RESISTANCE", "Corruption Resistance"
     ASSUME_ALTERNATE_SELF = "ASSUME_ALTERNATE_SELF", "Assume Alternate Self"
+    RESISTANCE = "RESISTANCE", "Damage-Type Resistance"
 
 
 class VitalBonusTarget(models.TextChoices):
