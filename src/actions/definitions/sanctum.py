@@ -41,6 +41,10 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
+_MSG_NO_ACTIVE_CHARACTER = "No active character."
+_MSG_OPERATION_FAILED = "Operation failed."
+
+
 # ---------------------------------------------------------------------------
 # Module-level resolution helpers — shared with commands/sanctum.py so the
 # room→RoomProfile→SanctumDetails walk lives in exactly one place.
@@ -137,7 +141,7 @@ class SanctumInstallAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             result = perform_sanctification(
                 kwargs["room_profile"],
@@ -146,7 +150,7 @@ class SanctumInstallAction(SanctumActionBase):
                 owner_mode=kwargs["owner_mode"],
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         if result.fizzled:
             return ActionResult(
                 success=True,
@@ -181,7 +185,7 @@ class SanctumHomecomingAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             result = perform_homecoming_ritual(
                 kwargs["sanctum"],
@@ -190,7 +194,7 @@ class SanctumHomecomingAction(SanctumActionBase):
                 narrative_text=kwargs.get("narrative_text", ""),
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="The Homecoming ritual is complete.",
@@ -216,7 +220,7 @@ class SanctumPurgingAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             result = perform_purging_ritual(
                 kwargs["sanctum"],
@@ -225,7 +229,7 @@ class SanctumPurgingAction(SanctumActionBase):
                 kwargs["resonance_sacrificed"],
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="The Purging ritual is complete.",
@@ -250,13 +254,13 @@ class SanctumWeaveAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             thread = weave_sanctum_thread(
                 kwargs["sanctum"], persona.character_sheet, kwargs["slot_kind"]
             )
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="You weave a thread into the Sanctum.",
@@ -275,11 +279,11 @@ class SanctumDissolveAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             result = perform_dissolution(kwargs["sanctum"], persona)
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="The Sanctum is dissolved.",
@@ -304,11 +308,11 @@ class SanctumAbsorbAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             result = absorb_sanctum_pool(kwargs["sanctum"], persona)
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="You absorb the Sanctum's resonance pool.",
@@ -332,11 +336,11 @@ class SanctumSeverAction(SanctumActionBase):
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
         persona = self._persona(actor)
         if persona is None:
-            return self._fail("No active character.")
+            return self._fail(_MSG_NO_ACTIVE_CHARACTER)
         try:
             sever_sanctum_thread(kwargs["thread"])
         except SANCTUM_EXC as exc:
-            return self._fail(getattr(exc, "user_message", "Operation failed."))  # noqa: GETATTR_LITERAL
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message="You sever the thread.",

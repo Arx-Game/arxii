@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
 
 
+_MSG_NO_ACTIVE_CHARACTER = "No active character."
+_MSG_ENTRY_NOT_FOUND = "That journal entry was not found."
+
+
 @dataclass
 class _BaseJournalAction(Action):
     """Shared base: sheet resolution + sheet-required prerequisite."""
@@ -53,7 +57,7 @@ class CreateJournalEntryAction(_BaseJournalAction):
 
         sheet = self._sheet(actor)
         if sheet is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
 
         entry = create_journal_entry(
             author=sheet,
@@ -91,7 +95,7 @@ class RespondToJournalAction(_BaseJournalAction):
 
         sheet = self._sheet(actor)
         if sheet is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
 
         parent = kwargs.get("parent")
         parent_id = kwargs.get("parent_id")
@@ -102,7 +106,7 @@ class RespondToJournalAction(_BaseJournalAction):
             try:
                 parent = JournalEntry.objects.get(pk=parent_id)
             except JournalEntry.DoesNotExist:
-                return ActionResult(success=False, message="That journal entry was not found.")
+                return ActionResult(success=False, message=_MSG_ENTRY_NOT_FOUND)
         else:
             return ActionResult(success=False, message="No journal entry selected.")
         if response_type not in ResponseType.values:
@@ -150,18 +154,18 @@ class EditJournalEntryAction(_BaseJournalAction):
 
         sheet = self._sheet(actor)
         if sheet is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
 
         entry = kwargs.get("entry")
         entry_id = kwargs.get("entry_id")
         if isinstance(entry, JournalEntry):
             if entry.author_id != sheet.pk:
-                return ActionResult(success=False, message="That journal entry was not found.")
+                return ActionResult(success=False, message=_MSG_ENTRY_NOT_FOUND)
         elif entry_id is not None:
             try:
                 entry = JournalEntry.objects.get(pk=entry_id, author_id=sheet.pk)
             except JournalEntry.DoesNotExist:
-                return ActionResult(success=False, message="That journal entry was not found.")
+                return ActionResult(success=False, message=_MSG_ENTRY_NOT_FOUND)
         else:
             return ActionResult(success=False, message="No journal entry selected.")
 

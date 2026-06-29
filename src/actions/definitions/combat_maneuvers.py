@@ -28,6 +28,10 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
 
+# Repeated ActionResult failure messages, extracted to satisfy S1192.
+NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
+NO_ACTION_DECLARED_MESSAGE = "You have not declared an action yet."
+
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
     """Return *actor*'s CharacterSheet, or None if absent."""
@@ -107,7 +111,7 @@ class FleeAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         try:
             declare_flee(participant)
         except ValueError as err:
@@ -138,7 +142,7 @@ class CoverAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         if ally_participant_id is None:
             return ActionResult(success=False, message="Cover requires an ally to protect.")
         ally = _resolve_ally(participant, ally_participant_id)
@@ -174,7 +178,7 @@ class InterposeAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         ally = _resolve_ally(participant, ally_participant_id)
         if ally_participant_id is not None and ally is None:
             return ActionResult(success=False, message="No such ally in this encounter.")
@@ -206,10 +210,10 @@ class ReadyAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         action = _current_round_action(participant)
         if action is None:
-            return ActionResult(success=False, message="You have not declared an action yet.")
+            return ActionResult(success=False, message=NO_ACTION_DECLARED_MESSAGE)
         toggle_action_ready(action)
         if action.is_ready:
             return ActionResult(success=True, message="You are ready.")
@@ -239,10 +243,10 @@ class UpgradeComboAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         action = _current_round_action(participant)
         if action is None:
-            return ActionResult(success=False, message="You have not declared an action yet.")
+            return ActionResult(success=False, message=NO_ACTION_DECLARED_MESSAGE)
         combo = ComboDefinition.objects.filter(pk=combo_id).first() if combo_id else None
         if combo is None:
             return ActionResult(success=False, message="No such combo.")
@@ -277,10 +281,10 @@ class RevertComboAction(Action):
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
         if participant is None:
-            return ActionResult(success=False, message="You are not in an active combat round.")
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         action = _current_round_action(participant)
         if action is None:
-            return ActionResult(success=False, message="You have not declared an action yet.")
+            return ActionResult(success=False, message=NO_ACTION_DECLARED_MESSAGE)
         try:
             revert_combo_upgrade(action)
         except ValueError as err:

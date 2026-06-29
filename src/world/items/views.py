@@ -88,6 +88,11 @@ from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
 from world.roster.models import RosterEntry
 
+# Shared validation message for missing required query parameters across the
+# item-first viewsets (these are computed/permission-context params, not
+# queryset filters, so they're validated manually rather than via a FilterSet).
+REQUIRED_QUERY_PARAM_MESSAGE = "This query parameter is required."
+
 
 def _user_plays_pk(user: AccountDB, pk: int) -> bool:
     """True if ``user`` has an active roster tenure on the character_sheet at ``pk``.
@@ -288,9 +293,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         # noqa: USE_FILTERSET
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         if instance_pk is None:
-            raise serializers.ValidationError(
-                {"item_instance": "This query parameter is required."}
-            )
+            raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             item = (
                 ItemInstance.objects.select_related("holder_character_sheet__character")
@@ -398,11 +401,9 @@ class ItemFacetViewSet(viewsets.ViewSet):
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         facet_pk = _parse_int_param(request.query_params.get("facet"))  # noqa: USE_FILTERSET
         if instance_pk is None:
-            raise serializers.ValidationError(
-                {"item_instance": "This query parameter is required."}
-            )
+            raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
         if facet_pk is None:
-            raise serializers.ValidationError({"facet": "This query parameter is required."})
+            raise serializers.ValidationError({"facet": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             item_instance = ItemInstance.objects.select_related(
                 "holder_character_sheet__character"
@@ -481,7 +482,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         # noqa: USE_FILTERSET
         character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
         if character_pk is None:
-            raise serializers.ValidationError({"character": "This query parameter is required."})
+            raise serializers.ValidationError({"character": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             character = ObjectDB.objects.get(pk=character_pk)
         except ObjectDB.DoesNotExist as exc:
@@ -626,7 +627,7 @@ class EquippedItemViewSet(viewsets.ViewSet):
         # noqa: USE_FILTERSET
         character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
         if character_pk is None:
-            raise serializers.ValidationError({"character": "This query parameter is required."})
+            raise serializers.ValidationError({"character": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             character = ObjectDB.objects.get(pk=character_pk)
         except ObjectDB.DoesNotExist as exc:
@@ -747,9 +748,7 @@ class OutfitViewSet(viewsets.ViewSet):
         # noqa: USE_FILTERSET
         sheet_pk = _parse_int_param(request.query_params.get("character_sheet"))  # noqa: USE_FILTERSET
         if sheet_pk is None:
-            raise serializers.ValidationError(
-                {"character_sheet": "This query parameter is required."}
-            )
+            raise serializers.ValidationError({"character_sheet": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             sheet = CharacterSheet.objects.get(pk=sheet_pk)
         except CharacterSheet.DoesNotExist as exc:
@@ -899,7 +898,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         # noqa: USE_FILTERSET
         outfit_pk = _parse_int_param(request.query_params.get("outfit"))  # noqa: USE_FILTERSET
         if outfit_pk is None:
-            raise serializers.ValidationError({"outfit": "This query parameter is required."})
+            raise serializers.ValidationError({"outfit": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             outfit = (
                 Outfit.objects.select_related("character_sheet")
@@ -1398,11 +1397,9 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         style_pk = _parse_int_param(request.query_params.get("style"))  # noqa: USE_FILTERSET
         if instance_pk is None:
-            raise serializers.ValidationError(
-                {"item_instance": "This query parameter is required."}
-            )
+            raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
         if style_pk is None:
-            raise serializers.ValidationError({"style": "This query parameter is required."})
+            raise serializers.ValidationError({"style": REQUIRED_QUERY_PARAM_MESSAGE})
         try:
             item_instance = ItemInstance.objects.select_related(
                 "holder_character_sheet__character"

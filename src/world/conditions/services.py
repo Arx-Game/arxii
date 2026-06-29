@@ -2466,7 +2466,72 @@ def _scene_participant(scene: "Scene", character_sheet: "CharacterSheet") -> boo
     return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
 
 
-def get_treatment_candidates(  # noqa: C901
+def _treatment_scene_ok(
+    treatment: TreatmentTemplate,
+    scene: "Scene",
+    helper_sheet: "CharacterSheet",
+    target_sheet: "CharacterSheet",
+) -> bool:
+    """Return True when *treatment*'s scene gate is satisfied for both parties."""
+    if not treatment.scene_required:
+        return True
+    return (
+        scene.is_active
+        and _scene_participant(scene, helper_sheet)
+        and _scene_participant(scene, target_sheet)
+    )
+
+
+def _find_bond_thread(
+    candidate_threads: list["Thread"],
+    target_sheet: "CharacterSheet",
+) -> "Thread | None":
+    """Return the first helper thread anchored to *target_sheet*, or None."""
+    for thread in candidate_threads:
+        if _thread_anchors_to_character(thread, target_sheet):
+            return thread
+    return None
+
+
+def _condition_matches_treatment(treatment: TreatmentTemplate, instance: ConditionInstance) -> bool:
+    """Return True when a condition instance is a valid target for *treatment*."""
+    if treatment.target_kind == TreatmentTargetKind.PRIMARY:
+        return instance.condition_id == treatment.target_condition_id
+    if treatment.target_kind == TreatmentTargetKind.AFTERMATH:
+        return instance.condition.parent_condition_id == treatment.target_condition_id
+    return True
+
+
+def _build_treatment_candidates(
+    treatment: TreatmentTemplate,
+    bond_thread: "Thread | None",
+    alteration_qs: Iterable["PendingAlteration"],
+    condition_qs: Iterable[ConditionInstance],
+) -> list[dict[str, Any]]:
+    """Build candidate dicts for a single *treatment* over the target's effects."""
+    if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+        return [
+            {
+                "treatment": treatment,
+                "target_effect": alteration,
+                "target_effect_type": TARGET_EFFECT_ALTERATION,
+                "bond_thread": bond_thread,
+            }
+            for alteration in alteration_qs
+        ]
+    return [
+        {
+            "treatment": treatment,
+            "target_effect": instance,
+            "target_effect_type": TARGET_EFFECT_CONDITION,
+            "bond_thread": bond_thread,
+        }
+        for instance in condition_qs
+        if _condition_matches_treatment(treatment, instance)
+    ]
+
+
+def get_treatment_candidates(
     helper_sheet: "CharacterSheet",
     target_sheet: "CharacterSheet",
     scene: "Scene",
@@ -2494,22 +2559,7 @@ def get_treatment_candidates(  # noqa: C901
     ).exists():
         return []
 
-    def _scene_ok(treatment: TreatmentTemplate) -> bool:
-        if not treatment.scene_required:
-            return True
-        return (
-            scene.is_active
-            and _scene_participant(scene, helper_sheet)
-            and _scene_participant(scene, target_sheet)
-        )
-
     candidate_threads = list(Thread.objects.filter(owner=helper_sheet, retired_at__isnull=True))
-
-    def _find_bond_thread() -> "Thread | None":
-        for thread in candidate_threads:
-            if _thread_anchors_to_character(thread, target_sheet):
-                return thread
-        return None
 
     condition_qs = ConditionInstance.objects.filter(
         target=target_character,
@@ -2524,44 +2574,19 @@ def get_treatment_candidates(  # noqa: C901
     candidates: list[dict[str, Any]] = []
 
     for treatment in TreatmentTemplate.objects.all():
-        if not _scene_ok(treatment):
+        if not _treatment_scene_ok(treatment, scene, helper_sheet, target_sheet):
             continue
 
         if treatment.requires_bond:
-            bond_thread = _find_bond_thread()
+            bond_thread = _find_bond_thread(candidate_threads, target_sheet)
             if bond_thread is None:
                 continue
         else:
             bond_thread = None
 
-        if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
-            candidates.extend(
-                {
-                    "treatment": treatment,
-                    "target_effect": alteration,
-                    "target_effect_type": TARGET_EFFECT_ALTERATION,
-                    "bond_thread": bond_thread,
-                }
-                for alteration in alteration_qs
-            )
-            continue
-
-        for instance in condition_qs:
-            if treatment.target_kind == TreatmentTargetKind.PRIMARY:
-                if instance.condition_id != treatment.target_condition_id:
-                    continue
-            elif treatment.target_kind == TreatmentTargetKind.AFTERMATH:
-                if instance.condition.parent_condition_id != treatment.target_condition_id:
-                    continue
-
-            candidates.append(
-                {
-                    "treatment": treatment,
-                    "target_effect": instance,
-                    "target_effect_type": TARGET_EFFECT_CONDITION,
-                    "bond_thread": bond_thread,
-                }
-            )
+        candidates.extend(
+            _build_treatment_candidates(treatment, bond_thread, alteration_qs, condition_qs)
+        )
 
     return candidates
 

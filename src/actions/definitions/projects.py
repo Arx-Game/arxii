@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from actions.types import ActionContext, ActionResult
 
 
+_MSG_NO_CHARACTER_SHEET = "You have no character sheet."
+_MSG_NO_SUCH_PROJECT = "No such project."
+
+
 @dataclass
 class DonateToProjectAction(Action):
     """Donate money from your own purse to an ACTIVE project (#1574).
@@ -63,7 +67,7 @@ class DonateToProjectAction(Action):
 
         sheet = actor.sheet_data
         if sheet is None:
-            return _ActionResult(success=False, message="You have no character sheet.")
+            return _ActionResult(success=False, message=_MSG_NO_CHARACTER_SHEET)
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
@@ -71,7 +75,7 @@ class DonateToProjectAction(Action):
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
-            return _ActionResult(success=False, message="No such project.")
+            return _ActionResult(success=False, message=_MSG_NO_SUCH_PROJECT)
 
         try:
             donate_to_project(project, donor_persona=persona, amount=amount)
@@ -129,7 +133,7 @@ class CheckContributeAction(Action):
             return _ActionResult(success=False, message="Contribute to which project, and how?")
         sheet = actor.sheet_data
         if sheet is None:
-            return _ActionResult(success=False, message="You have no character sheet.")
+            return _ActionResult(success=False, message=_MSG_NO_CHARACTER_SHEET)
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
@@ -137,7 +141,7 @@ class CheckContributeAction(Action):
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
-            return _ActionResult(success=False, message="No such project.")
+            return _ActionResult(success=False, message=_MSG_NO_SUCH_PROJECT)
         method = ContributionMethod.objects.filter(
             kind=project.kind, name__iexact=method_name, is_active=True
         ).first()
@@ -195,7 +199,7 @@ class StoryContributeAction(Action):
             return _ActionResult(success=False, message="Tell the story for which project?")
         sheet = actor.sheet_data
         if sheet is None:
-            return _ActionResult(success=False, message="You have no character sheet.")
+            return _ActionResult(success=False, message=_MSG_NO_CHARACTER_SHEET)
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
@@ -203,7 +207,7 @@ class StoryContributeAction(Action):
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
-            return _ActionResult(success=False, message="No such project.")
+            return _ActionResult(success=False, message=_MSG_NO_SUCH_PROJECT)
 
         contribution = set_contribution_story(project, contributor_persona=persona, text=text)
         if contribution is None:

@@ -2145,45 +2145,69 @@ def select_npc_actions(
     for opponent in opponents:
         pool_entries = entries_by_pool.get(opponent.threat_pool_id, [])
         cooldown_used = recently_used_by_opponent.get(opponent.pk, set())
-        eligible = _get_eligible_entries(opponent, pool_entries, cooldown_used)
-        if not eligible:
-            continue
-
-        target_pool, targeting_participants = _npc_action_target_pool(
-            opponent, active_participants, encounter
+        actions.extend(
+            _build_opponent_round_actions(
+                opponent,
+                pool_entries,
+                cooldown_used,
+                active_participants,
+                encounter,
+            )
         )
 
-        # Empty-pool guard: create no action row when the combatant has no valid
-        # target — a #1584 ALLY summon with no live enemy, or a #1590
-        # calmed/neutral opponent whose threat-read yielded no PCs.
-        if not target_pool:
-            continue
+    return actions
 
-        if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
-            n_attacks = swarm_attack_count(
-                opponent.swarm_count,
-                opponent.bodies_per_attack or 1,
-                len(target_pool),
-            )
-        else:
-            n_attacks = 1
 
-        for attack_index in range(n_attacks):
-            weights = [e.weight for e in eligible]
-            chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
-            action = CombatOpponentAction.objects.create(
-                opponent=opponent,
-                round_number=encounter.round_number,
-                threat_entry=chosen,
-            )
-            _set_npc_action_targets(
-                action,
-                chosen,
-                target_pool,
-                targeting_participants=targeting_participants,
-                rotation=attack_index,
-            )
-            actions.append(action)
+def _build_opponent_round_actions(
+    opponent: CombatOpponent,
+    pool_entries: list[ThreatPoolEntry],
+    cooldown_used: set[int],
+    active_participants: list[CombatParticipant],
+    encounter: CombatEncounter,
+) -> list[CombatOpponentAction]:
+    """Create one opponent's NPC action rows for the current round.
+
+    Returns the created actions, or an empty list when the opponent skips the
+    round — no eligible (off-cooldown) threat entry, or the empty-pool guard:
+    no valid target (a #1584 ALLY summon with no live enemy, or a #1590
+    calmed/neutral opponent whose threat-read yielded no PCs).
+    """
+    eligible = _get_eligible_entries(opponent, pool_entries, cooldown_used)
+    if not eligible:
+        return []
+
+    target_pool, targeting_participants = _npc_action_target_pool(
+        opponent, active_participants, encounter
+    )
+    if not target_pool:
+        return []
+
+    if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
+        n_attacks = swarm_attack_count(
+            opponent.swarm_count,
+            opponent.bodies_per_attack or 1,
+            len(target_pool),
+        )
+    else:
+        n_attacks = 1
+
+    actions: list[CombatOpponentAction] = []
+    for attack_index in range(n_attacks):
+        weights = [e.weight for e in eligible]
+        chosen = random.choices(eligible, weights=weights, k=1)[0]  # noqa: S311
+        action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=encounter.round_number,
+            threat_entry=chosen,
+        )
+        _set_npc_action_targets(
+            action,
+            chosen,
+            target_pool,
+            targeting_participants=targeting_participants,
+            rotation=attack_index,
+        )
+        actions.append(action)
 
     return actions
 
@@ -2263,6 +2287,74 @@ def swarm_attack_count(swarm_count: int, bodies_per_attack: int, active_pc_count
     return max(1, min(raw, active_pc_count))
 
 
+def _zero_opponent_damage_result(opponent: CombatOpponent) -> OpponentDamageResult:
+    """A no-effect damage result (hit cancelled or reduced to nothing)."""
+    return OpponentDamageResult(
+        damage_dealt=0,
+        health_damaged=False,
+        probed=False,
+        probing_increment=0,
+        defeated=False,
+        kills=0,
+        opponent_id=opponent.pk,
+    )
+
+
+def _apply_swarm_damage(opponent: CombatOpponent, raw_damage: int) -> OpponentDamageResult:
+    """Resolve a landing hit on a SWARM opponent (#875).
+
+    Swarms have no HP, soak, or probing — a landing attack clears bodies.
+    """
+    kills = min(swarm_kills(raw_damage, opponent.body_toughness or 1), opponent.swarm_count)
+    opponent.swarm_count -= kills
+    defeated = opponent.swarm_count <= 0
+    if defeated:
+        opponent.status = OpponentStatus.DEFEATED
+    opponent.save(update_fields=["swarm_count", "status"])
+    return OpponentDamageResult(
+        damage_dealt=kills,
+        health_damaged=False,
+        probed=False,
+        probing_increment=0,
+        defeated=defeated,
+        kills=kills,
+        opponent_id=opponent.pk,
+    )
+
+
+def _emit_opponent_pre_apply(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    damage_type: DamageType | None,
+    source_sheet: CharacterSheet | None,
+) -> tuple[int, bool]:
+    """Emit DAMAGE_PRE_APPLY for an opponent; return ``(amount, dropped)``.
+
+    Mirrors the participant path so reactive defences (force-field/reflect/blink)
+    fire on NPCs and ALLY summons identically (#1584). Returns the possibly
+    mutated damage amount and whether the hit should be dropped — the event
+    cancelled it, or the mutated amount fell to <= 0. Opponents with no
+    objectdb/location skip the event (amount unchanged, never dropped here).
+    """
+    if opponent.objectdb is None or opponent.objectdb.location is None:
+        return raw_damage, False
+    damage_source = classify_source(source_sheet.character if source_sheet is not None else None)
+    pre_payload = DamagePreApplyPayload(
+        target=opponent.objectdb,
+        amount=raw_damage,
+        damage_type=damage_type,
+        source=damage_source,
+    )
+    stack = emit_event(
+        EventName.DAMAGE_PRE_APPLY,
+        pre_payload,
+        location=opponent.objectdb.location,
+    )
+    if stack.was_cancelled():
+        return raw_damage, True
+    return pre_payload.amount, pre_payload.amount <= 0
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -2284,65 +2376,18 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     """
     # Swarm: no HP, no soak, no probing -- a landing attack clears bodies.
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
-        kills = min(swarm_kills(raw_damage, opponent.body_toughness or 1), opponent.swarm_count)
-        opponent.swarm_count -= kills
-        defeated = opponent.swarm_count <= 0
-        if defeated:
-            opponent.status = OpponentStatus.DEFEATED
-        opponent.save(update_fields=["swarm_count", "status"])
         del source_sheet
-        return OpponentDamageResult(
-            damage_dealt=kills,
-            health_damaged=False,
-            probed=False,
-            probing_increment=0,
-            defeated=defeated,
-            kills=kills,
-            opponent_id=opponent.pk,
-        )
+        return _apply_swarm_damage(opponent, raw_damage)
 
-    # --- DAMAGE_PRE_APPLY (cancellable, amount mutable) — mirrors the participant
-    # path so reactive defences (force-field/reflect/blink) fire on NPCs and
-    # ALLY summons identically (#1584).
-    # bypass_pre_apply=True skips emit + mutation; the bounced-reflect path uses
-    # this to terminate re-emission (loop guard). ---
+    # DAMAGE_PRE_APPLY (cancellable, amount mutable). bypass_pre_apply=True skips
+    # emit + mutation; the bounced-reflect path uses this to terminate re-emission
+    # (loop guard).
     if not bypass_pre_apply:
-        if opponent.objectdb is not None and opponent.objectdb.location is not None:
-            damage_source = classify_source(
-                source_sheet.character if source_sheet is not None else None
-            )
-            pre_payload = DamagePreApplyPayload(
-                target=opponent.objectdb,
-                amount=raw_damage,
-                damage_type=damage_type,
-                source=damage_source,
-            )
-            stack = emit_event(
-                EventName.DAMAGE_PRE_APPLY,
-                pre_payload,
-                location=opponent.objectdb.location,
-            )
-            if stack.was_cancelled():
-                return OpponentDamageResult(
-                    damage_dealt=0,
-                    health_damaged=False,
-                    probed=False,
-                    probing_increment=0,
-                    defeated=False,
-                    kills=0,
-                    opponent_id=opponent.pk,
-                )
-            raw_damage = pre_payload.amount
-            if raw_damage <= 0:
-                return OpponentDamageResult(
-                    damage_dealt=0,
-                    health_damaged=False,
-                    probed=False,
-                    probing_increment=0,
-                    defeated=False,
-                    kills=0,
-                    opponent_id=opponent.pk,
-                )
+        raw_damage, dropped = _emit_opponent_pre_apply(
+            opponent, raw_damage, damage_type, source_sheet
+        )
+        if dropped:
+            return _zero_opponent_damage_result(opponent)
 
     effective_soak = 0 if bypass_soak else opponent.soak_value
 

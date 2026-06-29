@@ -478,6 +478,36 @@ def apply_exhaustion_damage(character_sheet: CharacterSheet, amount: int) -> Non
     )
 
 
+def _tick_fatigue_collapse_for_target(
+    target: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Evaluate non-cast over-capacity fatigue collapse for a single round target.
+
+    Helper for ``tick_fatigue_collapse_for_targets``. No-ops for a ``None`` target,
+    a target without a CharacterSheet, or one without a traits handler (NPCs /
+    non-character objects in the round are not fatigue-tracked).
+    """
+    if target is None:
+        return
+    try:
+        sheet = target.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    if sheet is None:
+        return
+    try:
+        # Probe fatigue capability once; targets without a traits handler
+        # (NPCs / non-character objects in the round) are not fatigue-tracked.
+        capacities = {cat: get_fatigue_capacity(sheet, cat) for cat in FATIGUE_ENDURANCE_STAT}
+    except AttributeError:
+        return
+    for category, capacity in capacities.items():
+        if capacity <= 0:
+            continue
+        if get_fatigue_zone(sheet, category) in _TECHNIQUE_COLLAPSE_ZONES:
+            resolve_fatigue_collapse(sheet, category)
+
+
 def tick_fatigue_collapse_for_targets(
     targets: Iterable[ObjectDB],  # noqa: OBJECTDB_PARAM
 ) -> None:
@@ -494,25 +524,7 @@ def tick_fatigue_collapse_for_targets(
     (vitals.tick_round_for_targets) on round resolution.
     """
     for target in targets:
-        if target is None:
-            continue
-        try:
-            sheet = target.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        if sheet is None:
-            continue
-        try:
-            # Probe fatigue capability once; targets without a traits handler
-            # (NPCs / non-character objects in the round) are not fatigue-tracked.
-            capacities = {cat: get_fatigue_capacity(sheet, cat) for cat in FATIGUE_ENDURANCE_STAT}
-        except AttributeError:
-            continue
-        for category, capacity in capacities.items():
-            if capacity <= 0:
-                continue
-            if get_fatigue_zone(sheet, category) in _TECHNIQUE_COLLAPSE_ZONES:
-                resolve_fatigue_collapse(sheet, category)
+        _tick_fatigue_collapse_for_target(target)
 
 
 def reset_fatigue(character_sheet: CharacterSheet) -> None:

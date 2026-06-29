@@ -228,6 +228,42 @@ class SecretExposureResult:
     notified_persona_victim_ids: tuple[int, ...] = ()
 
 
+def _apply_relational_exposure(
+    secret: Secret, persona: Persona
+) -> tuple[dict[int, int], list[int]]:
+    """Apply the first-exposure **relational** channel (direct victim hits) (#1429).
+
+    Returns ``(organization_victim_deltas, notified_persona_victim_ids)``. Organization victims
+    take an ``OrganizationReputation`` delta independent of philosophy; persona victims are granted
+    the knowledge (prompting a player-driven relationship decision) and recorded. Helper for
+    ``expose_secret`` — only called on the first exposure of a secret.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415 — cross-app, avoid cycle at load
+    from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid import cycle at load
+        bump_organization_reputation,
+    )
+
+    org_deltas: dict[int, int] = {}
+    notified_persona_ids: list[int] = []
+    default_severity = DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(secret.level, 0)
+    for victim in secret.victims.select_related("organization", "persona__character_sheet"):
+        if victim.organization_id:
+            severity = victim.severity if victim.severity is not None else default_severity
+            new_value = bump_organization_reputation(persona, victim.organization, -severity)
+            if new_value is not None:
+                org_deltas[victim.organization_id] = new_value
+        elif victim.persona_id:
+            # Going public reaches the victim too: grant a PC victim the knowledge, which
+            # prompts them (via grant_secret_knowledge) to decide a relationship effect.
+            victim_entry = RosterEntry.objects.filter(
+                character_sheet=victim.persona.character_sheet
+            ).first()
+            if victim_entry is not None:
+                grant_secret_knowledge(roster_entry=victim_entry, secret=secret)
+                notified_persona_ids.append(victim.persona_id)
+    return org_deltas, notified_persona_ids
+
+
 def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExposureResult:
     """Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).
 
@@ -245,10 +281,8 @@ def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExpo
     Reputation is attributed to the subject's primary persona (only established/primary identities
     accrue reputation, enforced downstream). Idempotent across re-exposure.
     """
-    from world.roster.models import RosterEntry  # noqa: PLC0415 — cross-app, avoid cycle at load
     from world.societies.renown import (  # noqa: PLC0415 — cross-app, avoid import cycle at load
         apply_archetype_society_reputation,
-        bump_organization_reputation,
     )
 
     persona = secret.subject_sheet.primary_persona
@@ -264,22 +298,7 @@ def expose_secret(secret: Secret, *, societies: Iterable[Society]) -> SecretExpo
     org_deltas: dict[int, int] = {}
     notified_persona_ids: list[int] = []
     if first_exposure:
-        default_severity = DEFAULT_VICTIM_SEVERITY_BY_LEVEL.get(secret.level, 0)
-        for victim in secret.victims.select_related("organization", "persona__character_sheet"):
-            if victim.organization_id:
-                severity = victim.severity if victim.severity is not None else default_severity
-                new_value = bump_organization_reputation(persona, victim.organization, -severity)
-                if new_value is not None:
-                    org_deltas[victim.organization_id] = new_value
-            elif victim.persona_id:
-                # Going public reaches the victim too: grant a PC victim the knowledge, which
-                # prompts them (via grant_secret_knowledge) to decide a relationship effect.
-                victim_entry = RosterEntry.objects.filter(
-                    character_sheet=victim.persona.character_sheet
-                ).first()
-                if victim_entry is not None:
-                    grant_secret_knowledge(roster_entry=victim_entry, secret=secret)
-                    notified_persona_ids.append(victim.persona_id)
+        org_deltas, notified_persona_ids = _apply_relational_exposure(secret, persona)
 
     return SecretExposureResult(
         newly_exposed_society_ids=tuple(society.pk for society in newly),

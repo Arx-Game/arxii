@@ -161,6 +161,51 @@ class ResolveAlterationAction(Action):
             return None, "The Mage Scar could not be resolved. Please contact staff."
         return result, ""
 
+    def _resolve_pending(
+        self,
+        actor: ObjectDB,
+        sheet: CharacterSheet,
+        kwargs: dict[str, Any],
+    ) -> tuple[Any, str]:
+        """Look up the pending alteration and dispatch; return (result, error_message)."""
+        from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
+        from world.magic.models import PendingAlteration  # noqa: PLC0415
+        from world.scenes.scene_admin_services import resolve_actor_account  # noqa: PLC0415
+
+        pending_id = kwargs.get("pending_id")
+        if not isinstance(pending_id, int):
+            return None, "Which pending alteration do you want to resolve?"
+
+        try:
+            pending = PendingAlteration.objects.select_related("character").get(
+                pk=pending_id,
+                character=sheet,
+                status=PendingAlterationStatus.OPEN,
+            )
+        except PendingAlteration.DoesNotExist:
+            return None, "You have no open pending alteration with that id."
+
+        account = resolve_actor_account(actor)
+        is_staff = bool(account and account.is_staff)
+        library_template_id = kwargs.get("library_template_id")
+        if library_template_id is not None:
+            if not isinstance(library_template_id, int):
+                return None, "A valid library entry is required."
+            return self._resolve_library(
+                pending,
+                library_template_id,
+                account,
+                is_staff,
+                sheet,
+            )
+        return self._resolve_scratch(
+            pending,
+            kwargs,
+            account,
+            is_staff,
+            sheet,
+        )
+
     def execute(
         self,
         actor: ObjectDB,
@@ -169,54 +214,15 @@ class ResolveAlterationAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
-        from world.magic.models import PendingAlteration  # noqa: PLC0415
-        from world.scenes.scene_admin_services import resolve_actor_account  # noqa: PLC0415
-
-        result = None
-        message = "You can't resolve that Mage Scar right now."
-
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            message = "Only characters can resolve Mage Scars."
-        else:
-            pending_id = kwargs.get("pending_id")
-            if not isinstance(pending_id, int):
-                message = "Which pending alteration do you want to resolve?"
-            else:
-                try:
-                    pending = PendingAlteration.objects.select_related("character").get(
-                        pk=pending_id,
-                        character=sheet,
-                        status=PendingAlterationStatus.OPEN,
-                    )
-                except PendingAlteration.DoesNotExist:
-                    message = "You have no open pending alteration with that id."
-                else:
-                    account = resolve_actor_account(actor)
-                    is_staff = bool(account and account.is_staff)
-                    library_template_id = kwargs.get("library_template_id")
-                    if library_template_id is not None:
-                        if not isinstance(library_template_id, int):
-                            message = "A valid library entry is required."
-                        else:
-                            result, message = self._resolve_library(
-                                pending,
-                                library_template_id,
-                                account,
-                                is_staff,
-                                sheet,
-                            )
-                    else:
-                        result, message = self._resolve_scratch(
-                            pending,
-                            kwargs,
-                            account,
-                            is_staff,
-                            sheet,
-                        )
+            return ActionResult(
+                success=False,
+                message="Only characters can resolve Mage Scars.",
+            )
 
+        result, message = self._resolve_pending(actor, sheet, kwargs)
         if result is not None:
             return ActionResult(
                 success=True,

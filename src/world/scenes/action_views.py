@@ -116,12 +116,142 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         delivery_receivers = list(Persona.objects.filter(pk__in=receiver_ids))
         return delivery_receivers, len(delivery_receivers) == len(set(receiver_ids))
 
+    @staticmethod
+    def _reject_treatment_fields_for_non_treat(
+        action_key: str, serializer: SceneActionRequestCreateSerializer
+    ) -> None:
+        """Reject treatment-only fields submitted for a non-treat_condition action (#1486).
+
+        Treatment fields are only meaningful for treat_condition. Rejecting all four up front lets
+        the create path assume ``treatment_id`` implies treat_condition; previously only
+        ``treatment_id`` was rejected and the other three were silently ignored.
+        """
+        if action_key == TREAT_CONDITION_KEY:
+            return
+        if any(
+            v is not None
+            for v in (
+                serializer.validated_data.get("treatment_id"),
+                serializer.validated_data.get("target_condition_instance_id"),
+                serializer.validated_data.get("target_pending_alteration_id"),
+                serializer.validated_data.get("bond_thread_id"),
+            )
+        ):
+            raise DRFValidationError(
+                {"treatment_fields": "Treatment fields are only valid for treat_condition."}
+            )
+
+    @staticmethod
+    def _resolve_treatment_target_effect(
+        serializer: SceneActionRequestCreateSerializer,
+    ) -> tuple[Any, str]:
+        """Resolve the single treat_condition target effect (condition XOR alteration) (#1486)."""
+        one_effect_error = DRFValidationError(
+            {"target_effect": "Specify exactly one target effect (condition or alteration)."}
+        )
+        condition_instance_id = serializer.validated_data.get("target_condition_instance_id")
+        pending_alteration_id = serializer.validated_data.get("target_pending_alteration_id")
+        if condition_instance_id is not None and pending_alteration_id is not None:
+            raise one_effect_error
+        if condition_instance_id is not None:
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+            target_effect = get_object_or_404(ConditionInstance, pk=condition_instance_id)
+            return target_effect, TARGET_EFFECT_CONDITION
+        if pending_alteration_id is not None:
+            from world.magic.models import PendingAlteration  # noqa: PLC0415
+
+            target_effect = get_object_or_404(PendingAlteration, pk=pending_alteration_id)
+            return target_effect, TARGET_EFFECT_ALTERATION
+        raise one_effect_error
+
+    def _resolve_treatment(
+        self,
+        serializer: SceneActionRequestCreateSerializer,
+        *,
+        action_key: str,
+        initiator_persona: Persona,
+        target_persona: Persona | None,
+        scene: Scene,
+    ) -> tuple[Any, Any, str | None, dict[str, Any] | None]:
+        """Validate & resolve the treat_condition treatment, target effect, and matched candidate.
+
+        Returns ``(treatment, target_effect, target_effect_type, matched_candidate)``; all ``None``
+        for non-treat actions. Re-runs ``get_treatment_candidates`` and requires the submitted pair
+        to match one candidate by pk, so every scene/engagement/bond gate stays in the service and
+        a client cannot fabricate an arbitrary treatment_id + target pair (#1486).
+        """
+        if action_key != TREAT_CONDITION_KEY:
+            return None, None, None, None
+
+        treatment_id = serializer.validated_data.get("treatment_id")
+        if treatment_id is None:
+            raise DRFValidationError({"treatment_id": "treat_condition requires a treatment_id."})
+        # treat_condition is a heal-another flow: it always targets a single other persona.
+        # Cardinality allows 0 targets for SINGLE actions, so guard explicitly.
+        if target_persona is None:
+            raise DRFValidationError(
+                {"target_persona": "treat_condition requires a target persona."}
+            )
+
+        target_effect, target_effect_type = self._resolve_treatment_target_effect(serializer)
+
+        from world.conditions.models import TreatmentTemplate  # noqa: PLC0415
+        from world.conditions.services import get_treatment_candidates  # noqa: PLC0415
+
+        treatment = get_object_or_404(TreatmentTemplate, pk=treatment_id)
+        candidates = get_treatment_candidates(
+            initiator_persona.character_sheet, target_persona.character_sheet, scene
+        )
+        matched_candidate = next(
+            (
+                c
+                for c in candidates
+                if c["treatment"].pk == treatment.pk
+                and c["target_effect"].pk == target_effect.pk
+                and c["target_effect_type"] == target_effect_type
+            ),
+            None,
+        )
+        if matched_candidate is None:
+            raise DRFValidationError(
+                {"treatment": "That treatment is not available for this target in this scene."}
+            )
+        return treatment, target_effect, target_effect_type, matched_candidate
+
+    @staticmethod
+    def _apply_treatment_fks(
+        action_request: SceneActionRequest,
+        *,
+        treatment: Any,
+        target_effect: Any,
+        target_effect_type: str | None,
+        matched_candidate: dict[str, Any],
+    ) -> None:
+        """Mirror the telnet treat command's FK-setting on a freshly created request (#1486).
+
+        Sets treatment, the matching target effect, and the matched candidate's bond_thread (NOT a
+        client-supplied id — the discovery query already selected the valid anchored thread).
+        """
+        action_request.treatment = treatment
+        if target_effect_type == TARGET_EFFECT_CONDITION:
+            action_request.target_condition_instance = target_effect
+        else:
+            action_request.target_pending_alteration = target_effect
+        action_request.thread_used = matched_candidate["bond_thread"]
+        action_request.save(
+            update_fields=[
+                "treatment",
+                "target_condition_instance",
+                "target_pending_alteration",
+                "thread_used",
+            ]
+        )
+
     @extend_schema(
         request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
     )
-    def create(  # noqa: C901, PLR0912, PLR0915
-        self, request: Request, *args: Any, **kwargs: Any
-    ) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -140,25 +270,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         effort_level: str = serializer.validated_data["effort_level"]
 
         self._validate_cardinality(action_key, target_ids)
-
-        # Treatment fields are only meaningful for treat_condition (#1486).
-        # Reject ALL four up front for any other action_key so the create path
-        # below can assume treatment_id implies treat_condition. A non-treat
-        # action has no business carrying any of them; previously only
-        # treatment_id was rejected and the other three were silently ignored.
-        treatment_id = serializer.validated_data.get("treatment_id")
-        if action_key != TREAT_CONDITION_KEY and any(
-            v is not None
-            for v in (
-                treatment_id,
-                serializer.validated_data.get("target_condition_instance_id"),
-                serializer.validated_data.get("target_pending_alteration_id"),
-                serializer.validated_data.get("bond_thread_id"),
-            )
-        ):
-            raise DRFValidationError(
-                {"treatment_fields": "Treatment fields are only valid for treat_condition."}
-            )
+        self._reject_treatment_fields_for_non_treat(action_key, serializer)
 
         try:
             scene = Scene.objects.get(pk=scene_id, is_active=True)
@@ -200,85 +312,13 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Treat-condition candidate validation (#1486). The telnet treat
-        # command only ever submits candidates from get_treatment_candidates,
-        # so the scene/engagement/bond gates are implicitly satisfied. The web
-        # endpoint MUST NOT accept an arbitrary treatment_id + target pair a
-        # client could fabricate — that would bypass every gate. So we re-run
-        # the candidate query and require the submitted pair to match one
-        # candidate by pk. This delegates all gate logic to the service (no
-        # duplicated gate logic in the view); the view only resolves submitted
-        # ids, matches against the service's output, and sets FKs.
-        treatment = None
-        target_effect = None
-        target_effect_type: str | None = None
-        matched_candidate: dict[str, Any] | None = None
-        if action_key == TREAT_CONDITION_KEY:
-            if treatment_id is None:
-                raise DRFValidationError(
-                    {"treatment_id": "treat_condition requires a treatment_id."}
-                )
-            # treat_condition is a heal-another flow: it always targets a
-            # single other persona. Cardinality allows 0 targets for SINGLE
-            # actions, so guard explicitly rather than AttributeError on None.
-            if target_persona is None:
-                raise DRFValidationError(
-                    {"target_persona": "treat_condition requires a target persona."}
-                )
-            condition_instance_id = serializer.validated_data.get("target_condition_instance_id")
-            pending_alteration_id = serializer.validated_data.get("target_pending_alteration_id")
-            if condition_instance_id is not None and pending_alteration_id is not None:
-                raise DRFValidationError(
-                    {
-                        "target_effect": (
-                            "Specify exactly one target effect (condition or alteration)."
-                        )
-                    }
-                )
-            if condition_instance_id is not None:
-                from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-                target_effect = get_object_or_404(ConditionInstance, pk=condition_instance_id)
-                target_effect_type = TARGET_EFFECT_CONDITION
-            elif pending_alteration_id is not None:
-                from world.magic.models import PendingAlteration  # noqa: PLC0415
-
-                target_effect = get_object_or_404(PendingAlteration, pk=pending_alteration_id)
-                target_effect_type = TARGET_EFFECT_ALTERATION
-            else:
-                raise DRFValidationError(
-                    {
-                        "target_effect": (
-                            "Specify exactly one target effect (condition or alteration)."
-                        )
-                    }
-                )
-
-            from world.conditions.models import TreatmentTemplate  # noqa: PLC0415
-            from world.conditions.services import get_treatment_candidates  # noqa: PLC0415
-
-            treatment = get_object_or_404(TreatmentTemplate, pk=treatment_id)
-            helper_sheet = initiator_persona.character_sheet
-            target_sheet = target_persona.character_sheet
-            candidates = get_treatment_candidates(helper_sheet, target_sheet, scene)
-            matched_candidate = next(
-                (
-                    c
-                    for c in candidates
-                    if c["treatment"].pk == treatment.pk
-                    and c["target_effect"].pk == target_effect.pk
-                    and c["target_effect_type"] == target_effect_type
-                ),
-                None,
-            )
-            if matched_candidate is None:
-                raise DRFValidationError(
-                    {
-                        "treatment": (
-                            "That treatment is not available for this target in this scene."
-                        )
-                    }
-                )
+        treatment, target_effect, target_effect_type, matched_candidate = self._resolve_treatment(
+            serializer,
+            action_key=action_key,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            scene=scene,
+        )
 
         try:
             action_request = create_action_request(
@@ -300,24 +340,14 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Mirror the telnet treat command's FK-setting (commands/conditions.py):
-        # set treatment, the matching target effect, and the matched candidate's
-        # bond_thread (NOT a client-supplied id — the discovery query already
-        # selected the valid anchored thread).
+        # Mirror the telnet treat command's FK-setting (commands/conditions.py).
         if action_key == TREAT_CONDITION_KEY and matched_candidate is not None:
-            action_request.treatment = treatment
-            if target_effect_type == TARGET_EFFECT_CONDITION:
-                action_request.target_condition_instance = target_effect
-            else:
-                action_request.target_pending_alteration = target_effect
-            action_request.thread_used = matched_candidate["bond_thread"]
-            action_request.save(
-                update_fields=[
-                    "treatment",
-                    "target_condition_instance",
-                    "target_pending_alteration",
-                    "thread_used",
-                ]
+            self._apply_treatment_fks(
+                action_request,
+                treatment=treatment,
+                target_effect=target_effect,
+                target_effect_type=target_effect_type,
+                matched_candidate=matched_candidate,
             )
 
         return Response(

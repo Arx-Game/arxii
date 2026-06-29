@@ -88,6 +88,19 @@ const STATE_CLASSES: Record<string, string> = {
   DECLINED: 'bg-red-100 text-red-800',
 };
 
+// ---------------------------------------------------------------------------
+// Mutation error message
+// ---------------------------------------------------------------------------
+
+/** Derive a user-facing error string from a mutation's error state, or null. */
+function mutationErrorMessage(
+  mutation: { isError: boolean; error: unknown },
+  fallback: string
+): string | null {
+  if (!mutation.isError) return null;
+  return mutation.error instanceof Error ? mutation.error.message : fallback;
+}
+
 function StateBadge({ state }: { state: string }) {
   const label = STATE_LABELS[state] ?? state;
   const cls = STATE_CLASSES[state] ?? 'bg-muted text-muted-foreground';
@@ -175,16 +188,8 @@ function RitualSessionDetailInner({ sessionId }: DetailInnerProps) {
     });
   }
 
-  const fireError = fireMutation.isError
-    ? fireMutation.error instanceof Error
-      ? fireMutation.error.message
-      : 'Failed to fire session'
-    : null;
-  const cancelError = cancelMutation.isError
-    ? cancelMutation.error instanceof Error
-      ? cancelMutation.error.message
-      : 'Failed to cancel session'
-    : null;
+  const fireError = mutationErrorMessage(fireMutation, 'Failed to fire session');
+  const cancelError = mutationErrorMessage(cancelMutation, 'Failed to cancel session');
 
   return (
     <div className="space-y-6">

@@ -149,30 +149,31 @@ class ActionRef:
     # Blueprint pk for set_the_stage: identifies which PositionBlueprint to instantiate.
     blueprint_id: int | None = None
 
+    def _validate_combat(self) -> None:
+        """Validate the COMBAT-backend invariants (technique vs clash, passive slots)."""
+        has_technique = self.technique_id is not None
+        has_clash = self.clash_id is not None and self.clash_action_slot is not None
+        if not has_technique and not has_clash:
+            msg = "COMBAT ActionRef requires either technique_id or (clash_id + clash_action_slot)"
+            raise ValueError(msg)
+        if has_technique and has_clash:
+            msg = "COMBAT ActionRef must not set both technique_id and clash_id"
+            raise ValueError(msg)
+        passive_slots = {
+            CombatActionSlot.PASSIVE_PHYSICAL,
+            CombatActionSlot.PASSIVE_SOCIAL,
+            CombatActionSlot.PASSIVE_MENTAL,
+        }
+        if self.action_slot in passive_slots and self.technique_id is None:
+            msg = "Passive COMBAT ActionRef requires technique_id"
+            raise ValueError(msg)
+
     def __post_init__(self) -> None:
         if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:
             msg = "CHALLENGE ActionRef requires challenge_instance_id"
             raise ValueError(msg)
         if self.backend == ActionBackend.COMBAT:
-            has_technique = self.technique_id is not None
-            has_clash = self.clash_id is not None and self.clash_action_slot is not None
-            if not has_technique and not has_clash:
-                msg = (
-                    "COMBAT ActionRef requires either technique_id "
-                    "or (clash_id + clash_action_slot)"
-                )
-                raise ValueError(msg)
-            if has_technique and has_clash:
-                msg = "COMBAT ActionRef must not set both technique_id and clash_id"
-                raise ValueError(msg)
-            passive_slots = {
-                CombatActionSlot.PASSIVE_PHYSICAL,
-                CombatActionSlot.PASSIVE_SOCIAL,
-                CombatActionSlot.PASSIVE_MENTAL,
-            }
-            if self.action_slot in passive_slots and self.technique_id is None:
-                msg = "Passive COMBAT ActionRef requires technique_id"
-                raise ValueError(msg)
+            self._validate_combat()
         if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
             msg = "REGISTRY ActionRef requires registry_key"
             raise ValueError(msg)

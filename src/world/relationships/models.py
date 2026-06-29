@@ -22,6 +22,9 @@ from world.relationships.constants import (
     UpdateVisibility,
 )
 
+# Django related_name template producing a per-concrete-subclass reverse accessor.
+CLASS_SET_RELATED_NAME = "%(class)s_set"
+
 
 class RelationshipCondition(SharedMemoryModel):
     """
@@ -867,21 +870,21 @@ class WriteupFeedbackBase(SharedMemoryModel):
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="%(class)s_set",
+        related_name=CLASS_SET_RELATED_NAME,
     )
     development = models.ForeignKey(
         "relationships.RelationshipDevelopment",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="%(class)s_set",
+        related_name=CLASS_SET_RELATED_NAME,
     )
     capstone = models.ForeignKey(
         "relationships.RelationshipCapstone",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="%(class)s_set",
+        related_name=CLASS_SET_RELATED_NAME,
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
