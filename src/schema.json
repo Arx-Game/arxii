@@ -34966,6 +34966,12 @@ components:
           nullable: true
           description: Optional org this role fronts for (e.g., Builders Guild Clerk
             → Builders Guild Organization). Used by org-scoped permission filters.
+        is_active:
+          type: boolean
+          description: Master on/off switch for the role (#686). When False, no offer
+            on this role is eligible in available_offers, regardless of per-offer
+            state. Staff use this to disable a role without deleting it; migrated
+            value from the legacy `MissionGiver.is_active`.
       required:
       - id
       - name
@@ -34996,6 +35002,12 @@ components:
           nullable: true
           description: Optional org this role fronts for (e.g., Builders Guild Clerk
             → Builders Guild Organization). Used by org-scoped permission filters.
+        is_active:
+          type: boolean
+          description: Master on/off switch for the role (#686). When False, no offer
+            on this role is eligible in available_offers, regardless of per-offer
+            state. Staff use this to disable a role without deleting it; migrated
+            value from the legacy `MissionGiver.is_active`.
       required:
       - name
     NPCServiceOffer:
@@ -40020,6 +40032,12 @@ components:
           nullable: true
           description: Optional org this role fronts for (e.g., Builders Guild Clerk
             → Builders Guild Organization). Used by org-scoped permission filters.
+        is_active:
+          type: boolean
+          description: Master on/off switch for the role (#686). When False, no offer
+            on this role is eligible in available_offers, regardless of per-offer
+            state. Staff use this to disable a role without deleting it; migrated
+            value from the legacy `MissionGiver.is_active`.
     PatchedNPCServiceOfferRequest:
       type: object
       properties:

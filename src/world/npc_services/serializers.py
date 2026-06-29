@@ -42,6 +42,7 @@ class NPCRoleSerializer(serializers.ModelSerializer):
             "default_description_template",
             "default_rapport_starting_value",
             "faction_affiliation",
+            "is_active",
         ]
         read_only_fields = ["id"]
 

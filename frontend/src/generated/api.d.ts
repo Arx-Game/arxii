@@ -19438,6 +19438,8 @@ export interface components {
       default_rapport_starting_value?: number;
       /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
       faction_affiliation?: number | null;
+      /** @description Master on/off switch for the role (#686). When False, no offer on this role is eligible in available_offers, regardless of per-offer state. Staff use this to disable a role without deleting it; migrated value from the legacy `MissionGiver.is_active`. */
+      is_active?: boolean;
     };
     NPCRoleRequest: {
       /** @description Display name; e.g., 'Builders Guild Clerk', 'Town Guard'. */
@@ -19450,6 +19452,8 @@ export interface components {
       default_rapport_starting_value?: number;
       /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
       faction_affiliation?: number | null;
+      /** @description Master on/off switch for the role (#686). When False, no offer on this role is eligible in available_offers, regardless of per-offer state. Staff use this to disable a role without deleting it; migrated value from the legacy `MissionGiver.is_active`. */
+      is_active?: boolean;
     };
     NPCServiceOffer: {
       readonly id: number;
@@ -22424,6 +22428,8 @@ export interface components {
       default_rapport_starting_value?: number;
       /** @description Optional org this role fronts for (e.g., Builders Guild Clerk → Builders Guild Organization). Used by org-scoped permission filters. */
       faction_affiliation?: number | null;
+      /** @description Master on/off switch for the role (#686). When False, no offer on this role is eligible in available_offers, regardless of per-offer state. Staff use this to disable a role without deleting it; migrated value from the legacy `MissionGiver.is_active`. */
+      is_active?: boolean;
     };
     PatchedNPCServiceOfferRequest: {
       role?: number;
