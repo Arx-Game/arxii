@@ -8,7 +8,7 @@ class TestClusterRegistry(TestCase):
     def test_expected_clusters_registered(self) -> None:
         self.assertEqual(
             set(CLUSTER_SEEDERS),
-            {"checks", "magic", "items", "combat", "consent", "character_creation"},
+            {"checks", "social", "magic", "items", "combat", "consent", "character_creation"},
         )
 
     def test_character_creation_cluster_registered_after_magic(self) -> None:

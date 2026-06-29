@@ -15,6 +15,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`CheckType`**: Named check definition with trait weights and aspect weights. SharedMemoryModel.
 - **`CheckTypeTrait`**: Links CheckType to Trait with a weight multiplier. SharedMemoryModel.
 - **`CheckTypeAspect`**: Links CheckType to Aspect (from classes app) with a weight multiplier. SharedMemoryModel.
+- **`CheckTypeSpecialization`** (#1688): Links CheckType to a `skills.Specialization` with a weight — the third leg of stat + skill + specialization. The parent skill rides a `CheckTypeTrait` (a skill is Trait-backed); this folds in the owned specialization (0 when unowned). Social-check compositions are seeded in `world/seeds/social_checks.py` (authoritative). SharedMemoryModel.
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.

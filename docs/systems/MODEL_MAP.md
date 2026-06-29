@@ -84,7 +84,7 @@
 - `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' — Resume a paused pipeline after player decision.`
 - `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' — Apply all effects from the selected consequence.`
 - `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' — Resolve pool inheritance into a flat list of weighted consequences.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' — Resolve a scene-based action check using an ActionTemplate.`
 - `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' — Select a consequence using an existing check result.`
 - `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext', extra_modifiers: 'int' = 0, *, check_type: 'CheckType | None' = None) -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
@@ -927,8 +927,10 @@
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
   - aspects <- checks.CheckTypeAspect
+  - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
   - escalation_curves <- combat.EscalationCurve
+  - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
   - disarm_traps <- room_features.Trap
 
@@ -941,6 +943,11 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK]
   - aspect -> classes.Aspect [FK]
+
+### CheckTypeSpecialization
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+  - specialization -> skills.Specialization [FK]
 
 ### Consequence
 **Foreign Keys:**
@@ -972,7 +979,7 @@
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None) -> world.checks.types.ModifierBreakdown — Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `compute_resist_increment(defender_character: 'ObjectDB', resist_effort_level: str) -> int — Compute how much a defender's active resistance raises difficulty.`
 - `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `record_consequence_outcome(character_sheet: 'CharacterSheet', check_type: 'CheckType', pool, selected_consequence: 'Consequence | None', breakdown: world.checks.types.ModifierBreakdown, *, combat_interaction: 'Interaction | None' = None, challenge_record: 'CharacterChallengeRecord | None' = None, summary: str = '') -> world.checks.outcome_models.ConsequenceOutcome — Persist one consequence-resolution event as a ConsequenceOutcome + modifier rows.`
 
@@ -1374,7 +1381,7 @@
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool — Return True if the character has any active condition granting death_deferred.`
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
@@ -3235,7 +3242,7 @@
 - `end_interaction(session: 'InteractionSession') -> 'None' — Close the session and persist final affection for class 2-4 NPCs.`
 - `evaluate(rule: 'dict', ctx: 'PredicateContext') -> 'bool' — Evaluate a predicate rule tree against an acting-character context.`
 - `mission_pool_count(*, role: 'NPCRole', persona: 'Persona', npc_persona: 'Persona | None') -> 'int' — POOL offer count to surface for ``persona`` at this NPC (#726, #1020).`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `resolve_offer(session: 'InteractionSession', offer: 'NPCServiceOffer') -> 'EffectResult' — Grant ``offer`` in ``session`` — dispatch its effect, update rapport.`
 - `serialize_npc_session_state(session: 'InteractionSession', *, last_result_message: 'str' = '') -> 'dict' — Compose the response payload from a (live or freshly-closed) session.`
 - `start_interaction(*, role: 'NPCRole', persona: 'Persona', character: 'Character', npc_persona: 'Persona | None' = None) -> 'InteractionSession' — Begin an interaction with an NPC of ``role``.`
@@ -3481,6 +3488,7 @@
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
   - research_details <- clues.ResearchProjectDetails
+  - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_construction_details <- buildings.BuildingConstructionDetails
@@ -3493,14 +3501,27 @@
   - contributor_persona -> scenes.Persona [FK]
   - item_instance -> items.ItemInstance [FK] (nullable)
   - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - contribution_method -> projects.ContributionMethod [FK] (nullable)
+
+### ContributionMethod
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - contributions <- projects.Contribution
 
 ### Service Functions
-- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `contribute_check_to_project(project: 'Project', *, actor: 'ObjectDB', contributor_persona: 'Persona', method: 'ContributionMethod') -> 'Contribution' — Make a check-based contribution: spend AP, roll the check, advance on success (#1574).`
+- `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' — Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `maybe_complete_immediately(project: 'Project') -> 'bool' — Resolve an instant-completion project the moment its threshold is funded (#1500).`
+- `register_instant_completion_kind(kind: 'str') -> 'None' — Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
+- `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
 
 
 ## world.realms
@@ -4138,6 +4159,7 @@
 **Pointed to by:**
   - character_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
+  - check_type_specializations <- checks.CheckTypeSpecialization
 
 ### CharacterSkillValue
 **Foreign Keys:**
@@ -4170,6 +4192,8 @@
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Highest relationship tier character_a holds toward character_b (0 = none).`
+- `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' — A character's raw value for a specialization, 0 if unowned (#1688).`
+- `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_rank: 'int' = 1) -> 'bool' — Whether a character owns a specialization at ``minimum_rank`` or better (#1688).`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
