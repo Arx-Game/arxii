@@ -740,3 +740,60 @@ class RevertAlternateSelfTests(TestCase):
         self.assertEqual(state.active_form, self.true_form)
         active = ActiveAlternateSelf.objects.get(character=self.sheet)
         self.assertIsNone(active.alternate_self)
+
+
+class AssumeRevertAccessChangeTests(TestCase):
+    """Tests that assume/revert fire the access-change announcement."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        self.true_form = CharacterFormFactory(
+            character=self.character, name="True", form_type=FormType.TRUE
+        )
+        self.form_state = CharacterFormStateFactory(
+            character=self.character, active_form=self.true_form
+        )
+        self.technique = TechniqueFactory(name="Flame Lash")
+
+    def test_assume_sends_ability_message_for_newly_granted_techniques(self):
+        from world.narrative.constants import NarrativeCategory
+        from world.narrative.models import NarrativeMessage
+
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        msg = NarrativeMessage.objects.latest("id")
+        self.assertEqual(msg.category, NarrativeCategory.ABILITY)
+        self.assertIn("Flame Lash", msg.body)
+        self.assertIn("can now use", msg.body)
+
+    def test_assume_no_message_when_technique_already_permanently_known(self):
+        from world.narrative.models import NarrativeMessage
+
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique, source=None)
+        before = NarrativeMessage.objects.count()
+
+        assume_alternate_self(self.sheet, alt_self)
+
+        # All techniques permanently known; no new grants → no message.
+        self.assertEqual(NarrativeMessage.objects.count(), before)
+
+    def test_revert_sends_ability_message_for_reclaimed_techniques(self):
+        from world.narrative.constants import NarrativeCategory
+        from world.narrative.models import NarrativeMessage
+
+        alt_self = AlternateSelfFactory(character=self.sheet)
+        alt_self.techniques.set([self.technique])
+        assume_alternate_self(self.sheet, alt_self)
+
+        revert_alternate_self(self.sheet)
+
+        msg = NarrativeMessage.objects.latest("id")
+        self.assertEqual(msg.category, NarrativeCategory.ABILITY)
+        self.assertIn("Flame Lash", msg.body)
+        self.assertIn("no longer use", msg.body)

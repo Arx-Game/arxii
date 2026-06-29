@@ -265,7 +265,7 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
     if alt.persona is not None:
         set_active_persona(sheet, alt.persona)
 
-    _create_assumption_grants(sheet, alt)
+    source = _create_assumption_grants(sheet, alt)
     # ``_create_assumption_grants`` may have written/updated ``CharacterTechnique``
     # rows (the ability-suite). Invalidate the character's technique-handler cache
     # per its mutation contract (``world/magic/handlers.py``: services that grant or
@@ -274,6 +274,26 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
     # session. The cast gate itself reads the DB fresh, so cast availability is
     # unaffected; this is for the handler-cached read paths.
     sheet.character.techniques.invalidate()
+
+    # Collect techniques newly granted by this assumption (tagged to this source).
+    # Permanently-known techniques were left untouched by the stacking guard, so
+    # they do not appear in CharacterTechnique rows under this source.
+    if source is not None:
+        granted_techniques = [
+            ct.technique
+            for ct in CharacterTechnique.objects.filter(source=source).select_related("technique")
+        ]
+    else:
+        granted_techniques = []
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+
+    announce_access_change(
+        sheet,
+        gained=granted_techniques,
+        lost=[],
+        source=AccessChangeSource.ASSUMED_ALTERNATE_SELF,
+    )
 
     active.alternate_self = alt
     active.save(update_fields=["alternate_self", "return_form", "return_persona"])
@@ -347,6 +367,14 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     else:
         sources = ModifierSource.objects.none()
 
+    # Collect the techniques about to be reclaimed BEFORE deletion so we can
+    # announce them afterwards. Only technique rows (CharacterTechnique) are
+    # collected; stat rows (CharacterModifier) are dropped via CASCADE on source.
+    reclaimed_techniques = [
+        ct.technique
+        for ct in CharacterTechnique.objects.filter(source__in=sources).select_related("technique")
+    ]
+
     for source in sources:
         CharacterTechnique.objects.filter(source=source).delete()
         source.delete()
@@ -356,6 +384,16 @@ def revert_alternate_self(sheet: CharacterSheet) -> None:
     # clash-opposition matcher drop the reclaimed techniques this session — same
     # mutation contract as the assume path. Idempotent when no rows changed.
     sheet.character.techniques.invalidate()
+
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+
+    announce_access_change(
+        sheet,
+        gained=[],
+        lost=reclaimed_techniques,
+        source=AccessChangeSource.REVERTED_ALTERNATE_SELF,
+    )
 
     # Clear the active alt-self placeholder.
     active.alternate_self = None
