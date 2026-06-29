@@ -125,8 +125,10 @@ class ExecuteActionInputfuncTests(TestCase):
         Verified by checking what kwargs are passed to ``dispatch_player_action``.
         """
         actor = _StubActor()
+        actor.location = MagicMock(name="room")
         session = _make_session(puppet=actor)
         target_obj = MagicMock(name="resolved_target")
+        target_obj.location = actor.location  # co-located → perceivable (#1226)
         stub_action = MagicMock()
         stub_action.objectdb_target_kwargs = frozenset({"target"})
         dispatch_result = DispatchResult(
@@ -137,15 +139,16 @@ class ExecuteActionInputfuncTests(TestCase):
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
-            patch("evennia.objects.models.ObjectDB.objects.get", return_value=target_obj) as get,
+            patch("evennia.objects.models.ObjectDB.objects.filter") as mock_filter,
             patch(
                 "actions.player_interface.dispatch_player_action",
                 return_value=dispatch_result,
             ) as mock_dispatch,
         ):
+            mock_filter.return_value.first.return_value = target_obj
             execute_action(session, action="give", kwargs={"target_id": 42})
 
-        get.assert_called_once_with(pk=42)
+        mock_filter.assert_called_once_with(pk=42)
         # dispatch_player_action receives the resolved object (not the raw int).
         _, _, passed_kwargs = mock_dispatch.call_args.args
         self.assertIn("target", passed_kwargs)
@@ -153,28 +156,50 @@ class ExecuteActionInputfuncTests(TestCase):
         self.assertNotIn("target_id", passed_kwargs)
 
     def test_object_id_not_found_sends_error(self) -> None:
-        """An unresolvable object id sends an error and does not run the action."""
-        from evennia.objects.models import ObjectDB
-
+        """An unresolvable object id sends an error and does not dispatch."""
         actor = _StubActor()
+        actor.location = MagicMock(name="room")
         session = _make_session(puppet=actor)
         stub_action = MagicMock()
         stub_action.objectdb_target_kwargs = frozenset({"target"})
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
-            patch(
-                "evennia.objects.models.ObjectDB.objects.get",
-                side_effect=ObjectDB.DoesNotExist,
-            ),
+            patch("evennia.objects.models.ObjectDB.objects.filter") as mock_filter,
+            patch("actions.player_interface.dispatch_player_action") as mock_dispatch,
         ):
+            mock_filter.return_value.first.return_value = None
             execute_action(session, action="give", kwargs={"target_id": 9999999})
 
-        stub_action.run.assert_not_called()
+        mock_dispatch.assert_not_called()
         payload = _result_payload(session)
         self.assertEqual(payload["kwargs"]["success"], False)
         self.assertIn("Object not found", payload["kwargs"]["message"])
         self.assertIn("target_id", payload["kwargs"]["message"])
+
+    def test_out_of_scope_object_id_is_uniform_not_found(self) -> None:
+        """An existing but out-of-scope object returns the SAME 'not found' error as a
+        non-existent pk, and never dispatches — closing the existence probe (#1226)."""
+        actor = _StubActor()
+        actor.location = MagicMock(name="room")
+        session = _make_session(puppet=actor)
+        out_of_scope = MagicMock(name="distant_object")
+        out_of_scope.location = MagicMock(name="another_room")  # not co-located, not held
+        stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset({"target"})
+
+        with (
+            patch("actions.registry.get_action", return_value=stub_action),
+            patch("evennia.objects.models.ObjectDB.objects.filter") as mock_filter,
+            patch("actions.player_interface.dispatch_player_action") as mock_dispatch,
+        ):
+            mock_filter.return_value.first.return_value = out_of_scope
+            execute_action(session, action="give", kwargs={"target_id": 7})
+
+        mock_dispatch.assert_not_called()
+        payload = _result_payload(session)
+        self.assertEqual(payload["kwargs"]["success"], False)
+        self.assertIn("Object not found", payload["kwargs"]["message"])
 
     def test_action_interrupted_sends_error(self) -> None:
         """ActionInterrupted from action.run is forwarded as a failure response.
@@ -221,7 +246,7 @@ class ExecuteActionInputfuncTests(TestCase):
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
-            patch("evennia.objects.models.ObjectDB.objects.get") as get,
+            patch("evennia.objects.models.ObjectDB.objects.filter") as db_filter,
             patch(
                 "actions.player_interface.dispatch_player_action",
                 return_value=dispatch_result,
@@ -229,7 +254,7 @@ class ExecuteActionInputfuncTests(TestCase):
         ):
             execute_action(session, action="custom", kwargs={"identifier_id": "some-slug"})
 
-        get.assert_not_called()
+        db_filter.assert_not_called()
         # Non-int id kwargs pass through unresolved to dispatch_player_action.
         _, _, passed_kwargs = mock_dispatch.call_args.args
         self.assertEqual(passed_kwargs.get("identifier_id"), "some-slug")
@@ -255,7 +280,7 @@ class ExecuteActionInputfuncTests(TestCase):
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
-            patch("evennia.objects.models.ObjectDB.objects.get") as get,
+            patch("evennia.objects.models.ObjectDB.objects.filter") as db_filter,
             patch(
                 "actions.player_interface.dispatch_player_action",
                 return_value=dispatch_result,
@@ -264,7 +289,7 @@ class ExecuteActionInputfuncTests(TestCase):
             execute_action(session, action="apply_outfit", kwargs={"outfit_id": 42})
 
         # Resolver did NOT touch the int — outfit_id arrives raw at dispatch.
-        get.assert_not_called()
+        db_filter.assert_not_called()
         _, _, passed_kwargs = mock_dispatch.call_args.args
         self.assertEqual(passed_kwargs.get("outfit_id"), 42)
         self.assertNotIn("outfit", passed_kwargs)
@@ -513,6 +538,7 @@ class UnifiedDispatchPathTests(TestCase):
         actor = MagicMock()
         session = _make_session(puppet=actor)
         target_obj = MagicMock(name="resolved_target")
+        target_obj.location = actor.location  # co-located → perceivable (#1226)
         dispatch_result = self._stub_dispatch_result()
 
         stub_action = MagicMock()
@@ -520,16 +546,17 @@ class UnifiedDispatchPathTests(TestCase):
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
-            patch("evennia.objects.models.ObjectDB.objects.get", return_value=target_obj) as db_get,
+            patch("evennia.objects.models.ObjectDB.objects.filter") as db_filter,
             patch(
                 "actions.player_interface.dispatch_player_action",
                 return_value=dispatch_result,
             ) as mock_dispatch,
         ):
+            db_filter.return_value.first.return_value = target_obj
             execute_action(session, action="give", kwargs={"target_id": 42})
 
         # ObjectDB lookup must have fired
-        db_get.assert_called_once_with(pk=42)
+        db_filter.assert_called_once_with(pk=42)
         # dispatch_player_action receives the resolved object (not the raw int).
         # dispatch_player_action(actor, ref, kwargs) — kwargs is the 3rd positional.
         passed_kwargs = mock_dispatch.call_args.args[2]
