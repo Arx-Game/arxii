@@ -66,6 +66,11 @@ class ThreadPullEffect(SharedMemoryModel):
     paid pulls. Lookup row keyed (target_kind, resonance, tier, min_thread_level).
     Payload columns are mutually exclusive per effect_kind; clean() enforces
     the legal combinations and DB CheckConstraints mirror the validation.
+
+    ``target_gift`` scopes a row to a specific Gift (GIFT target_kind only).
+    Resolvers prefer gift-specific rows over null-target_gift rows (universal
+    fallback) when both exist for the same base key. Null = applies to all
+    threads matching the key (existing covenant/sanctum behavior unchanged).
     """
 
     target_kind = models.CharField(max_length=32, choices=TargetKind.choices)
@@ -103,15 +108,38 @@ class ThreadPullEffect(SharedMemoryModel):
         related_name="pull_effect_targets",
         help_text="The form whose combat profiles are selected for ASSUME_ALTERNATE_SELF.",
     )
+    target_gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_pull_effects",
+        help_text=(
+            "Gift-specific pull effect (GIFT target_kind only). Null = applies to all "
+            "threads matching the lookup key (existing covenant/sanctum behavior)."
+        ),
+    )
 
     class Meta:
         indexes = [
             models.Index(fields=["target_kind", "resonance", "tier"]),
         ]
         constraints = [
+            # Two partial UniqueConstraints replace the original single constraint so
+            # that Postgres treats NULL target_gift rows as unique (one per base key)
+            # while also allowing one row per (base key, specific gift). Without the
+            # condition= split, Postgres would treat NULLs as DISTINCT and allow
+            # duplicate null-target_gift rows — silently breaking covenant lookups.
+            # Pattern mirrors the per-kind partial constraints on Thread in this file.
             models.UniqueConstraint(
                 fields=["target_kind", "resonance", "tier", "min_thread_level"],
-                name="threadpulleffect_lookup_key",
+                condition=models.Q(target_gift__isnull=True),
+                name="threadpulleffect_lookup_key",  # keep name: existing rows unchanged
+            ),
+            models.UniqueConstraint(
+                fields=["target_kind", "resonance", "tier", "min_thread_level", "target_gift"],
+                condition=models.Q(target_gift__isnull=False),
+                name="threadpulleffect_lookup_key_gift",
             ),
             # FLAT_BONUS: requires flat_bonus_amount, forbids other payloads.
             models.CheckConstraint(

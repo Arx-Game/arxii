@@ -24,8 +24,8 @@ from world.magic.models import (
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
-    ThreadPullEffect,
 )
+from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.threads import (
     compute_anchor_cap,
     compute_effective_cap,
@@ -381,9 +381,8 @@ def resolve_pull_effects(
     for t in threads:
         multiplier = max(1, t.level // 10)
         for effect_tier in range(tier + 1):
-            rows = ThreadPullEffect.objects.filter(
-                target_kind=t.target_kind,
-                resonance=t.resonance,
+            rows = get_pull_effects_for_thread(
+                t,
                 tier=effect_tier,
                 min_thread_level__lte=t.level,
             )
