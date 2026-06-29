@@ -380,6 +380,10 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
             character_sheet=sheet, health=100, max_health=100, base_max_health=100
         )
 
+        # The exact 87/90 below assume a 0 thread-survivability DR baseline (this dev
+        # seed never calls seed_thread_survivability_tuning) and no worn armor — so the
+        # only modifier on the 10 raw damage is the drawback vuln (and later the gift
+        # resistance). If either of those baselines is seeded, these numbers shift.
         # Beat 3a: below the resistance threshold only the -3 vuln applies → 10 → 13.
         self.assertEqual(
             self._hit(vitals, participant, 10),
@@ -410,9 +414,16 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         )
         low = self._commit_pull_at_level(sheet, thread, 10)
         high = self._commit_pull_at_level(sheet, thread, 30)
-        # level 10 → multiplier 1 → 4 × 1 = 4; level 30 → multiplier 3 → 4 × 3 = 12.
-        self.assertEqual(low, 4)
-        self.assertEqual(high, 12)
+        # active_pull_resistance sums BOTH RESISTANCE snapshots a tier-1 pull writes:
+        # resolve_pull_effects iterates effect tiers 0..tier, so the always-on tier-0
+        # passive (amount 3, min_thread_level=5) AND the paid tier-1 row (amount 4) are
+        # each snapshotted and scaled by level_multiplier = max(1, level // 10). The
+        # returned value is therefore (passive + paid) × multiplier, NOT the paid row
+        # alone — that is why it is 7, not 4:
+        #   level 10 → mult 1 → (3 + 4) × 1 = 7
+        #   level 30 → mult 3 → (3 + 4) × 3 = 21
+        self.assertEqual(low, 7)
+        self.assertEqual(high, 21)
         self.assertGreater(high, low, "the pull is stronger at a higher thread level")
 
         # Beat 6: non-regression.
@@ -431,8 +442,12 @@ class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):
         spend_resonance_for_pull(
             sheet, self.resonance, tier=1, threads=[thread], action_context=ctx
         )
+        # A tier-1 pull snapshots a RESISTANCE row for EVERY effect tier 0..tier, so
+        # both the tier-0 passive and the tier-1 paid row land in CombatPullResolvedEffect;
+        # disambiguate by source_tier to assert against the paid row specifically (an
+        # unqualified .get(kind=RESISTANCE) would raise MultipleObjectsReturned).
         snap = CombatPullResolvedEffect.objects.get(
-            pull__participant=participant, kind=EffectKind.RESISTANCE
+            pull__participant=participant, kind=EffectKind.RESISTANCE, source_tier=1
         )
         self.assertEqual(snap.authored_value, 4)
         self.assertEqual(snap.source_thread_id, thread.pk)
