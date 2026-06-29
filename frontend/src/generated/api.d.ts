@@ -90,6 +90,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/achievements/character-titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/character-titles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List a character's earned, displayable titles (#1522).
+     *
+     *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
+     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     */
+    get: operations['achievements_character_titles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/': {
     parameters: {
       query?: never;
@@ -1292,6 +1336,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/finalize-gm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Finalize a player-GM's character onto the Available roster for their table (#1506).
+     *
+     *     The requesting account must own the target GM table. Creates the character + a
+     *     Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
+     *     viewable quality/trust signal (the GM vouches for it for their table; apping is
+     *     never gated by it). Body: ``target_table`` (id, required), ``story_title``
+     *     (required), optional ``story_description``.
+     */
+    post: operations['character_creation_drafts_finalize_gm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
@@ -2112,6 +2181,28 @@ export interface paths {
     put?: never;
     /** @description POST /unpause/ — staff: unpause the clock. */
     post: operations['clock_unpause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clues/held/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the clues held by the requesting player's characters (#1575).
+     *
+     *     Newest first. Always scoped to characters the requester plays — a foreign or unknown
+     *     ``character_sheet`` filter simply returns nothing (no existence leak).
+     */
+    get: operations['clues_held_list'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -4722,6 +4813,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/forms/alternate-selves/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + actions over a character's alternate selves (#1111 slice 4).
+     *
+     *     Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+     *     player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+     *     and telnet share one ``action.run()`` seam.
+     */
+    get: operations['forms_alternate_selves_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read + actions over a character's alternate selves (#1111 slice 4).
+     *
+     *     Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+     *     player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+     *     and telnet share one ``action.run()`` seam.
+     */
+    get: operations['forms_alternate_selves_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/revert/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1111 — revert the active alternate self (blocked while not in control). */
+    post: operations['forms_alternate_selves_revert_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/forms/alternate-selves/shift/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1111 — assume an alternate self owned by the played character. */
+    post: operations['forms_alternate_selves_shift_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/forms/builds/': {
     parameters: {
       query?: never;
@@ -5880,13 +6051,10 @@ export interface paths {
     get: operations['items_fashion_presentations_list'];
     put?: never;
     /**
-     * @description Present an outfit + list presentations (#514).
+     * @description Record the requesting account's acting character presenting an outfit at an event.
      *
-     *     POST /api/items/fashion-presentations/ — record the requesting account's
-     *     acting character presenting an outfit at an event.
-     *     GET  /api/items/fashion-presentations/?event=<id> — list presentations
-     *     (filterable by event) so the UI can show who is presenting there to judge.
-     *     GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+     *     Body: ``event`` (required) + optional ``outfit`` PKs. Returns the created
+     *     presentation (201), or 400 when the event has no host society / other rule failure.
      */
     post: operations['items_fashion_presentations_create'];
     delete?: never;
@@ -10302,6 +10470,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/create-established/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #1127 — the designed create path for a durable ESTABLISHED identity.
+     *
+     *     Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+     *     staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+     */
+    post: operations['personas_create_established_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/create-mask/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1127 — create a TEMPORARY anonymous mask and wear it (the "put on a mask" path). */
+    post: operations['personas_create_mask_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/set-active/': {
     parameters: {
       query?: never;
@@ -11771,6 +11978,24 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/roster/visibility-settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the active character's current ``appear_offline`` value. */
+    get: operations['roster_visibility_settings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Set the active character's ``appear_offline`` (quiet/hidden mode). */
+    patch: operations['roster_visibility_settings_partial_update'];
     trace?: never;
   };
   '/api/scenes/': {
@@ -13981,6 +14206,10 @@ export interface components {
       readonly name: string;
       readonly default_delivery: string;
     };
+    /** @description Result of a successful shift or revert — the now-active alternate-self id. */
+    ActiveAlternateSelfResult: {
+      active_alternate_self_id: number | null;
+    };
     /** @description Result of the #981 set-active-persona endpoint — the now-worn face id. */
     ActivePersonaResult: {
       readonly active_persona_id: number;
@@ -14022,6 +14251,30 @@ export interface components {
     AlterationResolutionResponse: {
       status: string;
       event_id: number;
+    };
+    /**
+     * @description Read shape for the alternate-self switcher (#1111 slice 4).
+     *
+     *     Includes the active alt-self flag for the played character so the switcher can
+     *     highlight the currently-assumed form without a second round-trip.
+     */
+    AlternateSelf: {
+      readonly id: number;
+      display_name?: string;
+      readonly persona_name: string | null;
+      readonly form_name: string | null;
+      readonly has_combat_profile: boolean;
+      readonly has_techniques: boolean;
+      readonly is_active: boolean;
+    };
+    /**
+     * @description Read shape for the alternate-self switcher (#1111 slice 4).
+     *
+     *     Includes the active alt-self flag for the played character so the switcher can
+     *     highlight the currently-assumed form without a second round-trip.
+     */
+    AlternateSelfRequest: {
+      display_name?: string;
     };
     /** @description Read-only representation of one eligible bonded fury anchor (#1543). */
     AnchorOption: {
@@ -15228,6 +15481,19 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
+    /**
+     * @description Serializer for an earned, displayable character title (#1522).
+     *
+     *     Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+     *     title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+     */
+    CharacterTitle: {
+      readonly id: number;
+      readonly title: string;
+      readonly reward_key: string;
+      /** Format: date-time */
+      readonly earned_at: string;
+    };
     /** @description Read-only vitals payload for the character sheet panel (#521). */
     CharacterVitals: {
       health: number;
@@ -15888,6 +16154,21 @@ export interface components {
       author_persona: number;
       body: string;
     };
+    /** @description POST body for the #1127 create-established-persona endpoint. */
+    CreateEstablishedPersonaRequestRequest: {
+      name: string;
+    };
+    /** @description POST body for the #1127 create-mask endpoint — a temporary anonymous face. */
+    CreateMaskRequestRequest: {
+      name: string;
+    };
+    /**
+     * @description * `staff` - Staff-created
+     *     * `gm_table` - GM-created (for a table)
+     *     * `player` - Player-created
+     * @enum {string}
+     */
+    CreationProvenanceEnum: 'staff' | 'gm_table' | 'player';
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
       boundary_level: number;
@@ -17120,11 +17401,12 @@ export interface components {
     /**
      * @description Serializer for FashionPresentation create + read (#514).
      *
-     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-     *     request body. The ``presenter`` is resolved from the requesting account in
-     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
-     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
-     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *     Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+     *     body. The orchestration runs through ``PresentOutfitAction`` in
+     *     ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+     *     Action seam, #1508); this serializer only validates input and serializes the result.
+     *     The ``presenter`` is resolved from the requesting account in the view, never supplied
+     *     by the client.
      *
      *     Read: all fields are present; read-only fields cannot be supplied.
      */
@@ -17146,11 +17428,12 @@ export interface components {
     /**
      * @description Serializer for FashionPresentation create + read (#514).
      *
-     *     Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-     *     request body. The ``presenter`` is resolved from the requesting account in
-     *     the view (``FashionPresentationViewSet.perform_create``) and injected via
-     *     ``serializer.save(presenter=sheet)`` — never supplied by the client
-     *     (mirrors the endorsement views' ``endorser_sheet`` handling).
+     *     Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+     *     body. The orchestration runs through ``PresentOutfitAction`` in
+     *     ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+     *     Action seam, #1508); this serializer only validates input and serializes the result.
+     *     The ``presenter`` is resolved from the requesting account in the view, never supplied
+     *     by the client.
      *
      *     Read: all fields are present; read-only fields cannot be supplied.
      */
@@ -17709,6 +17992,15 @@ export interface components {
       max_inches: number;
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
+    };
+    /** @description One clue a character holds — the journal row (#1575). */
+    HeldClue: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly target_kind: string;
+      /** Format: date-time */
+      readonly found_at: string;
     };
     /**
      * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241).
@@ -19685,6 +19977,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AggregateBeatContribution'][];
     };
+    PaginatedAlternateSelfList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AlternateSelf'][];
+    };
     PaginatedAreaListList: {
       /** @example 123 */
       count: number;
@@ -20247,6 +20554,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['GroupStoryProgress'][];
+    };
+    PaginatedHeldClueList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['HeldClue'][];
     };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
@@ -22475,6 +22797,16 @@ export interface components {
     PatchedUpdateBulletinReplyInputRequest: {
       body?: string;
     };
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    PatchedVisibilitySettingsRequest: {
+      appear_offline?: boolean;
+    };
     /** @description Serializer for Path in CG context. */
     Path: {
       readonly id: number;
@@ -22732,11 +23064,12 @@ export interface components {
       /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
       /**
-       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
        *
        *     * `primary` - Primary
        *     * `established` - Established
        *     * `temporary` - Temporary
+       *     * `alternate` - Alternate
        */
       persona_type?: components['schemas']['PersonaTypeEnum'];
       /** @description Physical description text */
@@ -22768,9 +23101,10 @@ export interface components {
      * @description * `primary` - Primary
      *     * `established` - Established
      *     * `temporary` - Temporary
+     *     * `alternate` - Alternate
      * @enum {string}
      */
-    PersonaTypeEnum: 'primary' | 'established' | 'temporary';
+    PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -23845,6 +24179,16 @@ export interface components {
       readonly fullname: string;
       readonly quote: string;
       readonly description: string;
+      /**
+       * @description Who authored this character — a display-only quality/trust signal.
+       *
+       *     * `staff` - Staff-created
+       *     * `gm_table` - GM-created (for a table)
+       *     * `player` - Player-created
+       */
+      readonly creation_provenance: components['schemas']['CreationProvenanceEnum'];
+      readonly creation_provenance_display: string;
+      readonly created_for_table_name: string | null;
     };
     /** @description Serializer for listing rosters with character counts. */
     RosterList: {
@@ -24260,6 +24604,10 @@ export interface components {
       advance_quorum_pct?: number;
       max_actions_per_round?: number;
       per_target_repeat_lock?: boolean;
+    };
+    /** @description POST body for the alternate-self shift endpoint. */
+    ShiftFormRequestRequest: {
+      alternate_self_id: number;
     };
     /**
      * @description * `positive` - Positive
@@ -26077,6 +26425,16 @@ export interface components {
      * @enum {string}
      */
     VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
+    /**
+     * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+     *
+     *     Read-and-write of quiet/hidden mode for the requesting player's active character. The
+     *     fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+     *     can join this surface later; the model already carries them.
+     */
+    VisibilitySettings: {
+      appear_offline: boolean;
+    };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {
       physical: components['schemas']['FatiguePoolStatus'];
@@ -26386,6 +26744,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterAchievement'];
+        };
+      };
+    };
+  };
+  achievements_character_titles_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'][];
+        };
+      };
+    };
+  };
+  achievements_character_titles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this character title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterTitle'];
         };
       };
     };
@@ -28024,6 +28425,31 @@ export interface operations {
       };
     };
   };
+  character_creation_drafts_finalize_gm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
   character_creation_drafts_resubmit_create: {
     parameters: {
       query?: never;
@@ -28913,6 +29339,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ClockDetail'];
+        };
+      };
+    };
+  };
+  clues_held_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedHeldClueList'];
         };
       };
     };
@@ -32584,6 +33034,99 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  forms_alternate_selves_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAlternateSelfList'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this alternate self. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlternateSelf'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_revert_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['AlternateSelfRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActiveAlternateSelfResult'];
+        };
+      };
+    };
+  };
+  forms_alternate_selves_shift_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ShiftFormRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActiveAlternateSelfResult'];
+        };
       };
     };
   };
@@ -40993,6 +41536,52 @@ export interface operations {
       };
     };
   };
+  personas_create_established_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEstablishedPersonaRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_create_mask_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateMaskRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
   personas_set_active_create: {
     parameters: {
       query?: never;
@@ -43361,6 +43950,48 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RosterTenureLookup'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
+        };
+      };
+    };
+  };
+  roster_visibility_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedVisibilitySettingsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VisibilitySettings'];
         };
       };
     };

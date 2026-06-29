@@ -69,6 +69,14 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
 
+    grants_intangibility = models.BooleanField(
+        default=False,
+        help_text=(
+            "Conditions in this category make the bearer untargetable (incorporeal, "
+            "sunk, phased). Aggregated by is_untargetable()."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -359,6 +367,18 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
             "The LOCK-Clash MAX threshold (e.g. 10 = PCs must reach 10 progress to fully "
             "secure / fully break the lock)."
         ),
+    )
+
+    # === Reactive-defense cost ===
+    upkeep_anima_per_round = models.PositiveIntegerField(
+        default=0,
+        help_text="Anima drained from the bearer each round to sustain this "
+        "condition; can't pay → it lapses. 0 = free to maintain.",
+    )
+    reactive_anima_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Anima spent each time this condition's reactive effect fires "
+        "(a dodge/reflect/absorb); can't pay → the effect fizzles. 0 = free.",
     )
 
     # === Corruption (Scope 7) ===
@@ -1090,6 +1110,13 @@ class ConditionInstance(SharedMemoryModel):
     severity = models.PositiveIntegerField(
         default=1,
         help_text="Intensity/potency affecting modifier scaling",
+    )
+    absorb_remaining = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Force-field buffer: damage points this instance can still "
+        "absorb. Decremented by the absorb_pool handler; expires at 0. Null = not "
+        "an absorb condition.",
     )
 
     # === Timing ===

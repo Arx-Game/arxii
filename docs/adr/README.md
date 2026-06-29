@@ -103,6 +103,9 @@ treat those names as hints to confirm, not gospel.
 - [0048 — Custom action resolvers for non-template consent actions](0048-custom-action-resolvers-for-non-template-consent-actions.md)
 - [0049 — Acute peril resolves through a guarded consequence pool, never unconditional death](0049-acute-peril-resolves-through-guarded-consequence-pool.md)
 - [0057 — Covenant of the Court: a leader and their retinue, as a third covenant type](0057-retinue-covenants-leader-plus-subordinates.md)
+- [0058 — NPC disposition is two-tier: ephemeral for mooks, durable for named NPCs, with persona-promotion as the seam](0058-npc-disposition-is-two-tier-ephemeral-and-durable.md)
+- [0059 — Allegiance is the unified substrate for summons and future charm/switch-sides](0059-allegiance-is-the-summon-charm-substrate.md)
+- [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

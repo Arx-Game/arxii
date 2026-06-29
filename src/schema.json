@@ -107,6 +107,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterAchievement'
           description: ''
+  /api/achievements/character-titles/:
+    get:
+      operationId: achievements_character_titles_list
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: query
+        name: character_sheet
+        schema:
+          type: integer
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterTitle'
+          description: ''
+  /api/achievements/character-titles/{id}/:
+    get:
+      operationId: achievements_character_titles_retrieve
+      description: |-
+        List a character's earned, displayable titles (#1522).
+
+        Titles are cosmetic and public — a character shows them off — so any authenticated user can
+        read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this character title.
+        required: true
+      tags:
+      - achievements
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterTitle'
+          description: ''
   /api/action-requests/:
     get:
       operationId: action_requests_list
@@ -2027,6 +2079,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/finalize-gm/:
+    post:
+      operationId: character_creation_drafts_finalize_gm_create
+      description: |-
+        Finalize a player-GM's character onto the Available roster for their table (#1506).
+
+        The requesting account must own the target GM table. Creates the character + a
+        Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
+        viewable quality/trust signal (the GM vouches for it for their table; apping is
+        never gated by it). Body: ``target_table`` (id, required), ``story_title``
+        (required), optional ``story_description``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterDraftRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterDraft'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -2981,6 +3066,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClockDetail'
+          description: ''
+  /api/clues/held/:
+    get:
+      operationId: clues_held_list
+      description: |-
+        List the clues held by the requesting player's characters (#1575).
+
+        Newest first. Always scoped to characters the requester plays — a foreign or unknown
+        ``character_sheet`` filter simply returns nothing (no existence leak).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - clues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHeldClueList'
           description: ''
   /api/codex/categories/:
     get:
@@ -7334,6 +7451,112 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/forms/alternate-selves/:
+    get:
+      operationId: forms_alternate_selves_list
+      description: |-
+        Read + actions over a character's alternate selves (#1111 slice 4).
+
+        Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+        player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+        and telnet share one ``action.run()`` seam.
+      parameters:
+      - in: query
+        name: character
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlternateSelfList'
+          description: ''
+  /api/forms/alternate-selves/{id}/:
+    get:
+      operationId: forms_alternate_selves_retrieve
+      description: |-
+        Read + actions over a character's alternate selves (#1111 slice 4).
+
+        Mirrors ``PersonaViewSet``: list the caller's own alt-self grants, then expose
+        player-facing mutators that dispatch through ``dispatch_player_action`` so the web
+        and telnet share one ``action.run()`` seam.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alternate self.
+        required: true
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlternateSelf'
+          description: ''
+  /api/forms/alternate-selves/revert/:
+    post:
+      operationId: forms_alternate_selves_revert_create
+      description: '#1111 — revert the active alternate self (blocked while not in
+        control).'
+      tags:
+      - alternate-selves
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlternateSelfRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveAlternateSelfResult'
+          description: ''
+  /api/forms/alternate-selves/shift/:
+    post:
+      operationId: forms_alternate_selves_shift_create
+      description: '#1111 — assume an alternate self owned by the played character.'
+      tags:
+      - alternate-selves
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftFormRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveAlternateSelfResult'
+          description: ''
   /api/forms/builds/:
     get:
       operationId: forms_builds_list
@@ -9293,13 +9516,10 @@ paths:
     post:
       operationId: items_fashion_presentations_create
       description: |-
-        Present an outfit + list presentations (#514).
+        Record the requesting account's acting character presenting an outfit at an event.
 
-        POST /api/items/fashion-presentations/ — record the requesting account's
-        acting character presenting an outfit at an event.
-        GET  /api/items/fashion-presentations/?event=<id> — list presentations
-        (filterable by event) so the UI can show who is presenting there to judge.
-        GET  /api/items/fashion-presentations/<pk>/ — retrieve one presentation.
+        Body: ``event`` (required) + optional ``outfit`` PKs. Returns the created
+        presentation (201), or 400 when the event has no host society / other rule failure.
       tags:
       - items
       requestBody:
@@ -17228,6 +17448,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSpreadableDeedList'
           description: ''
+  /api/personas/create-established/:
+    post:
+      operationId: personas_create_established_create
+      description: |-
+        #1127 — the designed create path for a durable ESTABLISHED identity.
+
+        Replaces the removed raw ModelViewSet create. Validated + capped at the service layer;
+        staff bypass the cap. A new persona starts with a blank descriptor set (privacy invariant).
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEstablishedPersonaRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
+  /api/personas/create-mask/:
+    post:
+      operationId: personas_create_mask_create
+      description: '#1127 — create a TEMPORARY anonymous mask and wear it (the "put
+        on a mask" path).'
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMaskRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/set-active/:
     post:
       operationId: personas_set_active_create
@@ -19829,6 +20096,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RosterTenureLookup'
+          description: ''
+  /api/roster/visibility-settings/:
+    get:
+      operationId: roster_visibility_settings_retrieve
+      description: Return the active character's current ``appear_offline`` value.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
+          description: ''
+    patch:
+      operationId: roster_visibility_settings_partial_update
+      description: Set the active character's ``appear_offline`` (quiet/hidden mode).
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVisibilitySettingsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilitySettings'
           description: ''
   /api/scenes/:
     get:
@@ -23636,6 +23937,16 @@ components:
       - default_delivery
       - id
       - name
+    ActiveAlternateSelfResult:
+      type: object
+      description: Result of a successful shift or revert — the now-active alternate-self
+        id.
+      properties:
+        active_alternate_self_id:
+          type: integer
+          nullable: true
+      required:
+      - active_alternate_self_id
     ActivePersonaResult:
       type: object
       description: 'Result of the #981 set-active-persona endpoint — the now-worn
@@ -23741,6 +24052,55 @@ components:
       required:
       - event_id
       - status
+    AlternateSelf:
+      type: object
+      description: |-
+        Read shape for the alternate-self switcher (#1111 slice 4).
+
+        Includes the active alt-self flag for the played character so the switcher can
+        highlight the currently-assumed form without a second round-trip.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        display_name:
+          type: string
+          maxLength: 100
+        persona_name:
+          type: string
+          nullable: true
+          readOnly: true
+        form_name:
+          type: string
+          nullable: true
+          readOnly: true
+        has_combat_profile:
+          type: boolean
+          readOnly: true
+        has_techniques:
+          type: boolean
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - form_name
+      - has_combat_profile
+      - has_techniques
+      - id
+      - is_active
+      - persona_name
+    AlternateSelfRequest:
+      type: object
+      description: |-
+        Read shape for the alternate-self switcher (#1111 slice 4).
+
+        Includes the active alt-self flag for the played character so the switcher can
+        highlight the currently-assumed form without a second round-trip.
+      properties:
+        display_name:
+          type: string
+          maxLength: 100
     AnchorOption:
       type: object
       description: Read-only representation of one eligible bonded fury anchor (#1543).
@@ -26363,6 +26723,32 @@ components:
       required:
       - character_sheet
       - resonance
+    CharacterTitle:
+      type: object
+      description: |-
+        Serializer for an earned, displayable character title (#1522).
+
+        Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+        title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        reward_key:
+          type: string
+          readOnly: true
+        earned_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - earned_at
+      - id
+      - reward_key
+      - title
     CharacterVitals:
       type: object
       description: Read-only vitals payload for the character sheet panel (#521).
@@ -27819,6 +28205,37 @@ components:
       - author_persona
       - body
       - post
+    CreateEstablishedPersonaRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-established-persona endpoint.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+    CreateMaskRequestRequest:
+      type: object
+      description: 'POST body for the #1127 create-mask endpoint — a temporary anonymous
+        face.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+    CreationProvenanceEnum:
+      enum:
+      - staff
+      - gm_table
+      - player
+      type: string
+      description: |-
+        * `staff` - Staff-created
+        * `gm_table` - GM-created (for a table)
+        * `player` - Player-created
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A
@@ -30418,11 +30835,12 @@ components:
       description: |-
         Serializer for FashionPresentation create + read (#514).
 
-        Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-        request body. The ``presenter`` is resolved from the requesting account in
-        the view (``FashionPresentationViewSet.perform_create``) and injected via
-        ``serializer.save(presenter=sheet)`` — never supplied by the client
-        (mirrors the endorsement views' ``endorser_sheet`` handling).
+        Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+        body. The orchestration runs through ``PresentOutfitAction`` in
+        ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+        Action seam, #1508); this serializer only validates input and serializes the result.
+        The ``presenter`` is resolved from the requesting account in the view, never supplied
+        by the client.
 
         Read: all fields are present; read-only fields cannot be supplied.
       properties:
@@ -30468,11 +30886,12 @@ components:
       description: |-
         Serializer for FashionPresentation create + read (#514).
 
-        Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-        request body. The ``presenter`` is resolved from the requesting account in
-        the view (``FashionPresentationViewSet.perform_create``) and injected via
-        ``serializer.save(presenter=sheet)`` — never supplied by the client
-        (mirrors the endorsement views' ``endorser_sheet`` handling).
+        Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+        body. The orchestration runs through ``PresentOutfitAction`` in
+        ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+        Action seam, #1508); this serializer only validates input and serializes the result.
+        The ``presenter`` is resolved from the requesting account in the view, never supplied
+        by the client.
 
         Read: all fields are present; read-only fields cannot be supplied.
       properties:
@@ -31697,6 +32116,32 @@ components:
       - max_inches
       - min_inches
       - name
+    HeldClue:
+      type: object
+      description: One clue a character holds — the journal row (#1575).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        found_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - description
+      - found_at
+      - id
+      - name
+      - target_kind
     HighlightReel:
       type: object
       description: |-
@@ -35664,6 +36109,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AggregateBeatContribution'
+    PaginatedAlternateSelfList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlternateSelf'
     PaginatedAreaListList:
       type: object
       required:
@@ -36537,6 +37005,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GroupStoryProgress'
+    PaginatedHeldClueList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldClue'
     PaginatedInteractionFavoriteList:
       type: object
       required:
@@ -40130,6 +40621,17 @@ components:
         body:
           type: string
           minLength: 1
+    PatchedVisibilitySettingsRequest:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
     Path:
       type: object
       description: Serializer for Path in CG context.
@@ -40678,11 +41180,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/PersonaTypeEnum'
           description: |-
-            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+            PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise, ALTERNATE = an alternate self's persona (shapeshift/possession/past-life)
 
             * `primary` - Primary
             * `established` - Established
             * `temporary` - Temporary
+            * `alternate` - Alternate
         description:
           type: string
           description: Physical description text
@@ -40741,11 +41244,13 @@ components:
       - primary
       - established
       - temporary
+      - alternate
       type: string
       description: |-
         * `primary` - Primary
         * `established` - Established
         * `temporary` - Temporary
+        * `alternate` - Alternate
     PhaseEnum:
       enum:
       - dawn
@@ -43066,9 +43571,29 @@ components:
         description:
           type: string
           readOnly: true
+        creation_provenance:
+          allOf:
+          - $ref: '#/components/schemas/CreationProvenanceEnum'
+          readOnly: true
+          description: |-
+            Who authored this character — a display-only quality/trust signal.
+
+            * `staff` - Staff-created
+            * `gm_table` - GM-created (for a table)
+            * `player` - Player-created
+        creation_provenance_display:
+          type: string
+          readOnly: true
+        created_for_table_name:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - can_apply
       - character
+      - created_for_table_name
+      - creation_provenance
+      - creation_provenance_display
       - description
       - fullname
       - id
@@ -43986,6 +44511,15 @@ components:
           minimum: 0
         per_target_repeat_lock:
           type: boolean
+    ShiftFormRequestRequest:
+      type: object
+      description: POST body for the alternate-self shift endpoint.
+      properties:
+        alternate_self_id:
+          type: integer
+          minimum: 1
+      required:
+      - alternate_self_id
     SignEnum:
       enum:
       - positive
@@ -47556,6 +48090,19 @@ components:
         * `shared` - Shared
         * `gossip` - Gossip
         * `public` - Public
+    VisibilitySettings:
+      type: object
+      description: |-
+        The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
+
+        Read-and-write of quiet/hidden mode for the requesting player's active character. The
+        fine-grained advanced controls (``show_online_status`` / ``allow_pages`` / ``allow_tells``)
+        can join this surface later; the model already carries them.
+      properties:
+        appear_offline:
+          type: boolean
+      required:
+      - appear_offline
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

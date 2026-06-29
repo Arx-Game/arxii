@@ -70,6 +70,33 @@ class FashionPresentationAPITests(APITestCase):
         self.assertEqual(response.data["base_score"], 3)
         self.assertEqual(response.data["acclaim"], 3)
 
+    def test_present_endpoint_dispatches_present_outfit_action(self) -> None:
+        """The web POST converges on PresentOutfitAction, not a serializer bypass (#1508).
+
+        Spies on the real ``run`` (it still executes, creating + serializing the
+        presentation → 201) and asserts it was the path taken. A regression back to the
+        serializer's direct ``present_outfit`` call would not call ``run`` and fail here.
+        """
+        from unittest.mock import patch
+
+        from actions.definitions.fashion import PresentOutfitAction
+
+        real_run = PresentOutfitAction.run
+        self.client.force_authenticate(user=self.presenter_account)
+        with (
+            force_check_outcome(self.outcome_success),
+            patch.object(
+                PresentOutfitAction, "run", autospec=True, side_effect=real_run
+            ) as mock_run,
+        ):
+            response = self.client.post(
+                "/api/items/fashion-presentations/",
+                data={"event": self.event.pk},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 201, response.content)
+        mock_run.assert_called_once()
+
     def test_present_does_not_accept_presenter_from_client(self) -> None:
         """A client-supplied presenter is ignored; the request sheet is used."""
         self.client.force_authenticate(user=self.presenter_account)

@@ -52,6 +52,13 @@ They do not use the command system, dispatchers, or handlers.
   telnet `CmdPersona` and the web `PersonaViewSet.set_active`. Validates the persona belongs to
   the actor's own sheet; wraps `world.scenes.services.set_active_persona` (the sole mutator).
   Pose/sdesc reflection of the active persona is #1109's scope, not this action;
+  `forms.py` — `ShiftFormAction` / `RevertFormAction`, keys `"shift_form"` / `"revert_form"`
+  (#1111 slice 4), REGISTRY backend, `target_type=SELF`; thin wrappers around
+  `world.forms.services.assume_alternate_self` / `revert_alternate_self`. Shift validates that
+  `alternate_self_id` belongs to the actor's sheet and is **not** `in_control`-gated
+  (forced/inadvertent shifts are the point). Revert **is** `in_control`-gated and surfaces
+  `RevertBlockedError.user_message` as a failure `ActionResult`. Shared by telnet and the web
+  dispatcher;
   `fatigue.py` — `RestAction`, key `"rest"` (#1491/#1524), REGISTRY backend, `target_type=SELF`;
   spend AP to gain `well_rested` for the next dawn reset. Gated by `CanRestPrerequisite`
   (own home only, not in combat). Wraps `world.fatigue.services.rest`; shared by telnet `CmdRest`

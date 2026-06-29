@@ -505,11 +505,12 @@ class OutfitRenameSerializer(serializers.ModelSerializer):
 class FashionPresentationSerializer(serializers.ModelSerializer):
     """Serializer for FashionPresentation create + read (#514).
 
-    Write: accepts ``event`` (required) + optional ``outfit`` PKs from the
-    request body. The ``presenter`` is resolved from the requesting account in
-    the view (``FashionPresentationViewSet.perform_create``) and injected via
-    ``serializer.save(presenter=sheet)`` — never supplied by the client
-    (mirrors the endorsement views' ``endorser_sheet`` handling).
+    Write: validates ``event`` (required) + optional ``outfit`` PKs from the request
+    body. The orchestration runs through ``PresentOutfitAction`` in
+    ``FashionPresentationViewSet.create`` (ADR-0001 — telnet + web share the registered
+    Action seam, #1508); this serializer only validates input and serializes the result.
+    The ``presenter`` is resolved from the requesting account in the view, never supplied
+    by the client.
 
     Read: all fields are present; read-only fields cannot be supplied.
     """
@@ -533,19 +534,6 @@ class FashionPresentationSerializer(serializers.ModelSerializer):
             "acclaim",
             "created_at",
         ]
-
-    def create(self, validated_data: dict) -> FashionPresentation:  # type: ignore[override]
-        """Delegate to ``present_outfit``; surface service errors as 400."""
-        from world.items.exceptions import FashionPresentationError  # noqa: PLC0415
-        from world.items.services.fashion_presentation import present_outfit  # noqa: PLC0415
-
-        presenter = validated_data.pop("presenter")
-        event = validated_data["event"]
-        outfit = validated_data.get("outfit")
-        try:
-            return present_outfit(presenter, event, outfit)
-        except FashionPresentationError as exc:
-            raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 
 class FashionJudgementSerializer(serializers.Serializer):

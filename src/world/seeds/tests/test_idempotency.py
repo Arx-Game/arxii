@@ -21,3 +21,17 @@ class TestSeedIdempotency(TestCase):
         seed_dev_database()
         res.refresh_from_db()
         self.assertEqual(res.description, "STAFF-EDITED — must survive re-seed")
+
+    def test_edited_cg_row_survives_reseed(self) -> None:
+        """The #651 non-overwrite gate for the character_creation cluster."""
+        from world.species.models import Species
+
+        seed_dev_database()
+        sp = Species.objects.get(name="Human")
+        sp.description = "HAND-EDITED"
+        sp.save()
+
+        seed_dev_database()  # re-seed must NOT overwrite
+
+        sp.refresh_from_db()
+        self.assertEqual(sp.description, "HAND-EDITED")

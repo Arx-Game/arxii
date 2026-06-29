@@ -197,6 +197,11 @@ ITEM_SOFT_DELETE_GRACE_DAYS = env.int("ITEM_SOFT_DELETE_GRACE_DAYS", default=30)
 # standard survivability pipeline (process_damage_consequences).
 FALL_IMPACT_PER_LEVEL = env.int("FALL_IMPACT_PER_LEVEL", default=5)
 
+# Max ESTABLISHED personas (durable, reputation-bearing alter egos) a player may
+# create per character via the designed creation flow (#1127). Staff bypass it.
+# TEMPORARY masks are not capped here (throwaway). PLACEHOLDER magnitude.
+MAX_ESTABLISHED_PERSONAS_PER_SHEET = env.int("MAX_ESTABLISHED_PERSONAS_PER_SHEET", default=5)
+
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",

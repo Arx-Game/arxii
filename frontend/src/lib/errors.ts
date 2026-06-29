@@ -1,7 +1,8 @@
 /**
  * Shared error helpers (#895). Consolidates the `extractErrorMessage` copy
  * that was duplicated across ~10 magic/ritual dialogs, plus the api-layer
- * `{detail}` parse-and-throw pattern (mirrors magic/api.ts `parseErrorDetail`).
+ * `{detail}` parse-and-throw pattern: `readErrorDetail` is the single home for
+ * the per-module `parseErrorDetail` copies, swept onto it in #1195.
  */
 
 /** Best-effort human-readable message from an unknown thrown value. */

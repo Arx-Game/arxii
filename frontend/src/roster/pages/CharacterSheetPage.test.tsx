@@ -79,6 +79,9 @@ describe('CharacterSheetPage', () => {
       fullname: 'Test Character',
       quote: '',
       description: '',
+      creation_provenance: 'player',
+      creation_provenance_display: 'Player-created',
+      created_for_table_name: null,
     };
     mockUseRosterEntryQuery.mockReturnValue({
       data: entry,

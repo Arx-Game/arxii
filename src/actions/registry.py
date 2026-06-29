@@ -64,6 +64,7 @@ from actions.definitions.events import (
 )
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
+from actions.definitions.forms import RevertFormAction, ShiftFormAction
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -132,6 +133,7 @@ from actions.definitions.progression_rewards import (
     RerollRandomSceneAction,
     SetPathIntentAction,
 )
+from actions.definitions.projects import DonateToProjectAction
 from actions.definitions.relationships import (
     CreateCapstoneAction,
     CreateDevelopmentAction,
@@ -198,7 +200,10 @@ _ALL_ACTIONS: list[Action] = [
     EquipAction(),
     UnequipAction(),
     RoomEditAction(),
+    DonateToProjectAction(),
     SetActivePersonaAction(),
+    ShiftFormAction(),
+    RevertFormAction(),
     SetSocialConsentPreferenceAction(),
     SetSocialConsentCategoryRuleAction(),
     AddSocialConsentWhitelistAction(),

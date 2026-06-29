@@ -56,3 +56,5 @@ class EventName(models.TextChoices):
     ENCOUNTER_COMPLETED = "encounter_completed", "Encounter Completed"
     # Vertical positioning (#1018): emitted when an entity enters a CHASM position.
     FELL = "fell", "Fell"
+    # Combat round lifecycle (#1584): fires at the top of resolve_round.
+    COMBAT_ROUND_STARTING = "combat_round_starting", "Combat Round Starting"

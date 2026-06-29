@@ -66,14 +66,16 @@ class PresentOutfitAction(Action):
         presenter = actor.sheet_data
 
         try:
-            present_outfit_service(presenter, event, outfit)
+            presentation = present_outfit_service(presenter, event, outfit)
         except FashionPresentationError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(actor_state, "$You() $conj(present) your look.")
-        return ActionResult(success=True)
+        # Carry the created presentation so the web viewset can serialize the response
+        # without re-querying — telnet ignores it (#1508).
+        return ActionResult(success=True, data={"presentation": presentation})
 
 
 @dataclass

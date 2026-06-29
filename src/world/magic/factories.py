@@ -2952,10 +2952,28 @@ class _BerserkConditionTemplateFactory:
 
     def __call__(self):
         from world.conditions.constants import DurationType
-        from world.conditions.models import ConditionStage
+        from world.conditions.models import ConditionCategory, ConditionStage
+
+        # Berserk is a behavior-altering condition: while raging, the character
+        # is not in control of themselves, which blocks self-revert of an
+        # alternate self (the #1111 slice-4 "revert blocked while raging"
+        # invariant). alters_behavior=True drives CharacterSheet.in_control.
+        category, _ = ConditionCategory.objects.get_or_create(
+            name="Control",
+            defaults={
+                "description": (
+                    "Conditions that change how a character behaves — compulsion, "
+                    "charm, fear, rage — rather than only their capabilities or stats."
+                ),
+                "is_negative": True,
+                "alters_behavior": True,
+                "display_order": 20,
+            },
+        )
 
         template = ConditionTemplateFactory(
             name=BERSERK_CONDITION_NAME,
+            category=category,
             description=(
                 "The caster has lost control of their fury. They act on primal rage, "
                 "unable to distinguish friend from foe."

@@ -157,59 +157,6 @@ class ActionPointPoolSpendTests(ActionPointPoolTestCase):
         assert pool.current == 100
 
 
-class ActionPointPoolBankTests(ActionPointPoolTestCase):
-    """Tests for ActionPointPool.bank method."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Set up test data."""
-        cls.character = CharacterFactory()
-
-    def test_bank_success(self):
-        """bank moves AP from current to banked."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=0)
-
-        result = pool.bank(30)
-
-        assert result is True
-        pool.refresh_from_db()
-        assert pool.current == 70
-        assert pool.banked == 30
-
-    def test_bank_insufficient_fails(self):
-        """bank returns False when insufficient current AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=20, banked=0)
-
-        result = pool.bank(30)
-
-        assert result is False
-        pool.refresh_from_db()
-        assert pool.current == 20
-        assert pool.banked == 0
-
-    def test_bank_adds_to_existing_banked(self):
-        """bank adds to existing banked amount."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=50)
-
-        result = pool.bank(30)
-
-        assert result is True
-        pool.refresh_from_db()
-        assert pool.current == 70
-        assert pool.banked == 80
-
-    def test_bank_negative_fails(self):
-        """bank returns False for negative amounts."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, banked=0)
-
-        result = pool.bank(-10)
-
-        assert result is False
-        pool.refresh_from_db()
-        assert pool.current == 100
-        assert pool.banked == 0
-
-
 class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.unbank method."""
 
@@ -338,66 +285,6 @@ class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
         assert pool.banked == 50
 
 
-class ActionPointPoolRegenerateTests(ActionPointPoolTestCase):
-    """Tests for ActionPointPool.regenerate method."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Set up test data."""
-        cls.character = CharacterFactory()
-
-    def test_regenerate_adds_to_current(self):
-        """regenerate adds AP to current."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-
-        added = pool.regenerate(50)
-
-        assert added == 50
-        pool.refresh_from_db()
-        assert pool.current == 150
-
-    def test_regenerate_capped_at_maximum(self):
-        """regenerate caps at maximum."""
-        pool = ActionPointPoolFactory(character=self.character, current=180, maximum=200)
-
-        added = pool.regenerate(50)
-
-        assert added == 20
-        pool.refresh_from_db()
-        assert pool.current == 200
-
-    def test_regenerate_at_maximum_adds_nothing(self):
-        """regenerate adds nothing when already at maximum."""
-        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
-
-        added = pool.regenerate(50)
-
-        assert added == 0
-        pool.refresh_from_db()
-        assert pool.current == 200
-
-    def test_regenerate_negative_returns_zero(self):
-        """regenerate returns 0 for negative amounts."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-
-        added = pool.regenerate(-10)
-
-        assert added == 0
-        pool.refresh_from_db()
-        assert pool.current == 100
-
-    def test_regenerate_ignores_banked(self):
-        """regenerate fills current regardless of banked amount."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200, banked=50)
-
-        added = pool.regenerate(100)
-
-        assert added == 100
-        pool.refresh_from_db()
-        assert pool.current == 200
-        assert pool.banked == 50  # Unchanged
-
-
 class ActionPointPoolHelperTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool helper methods."""
 
@@ -420,16 +307,6 @@ class ActionPointPoolHelperTests(ActionPointPoolTestCase):
         """can_afford returns True for exact amount."""
         pool = ActionPointPoolFactory(character=self.character, current=50)
         assert pool.can_afford(50) is True
-
-    def test_can_bank_true(self):
-        """can_bank returns True when sufficient AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=100)
-        assert pool.can_bank(50) is True
-
-    def test_can_bank_false(self):
-        """can_bank returns False when insufficient AP."""
-        pool = ActionPointPoolFactory(character=self.character, current=30)
-        assert pool.can_bank(50) is False
 
 
 class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):

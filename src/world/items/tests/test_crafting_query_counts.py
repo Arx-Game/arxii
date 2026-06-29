@@ -24,8 +24,10 @@ rather than discovered in production profiling.
   5. consequence_rows.select_related — 1 query (all rows in one hit, not per-row)
   6. consume_cost:
      a. ActionPointConfig × 2 + ActionPointPool GET + pool.spend UPDATE — 4 queries
-     b. deduct_anima → anima GET + unique check + UPDATE — 3 queries
-     c. consume_pks → Django cascade collect (batched IN-lists per FK) + DELETE — ~14 q
+     b. anima sufficiency guard (filter.first) — 1 query (#1243; symmetric with the AP
+        path, asserts the staged anima is still affordable before deducting)
+     c. deduct_anima → anima GET + unique check + UPDATE — 3 queries
+     d. consume_pks → Django cascade collect (batched IN-lists per FK) + DELETE — ~14 q
   7. apply_resolution → apply_all_effects — 0 queries for a consequence with no effects
   8. resolve_capped_tier:
      a. CraftingSkillCap.for_skill — 1 query (single ORDER BY + LIMIT, not per-row)
@@ -168,12 +170,13 @@ class CraftAttachFacetQueryCountTests(TestCase):
     def test_craft_attach_facet_query_count(self) -> None:
         """craft_attach_facet must not scale queries with consequence/cap/material row count.
 
-        Pinned at 63 queries (measured on SQLite, #1031 baseline). Breakdown:
+        Pinned at 64 queries (measured on SQLite; #1031 baseline 63 + 1 for the #1243
+        symmetric anima-sufficiency guard in consume_cost). Breakdown:
           - ~14 SAVEPOINT/RELEASE pairs from @transaction.atomic nesting
           - ~12 Django cascade collect queries before material DELETE (batched IN-lists
             per FK-related model; O(related_models) not O(material_count))
           - ~4 ActionPointConfig duplicate reads from get_or_create_for_character × 2
-          - ~33 real reads/writes covering the pipeline described in the module docstring
+          - ~34 real reads/writes covering the pipeline described in the module docstring
 
         consequence_rows: single SELECT (query 21) — NOT one per row.
         material_requirements: single SELECT (query 9) — NOT one per requirement.
@@ -183,7 +186,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
         consequence row (3 rows) would push the count up by ≥3, exceeding this ceiling.
         """
         with force_check_outcome(self.success_outcome):
-            with self.assertNumQueries(63):
+            with self.assertNumQueries(64):
                 result = craft_attach_facet(
                     crafter_account=self.account,
                     crafter_character=self.character,

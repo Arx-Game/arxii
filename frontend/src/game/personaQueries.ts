@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/evennia_replacements/api';
 
-export type PersonaType = 'primary' | 'established' | 'temporary';
+export type PersonaType = 'primary' | 'established' | 'temporary' | 'alternate';
 
 /** A face a character can present as, for the top-bar switcher. */
 export interface SwitchablePersona {

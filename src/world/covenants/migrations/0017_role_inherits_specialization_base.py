@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("achievements", "0004_rewarddefinition_modifier_target_and_more"),
         ("codex", "0004_alter_codexclue_unique_together_and_more"),
         ("covenants", "0016_covenantrole_codex_entry_and_more"),
-        ("magic", "0057_tighten_technique_variant_constraints"),
+        ("magic", "0058_tighten_technique_variant_constraints"),
     ]
 
     operations = [

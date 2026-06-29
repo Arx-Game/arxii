@@ -214,6 +214,14 @@ class FormType(models.TextChoices):
     DISGUISE = "disguise", "Disguise"
 
 
+class DisguiseKind(models.TextChoices):
+    """How a fake overlay is defeated (#1110). The pierce *contest* itself is the senior dev's
+    domain (perception-vs-disguise / dispel); this just records which contest applies."""
+
+    MUNDANE = "mundane", "Mundane Disguise"  # defeated by perception / inspection
+    MAGICAL = "magical", "Magical Illusion"  # defeated by dispel / see-magic
+
+
 class SourceType(models.TextChoices):
     EQUIPPED_ITEM = "equipped_item", "Equipped Item"
     APPLIED_ITEM = "applied_item", "Applied Item"
@@ -297,7 +305,18 @@ class CharacterFormValue(SharedMemoryModel):
 
 
 class CharacterFormState(SharedMemoryModel):
-    """Tracks which form a character currently has active."""
+    """The character's two-slot active appearance state (#1110).
+
+    - ``active_form`` is the **current real form** — what the body actually is right now (the true
+      form unless shapeshifted). Shapeshift swaps this slot; it is always REAL.
+    - ``active_fake_overlay`` is an optional **fake overlay** (a ``DISGUISE`` form) painted *over*
+      the real form. The real form is preserved beneath and seen when the overlay is pierced.
+      Single-slot for now (ordered-stack stacking is a deferred decision).
+
+    Owner/staff ground-truth reads ignore the overlay and read ``active_form``; everyone else's
+    composed view swaps in the overlay until they pierce it. The pierce *contest* (perception vs
+    disguise / dispel) is the senior dev's domain — this only holds the slots + ``overlay_kind``.
+    """
 
     character = models.OneToOneField(
         ObjectDB,
@@ -310,16 +329,159 @@ class CharacterFormState(SharedMemoryModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name="active_for",
+        help_text="The current REAL form (what the body actually is now).",
+    )
+    active_fake_overlay = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="overlay_for",
+        help_text="Optional FAKE overlay (a DISGUISE form) presented over the real form (#1110).",
+    )
+    overlay_kind = models.CharField(
+        max_length=20,
+        choices=DisguiseKind.choices,
+        blank=True,
+        default="",
+        help_text="How the active overlay is pierced (mundane vs magical). Blank ⇒ no overlay.",
     )
 
     class Meta:
         verbose_name = "Character Form State"
         verbose_name_plural = "Character Form States"
 
+    @property
+    def current_real_form(self) -> "CharacterForm | None":
+        """The current real form — the canonical name for the ``active_form`` slot (#1110)."""
+        return self.active_form
+
     def __str__(self):
         if self.active_form:
             return f"{self.character.db_key}: {self.active_form}"
         return f"{self.character.db_key}: No active form"
+
+
+class FormCombatProfile(SharedMemoryModel):
+    """A battle form's stat-suite — a package of stat modifiers applied while the form
+    is active. Owns its ModifierSource rows; created on assumption, deleted on revert.
+    """
+
+    form = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.CASCADE,
+        related_name="combat_profiles",
+        help_text="The ALTERNATE form this stat-suite belongs to.",
+    )
+    display_name = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["form", "display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name or f"{self.form} profile"
+
+
+class FormCombatProfileEffect(SharedMemoryModel):
+    """One stat modifier in a form's combat profile."""
+
+    profile = models.ForeignKey(FormCombatProfile, on_delete=models.CASCADE, related_name="effects")
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget", on_delete=models.CASCADE, related_name="form_effects"
+    )
+    value = models.IntegerField(help_text="Modifier value (can be negative).")
+
+    class Meta:
+        ordering = ["profile", "target"]
+
+    def __str__(self) -> str:
+        return f"{self.profile}: {self.target} {self.value:+d}"
+
+
+class AlternateSelf(SharedMemoryModel):
+    """A character's access to an alternate self — a bundle of optional facets (form,
+    stats, abilities, persona) swapped together on assumption. Each facet pointer is
+    optional and may reference a shared catalog template or a unique one. ``tuning_value``
+    parameterizes a shared template per-character (e.g. lycanthropy-thread strength).
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="alternate_selves",
+    )
+    form = models.ForeignKey(
+        CharacterForm,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="alternate_self_grants",
+    )
+    persona = models.ForeignKey(
+        SCENES_PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="alternate_self_grants",
+    )
+    combat_profile = models.ForeignKey(
+        FormCombatProfile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="grants",
+    )
+    techniques = models.ManyToManyField(
+        "magic.Technique", blank=True, related_name="alternate_self_grants"
+    )
+    tuning_value = models.IntegerField(null=True, blank=True)
+    display_name = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["character", "display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name or f"{self.character} alt-self"
+
+
+class ActiveAlternateSelf(SharedMemoryModel):
+    """The currently-assumed alternate self + per-facet return anchors. One per character.
+    Holds return_form/return_persona (the form/persona to revert to). ``in_control`` is a
+    DERIVED property (added in a later task) — NOT stored here.
+    """
+
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="active_alternate_self",
+    )
+    alternate_self = models.ForeignKey(
+        AlternateSelf,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_for",
+    )
+    return_form = models.ForeignKey(
+        CharacterForm,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="return_for_active",
+    )
+    return_persona = models.ForeignKey(
+        SCENES_PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="return_for_active",
+    )
+
+    class Meta:
+        ordering = ["character"]
+
+    def __str__(self) -> str:
+        return f"{self.character}: {self.alternate_self or 'no active alt-self'}"
 
 
 class TemporaryFormChangeManager(models.Manager):

@@ -67,6 +67,7 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.events import CmdEvent
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
+from commands.form import CmdForm
 from commands.gemit import CmdGemit
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
@@ -80,6 +81,7 @@ from commands.persona import CmdPersona
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
@@ -241,6 +243,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
             CmdEncounter,
             CmdStory,
+            # #1574 — project status + money donation (project/donate, +project).
+            CmdProject,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
@@ -249,6 +253,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdComfort,
             # #1522 — IC time + local weather readout (`time`/`weather`).
             CmdTime,
+            # #1111 — form shift/revert telnet namespace for alternate selves.
+            CmdForm,
             # #1347 — list faces + wear-face active persona switch.
             CmdPersona,
             # Training allocation and unlock purchase telnet surfaces.

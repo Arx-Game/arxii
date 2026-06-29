@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("achievements", "0003_initial"),
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
-        ("mechanics", "0006_modifiersource_achievement_reward"),
+        ("mechanics", "0007_modifiersource_achievement_reward"),
     ]
 
     operations = [

@@ -6,6 +6,7 @@ from world.achievements.models import (
     Achievement,
     AchievementReward,
     CharacterAchievement,
+    CharacterTitle,
     Discovery,
     StatTracker,
 )
@@ -87,6 +88,22 @@ class CharacterAchievementSerializer(serializers.ModelSerializer):
     def get_is_discoverer(self, obj: CharacterAchievement) -> bool:
         """Return True if the character was a discoverer of this achievement."""
         return obj.discovery_id is not None
+
+
+class CharacterTitleSerializer(serializers.ModelSerializer):
+    """Serializer for an earned, displayable character title (#1522).
+
+    Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
+    title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+    """
+
+    title = serializers.CharField(source="reward.name", read_only=True)
+    reward_key = serializers.CharField(source="reward.key", read_only=True)
+
+    class Meta:
+        model = CharacterTitle
+        fields = ["id", "title", "reward_key", "earned_at"]
+        read_only_fields = fields
 
 
 class StatTrackerSerializer(serializers.ModelSerializer):

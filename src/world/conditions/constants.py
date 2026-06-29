@@ -81,6 +81,19 @@ TARGET_EFFECT_ALTERATION: str = "alteration"
 # ConditionTemplate rows; services use them to locate active instances.
 UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
 BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
+FORCE_FIELD_CONDITION_NAME: str = "Aegis Field"  # absorb_pool reactive handler (#1584)
+REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (#1584)
+BLINK_CONDITION_NAME: str = "Phase Step"  # blink_dodge reactive handler (#1584)
+SUMMONING_CONDITION_NAME: str = "Summoning"  # active CONDITION_APPLIED summon trigger (#1584)
+
+# Task 14c simple effect bundles (#1584). These names locate the ConditionTemplate rows
+# seeded by ensure_teleport_content / ensure_obstacle_content / ensure_incorporeal_content /
+# ensure_sink_content / ensure_telekinesis_content in world.magic.effect_palette_content.
+TELEPORT_CONDITION_NAME: str = "Phase Jump"  # CONDITION_APPLIED → move_position (SELF)
+OBSTACLE_CONDITION_NAME: str = "Barricade"  # CONDITION_APPLIED → create_obstacle (SELF)
+INCORPOREAL_CONDITION_NAME: str = "Ghostform"  # intangibility gate only; no handler
+SINK_CONDITION_NAME: str = "Earthmeld"  # intangibility gate, 1-round duration; no handler
+TELEKINESIS_CONDITION_NAME: str = "Force Grip"  # CONDITION_APPLIED → move_position (ENEMY)
 
 # Poison content identity keys (#1050). The DamageType, the staged acute
 # Poisoned ConditionTemplate, and the long-term Slow Poison variant are seeded
@@ -89,6 +102,23 @@ POISON_DAMAGE_TYPE_NAME: str = "Poison"
 POISONED_CONDITION_NAME: str = "Poisoned"
 SLOW_POISON_CONDITION_NAME: str = "Slow Poison"
 POISON_CATEGORY_NAME: str = "Poison"
+
+# Charm/Calm content identity keys (#1590). Seeded idempotently by
+# ensure_charm_content() in world.conditions.charm_content.
+CHARM_CONDITION_NAME: str = "Charmed"
+CALM_CONDITION_NAME: str = "Calm"
+
+
+class Allegiance(models.TextChoices):
+    """Behavioral allegiance states used by charm/control effects.
+
+    Declared in the conditions constants module so combat and social code can
+    share one source of truth.
+    """
+
+    ENEMY = "enemy", "Enemy"
+    ALLY_OF_CASTER = "ally", "Fights for the charmer"
+    NEUTRAL = "neutral", "Will not attack"
 
 
 class FoundationalCapability:

@@ -4,7 +4,10 @@ Character Creation API views.
 
 from http import HTTPMethod
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
 
 from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
@@ -422,7 +425,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         draft = self.get_object()
 
         try:
-            character = finalize_character(draft, add_to_roster=True)
+            character = finalize_character(
+                draft,
+                add_to_roster=True,
+                created_by_account=cast("AccountDB", request.user),
+            )
             return Response(
                 {
                     "character_id": character.id,
@@ -435,6 +442,66 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 {"detail": "Character creation failed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="finalize-gm")
+    def finalize_gm(self, request: Request, pk: int | None = None) -> Response:
+        """Finalize a player-GM's character onto the Available roster for their table (#1506).
+
+        The requesting account must own the target GM table. Creates the character + a
+        Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
+        viewable quality/trust signal (the GM vouches for it for their table; apping is
+        never gated by it). Body: ``target_table`` (id, required), ``story_title``
+        (required), optional ``story_description``.
+        """
+        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+        from world.character_creation.services import finalize_gm_character  # noqa: PLC0415
+        from world.gm.models import GMTable  # noqa: PLC0415
+
+        table_id = request.data.get("target_table")
+        story_title = (request.data.get("story_title") or "").strip()
+        if table_id is None or not story_title:
+            return Response(
+                {"detail": "target_table and story_title are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        table = GMTable.objects.filter(pk=table_id).first()
+        if table is None:
+            return Response(
+                {"detail": "That GM table does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if table.gm.account_id != request.user.id:
+            return Response(
+                {"detail": "You do not own that GM table."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        draft = self.get_object()
+        draft.is_gm_creation = True
+        draft.target_table = table
+        draft.story_title = story_title
+        draft.story_description = request.data.get("story_description", "") or ""
+        draft.save(
+            update_fields=["is_gm_creation", "target_table", "story_title", "story_description"]
+        )
+
+        try:
+            entry, story = finalize_gm_character(draft)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": "; ".join(exc.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "character_id": entry.character_sheet.pk,
+                "roster_entry_id": entry.pk,
+                "story_id": story.pk,
+                "message": "GM character created on the Available roster.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="cg-points")
     def cg_points(self, request: Request, pk: int | None = None) -> Response:

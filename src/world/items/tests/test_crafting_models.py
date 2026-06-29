@@ -36,6 +36,25 @@ class CraftingRecipeModelTests(TestCase):
         self.assertIn(CraftingRecipeKind.FACET_ATTACH, CraftingRecipeKind.values)
         self.assertIn(CraftingRecipeKind.STYLE_ATTACH, CraftingRecipeKind.values)
 
+    def test_two_bare_factory_calls_reuse_the_same_kind_row(self) -> None:
+        """Two bare ``CraftingRecipeFactory()`` calls return the same row, not IntegrityError.
+
+        ``kind`` is unique; the factory keys ``django_get_or_create`` on it so the second
+        bare call reuses the FACET_ATTACH recipe instead of violating the constraint (#1243).
+        """
+        first = CraftingRecipeFactory()
+        second = CraftingRecipeFactory()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(
+            CraftingRecipe.objects.filter(kind=CraftingRecipeKind.FACET_ATTACH).count(), 1
+        )
+
+    def test_distinct_kinds_create_distinct_rows(self) -> None:
+        """Passing a distinct ``kind`` still creates a separate recipe."""
+        facet = CraftingRecipeFactory(kind=CraftingRecipeKind.FACET_ATTACH)
+        style = CraftingRecipeFactory(kind=CraftingRecipeKind.STYLE_ATTACH)
+        self.assertNotEqual(facet.pk, style.pk)
+
     def test_cost_consumption_choices(self) -> None:
         """CostConsumption has NONE, PARTIAL, FULL choices."""
         self.assertIn(CostConsumption.NONE, CostConsumption.values)
@@ -49,8 +68,12 @@ class CraftingRecipeModelTests(TestCase):
     def test_unique_kind_constraint(self) -> None:
         """Two recipes with the same kind violate the unique constraint."""
         CraftingRecipeFactory(name="Attach Facet", kind=CraftingRecipeKind.FACET_ATTACH)
+        # The factory get_or_creates on ``kind`` (so a second factory call would reuse the
+        # row); assert the DB constraint directly via the model to exercise it (#1243).
         with self.assertRaises(IntegrityError):
-            CraftingRecipeFactory(name="Attach Facet 2", kind=CraftingRecipeKind.FACET_ATTACH)
+            CraftingRecipe.objects.create(
+                name="Attach Facet 2", kind=CraftingRecipeKind.FACET_ATTACH
+            )
 
     def test_ordering(self) -> None:
         """CraftingRecipe default ordering is by name."""

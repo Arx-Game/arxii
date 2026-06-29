@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0010_conditioninstance_abandoned_since_round"),
-        ("magic", "0056_technique_variant"),
+        ("magic", "0057_technique_variant"),
     ]
 
     operations = [

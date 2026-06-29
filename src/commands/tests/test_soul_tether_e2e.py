@@ -331,7 +331,7 @@ class SoulTetherJourneyTests(TestCase):
                 f" writeup=Test bond."
             ),
         )
-        # Remove character from room so _get_active_scene returns None.
+        # Remove character from room so get_active_scene returns None.
         self.sinner_char.location = None
         self.sinner_char.save()
         if hasattr(self.room, "_active_scene_cache"):

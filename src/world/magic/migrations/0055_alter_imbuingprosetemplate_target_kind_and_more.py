@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0053_gift_kind"),
+        ("magic", "0054_gift_kind"),
     ]
 
     operations = [

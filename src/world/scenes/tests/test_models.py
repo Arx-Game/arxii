@@ -121,6 +121,20 @@ class PersonaModelTests(TestCase):
         assert persona.is_established_or_primary is False
 
 
+class PersonaAlternateFlavorTests(TestCase):
+    """Tests for PersonaType.ALTERNATE (slice 4 — alternate-self personas)."""
+
+    def test_persona_alternate_flavor(self):
+        from world.scenes.constants import PersonaType
+
+        assert PersonaType.ALTERNATE == "alternate"
+        sheet = CharacterSheetFactory()
+        p = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ALTERNATE)
+        assert p.persona_type == PersonaType.ALTERNATE
+        # multiple ALTERNATE personas on one character are allowed
+        PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ALTERNATE)
+
+
 class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
     """Partial unique constraint: one PRIMARY persona per character_sheet."""
 

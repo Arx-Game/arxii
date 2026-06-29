@@ -102,6 +102,37 @@ def add_contribution(  # noqa: PLR0913
     return contribution
 
 
+def donate_to_project(project: Project, *, donor_persona: Persona, amount: int) -> Contribution:
+    """Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.
+
+    Atomic: the spend and the contribution land together, or neither. ``transfer``
+    validates funds — a non-positive ``amount`` or an empty purse raises Django's
+    ``ValidationError``; an inactive project raises ``ProjectNotActiveError``. The money
+    is sunk (the project consumes it); the contribution advances ``current_progress`` at
+    one progress per 100 coppers (see ``add_contribution``).
+    """
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+
+    # Fail fast before debiting: never take the donor's money for a contribution that
+    # would then be rejected (add_contribution also guards this).
+    if project.status != ProjectStatus.ACTIVE:
+        msg = (
+            f"Project #{project.pk} status is {project.status}, not ACTIVE — "
+            "cannot accept contributions."
+        )
+        raise ProjectNotActiveError(msg)
+
+    with transaction.atomic():
+        purse = get_or_create_purse(donor_persona.character_sheet)
+        transfer(amount=amount, reason="project_donation", from_purse=purse)
+        return add_contribution(
+            project=project,
+            contributor_persona=donor_persona,
+            kind=ContributionKind.MONEY,
+            money_amount=amount,
+        )
+
+
 def _increment_contribution_stat(persona: Persona) -> None:
     """Increment the projects.total_contributed StatTracker for this persona.
 

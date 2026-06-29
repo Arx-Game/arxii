@@ -8,7 +8,7 @@ the unified Persona identity system, and non-combat scene rounds.
 ### `models.py`
 - **`Scene`**: Primary scene entity with title, status, location, summary, privacy_mode
 - **`SceneParticipation`**: Account participation tracking in scenes
-- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY). FK to CharacterSheet
+- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). FK to CharacterSheet
   (source of truth); partial unique constraint ensures one PRIMARY per sheet
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person
 - **`Block`** (#1278): one player blocking another, persona-scoped by default (`blocker_persona` ↔
@@ -125,10 +125,18 @@ Key service functions for scene round lifecycle:
 
 ### `views.py`
 - **`SceneViewSet`**: Scene CRUD operations and filtering
-- **`PersonaViewSet`**: Persona management. `set_active` dispatches `SetActivePersonaAction`
+- **`PersonaViewSet`**: Persona management (read + actions; **not** a `ModelViewSet` — the raw
+  create was removed, #1127). `set_active` dispatches `SetActivePersonaAction`
   (key `"set_active_persona"`, `actions/definitions/personas.py`) via `dispatch_player_action`
   — the same seam the telnet `CmdPersona` uses. `set_active_persona` (service) remains the
   sole mutator of `CharacterSheet.active_persona`; the action wraps it.
+  - **Designed creation (#1127):** `create-established` / `create-mask` POST actions are the only
+    creation surface (telnet `persona create|mask` mirrors them). Both call the validated services
+    `scenes.services.create_persona` (ESTABLISHED; capped by
+    `settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET`, staff bypass) and `create_mask` (TEMPORARY
+    anonymous mask, optionally applying a #1110 disguise overlay + switching the worn face). PRIMARY
+    is never created here. Creation copies **no** descriptors from sibling faces — the
+    descriptor-never-auto-attach privacy invariant (#1109) holds structurally.
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
 ### `interaction_views.py`
@@ -157,7 +165,7 @@ Key service functions for scene round lifecycle:
 
 - **`Scene`**: Contains participants and interactions
 - **`SceneParticipation`**: Tracks account involvement in scenes
-- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY). Has
+- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). Has
   `character_sheet` FK to CharacterSheet (the source-of-truth anchor). `is_established_or_primary`
   property for permission checks. Hosts `display_ic` / `display_with_history` / `display_to_staff` helpers
 - **`PersonaDiscovery`**: Stores raw discovery pairs; service functions handle resolution logic

@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("covenants", "0016_covenantrole_codex_entry_and_more"),
         ("items", "0022_garmentmitigation"),
-        ("magic", "0054_alter_imbuingprosetemplate_target_kind_and_more"),
+        ("magic", "0055_alter_imbuingprosetemplate_target_kind_and_more"),
         ("relationships", "0006_writeupcomplaint_writeupkudos"),
         ("traits", "0001_initial"),
     ]

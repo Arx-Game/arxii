@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRostersQuery, useRosterEntriesQuery } from '../queries';
 import type { RosterEntryData } from '../types';
+import { CreationProvenanceBadge } from '../components/CreationProvenanceBadge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Table,
@@ -126,9 +127,16 @@ export function RosterListPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <CharacterLink id={entry.id} className="underline">
-                          {entry.character.name}
-                        </CharacterLink>
+                        <div className="flex flex-col items-start gap-1">
+                          <CharacterLink id={entry.id} className="underline">
+                            {entry.character.name}
+                          </CharacterLink>
+                          <CreationProvenanceBadge
+                            provenance={entry.creation_provenance}
+                            display={entry.creation_provenance_display}
+                            tableName={entry.created_for_table_name}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell>{entry.character.gender ?? '—'}</TableCell>
                       <TableCell>{entry.character.char_class ?? '—'}</TableCell>

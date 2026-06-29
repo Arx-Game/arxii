@@ -50,40 +50,36 @@ pool = ActionPointPool.get_or_create_for_character(character)
 
 # Check affordability
 pool.can_afford(50)  # True if current >= 50
-pool.can_bank(30)    # True if current >= 30
 
 # Spend AP from current pool
 success = pool.spend(50)  # Returns bool
 
-# Bank AP (move from current to banked, for teaching offers)
-success = pool.bank(30)  # Returns bool
-
 # Unbank AP (return banked to current, capped at effective maximum; excess is lost)
 actually_restored = pool.unbank(30)  # Returns int (actual amount restored)
 
-# Consume banked AP (when an offer is accepted -- removes from banked, not returned to current)
+# Consume banked AP (when a teaching offer is accepted -- removes from banked, not returned to current)
 success = pool.consume_banked(30)  # Returns bool
-
-# Regenerate AP (add to current, capped at effective maximum)
-actually_added = pool.regenerate(50)  # Returns int (actual amount added)
-
-# Cron-triggered regeneration (applies modifier adjustments)
-actually_added = pool.apply_daily_regen()   # Uses config + ap_daily_regen modifier, updates timestamp
-actually_added = pool.apply_weekly_regen()  # Uses config + ap_weekly_regen modifier
 
 # Effective maximum (base maximum + ap_maximum modifier from distinctions)
 effective_max = pool.get_effective_maximum()  # Returns max(1, maximum + modifier)
 ```
+
+**Regeneration is batch-only (#1509).** AP is replenished by the scheduled job
+`world.game_clock.tasks._apply_ap_regen` (daily + weekly), which computes each pool's
+modifier-adjusted regen amount and effective maximum and `bulk_update`s all pools in a
+few queries (skipping protagonism-locked characters). There is **no** per-pool
+`regenerate()` model method — the batch job is the single regen path. (The `bank()` /
+`can_bank()` deposit helpers were removed as dead code; teaching offers reach `banked`
+through the codex teaching flow and recover/consume it via `unbank()` / `consume_banked()`.)
 
 ### Pool Behavior Summary
 
 | Operation | Source | Destination | Cap | Lost on overflow |
 |-----------|--------|-------------|-----|-----------------|
 | `spend(n)` | current | consumed | n/a (fails if insufficient) | No |
-| `bank(n)` | current | banked | n/a (fails if insufficient) | No |
 | `unbank(n)` | banked | current | effective maximum | Yes (excess lost) |
 | `consume_banked(n)` | banked | consumed | n/a (fails if insufficient) | No |
-| `regenerate(n)` | external | current | effective maximum | Yes (capped) |
+| batch regen (cron) | external | current | effective maximum | Yes (capped) |
 
 ---
 
@@ -133,8 +129,8 @@ for pool in ActionPointPool.objects.all():
 ## Integration Points
 
 - **Mechanics**: Reads `ap_daily_regen`, `ap_weekly_regen`, and `ap_maximum` modifiers via `get_modifier_total()`. Distinctions like Indolent or Efficient create these modifiers.
-- **Codex** (future): Teaching activities cost action points via `pool.spend()` or `pool.bank()`.
-- **Cron**: Daily and weekly jobs call `apply_daily_regen()` and `apply_weekly_regen()` on all pools.
+- **Codex**: Teaching offers commit AP into `banked` and consume it via `pool.consume_banked()` on accept; cancellation returns it via `pool.unbank()`.
+- **Cron**: The `game_clock` daily and weekly jobs call `world.game_clock.tasks._apply_ap_regen`, which batch-regenerates all pools (modifier-adjusted, capped at effective max, protagonism-lock-aware).
 
 ---
 

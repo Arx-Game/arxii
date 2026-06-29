@@ -11,8 +11,8 @@ class Migration(migrations.Migration):
         ("achievements", "0004_rewarddefinition_modifier_target_and_more"),
         ("codex", "0004_alter_codexclue_unique_together_and_more"),
         ("conditions", "0010_conditioninstance_abandoned_since_round"),
-        ("magic", "0055_target_gift_thread"),
-        ("mechanics", "0006_modifiersource_achievement_reward"),
+        ("magic", "0056_target_gift_thread"),
+        ("mechanics", "0007_modifiersource_achievement_reward"),
     ]
 
     operations = [

@@ -58,6 +58,14 @@ artist changes persona with an *identical* body; a curse changes the body and
 - Existing `Persona` (`world/scenes`): `PRIMARY` / `ESTABLISHED` / `TEMPORARY`,
   `is_fake_name`, plus prestige/fame fields (reputation is **per-persona** — a
   criminal alt's infamy never touches the primary).
+- **Creation flow (#1127).** PRIMARY is minted once at character creation; everything else goes
+  through the designed, validated services `scenes.services.create_persona` (durable ESTABLISHED,
+  capped by `settings.MAX_ESTABLISHED_PERSONAS_PER_SHEET`, staff bypass) and `create_mask` (a
+  TEMPORARY anonymous mask, optionally applying a #1110 disguise overlay and switching the worn
+  face). Faces: telnet `persona create <name>` / `persona mask <name>` and the web
+  `PersonaViewSet` `create-established` / `create-mask` actions. The raw `ModelViewSet` create was
+  removed — these are the only creation surfaces. They create the persona and **nothing else**, so
+  the *Privacy invariant* below holds structurally (no descriptor is ever copied from a sibling).
 - **Named/public personas** (PRIMARY, ESTABLISHED) render **by name to everyone** —
   the accessibility guarantee.
 - **Anonymous personas** (`is_fake_name`, typically TEMPORARY — the mask) render as a
@@ -85,6 +93,18 @@ artist changes persona with an *identical* body; a curse changes the body and
   **Scope boundary:** the pose/sdesc read-path (`record_interaction` /
   `_characters_to_active_personas`) is **not** changed here — making poses reflect the
   presented persona (with privacy/discovery/freeze) is **#1109**'s scope.
+- **Web surface** (`world/forms/views.py:AlternateSelfViewSet`,
+  `frontend/src/game/components/FormSwitcher.tsx`, #1111 slice 4) —
+  `GET /api/forms/alternate-selves/` lists caller-owned alternate selves with an
+  `is_active` flag; `POST /api/forms/alternate-selves/shift/` and `revert/` dispatch
+  `ShiftFormAction` / `RevertFormAction` through `dispatch_player_action`. The
+  top-bar `FormSwitcher` mirrors `PersonaSwitcher` and surfaces revert errors
+  returned by the action.
+- **Telnet `form` namespace** (`commands/form.py`, #1111 slice 4) — `form list` shows
+  the active alternate self, the available alternate selves, and whether revert is
+  blocked; `form shift <name|id>` triggers `ShiftFormAction`; `form revert` triggers
+  `RevertFormAction`. All dispatch through `dispatch_player_action`, converging with
+  the web form dispatcher on the same action seam.
 
 ## Layer 2 — Form (physical body, REAL)
 
@@ -144,6 +164,50 @@ artist changes persona with an *identical* body; a curse changes the body and
 Covered in Layer 2's "three real anchors." The key non-collapse: **natural baseline
 (origin) ≠ true form (return point)** — washing out dye returns to *natural*;
 reverting a shapeshift returns to the *current real* (cosmetics included).
+
+## Alternate-self lifecycle (slice 4)
+
+The alternate-self (shapeshift / cover-identity) seam is intentionally decoupled:
+**control is independent of the shift**.
+
+- **Assumption** — `world.forms.services.assume_alternate_self(sheet, alt)` swaps the
+  form and/or persona facets, creates the stat-suite (`ModifierSource` +
+  `CharacterModifier`) and ability-suite (`CharacterTechnique` rows tagged to that
+  source), and records return anchors on `ActiveAlternateSelf`. Assumption is **not**
+  gated by `in_control`; forced/inadvertent shifts (moon madness, rage) are the point.
+- **`CharacterSheet.in_control`** — a `@cached_property` derived from active conditions
+  whose `ConditionCategory.alters_behavior` is True (rage / possession / charm /
+  mind-control). It is **not** a stored flag and not a per-status name lookup.
+- **Revert** — `world.forms.services.revert_alternate_self(sheet)` restores the captured
+  form/persona anchors and deletes the granted modifier + technique rows. Revert is
+  **blocked** while `not sheet.in_control` and raises `RevertBlockedError`. Only
+  revert is blocked; assumption stays allowed.
+- **Removing an `alters_behavior` condition does NOT auto-revert the form.** It
+  re-derives `in_control=True`, which unblocks a later self-revert. The form persists
+  after the condition clears. The canonical instance is the fury `Berserk` condition,
+  seeded with a `Control` category carrying `alters_behavior=True`; it is cleared by
+  the existing `RestoreSenseAction` (`restore_sense`) calm-down action.
+
+## Player-facing action seam
+
+The two alternate-self verbs are real `actions.base.Action`s on the shared
+`action.run()` seam (ADR-0001):
+
+- **`ShiftFormAction`** (`actions/definitions/forms.py`, key `"shift_form"`) —
+  assumes an `AlternateSelf` owned by the actor's sheet. `target_type=SELF`, kwarg
+  `alternate_self_id`. **Not gated by `in_control`**; forced/inadvertent shifts
+  (moon madness, rage) use the same path. A foreign or unknown id returns a
+  uniform failure message to avoid leaking repertoire information.
+- **`RevertFormAction`** (`actions/definitions/forms.py`, key `"revert_form"`) —
+  reverts the active alternate self. `target_type=SELF`, no kwargs. Catches
+  `RevertBlockedError` while `not sheet.in_control` and surfaces it as a failure
+  `ActionResult`. No active alt-self also returns a failure result.
+
+Both wrap `world.forms.services.assume_alternate_self` / `revert_alternate_self`;
+  telnet and the web dispatcher converge on the same action path.
+
+Service details and the stacking guard (permanently-known techniques are not
+overwritten) live in [`forms.md`](forms.md).
 
 ## The single render composition
 
@@ -219,8 +283,8 @@ path copies a descriptor from a sibling persona.
 | `(Persona × FormTrait)` descriptor | **ABSENT** | genuinely new — the core net-new surface |
 | Trait **mutability** tag | **ABSENT** | small new flag on `FormTrait` |
 | Natural baseline + change log | **ABSENT** | new |
-| Two-slot active state (`current_real_form` + `active_fake_overlay`) | **ABSENT** | today there's a single `active_form` |
-| Single render composition (gated by viewer) | **NOT WIRED** | rendering ignores both active pointers; reads TRUE form |
+| Two-slot active state (`current_real_form` + `active_fake_overlay`) | **BUILT (#1110)** | `forms.CharacterFormState.active_form` (real) + `active_fake_overlay` + `overlay_kind` (`DisguiseKind`); `apply_disguise`/`remove_disguise`; `get_presented_appearance(pierced=)` swaps the overlay in unless pierced (the pierce *contest* stays the senior dev's) |
+| Single render composition (gated by viewer) | **PARTLY WIRED (#1325)** | scalar fields ARE viewer-gated: `_build_appearance` exposes exact `height_inches` only to owner/staff (others get the coarse `height_band` label via `get_height_band`) and shows the free-text `description` only when `reveal_identity`; form-trait *overlay* selection still reads the TRUE form (ignores `active_fake_overlay`) — that part remains not wired |
 
 **Consolidation to ratify:** retire the legacy `Characteristic` path for skin/eye/hair
 so `FormTrait` is the single home (kills the telnet-vs-web duplication).
@@ -247,7 +311,12 @@ so `FormTrait` is the single home (kills the telnet-vs-web duplication).
    invariant (Bob/Robert); anonymous personas → sdesc; `PersonaDiscovery` wiring;
    recorded-scene persona freezing.
 3. **Slice 3 — concealment (ours + perception).** Fake overlays (disguise/illusion),
-   reveal metadata, stacking.
+   reveal metadata, stacking. **Substrate shipped (#1110):** `active_fake_overlay` + `overlay_kind`
+   (`DisguiseKind` MUNDANE/MAGICAL) on `CharacterFormState`; `apply_disguise`/`remove_disguise`;
+   `get_presented_appearance(character, *, pierced=False)` presents the overlay unless pierced, with
+   the owner/staff ground-truth read passing `pierced=True`. **Single-slot** for now (the ordered-stack
+   open decision is deferred). The **pierce contest** (perception-vs-disguise / dispel) is the senior
+   dev's domain and writes into these slots — a separate issue.
 4. **Slice 4 — shapeshift (mostly senior dev).** Voluntary alternate forms first (Lily
    controlled, near-free from `ALTERNATE`); then involuntary/rage as a
    conditions-driven state; durations; combat profiles.

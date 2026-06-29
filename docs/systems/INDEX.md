@@ -179,6 +179,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
     alongside residence trickle
+  - Effect palette (#1584):
+    `ensure_effect_palette_content()` (`world/magic/effect_palette_content.py`) — idempotent
+    entry point that seeds all 9 castable effects (Summon Spirit, Aegis Field, Mirror Ward,
+    Phase Step, Phase Jump, Barricade, Ghostform, Earthmeld, Force Grip). Calls individual
+    `ensure_*_content()` sub-builders. Effect handlers live in
+    `world/magic/services/effect_handlers.py`: `absorb_pool`, `reflect_damage`, `blink_dodge`,
+    `summon_ally`, `move_position`, `create_obstacle`; adapters: `summon_ally_on_condition`,
+    `move_position_on_condition`, `create_obstacle_on_condition`, `init_absorb_buffer`.
+    See magic.md §"Effect Palette" for the full handler/adapter table.
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,
@@ -351,8 +360,12 @@ Check resolution engine — converts trait values to ranks and rolls against res
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
-  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent),
-  `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`,
+  such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
+  `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
+  `ConditionTemplate` (`upkeep_anima_per_round` int — anima drained per round for reactive
+  conditions; `reactive_anima_cost` int — anima paid per reactive-defense fire; ADR-0060),
+  `ConditionStage`, `ConditionInstance` (`absorb_remaining` int nullable — Aegis Field
+  absorption buffer seeded by `init_absorb_buffer`), `ConditionCapabilityEffect`,
   `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
   `ConditionDamageInteraction`, `ConditionConditionInteraction`
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
@@ -364,10 +377,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
   `perform_treatment()`
-- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment
-  boon/injury application, behavior-consent gating via `ConditionCategory.alters_behavior`),
-  progression (interactions), scenes (telnet `treat` + web Treat panel surface converges on the
-  `SceneActionRequest` consent seam via the custom-action-resolver registry)
+- **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
+  (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
+  `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).
+- **Integrates with:** combat (DoT, capability blocking, NPC allegiance reads via
+  `ConditionCategory.alters_behavior`; `select_npc_actions` consults `derive_allegiance`),
+  magic (power sources, resonance-environment boon/injury application, behavior-consent gating
+  via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
+  web Treat panel surface converges on the `SceneActionRequest` consent seam via the
+  custom-action-resolver registry)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
@@ -379,11 +397,18 @@ Species/race definitions with stat bonuses and language assignments.
 - **Source:** `src/world/species/`
 - **Details:** [species.md](species.md)
 ### Forms
-Physical appearance options (height, build, hair/eye colors).
+Physical appearance options (height, build, hair/eye colors) and the alternate-self
+shapeshift lifecycle.
 
-- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`
-- **Enums:** `TraitType` (color/style)
-- **Integrates with:** character_sheets (appearance), species (height bands per species)
+- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`,
+  `FormCombatProfile`, `FormCombatProfileEffect`, `AlternateSelf`, `ActiveAlternateSelf`
+- **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
+- **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
+  `switch_form(character, target_form)`, `revert_to_true_form(character)`,
+  `get_presented_appearance(character)`
+- **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
+- **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
+  mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)
 - **Source:** `src/world/forms/`
 - **Details:** [forms.md](forms.md)
 ### Appearance & Identity (architecture)
@@ -587,6 +612,10 @@ held captive to rescue); players acquire clues by **searching** a room or via pa
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
   each placement (access layer; empty rule = open to anyone)
+- **Read surface (#1575):** `GET /api/clues/held/?character_sheet=<id>` (`MyHeldCluesView`,
+  `HeldClueSerializer`) — the held-clue *journal*, scoped to characters the requester plays
+  (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
+  only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
   (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
   clues planted on capture / cleared on resolution), predicates (eligibility), checks
@@ -737,6 +766,7 @@ Multi-stage character creation flow with draft system.
 
 - **Models:** `CharacterDraft`, `StartingArea`, `Beginnings`
 - **Key Functions:** Stage validation, draft progression
+- **Seeded CG-world content (#1333):** `seed_character_creation_dev()` (`src/world/seeds/character_creation.py`) — the `"character_creation"` cluster; seeds Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stat Traits/Rosters/Path so `finalize_character` runs on a fresh DB. Part of `seed_dev_database()` (the admin "Load sane defaults" Big Button); surfaced in the superuser-only **Game Setup** hub.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -896,6 +926,16 @@ register as additional kinds.
   `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;
   Plan 3 (#668) fills in real `BuildingPermit` ItemInstance creation. Mission migration
   onto this dispatch is #686.
+- **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
+  `(pc_persona, npc_persona)`) is atomically accumulated by
+  `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action
+  graded outcomes route through `apply_social_disposition_delta(actor, target_persona_id,
+  result)`. Persona-less NPCs (mooks) use the session-scoped
+  `world.npc_services.ephemeral_disposition` store; the promotion seam to durable rows is
+  future work (ADR-0058).
+- **Allegiance (#1590):** `derive_allegiance(opponent, encounter)` derives `ENEMY` /
+  `ALLY_OF_CASTER` / `NEUTRAL` from active `alters_behavior` conditions (charm/calm);
+  consumed by combat's `select_npc_actions` per opponent.
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`
@@ -1441,6 +1481,46 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
   `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
+- **Effect-palette / summon / allegiance additions (#1584):**
+  - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
+    side-field; ALLY opponents fight *for* the party (summons, and future charm/
+    switch-sides targets). See ADR-0059.
+  - `CombatOpponent.summoned_by` (FK → `CharacterSheet`, nullable) — conjurer bond; set on
+    summoned ALLY opponents.
+  - `CombatOpponent.bond_expires_round` (int, nullable) — round at which the summon expires.
+  - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
+    `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
+    `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Effect-palette / allegiance / intangibility services (#1584):**
+  - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
+    returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
+    given actor, querying on `allegiance`.
+  - `_resolve_npc_action_on_opponent_target(action, npc_action)` — routes an ALLY summon's
+    action against a `CombatOpponent` target through `apply_damage_to_opponent`, bypassing
+    the PC survivability pipeline and conditions.
+  - `apply_damage_to_opponent(..., bypass_pre_apply=False)` /
+    `apply_damage_to_participant(..., bypass_pre_apply=False)` — optional kwarg that skips
+    `DAMAGE_PRE_APPLY` emit + `_try_interpose`; used by `reflect_damage` to bounce a hit
+    without triggering another reactive cycle (loop-safety via `bypass_pre_apply=True`).
+  - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
+    from each active participant holding a reactive condition; called by `begin_round_of_combat`
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
+  - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
+    True when the target has an active `ConditionInstance` whose
+    `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
+    filter sites to honour the intangibility gate.
+- **Event:** `EventName.COMBAT_ROUND_STARTING` (`flows/constants.py`) — emitted at the
+  start of each round by `begin_round_of_combat`; `drain_reactive_upkeep` subscribes to it.
+- **Condition fields added for effect palette (#1584):**
+  - `ConditionCategory.grants_intangibility` (bool) — marks intangibility categories
+    (Ghostform, Earthmeld); the `is_untargetable` gate reads this.
+  - `ConditionTemplate.upkeep_anima_per_round` (int) — anima drained per round from the
+    bearer when they hold this reactive condition (0 = no upkeep).
+  - `ConditionTemplate.reactive_anima_cost` (int) — anima paid per reactive-defense fire;
+    can't pay → fizzle, the attack lands (0 = free).
+  - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
+    the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
+    `CONDITION_APPLIED`.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
@@ -1476,11 +1556,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   yield, flee, my_action, available_combos), duel challenge endpoints
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
-  conditions (`bulk_apply_conditions` — now installs reactive side-effects),
+  conditions (`bulk_apply_conditions` — now installs reactive side-effects;
+  `is_untargetable` for intangibility gate; `ConditionCategory.grants_intangibility`),
   mechanics (`dispatch_capability_reaction`, `resolve_challenge`),
-  flows (`DAMAGE_PRE_APPLY` event; `MODIFY_PAYLOAD` flow action for DEFEND),
+  flows (`DAMAGE_PRE_APPLY` event; `COMBAT_ROUND_STARTING` event; `MODIFY_PAYLOAD` flow
+  action for DEFEND; reactive-defense handlers in `world/magic/services/effect_handlers.py`),
   covenants (speed_rank resolution order, `apply_equipped_armor_soak`),
-  magic (technique use pipeline, `CombatPull`)
+  magic (technique use pipeline, `CombatPull`, effect palette — summon/reactive handlers)
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
@@ -1668,13 +1750,14 @@ Extensions to Evennia models for additional data storage.
 Production-callable seed layer for populating sane defaults on a fresh dev install.
 
 - **Entry Point:** `world.seeds.database.seed_dev_database(*, verbose=False) -> SeedReport` — calls every registered cluster seeder in sequence; idempotent (create-if-missing semantics throughout, never overwrites).
-- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name (`"magic"`, `"items"`, `"combat"`, `"checks"`). Add a new cluster by appending an entry here.
+- **Cluster registry:** `world.seeds.clusters.CLUSTER_SEEDERS` — `dict[str, Callable]` keyed by cluster name, in seed order: `"checks"` (resolution spine, first), `"magic"`, `"items"`, `"combat"`, `"consent"`, `"character_creation"` (CG-world content, last — after `magic`, which provides the cantrip/resonance `finalize_character` picks). Add a new cluster by appending an entry here. `seeded_models()` (flat representative-content list for row-count tracking) and `seeded_models_by_cluster()` (per-cluster inventory for the admin hub) are the two read shapes.
 - **Surfaces:**
   - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
-  - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message.
-- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220).
-- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (`seed_check_resolution_tables()` — the natively-owned checks cluster), `types.py` (`SeedReport` dataclass).
-- **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression.
+  - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message; redirects to the Game Setup hub on success.
+  - Django admin **"Game Setup"** hub (`src/web/admin/game_setup_views.py`, `_game_setup/` URL, `admin_game_setup` name) — superuser-only landing page ("Welcome to a new Arx-based instance"): the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. Header link visible to superusers next to the Big Button.
+- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220). The natively-owned clusters (`checks`, `consent`, `character_creation`) live directly under `src/world/seeds/`.
+- **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch + inventory helpers), `checks.py` (`seed_check_resolution_tables()` — the checks spine), `consent.py` (`seed_social_consent_categories()`), `character_creation.py` (`seed_character_creation_dev()` — CG-world content: Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stats/Rosters/Path), `types.py` (`SeedReport` dataclass).
+- **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression (including `TestSeededCharacterCreation` — `finalize_character` runs end-to-end on a seeded-only DB).
 - **Source:** `src/world/seeds/`
 - **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
 

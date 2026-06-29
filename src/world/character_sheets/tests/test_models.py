@@ -4,6 +4,8 @@ Tests for character sheets models.
 Tests focus on custom methods and behaviors, not standard Django functionality.
 """
 
+from unittest.mock import MagicMock, patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 import pytest
@@ -250,9 +252,33 @@ class CurrentLevelTests(TestCase):
         CharacterClassLevelFactory(character=sheet.character, level=7)
         self.assertEqual(sheet.current_level, 5, "Cached value should persist")
 
-        # Explicit invalidation refreshes.
+        # Invalidate and confirm the cache re-derives the new higher value.
         sheet.invalidate_class_level_cache()
         self.assertEqual(sheet.current_level, 7)
+
+
+class InControlPropertyTests(TestCase):
+    """Tests for CharacterSheet.in_control derived property (slice 4)."""
+
+    def setUp(self):
+        CharacterSheet.flush_instance_cache()
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def test_in_control_true_with_no_alters_behavior_conditions(self):
+        self.assertIs(self.sheet.in_control, True)
+
+    def test_in_control_false_with_alters_behavior_condition(self):
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = True
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            self.assertIs(self.sheet.in_control, False)
+
+    def test_in_control_true_when_only_non_altering_conditions(self):
+        fake_condition = MagicMock()
+        fake_condition.condition.category.alters_behavior = False
+        with patch.object(self.sheet.character.conditions, "active", return_value=[fake_condition]):
+            self.assertIs(self.sheet.in_control, True)
 
 
 class CachedAchievementsHeldTests(TestCase):

@@ -17,6 +17,9 @@ from world.conditions.constants import (
     ConditionInteractionTrigger,   # ON_OTHER_APPLIED, ON_SELF_APPLIED, WHILE_BOTH_PRESENT
     ConditionInteractionOutcome,   # REMOVE_SELF, REMOVE_OTHER, REMOVE_BOTH, PREVENT_OTHER,
                                    # PREVENT_SELF, TRANSFORM_SELF, MERGE
+    Allegiance,                    # ENEMY, ALLY_OF_CASTER, NEUTRAL
+    CHARM_CONDITION_NAME,          # "Charmed"
+    CALM_CONDITION_NAME,           # "Calm"
 )
 ```
 
@@ -44,7 +47,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative` |
+| `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative`, `alters_behavior` |
 | `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description` |
 | `CheckType` | Check types that receive bonuses/penalties | `name`, `description` |
 | `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierTarget`), `color_hex`, `icon` |
@@ -55,6 +58,13 @@ from world.conditions.types import (
 |-------|---------|------------|
 | `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings, combat settings (`affects_turn_order`, `draws_aggro`), display settings |
 | `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier` |
+
+**Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
+`Charmed` / `Calm` templates are seeded idempotently by `ensure_charm_content()` in
+`world.conditions.charm_content`, aggregated via `ensure_conditions_content()`. The
+`Allegiance` enum is derived from active `alters_behavior` conditions on an NPC. Charm on an
+NPC alters a non-player's behavior; ADR-0024's PC consent gate does not apply. See ADR-0058 for
+the two-tier NPC disposition model.
 
 ### Condition Effects (Abstract base: `ConditionOrStageEffect`)
 
@@ -263,6 +273,15 @@ See ADR-0048 for the rationale behind the custom-action-resolver registry.
 - **Bidirectional modifiers**: Conditions can be good or bad depending on context.
 - **Abstract base effects**: `ConditionOrStageEffect` uses mutually exclusive FKs for condition-level vs stage-specific effects.
 - **Batch queries**: Views aggregate effects in 3 queries instead of N per condition type.
+
+## Behavior-altering categories
+
+`ConditionCategory.alters_behavior` marks conditions that change how a character
+*behaves* (compulsion, charm, fear, rage) rather than only their capabilities or
+stats. It is the consent signal used by cast targeting and by
+`CharacterSheet.in_control`. The canonical seeded behavior-altering category is
+`Control` (`alters_behavior=True`), and the `Berserk` condition created by the fury
+system belongs to it.
 
 ---
 

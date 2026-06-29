@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("mechanics", "0005_modifiersource_residence_comfort"),
+        ("mechanics", "0006_modifiersource_form_combat_profile"),
     ]
 
     operations = [
