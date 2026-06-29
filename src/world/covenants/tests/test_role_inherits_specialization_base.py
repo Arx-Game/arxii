@@ -5,7 +5,7 @@ from ``SharedMemoryModel`` to ``AbstractSpecializedVariant`` (which itself
 inherits ``SharedMemoryModel``), hoisting four duplicated columns
 (``resonance``, ``unlock_thread_level``, ``discovery_achievement``,
 ``codex_entry``) onto the shared base. No behavior change — the proven
-``resolve_effective_role`` + ``fire_subrole_discoveries`` paths are the
+``resolve_effective_role`` + ``fire_variant_discoveries`` paths are the
 canary (see their existing test modules).
 """
 

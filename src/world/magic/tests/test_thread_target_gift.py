@@ -2,8 +2,9 @@
 
 GIFT-kind threads anchor to a Gift via target_kind=GIFT + target_gift FK.
 Mirrors the COVENANT_ROLE discriminator pattern: exactly-one-target
-CheckConstraint + per-(owner, resonance, target_gift) partial UniqueConstraint
-WHERE retired_at IS NULL (#1578 Task 2).
+CheckConstraint + per-(owner, target_gift) partial UniqueConstraint WHERE
+retired_at IS NULL — one active GIFT thread per gift (decision 7, #1578).
+Multi-resonance is a deferred follow-up (#1619).
 
 The clean()-only tests use unsaved Thread instances (the same idiom as
 test_mantle_thread.py) so the DB CheckConstraint does not fire before
@@ -67,7 +68,7 @@ class ThreadTargetGiftIntegrityTests(TestCase):
                 target_trait=TraitFactory(),
             )
 
-    def test_unique_active_gift_thread_per_owner_resonance_gift(self) -> None:
+    def test_unique_active_gift_thread_per_owner_gift(self) -> None:
         Thread.objects.create(
             owner=self.sheet,
             resonance=self.resonance,
@@ -81,7 +82,28 @@ class ThreadTargetGiftIntegrityTests(TestCase):
                     resonance=self.resonance,
                     target_kind=TargetKind.GIFT,
                     target_gift=self.gift,
-                )  # duplicate (owner, resonance, gift), both active
+                )  # duplicate (owner, gift), both active
+
+    def test_unique_active_gift_thread_rejects_different_resonance(self) -> None:
+        # The constraint is (owner, target_gift), NOT (owner, resonance, gift):
+        # a second active thread on the same gift at a DIFFERENT resonance is
+        # rejected too (one active GIFT thread per gift — decision 7, #1578).
+        # Multi-resonance is a deferred follow-up (#1619).
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+        )
+        other_resonance = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Thread.objects.create(
+                    owner=self.sheet,
+                    resonance=other_resonance,
+                    target_kind=TargetKind.GIFT,
+                    target_gift=self.gift,
+                )
 
     def test_retired_gift_thread_not_unique_conflict(self) -> None:
         first = Thread.objects.create(

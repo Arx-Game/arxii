@@ -131,7 +131,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         """Variants on ``parent`` whose ``unlock_thread_level`` falls in
         ``(starting_level, new_level]`` at ``resonance_id``.
 
-        Lifted from ``fire_subrole_discoveries``'s list-comp
+        Lifted from ``fire_variant_discoveries``'s list-comp
         (``covenants/discovery.py:37-44``). The discovery ceremony calls this to
         find which variants to fire beats for on an imbue.
         """

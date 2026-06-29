@@ -277,7 +277,7 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
             )
         else:
             # Personal: the discovering sheet is supplied by the ceremony
-            # caller (fire_subrole_discoveries), which has thread.owner in
+            # caller (fire_variant_discoveries), which has thread.owner in
             # scope; it appends [thread.owner] when this returns [].
             recipients: list[CharacterSheet] = []
             body = (

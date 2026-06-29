@@ -40529,6 +40529,7 @@ components:
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
+            * `GIFT` - Gift
         target_id:
           type: integer
           writeOnly: true
@@ -46959,6 +46960,7 @@ components:
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
+            * `GIFT` - Gift
         name:
           type: string
           default: ''
@@ -47160,6 +47162,7 @@ components:
             * `COVENANT_ROLE` - Covenant Role
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
+            * `GIFT` - Gift
         target_id:
           type: integer
           writeOnly: true
@@ -47187,6 +47190,7 @@ components:
       - COVENANT_ROLE
       - MANTLE
       - SANCTUM
+      - GIFT
       type: string
       description: |-
         * `TRAIT` - Trait
@@ -47197,6 +47201,7 @@ components:
         * `COVENANT_ROLE` - Covenant Role
         * `MANTLE` - Mantle
         * `SANCTUM` - Sanctum
+        * `GIFT` - Gift
     ThreadWeavingTeachingOffer:
       type: object
       description: Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5).

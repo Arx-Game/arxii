@@ -605,15 +605,16 @@ class Thread(SharedMemoryModel):
                 ),
             ),
             # ---- GIFT ---------------------------------------------------------
-            # One active thread per (owner, resonance, target_gift). Retired
-            # threads (retired_at IS NOT NULL) are excluded so a character can
-            # retire a gift thread and later weave a new one on the same gift.
-            # Multi-resonance (multiple active GIFT threads per gift) is permitted
-            # by this constraint and gated instead by provisioning logic (Task 7):
-            # a latent level-0 thread is created once per gift; weaving commits a
-            # resonance onto it rather than creating a second (decision 7).
+            # One active thread per (owner, target_gift), mirroring
+            # uniq_thread_covenant_role_active (one active thread per anchor).
+            # Retired threads (retired_at IS NOT NULL) are excluded so a
+            # character can retire a gift thread and later weave a new one on
+            # the same gift. The single-thread-per-gift invariant is enforced
+            # here at the DB layer (decision 7); multi-resonance (multiple
+            # active GIFT threads per gift) is a deferred follow-up (#1619) and
+            # would relax this constraint + make the resolver return a set.
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_gift"],
+                fields=["owner", "target_gift"],
                 condition=models.Q(
                     target_kind=TargetKind.GIFT,
                     retired_at__isnull=True,
