@@ -445,6 +445,26 @@ CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the 
 resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
 
+### Path-crossing grant — (Gift × Path) → base technique set (grants.py, services/path_magic.py — #1579)
+
+The complement to the resonance engine above: #1578 specializes *how* a known technique
+manifests; #1579 grants *which* techniques you get when you advance into a new Path. This is
+ADR-0055's "(Gift × Path) sets the base technique set" leg, realized as an **acquisition** on
+crossing (not a derive-on-read), honoring ADR-0053 (advancement *gates*; the grant is a
+consequence of Path membership per ADR-0050, not an XP purchase).
+
+| Surface | Role | Notes |
+|---|---|---|
+| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
+| `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via `provision_latent_gift_thread`) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Latent-thread resonance = a claimed supported resonance, else the gift's first supported. |
+| `cross_threshold` hook (`audere_majora.py`) | Wiring | Calls `grant_path_magic(sheet, chosen_path)` right after the `CharacterPathHistory` write — so *which* levels grant is authored data (`AudereMajoraThreshold` rows); a level-3 POTENTIAL "pre-crossing" reuses the same machinery with lesser-ceremony wording. |
+
+Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`: real
+`resolve_audere_majora_offer → cross_threshold` into the warrior path grants only the warrior
+technique set from a shared gift (spy set absent), provisions the latent thread, and the granted
+technique resolves through the specialization path. **Out of scope → #1581:** the within-tier
+gift-thread *strength* axis (`compute_anchor_cap` GIFT case + imbue-driven growth).
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one
