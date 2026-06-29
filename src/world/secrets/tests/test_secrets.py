@@ -9,7 +9,9 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.missions.factories import MissionDeedRecordFactory
 from world.roster.factories import RosterEntryFactory
+from world.scenes.factories import SceneFactory
 from world.secrets.constants import SecretLevel, SecretProvenance
 from world.secrets.factories import SecretCategoryFactory, SecretFactory
 from world.secrets.models import Secret, SecretKnowledge
@@ -19,7 +21,10 @@ from world.secrets.services import (
     author_secret,
     grant_secret_knowledge,
     secret_known_to,
+    secrets_explaining,
+    set_secret_act_anchor,
 )
+from world.societies.factories import LegendEntryFactory
 
 
 class SecretModelTests(TestCase):
@@ -164,3 +169,82 @@ class SecretClueTargetTests(TestCase):
         grant_clue_target(clue, self.knower)
         assert secret_known_to(self.secret, self.knower) is True
         assert target_already_known(clue, self.knower) is True
+
+
+class SecretActAnchorTests(TestCase):
+    """A secret anchors to the act it is the truth behind — one act, several records (#1573)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.subject = CharacterSheetFactory()
+        cls.knower = RosterEntryFactory()
+
+    def test_unanchored_secret_is_not_act_anchored(self) -> None:
+        secret = SecretFactory(subject_sheet=self.subject)
+        assert secret.is_act_anchored is False
+
+    def test_one_secret_holds_all_three_records_of_one_act(self) -> None:
+        # The load-bearing invariant: Bob's legendary murder is ONE secret, not three. The public
+        # legend, the mission deed, and the scene are co-facets of the *same* act, carried on the
+        # single secret — never fragmented into a secret per record (which would confuse a knower).
+        legend = LegendEntryFactory()
+        deed = MissionDeedRecordFactory()
+        scene = SceneFactory()
+        secret = author_secret(
+            subject_sheet=self.subject,
+            provenance=SecretProvenance.ACTION_ANCHORED,
+            level=SecretLevel.DANGEROUS,
+            content="The heroic duel was a cold murder.",
+            legend_deed=legend,
+            mission_deed=deed,
+            scene=scene,
+        )
+        assert secret.is_act_anchored is True
+        assert secret.legend_deed_id == legend.pk
+        assert secret.mission_deed_id == deed.pk
+        assert secret.scene_id == scene.pk
+        # Exactly one Secret row for the act — the anti-fragmentation guarantee.
+        assert Secret.objects.filter(subject_sheet=self.subject).count() == 1
+
+    def test_anchored_secret_cannot_be_player_flavor(self) -> None:
+        # An act-anchored secret is evidenced ("true because it happened"), so it can never be the
+        # unverified player-flavor tier — even at Level 1.
+        scene = SceneFactory()
+        with self.assertRaises(SecretError):
+            author_secret(
+                subject_sheet=self.subject,
+                provenance=SecretProvenance.PLAYER_FLAVOR,
+                level=SecretLevel.UNCOMMON_KNOWLEDGE,
+                content="it totally happened",
+                scene=scene,
+            )
+
+    def test_set_secret_act_anchor_sets_then_clears(self) -> None:
+        secret = SecretFactory(subject_sheet=self.subject, provenance=SecretProvenance.GM_AUTHORED)
+        legend = LegendEntryFactory()
+        set_secret_act_anchor(secret, legend_deed=legend)
+        secret.refresh_from_db()
+        assert secret.legend_deed_id == legend.pk
+        # Passing no records resets the full anchor state (explicit, not a partial merge).
+        set_secret_act_anchor(secret)
+        secret.refresh_from_db()
+        assert secret.is_act_anchored is False
+
+    def test_secrets_explaining_is_gated_by_knowledge(self) -> None:
+        legend = LegendEntryFactory()
+        secret = author_secret(
+            subject_sheet=self.subject,
+            provenance=SecretProvenance.ACTION_ANCHORED,
+            level=SecretLevel.WHISPERS,
+            content="the truth behind the tale",
+            legend_deed=legend,
+        )
+        # A stranger who has not learned the secret sees nothing behind the public deed.
+        assert not secrets_explaining(roster_entry=self.knower, legend_deed=legend).exists()
+        # Once they hold the secret, the backlink surfaces it (the "vice-versa" direction).
+        grant_secret_knowledge(roster_entry=self.knower, secret=secret)
+        known = secrets_explaining(roster_entry=self.knower, legend_deed=legend)
+        assert [row.secret_id for row in known] == [secret.pk]
+
+    def test_secrets_explaining_with_no_record_is_empty(self) -> None:
+        assert not secrets_explaining(roster_entry=self.knower).exists()

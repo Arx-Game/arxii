@@ -95,6 +95,40 @@ class Secret(SharedMemoryModel):
         related_name="authored_secrets",
         help_text="The narrating persona (player-authored). Null for GM/staff-authored.",
     )
+    # --- Act anchor (#1573): the recorded act this secret is the hidden truth behind. ---
+    # ONE secret = one act. That act surfaces through several *records* — a mission deed (the
+    # mechanical act), a legend entry (the public, embellished telling), and/or the scene it
+    # happened in — but they are co-facets of the *same* act, so they live as independent optional
+    # FKs on the single secret. They are never fragmented into one-secret-per-record (which would
+    # leave a knower thinking they hold three secrets about one event). The distinct *consequences*
+    # (legend, criminal, society) ride the #1429 reputation payload below, not these links. Any
+    # subset may be set; all-null = unanchored (the common case). FK direction is specific→general
+    # per ADR-0010: the secret (consumer) points at the reusable record primitives, and `scenes`/
+    # `missions` stay free of any dependency on `secrets`.
+    legend_deed = models.ForeignKey(
+        "societies.LegendEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="explaining_secrets",
+        help_text="The public legend telling of the act this secret is the truth behind (#1573).",
+    )
+    mission_deed = models.ForeignKey(
+        "missions.MissionDeedRecord",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="explaining_secrets",
+        help_text="The recorded mission act this secret is the truth behind (#1573).",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="explaining_secrets",
+        help_text="Scene the act happened in — freeform/blackmail context (#1573).",
+    )
     # --- Reputation payload (#1429): how this fact reads when it becomes known. ---
     # The diffuse channel — a vector of moral framings dot-producted against each aware society's
     # principles, so the same fact reads positive to one society and negative to another. Empty =
@@ -125,12 +159,24 @@ class Secret(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.get_level_display()} secret about {self.subject_sheet_id}"
 
-    def clean(self) -> None:
-        """Enforce anchor-scales-with-level: free player-flavor only at Level 1 (#1334).
+    @property
+    def is_act_anchored(self) -> bool:
+        """Whether this secret is the hidden truth behind a recorded act (#1573).
 
-        Player-flavor secrets carry no mechanical effect, so their truth is moot — but that
-        only holds at Level 1. Anything heavier must be GM- or action-anchored, which is what
-        stops a player from free-writing a Dangerous-tier "I killed a god."
+        True if any of the act-record anchors (legend deed / mission deed / scene) is set —
+        the several records are facets of one act, so any one of them makes the secret anchored.
+        """
+        return bool(self.legend_deed_id or self.mission_deed_id or self.scene_id)
+
+    def clean(self) -> None:
+        """Enforce the secret invariants (#1334, #1573).
+
+        - **Anchor scales with level:** player-flavor secrets carry no mechanical effect, so
+          their truth is moot — but that only holds at Level 1. Anything heavier must be GM- or
+          action-anchored (what stops a player free-writing a Dangerous-tier "I killed a god").
+        - **Anchored ⇒ evidenced:** a secret tied to a recorded act (legend/mission/scene) is
+          true-because-it-happened, so it can never be player-flavor (unverified) — minting it
+          from play uses ``ACTION_ANCHORED`` provenance.
         """
         super().clean()
         if (
@@ -139,6 +185,9 @@ class Secret(SharedMemoryModel):
         ):
             msg = "Player-authored secrets above Level 1 must be GM- or action-anchored."
             raise ValidationError({"level": msg})
+        if self.is_act_anchored and self.provenance == SecretProvenance.PLAYER_FLAVOR:
+            msg = "A secret anchored to a recorded act is evidenced, not player-flavor."
+            raise ValidationError({"provenance": msg})
 
 
 class SecretVictim(SharedMemoryModel):

@@ -929,6 +929,7 @@
   - aspects <- checks.CheckTypeAspect
   - item_check_modifiers <- items.ItemCheckModifier
   - escalation_curves <- combat.EscalationCurve
+  - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
   - disarm_traps <- room_features.Trap
 
@@ -3091,6 +3092,7 @@
   - outcome -> traits.CheckOutcome [FK] (nullable)
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
 **Pointed to by:**
+  - explaining_secrets <- secrets.Secret
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
 
@@ -3481,6 +3483,7 @@
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
   - research_details <- clues.ResearchProjectDetails
+  - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_construction_details <- buildings.BuildingConstructionDetails
@@ -3493,14 +3496,27 @@
   - contributor_persona -> scenes.Persona [FK]
   - item_instance -> items.ItemInstance [FK] (nullable)
   - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - contribution_method -> projects.ContributionMethod [FK] (nullable)
+
+### ContributionMethod
+**Foreign Keys:**
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - contributions <- projects.Contribution
 
 ### Service Functions
-- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
+- `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `contribute_check_to_project(project: 'Project', *, actor: 'ObjectDB', contributor_persona: 'Persona', method: 'ContributionMethod') -> 'Contribution' — Make a check-based contribution: spend AP, roll the check, advance on success (#1574).`
+- `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' — Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `maybe_complete_immediately(project: 'Project') -> 'bool' — Resolve an instant-completion project the moment its threshold is funded (#1500).`
+- `register_instant_completion_kind(kind: 'str') -> 'None' — Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
+- `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
 
 
 ## world.realms
@@ -3785,6 +3801,7 @@
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
+  - explaining_secrets <- secrets.Secret
   - treatment_attempts <- conditions.TreatmentAttempt
   - situation_instances <- mechanics.SituationInstance
   - relationshipupdate_set <- relationships.RelationshipUpdate
@@ -4083,6 +4100,9 @@
   - subject_sheet -> character_sheets.CharacterSheet [FK]
   - category -> secrets.SecretCategory [FK] (nullable)
   - author_persona -> scenes.Persona [FK] (nullable)
+  - legend_deed -> societies.LegendEntry [FK] (nullable)
+  - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
@@ -4111,13 +4131,15 @@
 
 ### Service Functions
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`
-- `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
+- `author_secret(*, subject_sheet: 'CharacterSheet', provenance: 'str', level: 'int' = SecretLevel.UNCOMMON_KNOWLEDGE, content: 'str' = '', category: 'SecretCategory | None' = None, consequences: 'str' = '', author_persona: 'Persona | None' = None, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.`
 - `expose_secret(secret: 'Secret', *, societies: 'Iterable[Society]') -> 'SecretExposureResult' — Fire the reputation consequences of a secret becoming known to ``societies`` (#1429).`
 - `grant_secret_knowledge(*, roster_entry: 'RosterEntry', secret: 'Secret', knows_category: 'bool' = False, knows_consequences: 'bool' = False) -> 'SecretKnowledge' — Record that a character knows a secret, unlocking the given layers (idempotent).`
 - `known_secrets_for(roster_entry: 'RosterEntry', *, subject_sheet: 'CharacterSheet | None' = None, sort: 'str' = 'recent') -> 'QuerySet[SecretKnowledge]' — The secrets a character has **learned about others** — held records (#1334).`
 - `register_secret_grievance(*, roster_entry: 'RosterEntry', secret: 'Secret', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '') -> 'RelationshipCapstone' — A secret's victim registers a grievance against its subject (#1429).`
 - `secret_known_to(secret: 'Secret', roster_entry: 'RosterEntry') -> 'bool' — Whether this character already holds the fact of this secret (#1334).`
+- `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' — The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
+- `set_secret_act_anchor(secret: 'Secret', *, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Set (or clear) the recorded act a secret is the hidden truth behind (#1573).`
 
 
 ## world.skills
@@ -4302,6 +4324,7 @@
   - deed_stories <- societies.LegendDeedStory
   - knowledge_rows <- societies.PersonaDeedKnowledge
   - covenant_credits <- societies.CovenantLegendCredit
+  - explaining_secrets <- secrets.Secret
 
 ### LegendSpread
 **Foreign Keys:**

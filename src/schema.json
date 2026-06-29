@@ -33358,7 +33358,15 @@ components:
         author:
           type: string
           readOnly: true
+        anchored_to:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
       required:
+      - anchored_to
       - author
       - can_grieve
       - category

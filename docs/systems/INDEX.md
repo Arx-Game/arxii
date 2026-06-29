@@ -608,8 +608,9 @@ Hidden facts about a character — cover identities, crimes, private distinction
 relationships. The privacy layer for the mystery loop: **bio/story stay public**, sensitive
 info is *relocated* into Secrets that must be earned and shared. A Secret is the missing 4th
 primitive alongside Distinction / Condition / Resonance. *Slices 1–3 (content model, discovery,
-secret-tab display) + the #1269 distinction migration are built; action-anchored minting, the
-Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.*
+secret-tab display) + the #1269 distinction migration + the **act-anchor cross-link** (#1573 —
+`legend_deed`/`mission_deed`/`scene`, one act = one secret) are built; action-anchored minting, the
+blackmail loop, and the PersonaDiscovery subsumption are later slices.*
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
@@ -621,7 +622,8 @@ Deed↔Secret cross-link, and the PersonaDiscovery subsumption are later slices.
   (it carries no mechanical effect, so its truth is moot); heavier secrets must be GM- or
   action-anchored, so player flavor can never masquerade as canon (`Secret.clean`)
 - **Key functions (`world/secrets/services.py`):** `author_secret`, `author_player_flavor_secret`,
-  `grant_secret_knowledge`, `secret_known_to`
+  `grant_secret_knowledge`, `secret_known_to`, `set_secret_act_anchor` /  `secrets_explaining`
+  (the act-anchor cross-link both directions, #1573)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);

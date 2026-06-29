@@ -25,11 +25,12 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from world.character_sheets.models import CharacterSheet
+    from world.missions.models import MissionDeedRecord
     from world.relationships.models import GrievanceOption, RelationshipCapstone, RelationshipTrack
     from world.roster.models import RosterEntry
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene
     from world.secrets.models import SecretCategory
-    from world.societies.models import Society
+    from world.societies.models import LegendEntry, Society
 
 
 class SecretError(Exception):
@@ -49,12 +50,20 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
     category: SecretCategory | None = None,
     consequences: str = "",
     author_persona: Persona | None = None,
+    legend_deed: LegendEntry | None = None,
+    mission_deed: MissionDeedRecord | None = None,
+    scene: Scene | None = None,
 ) -> Secret:
     """Author a secret about ``subject_sheet``, enforcing the anchor-scales-with-level rule.
 
-    Raises ``SecretError`` if the request violates the invariant (e.g. a player-flavor secret
-    above Level 1). The model's ``clean`` is the single source of truth for that rule; this
-    surface just translates its ``ValidationError`` into a typed, user-facing error.
+    Raises ``SecretError`` if the request violates an invariant (e.g. a player-flavor secret
+    above Level 1, or a player-flavor secret carrying an act anchor). The model's ``clean`` is
+    the single source of truth for those rules; this surface just translates its
+    ``ValidationError`` into a typed, user-facing error.
+
+    The optional ``legend_deed`` / ``mission_deed`` / ``scene`` anchor the secret to the recorded
+    act it is the hidden truth behind (#1573) — one act, surfaced through several records. Pass
+    whichever records exist; action-anchored minting sets them here at creation.
     """
     secret = Secret(
         subject_sheet=subject_sheet,
@@ -64,7 +73,38 @@ def author_secret(  # noqa: PLR0913 — keyword-only; each arg is a distinct sec
         category=category,
         consequences=consequences,
         author_persona=author_persona,
+        legend_deed=legend_deed,
+        mission_deed=mission_deed,
+        scene=scene,
     )
+    try:
+        secret.full_clean()
+    except ValidationError as exc:
+        msg = "; ".join(exc.messages)
+        raise SecretError(msg, user_message=msg) from exc
+    secret.save()
+    return secret
+
+
+def set_secret_act_anchor(
+    secret: Secret,
+    *,
+    legend_deed: LegendEntry | None = None,
+    mission_deed: MissionDeedRecord | None = None,
+    scene: Scene | None = None,
+) -> Secret:
+    """Set (or clear) the recorded act a secret is the hidden truth behind (#1573).
+
+    The sole mutator for the act anchor. One secret = one act; the act may surface through a
+    mission deed, its public legend telling, and/or the scene it happened in — pass whichever
+    records apply. This sets the **complete** anchor state: a record not passed is cleared (so
+    re-anchoring is explicit, never an accidental partial merge). All-None clears the anchor.
+    Validates via the model's ``clean`` (an anchored secret cannot be player-flavor); raises
+    ``SecretError`` on violation.
+    """
+    secret.legend_deed = legend_deed
+    secret.mission_deed = mission_deed
+    secret.scene = scene
     try:
         secret.full_clean()
     except ValidationError as exc:
@@ -315,7 +355,7 @@ def secrets_owned_by(sheet: CharacterSheet, *, sort: str = "level") -> QuerySet[
     order = _OWN_SORTS.get(sort, _OWN_SORTS["level"])
     return (
         Secret.objects.filter(subject_sheet=sheet)
-        .select_related("category", "author_persona")
+        .select_related("category", "author_persona", "legend_deed", "mission_deed", "scene")
         .order_by(*order)
     )
 
@@ -337,8 +377,41 @@ def known_secrets_for(
         "secret__category",
         "secret__author_persona",
         "secret__subject_sheet__character",
+        "secret__legend_deed",
+        "secret__mission_deed",
+        "secret__scene",
     )
     if subject_sheet is not None:
         qs = qs.filter(secret__subject_sheet=subject_sheet)
     order = _KNOWN_SORTS.get(sort, _KNOWN_SORTS["recent"])
     return qs.order_by(*order)
+
+
+def secrets_explaining(
+    *,
+    roster_entry: RosterEntry,
+    legend_deed: LegendEntry | None = None,
+    mission_deed: MissionDeedRecord | None = None,
+    scene: Scene | None = None,
+) -> QuerySet[SecretKnowledge]:
+    """The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).
+
+    The "vice-versa" direction of the cross-link: from a public record (a legend deed, a mission
+    deed, or a scene), the secrets *this character has already learned* that explain it. Gated by
+    ``SecretKnowledge`` — you only see the truth behind a deed if you already hold that secret, so
+    the backlink never leaks a secret's existence to someone who hasn't earned it. Pass exactly one
+    record; passing none returns an empty queryset.
+    """
+    if legend_deed is not None:
+        anchor_filter = {"secret__legend_deed": legend_deed}
+    elif mission_deed is not None:
+        anchor_filter = {"secret__mission_deed": mission_deed}
+    elif scene is not None:
+        anchor_filter = {"secret__scene": scene}
+    else:
+        return SecretKnowledge.objects.none()
+    return (
+        SecretKnowledge.objects.filter(roster_entry=roster_entry, **anchor_filter)
+        .select_related("secret", "secret__category", "secret__subject_sheet__character")
+        .order_by("-found_at")
+    )

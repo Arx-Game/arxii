@@ -68,6 +68,24 @@ def _render_secret_section(command: Command) -> list[str]:
     return _render_known(known_secrets_for(entry, subject_sheet=target_sheet))
 
 
+def _anchor_summary(secret: Secret) -> str | None:
+    """A one-line "the truth behind …" summary of a secret's act anchors (#1573), or None.
+
+    One secret = one act; the act may surface through several records (legend / mission deed /
+    scene), so they fold into a single context line — never implying several secrets.
+    """
+    parts: list[str] = []
+    if secret.legend_deed_id:
+        parts.append(f'the legend "{secret.legend_deed.title}"')
+    if secret.mission_deed_id:
+        parts.append("a recorded mission deed")
+    if secret.scene_id:
+        parts.append(secret.scene.name or f"scene #{secret.scene_id}")
+    if not parts:
+        return None
+    return "The truth behind: " + ", ".join(parts)
+
+
 def _render_own(secrets: QuerySet[Secret]) -> list[str]:
     rows = list(secrets)
     if not rows:
@@ -79,6 +97,9 @@ def _render_own(secrets: QuerySet[Secret]) -> list[str]:
         lines.append(
             f"      Category: {category} | Consequences: {secret.consequences or _UNKNOWN}"
         )
+        anchor = _anchor_summary(secret)
+        if anchor:
+            lines.append(f"      {anchor}")
     return lines
 
 
@@ -97,6 +118,9 @@ def _render_known(held_rows: QuerySet[SecretKnowledge]) -> list[str]:
         )
         lines.append(f"  |c[{secret.get_level_display()}]|n {secret.content}")
         lines.append(f"      Category: {category} | Consequences: {consequences}")
+        anchor = _anchor_summary(secret)
+        if anchor:
+            lines.append(f"      {anchor}")
     return lines
 
 
