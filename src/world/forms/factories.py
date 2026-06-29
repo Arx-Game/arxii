@@ -175,6 +175,7 @@ class FormCombatProfileFactory(factory.django.DjangoModelFactory):
 
     form = factory.SubFactory(CharacterFormFactory)
     display_name = ""
+    depth = 0
 
 
 class FormCombatProfileEffectFactory(factory.django.DjangoModelFactory):
