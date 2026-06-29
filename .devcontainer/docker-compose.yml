@@ -26,6 +26,12 @@ services:
       - arxii-worktrees:/workspaces/arxii/.claude/worktrees
       # Persist Claude Code auth/config so login survives container rebuilds.
       - arxii-claude-home:/home/vscode/.claude
+      # Persist polytoken's config (incl. model-provider credentials) and
+      # session history across rebuilds, mirroring arxii-claude-home above.
+      # Config dir confirmed at ~/.config/polytoken; sessions under
+      # ~/.local/share/polytoken (XDG). Verify the session dir at first dc-build.
+      - arxii-polytoken-config:/home/vscode/.config/polytoken
+      - arxii-polytoken-data:/home/vscode/.local/share/polytoken
       # Shadow the host's src/.env (which points DATABASE_URL at a bare-metal
       # localhost Postgres) with a container-specific file. sync-env.sh
       # generates dev.env from src/.env with DATABASE_URL rewritten before
@@ -102,3 +108,5 @@ volumes:
   arxii-fe-node-modules:
   arxii-worktrees:
   arxii-claude-home:
+  arxii-polytoken-config:
+  arxii-polytoken-data:

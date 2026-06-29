@@ -47,6 +47,11 @@ ENV PATH="/home/vscode/.local/bin:${PATH}"
 # cannot write its credentials.
 RUN mkdir -p /home/vscode/.claude
 
+# Same rationale for polytoken's config + data dirs (the arxii-polytoken-config
+# and arxii-polytoken-data volumes in compose). Provider credentials live in
+# ~/.config/polytoken; session history under ~/.local/share/polytoken (XDG).
+RUN mkdir -p /home/vscode/.config/polytoken /home/vscode/.local/share/polytoken
+
 # Install mise, then bake the project toolchain at build time. Network is
 # unrestricted during build, so the runtime firewall never needs mise's
 # download hosts. Only mise.toml is copied so the layer caches well.
@@ -79,3 +84,12 @@ USER vscode
 # node so the binary lands at .../node/24.4.1/bin/claude — already on
 # PATH for any shell that activates mise (via ~/.bashrc).
 RUN ~/.local/bin/mise exec -C /tmp/mise -- npm install -g @anthropic-ai/claude-code
+
+# Install polytoken — a separate coding-agent harness (daemon + CLI/TUI) run
+# alongside Claude Code. Same build-time rationale as Claude Code above: latest
+# at build, no churn on container recreate, explicit upgrades via `just dc-build`.
+# The installer fetches a static linux/amd64 binary into ~/.local/bin (already
+# on PATH) with no sudo. Build-time network is open, so the runtime firewall
+# never needs get/dl.polytoken.dev — only the model-provider host
+# (api.code.umans.ai) is allowlisted in init-firewall.sh.
+RUN curl -fsS https://get.polytoken.dev | bash
