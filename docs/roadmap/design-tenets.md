@@ -332,6 +332,20 @@ This composes with **closed-issue ≠ proven**: a capability counts as covered o
 end-to-end test demonstrates the outcome — "we think it works" is not safe to hand a GM. The
 live coverage map is [`player-capability-ledger.md`](player-capability-ledger.md).
 
+### Checks are stat + skill (+ specialization), rarely stat + stat
+
+A check's composition defaults to a **stat + the relevant skill**, plus a **specialization
+when the character owns one** (e.g. *Charm + Persuasion + Seduction*; *Charm + Persuasion +
+Gossip*). **stat + stat is the rare exception, not the norm** — a check resolving on two raw
+attributes with no trained skill must be a deliberate choice, never a default. Character
+identity (the trained skill, the owned specialization) should almost always matter to the
+roll. Specializations compose as **parent skill + specialization** and require the
+spec-in-checks engine foundation (#1688) before they can participate in a `CheckType`.
+
+Auto-scaffolded check seeds are **PLACEHOLDER** until a real composition pass: the social
+`CheckType`s (Intimidation/Persuasion/Deception/Seduction/Performance/Presence) shipped as
+stat+stat boilerplate and are slated to be redesigned to stat + skill (+ spec).
+
 ---
 
 ## What's NOT here

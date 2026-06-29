@@ -125,6 +125,47 @@ class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.check_type.name}: {self.aspect.name} ({self.weight}x)"
 
 
+class CheckTypeSpecialization(NaturalKeyMixin, SharedMemoryModel):
+    """Weighted specialization contribution to a check type (#1688).
+
+    The third leg of the standing **stat + skill + specialization** check shape (see
+    ``docs/roadmap/design-tenets.md``): the parent skill rides the ordinary ``CheckTypeTrait``
+    path (a skill is Trait-backed), and this adds the specialization on top **when the character
+    owns it** — ``CharacterSpecializationValue`` is 0 for a non-owner, so a non-specialist simply
+    rolls stat + skill. Specialization values scale like skills, so they convert through the same
+    ``PointConversionRange`` as a SKILL trait.
+    """
+
+    check_type = models.ForeignKey(
+        CheckType,
+        on_delete=models.CASCADE,
+        related_name="specializations",
+    )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.CASCADE,
+        related_name="check_type_specializations",
+    )
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1.0,
+        help_text="Multiplier for this specialization's contribution (default 1.0)",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["check_type", "specialization"]
+        dependencies = ["checks.CheckType", "skills.Specialization"]
+
+    class Meta:
+        unique_together = ["check_type", "specialization"]
+
+    def __str__(self):
+        return f"{self.check_type.name}: {self.specialization.name} ({self.weight}x)"
+
+
 # ---------------------------------------------------------------------------
 # Generic Consequence system
 # ---------------------------------------------------------------------------

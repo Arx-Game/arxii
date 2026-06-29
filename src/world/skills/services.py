@@ -110,6 +110,26 @@ def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
         return 0
 
 
+def get_specialization_value(character: ObjectDB, specialization: Specialization) -> int:
+    """A character's raw value for a specialization, 0 if unowned (#1688).
+
+    The public read the check engine uses to fold a specialization into a roll. Public wrapper
+    over ``_get_spec_value`` so callers outside the skills cron don't reach a private helper.
+    """
+    return _get_spec_value(character, specialization)
+
+
+def has_specialization(
+    character: ObjectDB, specialization: Specialization, *, minimum_rank: int = 1
+) -> bool:
+    """Whether a character owns a specialization at ``minimum_rank`` or better (#1688).
+
+    Ranks are display values (1.0, 2.0, …) stored ×10, so rank 1 is a stored value of 10. Gates
+    surfacing of spec-only options (e.g. the gossip option only appears at Gossip ≥ 1).
+    """
+    return _get_spec_value(character, specialization) >= minimum_rank * 10
+
+
 def _get_teaching_skill() -> Skill | None:
     """Look up the Teaching skill from the skill config.
 

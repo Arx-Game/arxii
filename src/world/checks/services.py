@@ -18,6 +18,7 @@ from world.traits.models import (
     ResultChart,
     ResultChartOutcome,
     Trait,
+    TraitType,
 )
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType, Consequence
     from world.mechanics.models import CharacterChallengeRecord
     from world.scenes.models import Interaction, Scene
+    from world.skills.models import Specialization
     from world.traits.handlers import TraitHandler
 
 
@@ -37,6 +39,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     extra_modifiers: int = 0,
     effort_level: str | None = None,
     fatigue_penalty: int = 0,
+    specialization: "Specialization | None" = None,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -73,6 +76,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             extra_modifiers=extra_modifiers,
             effort_level=effort_level,
             fatigue_penalty=fatigue_penalty,
+            specialization=specialization,
         )
 
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
@@ -81,8 +85,16 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
+    specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
+    total_points = (
+        trait_points
+        + specialization_points
+        + aspect_bonus
+        + extra_modifiers
+        + effort_modifier
+        + fatigue_penalty
+    )
 
     roller_rank = CheckRank.get_rank_for_points(total_points)
     target_rank = CheckRank.get_rank_for_points(target_difficulty)
@@ -109,6 +121,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         trait_points=trait_points,
         aspect_bonus=aspect_bonus,
         total_points=total_points,
+        specialization_points=specialization_points,
     )
 
 
@@ -120,6 +133,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     extra_modifiers: int,
     effort_level: str | None,
     fatigue_penalty: int,
+    specialization: "Specialization | None" = None,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -133,8 +147,16 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
     trait_points = _calculate_trait_points(handler, check_type)
+    specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
+    total_points = (
+        trait_points
+        + specialization_points
+        + aspect_bonus
+        + extra_modifiers
+        + effort_modifier
+        + fatigue_penalty
+    )
 
     roller_rank = CheckRank.get_rank_for_points(total_points)
     target_rank = CheckRank.get_rank_for_points(target_difficulty)
@@ -155,6 +177,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         trait_points=trait_points,
         aspect_bonus=aspect_bonus,
         total_points=total_points,
+        specialization_points=specialization_points,
     )
 
 
@@ -218,6 +241,40 @@ def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") ->
             weighted_value = int(trait_value * ct_trait.weight)
             if weighted_value > 0:
                 total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
+
+    return total
+
+
+def _calculate_specialization_points(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    runtime_specialization: "Specialization | None" = None,
+) -> int:
+    """Calculate weighted specialization points for a check (#1688).
+
+    The third leg of stat + skill + **specialization**: each ``CheckTypeSpecialization`` on the
+    check (plus an optional ``runtime_specialization`` chosen at call time, e.g. which Performance
+    art) adds its owner's value. A character who doesn't own the spec contributes 0 (so a
+    non-specialist simply rolls stat + skill). Specialization values scale like skills, so they
+    convert through the same ``PointConversionRange`` as a SKILL trait.
+    """
+    from world.skills.services import get_specialization_value  # noqa: PLC0415 — avoid app cycle
+
+    total = 0
+    seen: set[int] = set()
+    for ct_spec in check_type.specializations.select_related("specialization").all():  # type: ignore[attr-defined] — reverse FK from CheckTypeSpecialization
+        spec = ct_spec.specialization
+        seen.add(spec.pk)
+        value = get_specialization_value(character, spec)
+        if value > 0:
+            weighted_value = int(value * ct_spec.weight)
+            if weighted_value > 0:
+                total += PointConversionRange.calculate_points(TraitType.SKILL, weighted_value)
+
+    if runtime_specialization is not None and runtime_specialization.pk not in seen:
+        value = get_specialization_value(character, runtime_specialization)
+        if value > 0:
+            total += PointConversionRange.calculate_points(TraitType.SKILL, value)
 
     return total
 
