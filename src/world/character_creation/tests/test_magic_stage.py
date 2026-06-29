@@ -163,7 +163,7 @@ class MagicFinalizationCGSeedingTest(TestCase):
         self.assertEqual(FatiguePool.objects.filter(character_sheet=sheet).count(), 1)
 
 
-class CantripeGrantNotificationTest(TestCase):
+class CantripGrantNotificationTest(TestCase):
     """Cantrip grant during magic-stage finalization queues an ABILITY NarrativeMessage (#1606)."""
 
     def _make_draft_and_sheet(self):

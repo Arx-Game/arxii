@@ -39,8 +39,8 @@ class AccessChangeSource(models.TextChoices):
     abilities changes (e.g., gaining or losing techniques).
     """
 
-    ASSUMED_ALTERNATE_SELF = "assumed_alternate_self", ("assuming an alternate self")
-    REVERTED_ALTERNATE_SELF = "reverted_alternate_self", ("reverting to your true self")
-    COVENANT_ROLE_ENGAGED = "covenant_role_engaged", ("taking up your covenant role")
-    COVENANT_ROLE_DISENGAGED = "covenant_role_disengaged", ("setting down your covenant role")
+    ASSUMED_ALTERNATE_SELF = "assumed_alternate_self", "assuming an alternate self"
+    REVERTED_ALTERNATE_SELF = "reverted_alternate_self", "reverting to your true self"
+    COVENANT_ROLE_ENGAGED = "covenant_role_engaged", "taking up your covenant role"
+    COVENANT_ROLE_DISENGAGED = "covenant_role_disengaged", "setting down your covenant role"
     CHARACTER_CREATION = "character_creation", "your origins"

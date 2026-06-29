@@ -936,7 +936,7 @@ gains a discoverable content item for the first time.
   `_announce_capability_diff`), `world/character_creation/services.py` (CG cantrip grant)
 - **API Endpoints:**
   - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
-- **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discover_achievement`
+- **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
   FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
   (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
   for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
