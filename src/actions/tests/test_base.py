@@ -155,6 +155,7 @@ class ActionRegistryTests(TestCase):
             "equip",
             "unequip",
             "edit_room",
+            "project_donate",
             "put_in",
             "take_out",
             "apply_outfit",
