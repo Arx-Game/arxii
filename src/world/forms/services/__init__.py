@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -14,6 +15,7 @@ from world.forms.models import (
     CharacterFormState,
     CharacterFormValue,
     DisguiseKind,
+    FormCombatProfile,
     FormTrait,
     FormTraitOption,
     FormType,
@@ -141,6 +143,32 @@ def revert_to_true_form(character) -> None:
     switch_form(character, true_form)
 
 
+def _grant_stat_suite(
+    sheet: CharacterSheet,
+    profile: FormCombatProfile,
+    source: ModifierSource,
+    multiplier: float,
+) -> None:
+    """Write one ``CharacterModifier`` per profile effect, scaled by ``multiplier``.
+
+    The neutral multiplier (``isclose(multiplier, 1.0)``) is the identity case:
+    the granted value equals ``effect.value`` exactly, preserving prior grants.
+    Float equality is avoided via ``math.isclose`` (SonarCloud S1244); any other
+    multiplier scales ``effect.value`` and divides by ``SCALE``.
+    """
+    for effect in profile.effects.all():
+        if math.isclose(multiplier, 1.0):
+            granted_value = effect.value
+        else:
+            granted_value = round(effect.value * multiplier / SCALE)
+        CharacterModifier.objects.create(
+            character=sheet,
+            target=effect.target,
+            value=granted_value,
+            source=source,
+        )
+
+
 def _create_assumption_grants(
     sheet: CharacterSheet, alt: AlternateSelf, instance_value: float = 1.0
 ) -> ModifierSource | None:
@@ -154,17 +182,15 @@ def _create_assumption_grants(
 
     Stat values are scaled by ``alt.tuning_value`` (the per-character template
     factor) and ``instance_value`` (the per-assumption multiplier), then
-    divided by ``SCALE``. The neutral case is identity: when ``tuning_value``
-    is ``None`` and ``instance_value`` is ``1.0``, the granted value equals
+    divided by ``SCALE``. The neutral case is identity: when the combined
+    multiplier is ``1.0`` (no scaling requested), the granted value equals
     ``effect.value`` exactly, preserving existing grants.
 
     Formula::
 
-        baseline = alt.tuning_value or 1
-        if baseline == 1 and instance_value == 1.0:
-            value = effect.value
-        else:
-            value = round(effect.value * baseline * instance_value / SCALE)
+        multiplier = (alt.tuning_value or 1) * instance_value
+        value = effect.value if isclose(multiplier, 1.0)
+                else round(effect.value * multiplier / SCALE)
 
     Returns the created ``ModifierSource``, or ``None`` when nothing was
     granted (persona-only alt-self, or a techniques-only alt-self whose
@@ -179,21 +205,11 @@ def _create_assumption_grants(
     source = ModifierSource.objects.create(form_combat_profile=profile)
     granted_any = profile is not None
 
-    # Stat-suite.
+    # Stat-suite. ``_grant_stat_suite`` writes one ``CharacterModifier`` per
+    # profile effect, scaled by the combined multiplier (identity when neutral).
     if profile is not None:
-        baseline = alt.tuning_value or 1
-        neutral = baseline == 1 and instance_value == 1.0
-        for effect in profile.effects.all():
-            if neutral:
-                granted_value = effect.value
-            else:
-                granted_value = round(effect.value * baseline * instance_value / SCALE)
-            CharacterModifier.objects.create(
-                character=sheet,
-                target=effect.target,
-                value=granted_value,
-                source=source,
-            )
+        multiplier = (alt.tuning_value or 1) * instance_value
+        _grant_stat_suite(sheet, profile, source, multiplier)
 
     # Ability-suite with stacking guard. ``get_or_create`` returns
     # ``created=False`` for a permanently-known technique (existing row with

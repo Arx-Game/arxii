@@ -608,10 +608,10 @@ def _apply_technique_fatigue_step(
     )
 
 
-# TODO: Move the mid-band ceiling into a staff-tunable config singleton
-# (e.g. TechniqueBudgetConfig-style) if tuning proves volatile after shipping.
-# Keeping it as a module constant avoids scope-creep for the ASSUME_ALTERNATE_SELF
-# bugfix (#1604).
+# The mid-band ceiling is a module constant for now; if tuning proves volatile
+# after shipping, move it into a staff-tunable config singleton
+# (TechniqueBudgetConfig-style). Kept as a constant here to avoid scope-creep
+# for the ASSUME_ALTERNATE_SELF path (#1604).
 _SUCCESS_BAND_MID_CEILING = 5
 
 
