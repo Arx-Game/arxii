@@ -15,6 +15,8 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.capability_content import AT_WILL_SHIFTING
+from world.conditions.factories import CapabilityTypeFactory
 from world.forms.factories import (
     ActiveAlternateSelfFactory,
     AlternateSelfFactory,
@@ -23,12 +25,31 @@ from world.forms.factories import (
 )
 from world.forms.models import ActiveAlternateSelf, FormType
 from world.forms.views import AlternateSelfViewSet
+from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFactory
+from world.mechanics.models import CharacterModifier, ModifierTarget
 
 
 def _sheet():
     character = CharacterFactory()
     sheet = CharacterSheetFactory(character=character)
     return character, sheet
+
+
+def _grant_at_will_shifting(sheet):
+    capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
+    category = ModifierCategoryFactory(name="capability")
+    target = ModifierTarget.objects.create(
+        name=f"capability_{capability.pk}",
+        category=category,
+        target_capability=capability,
+    )
+    source = ModifierSourceFactory()
+    CharacterModifier.objects.create(
+        character=sheet,
+        target=target,
+        source=source,
+        value=1,
+    )
 
 
 class AlternateSelfListEndpointTests(TestCase):
@@ -74,6 +95,7 @@ class ShiftFormEndpointTests(TestCase):
         )
         CharacterFormStateFactory(character=cls.character, active_form=cls.true_form)
         cls.alt = AlternateSelfFactory(character=cls.sheet, display_name="the Beast")
+        _grant_at_will_shifting(cls.sheet)
 
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -126,6 +148,7 @@ class RevertFormEndpointTests(TestCase):
             form=cls.alt_form,
             display_name="the Beast",
         )
+        _grant_at_will_shifting(cls.sheet)
 
     def setUp(self):
         self.factory = APIRequestFactory()

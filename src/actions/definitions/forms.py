@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.prerequisites import HoldsCapabilityPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -45,6 +46,9 @@ class ShiftFormAction(Action):
     icon: str = "paw-print"
     category: str = "forms"
     target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HoldsCapabilityPrerequisite("at_will_shifting")]
 
     def execute(
         self,

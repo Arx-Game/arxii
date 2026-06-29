@@ -11,6 +11,8 @@ from actions.definitions.forms import (
 )
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import CharacterSheet
+from world.conditions.capability_content import AT_WILL_SHIFTING
+from world.conditions.factories import CapabilityTypeFactory
 from world.forms.factories import (
     AlternateSelfFactory,
     CharacterFormFactory,
@@ -26,7 +28,8 @@ from world.forms.models import (
     FormType,
 )
 from world.forms.services import RevertBlockedError, assume_alternate_self
-from world.mechanics.models import ModifierSource
+from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFactory
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 
 
 class ShiftFormActionTests(TestCase):
@@ -37,6 +40,23 @@ class ShiftFormActionTests(TestCase):
         self.alt_form = self._make_form(self.character, name="Beast", form_type=FormType.ALTERNATE)
         CharacterFormStateFactory(character=self.character, active_form=true_form)
         self.alt = self._make_alt(self.sheet, form=self.alt_form, display_name="the Beast")
+        self._grant_at_will_shifting()
+
+    def _grant_at_will_shifting(self) -> None:
+        capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
+        category = ModifierCategoryFactory(name="capability")
+        target = ModifierTarget.objects.create(
+            name=f"capability_{capability.pk}",
+            category=category,
+            target_capability=capability,
+        )
+        source = ModifierSourceFactory()
+        CharacterModifier.objects.create(
+            character=self.sheet,
+            target=target,
+            source=source,
+            value=1,
+        )
 
     def _sheet(self) -> CharacterSheet:
         from world.character_sheets.factories import CharacterSheetFactory
