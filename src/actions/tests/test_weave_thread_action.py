@@ -7,8 +7,10 @@ from django.test import TestCase
 from actions.definitions.threads import WeaveThreadAction
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
+from world.magic.exceptions import UnsupportedGiftResonanceError
 from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
+    GiftFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
     WeavingCeremonyFactory,
@@ -90,3 +92,22 @@ class WeaveThreadActionTests(TestCase):
         )
         self.assertFalse(result.success)
         self.assertIn("Rite of Weaving", result.message)
+
+    def test_run_returns_failure_for_unsupported_gift_resonance(self) -> None:
+        # GIFT weaving sidesteps the unlock gate (the GIFT branch in weave_thread
+        # runs before _has_weaving_unlock). An unsupported resonance raises
+        # UnsupportedGiftResonanceError in the service; the action must catch it
+        # and return a failure ActionResult rather than propagating a 500.
+        gift = GiftFactory()
+        supported = ResonanceFactory()
+        gift.resonances.add(supported)
+        unsupported = ResonanceFactory()
+        action = WeaveThreadAction()
+        result = action.run(
+            actor=self.sheet.character,
+            target_kind=TargetKind.GIFT,
+            target=gift,
+            resonance=unsupported,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, UnsupportedGiftResonanceError.user_message)
