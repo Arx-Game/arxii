@@ -35264,6 +35264,7 @@ components:
       - covenant
       - renown
       - weather
+      - ability
       type: string
       description: |-
         * `story` - Story update
@@ -35274,6 +35275,7 @@ components:
         * `covenant` - Covenant
         * `renown` - Renown
         * `weather` - Weather
+        * `ability` - Ability access
     NarrativeMessage:
       type: object
       description: Player-facing message representation. Excludes ooc_note.
