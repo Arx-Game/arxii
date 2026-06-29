@@ -1450,9 +1450,9 @@
 
 ### CovenantRole
 **Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - parent_role -> covenants.CovenantRole [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
-  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
@@ -2171,6 +2171,7 @@
 
 ### Technique
 **Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
   - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]

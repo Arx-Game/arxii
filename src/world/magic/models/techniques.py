@@ -19,6 +19,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory, ActionTargetType
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.achievements.models import DiscoverableContent
 from world.magic.constants import TechniqueReach
 from world.magic.models.gifts import Gift
 
@@ -224,7 +225,7 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (threshold: {self.threshold})"
 
 
-class Technique(SharedMemoryModel):
+class Technique(DiscoverableContent, SharedMemoryModel):
     """
     A specific magical ability within a Gift.
 

@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
+    from world.achievements.constants import AccessChangeSource
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
@@ -70,6 +71,24 @@ def _invalidate_role_caches(character_sheet: CharacterSheet) -> None:
     this module — an engaged membership always has a resolved typeclass.
     """
     character_sheet.character.threads.invalidate()
+
+
+def _announce_capability_diff(
+    sheet: CharacterSheet, before: set[int], after: set[int], source: AccessChangeSource
+) -> None:
+    """Announce the CapabilityType gain/loss between two passive_capability_grants() snapshots."""
+    gained_ids, lost_ids = after - before, before - after
+    if not (gained_ids or lost_ids):
+        return
+    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+
+    announce_access_change(
+        sheet,
+        gained=list(CapabilityType.objects.filter(pk__in=gained_ids)),
+        lost=list(CapabilityType.objects.filter(pk__in=lost_ids)),
+        source=source,
+    )
 
 
 def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRank, CovenantRank]:
@@ -520,9 +539,11 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     Iterates and calls save() (rather than bulk update) so SharedMemoryModel's
     identity-map cache stays in sync for rows already held in memory.
     """
+    sheet = membership.character_sheet
+    before = set(sheet.character.threads.passive_capability_grants())
     other_engaged = list(
         CharacterCovenantRole.objects.filter(
-            character_sheet=membership.character_sheet,
+            character_sheet=sheet,
             covenant__covenant_type=membership.covenant.covenant_type,
             engaged=True,
             left_at__isnull=True,
@@ -533,11 +554,15 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
         row.save(update_fields=["engaged"])
     membership.engaged = True
     membership.save(update_fields=["engaged"])
-    membership.character_sheet.character.covenant_roles.invalidate()
-    _invalidate_role_caches(membership.character_sheet)
+    sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(sheet)
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
-    recompute_max_health_with_threads(membership.character_sheet)
+    recompute_max_health_with_threads(sheet)
+    after = set(sheet.character.threads.passive_capability_grants())
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+
+    _announce_capability_diff(sheet, before, after, AccessChangeSource.COVENANT_ROLE_ENGAGED)
 
 
 @transaction.atomic
@@ -545,13 +570,19 @@ def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     """Un-engage this membership. Idempotent."""
     if not membership.engaged:
         return
+    sheet = membership.character_sheet
+    before = set(sheet.character.threads.passive_capability_grants())
     membership.engaged = False
     membership.save(update_fields=["engaged"])
-    membership.character_sheet.character.covenant_roles.invalidate()
-    _invalidate_role_caches(membership.character_sheet)
+    sheet.character.covenant_roles.invalidate()
+    _invalidate_role_caches(sheet)
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
-    recompute_max_health_with_threads(membership.character_sheet)
+    recompute_max_health_with_threads(sheet)
+    after = set(sheet.character.threads.passive_capability_grants())
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+
+    _announce_capability_diff(sheet, before, after, AccessChangeSource.COVENANT_ROLE_DISENGAGED)
 
 
 @transaction.atomic
@@ -571,6 +602,7 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     )
     if not rows:
         return
+    before = set(character_sheet.character.threads.passive_capability_grants())
     for row in rows:
         row.engaged = False
         row.save(update_fields=["engaged"])
@@ -579,6 +611,12 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(character_sheet)
+    after = set(character_sheet.character.threads.passive_capability_grants())
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+
+    _announce_capability_diff(
+        character_sheet, before, after, AccessChangeSource.COVENANT_ROLE_DISENGAGED
+    )
 
 
 def resolve_effective_role(*, character: Character, role: CovenantRole) -> CovenantRole:

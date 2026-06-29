@@ -884,7 +884,10 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
 
 - **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
-- **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM
+- **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM, COVENANT, RENOWN,
+  WEATHER (weather tick emits),
+  ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
+  by `announce_achievement` for first-ever Discovery ceremonies on discoverable content)
 - **Key Services:**
   - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
   - `deliver_queued_messages(sheet)` — drains queued deliveries at login (called from `at_post_puppet` via stories login service)
@@ -892,6 +895,56 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Source:** `src/world/narrative/`
+
+### Achievements
+Cross-cutting meta-engagement layer: hidden milestones characters earn across every game system,
+plus the shared access-change announcement surface that fires discovery ceremonies when a character
+gains a discoverable content item for the first time.
+
+- **Models:** `StatDefinition` (normalized stat key — dot-separated, e.g.
+  `"relationships.total_established"`), `StatTracker` (per-character integer counter),
+  `Achievement` (staff-authored; `hidden` default True, `notification_level`, chained via
+  `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
+  achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
+  `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
+  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE reward catalog),
+  `AchievementReward` (per-achievement reward with optional `reward_value` amount),
+  `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
+  `ConditionStatRule` (bridge: condition event type → stat increment),
+  **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
+  content model whose instances can be discovered for the first time; inherited by `Technique`
+  and `CovenantRole`; null = not discoverable; see ADR-0061)
+- **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
+  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE), `ConditionEventType` (GAINED),
+  `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
+  COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
+- **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
+  `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
+- **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
+  sheets) -> list[CharacterAchievement]`, `apply_achievement_rewards(sheet, achievement)`,
+  `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
+- **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
+  - `announce_access_change(character_sheet, *, gained, lost, source)` — sends an ABILITY
+    `NarrativeMessage` to the character listing what techniques/capabilities changed, then for
+    each gained item with a non-null `discovery_achievement` FK fires `grant_achievement` and
+    `announce_achievement`. Source-agnostic: callers never branch on covenant vs. form vs. CG.
+  - `announce_achievement(earners, *, is_first, first_body, personal_body, category)` —
+    gamewide to all active player sheets when `is_first` (first-ever Discovery); otherwise
+    personal to the earner list.
+- **Wired callers of `announce_access_change`:** `world/forms/services.py` (assume/revert
+  alternate self), `world/covenants/services.py` (engage/disengage covenant role, via
+  `_announce_capability_diff`), `world/character_creation/services.py` (CG cantrip grant)
+- **API Endpoints:**
+  - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
+- **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
+  FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
+  (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
+  for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
+  societies (PRESTIGE reward → `award_deed_prestige`), conditions (`ConditionStatRule` bridge),
+  stories (reactivity hook `on_achievement_earned`)
+- **Source:** `src/world/achievements/`
+- **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
+
 ### NPC Services
 Unified "ask NPC for thing" framework: per-NPC-role offer surface, persona-keyed standing,
 per-kind effect handler dispatch. Covers permits today; missions/loans/training/favors

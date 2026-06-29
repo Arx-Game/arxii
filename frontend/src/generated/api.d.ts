@@ -19577,6 +19577,7 @@ export interface components {
      *     * `covenant` - Covenant
      *     * `renown` - Renown
      *     * `weather` - Weather
+     *     * `ability` - Ability access
      * @enum {string}
      */
     NarrativeCategoryEnum:
@@ -19587,7 +19588,8 @@ export interface components {
       | 'system'
       | 'covenant'
       | 'renown'
-      | 'weather';
+      | 'weather'
+      | 'ability';
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;

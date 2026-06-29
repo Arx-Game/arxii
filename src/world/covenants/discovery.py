@@ -95,31 +95,26 @@ def _unlock_codex(sheet: CharacterSheet, sub: CovenantRole) -> None:
 def _notify(sheet: CharacterSheet, sub: CovenantRole, *, is_first: bool) -> None:
     """Send a NarrativeMessage announcing the sub-role discovery.
 
+    Delegates to ``announce_achievement`` (achievements/discovery.py), preserving
+    the exact wording and COVENANT category.
+
     First-ever (``is_first=True``): gamewide — all active player character sheets.
     Not first (``is_first=False``): personal — only the discovering sheet.
     """
+    from world.achievements.discovery import announce_achievement  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    if is_first:
-        from world.roster.selectors import active_player_character_sheets  # noqa: PLC0415
-
-        recipients = active_player_character_sheets()
-        body = (
+    announce_achievement(
+        [sheet],
+        is_first=is_first,
+        first_body=(
             f"For the first time in recorded history, a character has manifested "
             f"the {sub.name} sub-role — a convergence of {sub.resonance.name} and "
             f"covenant purpose no one has achieved before."
-        )
-    else:
-        recipients = [sheet]
-        body = (
-            f"Your covenant path has deepened. You have manifested the {sub.name} "
-            f"sub-role, channelled through {sub.resonance.name}."
-        )
-
-    send_narrative_message(
-        recipients=recipients,
-        body=body,
+        ),
+        personal_body=(
+            f"Your covenant path has deepened. You have manifested the "
+            f"{sub.name} sub-role, channelled through {sub.resonance.name}."
+        ),
         category=NarrativeCategory.COVENANT,
-        sender_account=None,
     )
