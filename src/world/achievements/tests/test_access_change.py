@@ -9,7 +9,8 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import TechniqueFactory
 from world.narrative.constants import NarrativeCategory
-from world.narrative.models import NarrativeMessage
+from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 class AnnounceAccessChangePersonalMessageTest(TestCase):
@@ -33,7 +34,9 @@ class AnnounceAccessChangePersonalMessageTest(TestCase):
 
 class AnnounceAccessChangeDiscoveryAchievementTest(TestCase):
     def test_gained_with_discovery_achievement_fires_first_ever_gamewide(self):
-        other = CharacterSheetFactory()  # a second active player to receive gamewide
+        # `other` must have an active tenure so active_player_character_sheets() includes it.
+        other = CharacterSheetFactory()
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=other), end_date=None)
         ach = AchievementFactory(hidden=True)
         tech = TechniqueFactory(discovery_achievement=ach)
         sheet = CharacterSheetFactory()
@@ -49,7 +52,10 @@ class AnnounceAccessChangeDiscoveryAchievementTest(TestCase):
             CharacterAchievement.objects.filter(character_sheet=sheet, achievement=ach).exists()
         )
         self.assertTrue(Discovery.objects.filter(achievement=ach).exists())
-        _ = other  # referenced for documentation; gamewide delivery not asserted here
+        self.assertTrue(
+            NarrativeMessageDelivery.objects.filter(recipient_character_sheet=other).exists(),
+            "Gamewide first-ever message should be delivered to other active sheet.",
+        )
 
 
 class AnnounceAccessChangeCapabilityTest(TestCase):

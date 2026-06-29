@@ -105,7 +105,6 @@ def _notify(sheet: CharacterSheet, sub: CovenantRole, *, is_first: bool) -> None
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
 
     announce_achievement(
-        sub.discovery_achievement,
         [sheet],
         is_first=is_first,
         first_body=(

@@ -17,8 +17,7 @@ from world.achievements.constants import AccessChangeSource
 from world.achievements.services import grant_achievement
 
 
-def announce_achievement(  # noqa: PLR0913
-    achievement,  # noqa: ARG001
+def announce_achievement(
     earners,
     *,
     is_first,
@@ -31,9 +30,6 @@ def announce_achievement(  # noqa: PLR0913
     First-ever (``is_first``): gamewide to every active player character sheet,
     using ``first_body`` (which must NOT name the discoverer). Otherwise:
     personal, to ``earners``, using ``personal_body``.
-
-    ``achievement`` is accepted for documentation / future use; it is not
-    consumed inside this function.
     """
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
@@ -85,7 +81,6 @@ def announce_access_change(character_sheet, *, gained, lost, source):
         is_first = bool(results and results[0].discovery_id is not None)
         name = getattr(item, "name", str(item))  # noqa: GETATTR_LITERAL
         announce_achievement(
-            ach,
             [character_sheet],
             is_first=is_first,
             first_body=(
