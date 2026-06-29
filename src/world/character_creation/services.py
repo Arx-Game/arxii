@@ -965,6 +965,20 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 1. Create Gift and Technique from cantrip
     _finalize_cantrip_gift_and_technique(draft, sheet)
 
+    # 1b. Provision species Minor Gift(s) + latent GIFT thread + any drawback (#1580).
+    #     Re-uses the player's CG-chosen resonance (same key as the Major-gift block)
+    #     so the species gift thread anchors to the same resonance the player picked.
+    #     Falls back to each gift's first supported resonance when unset.
+    from world.species.services import provision_species_gifts  # noqa: PLC0415
+
+    _cg_resonance = None
+    _cg_resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    if _cg_resonance_id:
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        _cg_resonance = Resonance.objects.filter(pk=_cg_resonance_id).first()
+    provision_species_gifts(sheet, resonance=_cg_resonance)
+
     # 2. Create CharacterTradition (optional)
     if draft.selected_tradition:
         CharacterTradition.objects.create(
