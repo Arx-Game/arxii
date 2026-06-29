@@ -15,6 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.achievements.models import DiscoverableContent
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -179,7 +180,7 @@ class Covenant(SharedMemoryModel):
         return f"{self.name} ({self.get_covenant_type_display()}, {state})"
 
 
-class CovenantRole(SharedMemoryModel):
+class CovenantRole(DiscoverableContent, SharedMemoryModel):
     """A role that a character can hold within a covenant.
 
     Lookup table — staff-authored, cached via SharedMemoryModel.
@@ -233,16 +234,6 @@ class CovenantRole(SharedMemoryModel):
     unlock_thread_level = models.PositiveIntegerField(
         default=0,
         help_text="0 for primary roles; 3+ for sub-roles (Thread level needed to unlock).",
-    )
-    discovery_achievement = models.ForeignKey(
-        "achievements.Achievement",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text=(
-            "Sub-roles only: achievement granted (and global-first Discovery) on manifestation."
-        ),
     )
     codex_entry = models.ForeignKey(
         "codex.CodexEntry",
