@@ -56,6 +56,19 @@ Creates a Character from a completed draft:
 - Creates RosterEntry for roster management
 - Handles staff "Add to Roster" vs player submission
 
+### Magic finalization — `finalize_magic_data`
+After `CharacterGift` is created for the chosen gift, the magic stage provisions the
+latent GIFT thread (#1578, ADR-0055):
+- `provision_latent_gift_thread(sheet, gift, resonance=...)` creates the level-0 GIFT
+  thread (the specialization substrate), idempotent on `(owner, gift)` and write-once on
+  resonance. One active GIFT thread per gift.
+- The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`. The
+  frontend CG resonance picker is a deferred needs-design follow-up; until it lands,
+  that draft key is never written in production or tests (the E2E test calls
+  `provision_latent_gift_thread(..., resonance=...)` directly). When unset, the
+  provisioning falls back to `gift.resonances.first()` with a warning, and skips
+  entirely if the gift supports no resonances.
+
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.
 

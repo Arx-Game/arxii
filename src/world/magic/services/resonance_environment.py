@@ -198,18 +198,22 @@ def _all_place_affinity_magnitudes(
 def _working_affinities_for_raw(
     technique: Technique | None,
     working_affinity: Affinity,
+    *,
+    caster: DefaultObject,
 ) -> list[Affinity]:
     """Return the ordered list of working affinities for the enriched raw sum.
 
-    Cast-time: all distinct affinities from the gift's resonances, preserving
-    encounter order (the caller's loop is deterministic).
+    Cast-time: all distinct affinities from the character's GIFT-thread resonance,
+    preserving encounter order (the caller's loop is deterministic).
     Presence-time: just the single dominant aura affinity.
     """
     if technique is None:
         return [working_affinity]
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
     seen: set[int] = set()
     result: list[Affinity] = []
-    for r in technique.gift.resonances.select_related("affinity").all():
+    for r in gift_resonances_for(caster, technique.gift):
         if r.affinity.pk not in seen:
             seen.add(r.affinity.pk)
             result.append(r.affinity)
@@ -229,8 +233,9 @@ def _enriched_raw(
     ``primary_valence``:
         contribution = place_magnitude_P × caster_alignment_G × severity_G→P × base_coefficient
 
-    Technique-resonance opposition weighting: ``all_working`` contains every distinct affinity
-    from the gift's resonances (cast-time) or just the dominant aura affinity (presence-time).
+    Technique-resonance opposition weighting: ``all_working`` contains the distinct affinity
+    from the character's GIFT-thread resonance (cast-time) or just the dominant aura affinity
+    (presence-time).
     Multi-resonance place weighting: ``place_magnitudes`` covers every place affinity, so
     secondary affinities contribute in proportion to their magnitude and interaction severity.
     Pairs whose interaction row is absent or has a different valence are skipped.
@@ -249,18 +254,22 @@ def _enriched_raw(
 def _working_affinity_cast_time(
     technique: Technique,
     place_affinity: Affinity,
+    *,
+    caster: DefaultObject,
 ) -> tuple[Affinity | None, AffinityInteraction | None]:
     """Determine working affinity for cast-time evaluation.
 
-    Collect distinct affinities from technique.gift.resonances. For each,
-    look up AffinityInteraction vs place_affinity. Pick the interaction with
+    Collect distinct affinities from the character's GIFT-thread resonance. For
+    each, look up AffinityInteraction vs place_affinity. Pick the interaction with
     the highest severity_multiplier; tiebreak by Affinity.name ascending.
 
     Returns (chosen_affinity, chosen_interaction). Returns (None, None) if
     no interactions are found.
     """
-    # Collect distinct affinities from the gift's resonances
-    gift_resonances = list(technique.gift.resonances.select_related("affinity").all())
+    # Collect distinct affinities from the character's GIFT-thread resonance
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+    gift_resonances = list(gift_resonances_for(caster, technique.gift))
     seen_affinity_pks: set[int] = set()
     affinities: list[Affinity] = []
     for r in gift_resonances:
@@ -359,7 +368,7 @@ def evaluate_resonance_environment(
 
     ``technique=None`` → presence-time evaluation (no technique-resonance
     factor; uses caster's dominant CharacterAura affinity). ``technique=...``
-    → cast-time evaluation (uses technique.gift.resonances).
+    → cast-time evaluation (uses the character's GIFT-thread resonance).
 
     Mechanism only. Returns the interaction; never applies effects. The
     reactive flow branches on the result and applies authored content.
@@ -380,7 +389,9 @@ def evaluate_resonance_environment(
 
     # Step 1b: Determine working affinity and look up AffinityInteraction.
     if technique is not None:
-        working_affinity, interaction = _working_affinity_cast_time(technique, place_affinity)
+        working_affinity, interaction = _working_affinity_cast_time(
+            technique, place_affinity, caster=caster
+        )
     else:
         # Presence-time: _working_affinity_presence_time handles missing aura gracefully.
         working_affinity, interaction = _working_affinity_presence_time(caster, place_affinity)
@@ -406,7 +417,7 @@ def evaluate_resonance_environment(
     # Technique-resonance opposition weighting: all distinct gift affinities contribute.
     # Multi-resonance place weighting: all place affinities contribute, not only dominant.
     config = get_resonance_environment_config()
-    all_working = _working_affinities_for_raw(technique, working_affinity)
+    all_working = _working_affinities_for_raw(technique, working_affinity, caster=caster)
     place_magnitudes = _all_place_affinity_magnitudes(room, room_resonances)
     raw = _enriched_raw(aura, all_working, place_magnitudes, interaction.valence, config)
 

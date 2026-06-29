@@ -422,6 +422,14 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
     )
+    target_gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=GIFT; null otherwise.",
+    )
     target_mantle = models.ForeignKey(
         "items.Mantle",
         on_delete=models.PROTECT,
@@ -485,6 +493,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -501,6 +510,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -517,6 +527,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -533,6 +544,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -560,6 +572,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -585,6 +598,41 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_gift__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
+                    )
+                ),
+            ),
+            # ---- GIFT ---------------------------------------------------------
+            # One active thread per (owner, target_gift), mirroring
+            # uniq_thread_covenant_role_active (one active thread per anchor).
+            # Retired threads (retired_at IS NOT NULL) are excluded so a
+            # character can retire a gift thread and later weave a new one on
+            # the same gift. The single-thread-per-gift invariant is enforced
+            # here at the DB layer (decision 7); multi-resonance (multiple
+            # active GIFT threads per gift) is a deferred follow-up (#1619) and
+            # would relax this constraint + make the resolver return a set.
+            models.UniqueConstraint(
+                fields=["owner", "target_gift"],
+                condition=models.Q(
+                    target_kind=TargetKind.GIFT,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_gift_active",
+            ),
+            models.CheckConstraint(
+                name="thread_gift_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.GIFT)
+                    | (
+                        models.Q(target_gift__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
@@ -611,6 +659,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
                     )
                 ),
@@ -661,6 +710,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
                         & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                     )
                 ),
@@ -684,6 +734,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.GIFT: "target_gift",
             TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
         }
@@ -705,6 +756,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.COVENANT_ROLE: "target_covenant_role",
+            TargetKind.GIFT: "target_gift",
             TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
         }
@@ -715,6 +767,7 @@ class Thread(SharedMemoryModel):
             "target_relationship_track",
             "target_capstone",
             "target_covenant_role",
+            "target_gift",
             "target_mantle",
             "target_sanctum_details",
         )

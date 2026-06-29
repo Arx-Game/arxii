@@ -68,7 +68,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `CharacterAnima` - Magical resource (anima) tracking
 
 ### Gifts & Techniques
-- `Gift` - Thematic collections of magical techniques (M2M to Resonance). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
+- `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
 - `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
@@ -305,7 +305,7 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
   `target_trait`, `target_technique`, `target_facet`,
   `target_relationship_track`, `target_capstone`, `target_covenant_role`,
-  `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
+  `target_gift`, `target_mantle`, `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
   (FK Resonance), `name`, `description`, `developed_points`, `level`, timestamps,
   `retired_at` (soft-retire), `slot_kind` (required for SANCTUM threads —
   `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER). All typed FKs use
@@ -379,6 +379,76 @@ The baseline is injected at these call sites:
 
 **Note:** Affinity and Resonance are proper domain models in this app, each with an
 optional OneToOne FK back to ModifierTarget for modifier system integration.
+
+### Specialization Engine (ADR-0055 — #1578)
+
+A character's specialized techniques and capabilities are resolved by combining an
+entity they hold — a **Gift**, **Path**, or **Covenant Role** — with their **resonance**
+(and, where a thread is woven, that thread's level) through **one shared specialization
+primitive**, not per-entity bespoke logic. The specialized form is **derived on read**
+(ADR-0014): a resonance change instantly re-specializes every affected technique with no
+regeneration step.
+
+- `AbstractSpecializedVariant` — shared abstract base (SharedMemoryModel), the "one
+  specialization engine." Carries the `matching_variant` selection predicate (highest
+  `unlock_thread_level ≤ thread level` at the thread's resonance), the
+  `newly_crossed_variants` discovery query, and the `discovery_narrative(is_first)`
+  ceremony contract (`is_first=True` → gamewide recipients; `is_first=False` → `[]`,
+  ceremony appends `[thread.owner]`).
+- `TechniqueVariant` — concrete subclass. A resonance-specialized form of a parent
+  `Technique` (`parent_technique` self-FK, `related_name="variants"`). Fields:
+  `resonance`, `unlock_thread_level` (≥3 = variant), `name_override`,
+  `intensity_delta`, `control_delta`, `discovery_achievement`, `codex_entry`. Unique per
+  `(parent_technique, resonance, unlock_thread_level)`.
+- `CovenantRole` — refactored to inherit `AbstractSpecializedVariant` (schema no-op;
+  `parent_role` with `related_name="sub_roles"` is the variant parent).
+
+**Resolver — `resolve_specialized_variant(*, entity, character)`**
+(`world/magic/specialization/services.py`): the single specialization resolver.
+`Technique` → `_ResolvedTechnique` value object (wraps parent + matching variant,
+exposing `name`/`intensity`/`control` with deltas; raw parent `Technique` when no variant
+matches). `CovenantRole` → the matching sub-role variant. Both paths read the active
+thread through the cached `character.threads` handler (the same cached queryset the
+passive bonuses read), never a fresh `Thread.objects.filter()`; a character with no
+`CharacterSheet` degrades gracefully (returns the parent entity / supported set). The
+GIFT-thread write-paths (`provision_latent_gift_thread`, `_weave_gift_thread`) call
+`character.threads.invalidate()` after mutation, mirroring the covenant-role
+invalidation contract. `_ResolvedTechnique`'s payload accessors
+(`damage_profiles`/`capability_grants`/`condition_applications`) read their source's
+single `cached_<payload>` list (on `Technique`/`TechniqueVariant`) rather than issuing a
+`.exists()` + `.all()` pair. `resolve_effective_role` is now a one-line shim over this
+resolver; no parallel specialization systems (ADR-0016).
+
+**Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
+(`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
+dispatch on `thread.target_kind` — `COVENANT_ROLE` → single parent role; `GIFT` → iterate
+`gift.cached_techniques`. For each variant whose `unlock_thread_level` falls in
+`(starting_level, new_level]` at the thread's resonance: grants `discovery_achievement`
+(gamewide-first `Discovery` on first crossing), unlocks `codex_entry`, sends
+`discovery_narrative`. Called from `spend_resonance_for_imbuing` on every thread advance;
+also standalone-callable for ceremony-direct testing.
+
+**GIFT thread substrate:**
+- `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift. One
+  active GIFT thread per `(owner, gift)` for now (multi-resonance chooser deferred).
+- `provision_latent_gift_thread(sheet, gift, *, resonance)` — idempotent level-0 GIFT
+  thread at CG finalization (`finalize_magic_data`), write-once on resonance. The
+  resonance is chosen at the provisioning call (a frontend CG picker is deferred;
+  the E2E test passes `resonance=` directly).
+- `weave_thread(target_kind=GIFT)` — commits/chooses a resonance onto the existing latent
+  thread rather than creating a new one (validates the resonance is in the gift's
+  supported set, else `UnsupportedGiftResonanceError`, caught by `WeaveThreadAction`).
+- `gift_resonances_for(character, gift) -> list[Resonance]` — the derive-on-read seam
+  replacing `technique.gift.resonances.all()` at the four cast sites (`power_terms`,
+  `techniques` ×2, `resonance_environment` ×2). Reads the active GIFT thread through the
+  cached `character.threads` handler; returns `[thread.resonance]`, falling back to
+  `gift.cached_resonances` (the authored supported set) when no thread or no sheet.
+- `Gift.resonances` is repurposed to the **supported set** (weave constraint, not the
+  cast-time value) per ADR-0052.
+
+**Deferred:** the GIFT anchor cap (`compute_anchor_cap` has no `GIFT` case → returns 0) and
+the frontend CG resonance picker are needs-design follow-ups. Proven end-to-end by
+`world/magic/tests/integration/test_gift_specialization_e2e.py`.
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 

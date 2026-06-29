@@ -371,6 +371,10 @@ class DramaticMomentCapExceeded(Exception):
 # =============================================================================
 
 
+class UnsupportedGiftResonanceError(MagicError):
+    user_message = "That resonance is not supported by this gift."
+
+
 class TechniqueAuthoringNotPermitted(MagicError):
     user_message = "You are not permitted to author a technique at that tier."
 

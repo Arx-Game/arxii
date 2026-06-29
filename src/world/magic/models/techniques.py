@@ -402,6 +402,40 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         """Restrictions for this technique. Supports Prefetch(to_attr=)."""
         return list(self.restrictions.all())
 
+    @cached_property
+    def cached_variants(self) -> list:
+        """Resonance-specialized variants of this technique. Supports Prefetch(to_attr=).
+
+        Read by the shared specialization engine's ``_variant_queryset``
+        (via list-comp filter) rather than ``.variants.filter()`` per project
+        cached-property rule. To invalidate: ``del instance.cached_variants``.
+        """
+        return list(self.variants.all())
+
+    @cached_property
+    def cached_damage_profiles(self) -> list:
+        """Damage profiles for this technique. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_damage_profiles``.
+        """
+        return list(self.damage_profiles.all())
+
+    @cached_property
+    def cached_capability_grants(self) -> list:
+        """Capability grants for this technique. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_capability_grants``.
+        """
+        return list(self.capability_grants.all())
+
+    @cached_property
+    def cached_condition_applications(self) -> list:
+        """Applied conditions for this technique. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_condition_applications``.
+        """
+        return list(self.condition_applications.all())
+
     def has_property(self, name: str) -> bool:
         """Return True if this technique carries the named Property tag."""
         return self.properties.filter(name=name).exists()

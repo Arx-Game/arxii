@@ -20,6 +20,7 @@ class TargetKindTests(SimpleTestCase):
                 "RELATIONSHIP_TRACK",
                 "RELATIONSHIP_CAPSTONE",
                 "COVENANT_ROLE",
+                "GIFT",
                 "MANTLE",
                 "SANCTUM",
             },

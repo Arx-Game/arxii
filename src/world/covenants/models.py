@@ -15,7 +15,6 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.achievements.models import DiscoverableContent
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -26,10 +25,15 @@ from world.covenants.constants import (
     RoleArchetype,
 )
 from world.items.constants import GearArchetype
+from world.magic.specialization.models import AbstractSpecializedVariant
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from world.character_sheets.models import CharacterSheet
     from world.conditions.models import ConditionTemplate
     from world.covenants.handlers import CovenantMembershipHandler
+    from world.magic.models.affinity import Resonance
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
@@ -180,7 +184,7 @@ class Covenant(SharedMemoryModel):
         return f"{self.name} ({self.get_covenant_type_display()}, {state})"
 
 
-class CovenantRole(DiscoverableContent, SharedMemoryModel):
+class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
     """A role that a character can hold within a covenant.
 
     Lookup table — staff-authored, cached via SharedMemoryModel.
@@ -189,6 +193,17 @@ class CovenantRole(DiscoverableContent, SharedMemoryModel):
 
     Combat reads ``speed_rank`` directly from this model during resolution
     order calculation.
+
+    Inherits the four specialization columns (``resonance``,
+    ``unlock_thread_level``, ``discovery_achievement``, ``codex_entry``)
+    from ``AbstractSpecializedVariant`` (#1578, ADR-0055) — the same base
+    ``TechniqueVariant`` uses. That base supersedes main's #1623
+    ``DiscoverableContent`` mixin here (it provides the same
+    ``discovery_achievement`` field), so ``CovenantRole`` does NOT also
+    inherit ``DiscoverableContent``; ``Technique`` keeps it. Schema no-op:
+    the columns matched the base verbatim, so this refactor changes only the
+    Python class graph (and the ``resonance`` reverse ``related_name``,
+    which no live code reads).
     """
 
     name = models.CharField(max_length=60, help_text="Display name, e.g. 'Vanguard'.")
@@ -223,26 +238,66 @@ class CovenantRole(DiscoverableContent, SharedMemoryModel):
         related_name="sub_roles",
         help_text="Null for primary roles. Set for sub-roles.",
     )
-    resonance = models.ForeignKey(
-        "magic.Resonance",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="covenant_subroles",
-        help_text="Null for primary roles. Set for sub-roles.",
-    )
-    unlock_thread_level = models.PositiveIntegerField(
-        default=0,
-        help_text="0 for primary roles; 3+ for sub-roles (Thread level needed to unlock).",
-    )
-    codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Sub-roles only: lore entry unlocked on manifestation.",
-    )
+
+    @cached_property
+    def cached_sub_roles(self) -> list:
+        """Sub-roles for this role. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_sub_roles``.
+        """
+        return list(self.sub_roles.all())
+
+    @classmethod
+    def _variant_queryset(
+        cls,
+        parent: AbstractSpecializedVariant,
+        *,
+        resonance: Resonance | None = None,
+        resonance_id: int | None = None,
+    ) -> list[CovenantRole]:
+        """CovenantRole binds the parent self-FK ``parent_role`` -> reverse
+        ``sub_roles``. Override so the shared classmethods read the parent's
+        ``cached_sub_roles`` list (the convention in techniques.py / gifts.py)
+        and filter by resonance via a list-comp — no ``.filter()`` query per
+        project cached-property rule.
+        """
+        rid = resonance.pk if resonance is not None else resonance_id
+        return [r for r in parent.cached_sub_roles if r.resonance_id == rid]
+
+    def discovery_narrative(
+        self,
+        *,
+        is_first: bool,
+    ) -> tuple[Sequence[CharacterSheet], str]:
+        """Sub-role manifestation copy (mirrors covenants/discovery._notify).
+
+        ``is_first=True`` -> gamewide recipients (all active player sheets) +
+        "first time in recorded history" prose. ``is_first=False`` -> empty
+        recipients ``[]`` (the ceremony caller appends ``[thread.owner]``) +
+        "covenant path has deepened" prose.
+        """
+        if is_first:
+            from world.roster.selectors import (  # noqa: PLC0415
+                active_player_character_sheets,
+            )
+
+            recipients = active_player_character_sheets()
+            body = (
+                f"For the first time in recorded history, a character has "
+                f"manifested the {self.name} sub-role — a convergence of "
+                f"{self.resonance.name} and covenant purpose no one has "
+                f"achieved before."
+            )
+        else:
+            # Personal: the discovering sheet is supplied by the ceremony
+            # caller (fire_variant_discoveries), which has thread.owner in
+            # scope; it appends [thread.owner] when this returns [].
+            recipients: list[CharacterSheet] = []
+            body = (
+                f"Your covenant path has deepened. You have manifested the "
+                f"{self.name} sub-role, channelled through {self.resonance.name}."
+            )
+        return recipients, body
 
     class Meta:
         constraints = [

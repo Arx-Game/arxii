@@ -14,6 +14,9 @@ Submodules (see Scope 6 §4.4):
   TechniqueDamageProfile, CharacterTechnique, TechniqueOutcomeModifier
 - technique_draft: TechniqueDraft, TechniqueDraftCapabilityGrant,
   TechniqueDraftDamageProfile, TechniqueDraftAppliedCondition
+- specialization: TechniqueVariant, TechniqueVariantCapabilityGrant,
+  TechniqueVariantDamageProfile, TechniqueVariantAppliedCondition
+  (gift-technique specialization variants, #1578)
 - cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier
@@ -175,6 +178,12 @@ from world.magic.models.weaving import (
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
 )
+from world.magic.specialization.models import (
+    TechniqueVariant,
+    TechniqueVariantAppliedCondition,
+    TechniqueVariantCapabilityGrant,
+    TechniqueVariantDamageProfile,
+)
 
 __all__ = [
     # audere (re-exported from world.magic.audere)
@@ -316,6 +325,11 @@ __all__ = [
     "TechniqueStyle",
     "TechniqueStyleManager",
     "TechniqueTierBudget",
+    # gift-technique specialization variants (#1578)
+    "TechniqueVariant",
+    "TechniqueVariantAppliedCondition",
+    "TechniqueVariantCapabilityGrant",
+    "TechniqueVariantDamageProfile",
     # threads
     "Thread",
     "ThreadLevelUnlock",

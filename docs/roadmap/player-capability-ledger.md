@@ -77,7 +77,7 @@ in-fiction trigger is plausible.
 | **Negotiate / parley** an NPC down | ✅ PROVEN | `apply_social_disposition_delta` → `adjust_npc_affection`; durable + ephemeral tiers (#1591, ADR-0058) | MVP |
 | **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN | `effect_palette_content.py`; 9 seeded effects; summon E2E `integration_tests/pipeline/test_effect_summon_telnet_e2e.py`; reactive interceptor E2Es `integration_tests/pipeline/test_effect_reactive_families.py` (#1584) | done |
 | **Companions / pets / summons** w/ breath weapons & ordered abilities | ✅ PROVEN (basic) | ALLY `CombatOpponent` via `allegiance`/`summoned_by`; opponent-vs-opponent damage; advanced ordered abilities are a follow-up | done (ADR-0059; #672 folds in) |
-| **Roles grant techniques** (resonance-spec at lvl 3) | ❌ → DESIGNED | **ADR-0055** (the specialization engine); reverses bonuses-only | MVP+ADR |
+| **Roles grant techniques** (resonance-spec at lvl 3) | ✅ PROVEN | **ADR-0055** (the specialization engine); `CovenantRole` inherits `AbstractSpecializedVariant` + `fire_variant_discoveries` generalizes the discovery beat across `target_kind`; proven by `covenants/tests/integration/test_resonance_subrole_flow.py` (covenant) + `magic/tests/integration/test_gift_specialization_e2e.py` (gift) | done |
 | **War / battle system** | ❌ ABSENT | war covenants have nowhere to resolve | soon |
 | Mounts / charging · flying mounts / dragons | ❌ ABSENT | planned-systems (aerial positioning exists, no mount) | P2 |
 | Ranged / archery mechanics | 🟡 SUBSTRATE | range bands + RANGED class exist | soon |
@@ -105,9 +105,9 @@ in-fiction trigger is plausible.
 | Capability | Tier | Evidence / home | MVP? |
 |---|---|---|---|
 | Covenant role resolution `(role × resonance × thread level)` → sub-role | ✅ PROVEN | `resolve_effective_role`; the **template** to generalize | done |
-| **One specialization primitive** `(entity × resonance) → customized capability` | ❌ → DESIGNED | **ADR-0055** — generalize `resolve_effective_role` to Gift & Path (no parallel impls, ADR-0016) | **now (foundational)** |
-| **Gift × Path → specialized techniques** | ❌ → DESIGNED | **ADR-0055** (consume the dead `allowed_paths`) | MVP |
-| **Resonance differentiates your magic** (gift affinity + technique form) | ❌ → DESIGNED | **ADR-0052** (gift affinity = thread resonance) + **ADR-0055** (derive-on-read) | MVP |
+| **One specialization primitive** `(entity × resonance) → customized capability` | ✅ PROVEN | **ADR-0055** — `AbstractSpecializedVariant` base + `resolve_specialized_variant(entity, character)` (the one resolver; `resolve_effective_role` is a shim); `test_gift_specialization_e2e.py` | done |
+| **Gift × Path → specialized techniques** | ✅ PROVEN | **ADR-0055** — `TechniqueVariant` (per-resonance sub-technique rows) resolved derive-on-read from the GIFT thread; `test_gift_specialization_e2e.py` | done |
+| **Resonance differentiates your magic** (gift affinity + technique form) | ✅ PROVEN | **ADR-0052** (gift affinity = thread resonance) + **ADR-0055** (derive-on-read); `gift_resonances_for` feeds the four cast sites; `test_gift_specialization_e2e.py` | done |
 | **Signature technique** (one technique deepened, own resonance, may diverge) | ❌ → DESIGNED | **ADR-0056** (re-scope `TargetKind.TECHNIQUE`) | soon |
 | **Fall / Redemption** resonance conversion (asymmetric) | ❌ → DESIGNED | **ADR-0054** (new conversion service; respect monotonic `lifetime_earned`) | soon |
 | **Covenant of the Court** lets a peerless puissant hold a role | ❌ → DESIGNED | **ADR-0057** (new `CovenantType.COURT`, reuses covenant substrate) | soon |

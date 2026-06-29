@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("achievements", "0004_rewarddefinition_modifier_target_and_more"),
-        ("magic", "0054_gift_kind"),
+        ("magic", "0059_remove_thread_uniq_thread_gift_active_and_more"),
     ]
 
     operations = [

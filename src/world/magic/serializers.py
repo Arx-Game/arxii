@@ -837,6 +837,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         from world.items.models import Mantle  # noqa: PLC0415
         from world.magic.models import (  # noqa: PLC0415
             Facet,
+            Gift,
             Technique as TechniqueModel,
         )
         from world.relationships.models import (  # noqa: PLC0415
@@ -853,6 +854,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             TargetKind.FACET: Facet,
             TargetKind.COVENANT_ROLE: CovenantRole,
             TargetKind.MANTLE: Mantle,
+            TargetKind.GIFT: Gift,
         }
         model = model_map.get(target_kind)
         if model is None:

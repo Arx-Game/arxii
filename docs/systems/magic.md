@@ -60,7 +60,7 @@ and the 5-axis Thread model no longer exist.
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
 | `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
-| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`), `creator` (FK to CharacterSheet) |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
 
@@ -271,7 +271,7 @@ RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER) |
+| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER) |
 | `ThreadLevelUnlock` | Per-thread XP-locked-boundary receipt | `thread` FK, `unlocked_level`, `xp_spent`, `acquired_at` (unique per (thread, unlocked_level)) |
 
 **Integrity layers on Thread.** (1) `clean()` asserts exactly one `target_*`
@@ -378,6 +378,71 @@ now say "Mage Scars."
 | `MagicalAlterationTemplate` | OneToOne on ConditionTemplate; magic-specific alteration metadata | `tier`, `origin_affinity`, `origin_resonance`, `is_library`, `visibility_required` |
 | `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields |
 | `MagicalAlterationEvent` | Immutable provenance audit log | `pending`, `event_type`, `data`, `created_at` |
+
+### Specialization Engine (ADR-0055 — #1578)
+
+A character's specialized techniques and capabilities are resolved by combining an
+entity they hold — a **Gift**, **Path**, or **Covenant Role** — with their **resonance**
+(and, where a thread is woven, that thread's level) through **one shared specialization
+primitive**, not per-entity bespoke logic. The combination of (Gift × Path) sets the base
+technique set; the character's resonance specializes how those techniques manifest —
+exactly as (Covenant Role × anchored-thread resonance × thread level) already resolves a
+specialized sub-role. The specialized form is **derived on read** (ADR-0014): a change of
+resonance instantly re-specializes every affected technique with no regeneration step.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `AbstractSpecializedVariant` | Shared abstract base (SharedMemoryModel) — the "one specialization engine" | `parent` discriminator contract, `matching_variant` selection predicate (highest `unlock_thread_level ≤ thread level` at the thread's resonance), `newly_crossed_variants` discovery query, `discovery_narrative(is_first)` ceremony contract |
+| `TechniqueVariant` | Concrete subclass — a resonance-specialized form of a parent `Technique` | `parent_technique` (self-FK, `related_name="variants"`), `resonance` FK, `unlock_thread_level` (≥3 = variant), `name_override`, `intensity_delta`, `control_delta`, `discovery_achievement` FK, `codex_entry` FK. Unique per `(parent_technique, resonance, unlock_thread_level)` |
+| `CovenantRole` | Refactored to inherit `AbstractSpecializedVariant` (schema no-op) | existing sub-role fields; `parent_role` (`related_name="sub_roles"`) is the variant parent |
+
+**Resolver — `resolve_specialized_variant(*, entity, character)`** (`world/magic/specialization/services.py`):
+the single specialization resolver. For a `Technique` it finds the character's active GIFT
+thread on the technique's gift, reads resonance + level, and returns a `_ResolvedTechnique`
+value object wrapping the parent + matching variant (exposing `name`/`intensity`/`control`
+with variant deltas applied), or the raw parent `Technique` when no variant matches. For a
+`CovenantRole` it reads the cached `character.threads` handler (preserving the proven
+`resolve_effective_role` cache coherence). `resolve_effective_role` is now a one-line shim
+over this resolver — no parallel specialization systems (ADR-0016).
+
+**Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
+(`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
+dispatch on `thread.target_kind` — `COVENANT_ROLE` → the single parent role;
+`GIFT` → iterate `gift.techniques.all()`. For each variant whose `unlock_thread_level`
+falls in `(starting_level, new_level]` at the thread's resonance, it grants the
+`discovery_achievement` (gamewide-first `Discovery` on the first crossing), unlocks the
+`codex_entry`, and sends the `discovery_narrative`. Called from `spend_resonance_for_imbuing`
+on every thread advance; also standalone-callable for ceremony-direct testing.
+
+**GIFT thread substrate (#1578):**
+- `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift.
+  One active GIFT thread per `(owner, gift)` for now (multi-resonance chooser is a deferred
+  needs-design follow-up).
+- **Latent provisioning at CG** — `provision_latent_gift_thread(sheet, gift, *, resonance)`
+  (`world/magic/specialization/services.py`) creates the level-0 GIFT thread at
+  character-creation finalization, idempotent on `(owner, gift)` and write-once on resonance.
+  Wires from `finalize_magic_data` after `CharacterGift` creation, reading the chosen
+  `selected_gift_resonance_id` from `draft.draft_data` (frontend picker is a deferred
+  needs-design follow-up; falls back to `gift.resonances.first()`).
+- **Weaving commits resonance** — `weave_thread(target_kind=GIFT)` commits/chooses a
+  resonance onto the existing latent thread rather than creating a new one (validates the
+  resonance is in the gift's supported set, else raises `UnsupportedGiftResonanceError`,
+  which `WeaveThreadAction` catches into a failure `ActionResult`).
+- **`gift_resonances_for(character, gift)`** — the derive-on-read seam replacing direct
+  `technique.gift.resonances.all()` reads at the four cast sites (`power_terms`,
+  `techniques` ×2, `resonance_environment` ×2). Returns the active GIFT thread's resonance;
+  falls back to the authored `Gift.resonances` supported set when no thread exists.
+- **`Gift.resonances`** is repurposed to the **supported set** (a weave constraint, not the
+  cast-time value) per ADR-0052.
+
+The GIFT anchor cap (`compute_anchor_cap` has no `GIFT` case → returns 0) is a deferred
+needs-design follow-up; until it lands, GIFT-thread advancement is exercised by setting
+`level` directly + calling the ceremony explicitly (see `test_gift_specialization_e2e.py`).
+
+Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e.py`:
+CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the thread's
+resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
+deltas) → discovery beat fires (achievement + codex).
 
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
