@@ -158,6 +158,26 @@ class Achievement(SharedMemoryModel):
         return list(self.rewards.select_related("reward").all())
 
 
+class DiscoverableContent(models.Model):
+    """Abstract mixin: marks a content row as discoverable by attaching the
+    Achievement (and global-first Discovery) earned the first time a character
+    gains it. Inherited by gainable content models (ADR-0016); never a table
+    of its own. Null = not discoverable."""
+
+    discovery_achievement = models.ForeignKey(
+        Achievement,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Achievement granted (with global-first Discovery) the first time a "
+        "character gains this content. Null = not discoverable.",
+    )
+
+    class Meta:
+        abstract = True
+
+
 class AchievementRequirement(SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.

@@ -11,8 +11,9 @@ Entry point: ``fire_variant_discoveries(*, thread, starting_level, new_level)``.
 Dispatches on ``thread.target_kind`` to the variant model
 (``CovenantRole`` / ``TechniqueVariant``), which supplies
 ``newly_crossed_variants`` (the threshold predicate) and ``discovery_narrative``
-(the flavor copy + recipients). The grant/unlock/notify ceremony body is
-shared and unchanged from the original sub-role beat.
+(the flavor copy). ``_notify`` routes the gamewide-vs-personal send through the
+shared ``announce_achievement`` helper (achievements/discovery.py, #1606); the
+grant/unlock ceremony body is unchanged from the original sub-role beat.
 """
 
 from __future__ import annotations
@@ -139,33 +140,40 @@ def _unlock_codex(sheet: CharacterSheet, variant: AbstractSpecializedVariant) ->
 
 
 def _notify(sheet: CharacterSheet, variant: AbstractSpecializedVariant, *, is_first: bool) -> None:
-    """Send a NarrativeMessage announcing the variant discovery.
+    """Send the NarrativeMessage announcing a variant discovery.
 
-    ``variant.discovery_narrative(is_first=...)`` returns (recipients, body).
-    When ``is_first=True`` the variant returns the gamewide recipient list.
-    When ``is_first=False`` the variant returns ``[]`` and we use ``[sheet]``.
+    Delegates the gamewide-vs-personal recipient selection + send to
+    ``announce_achievement`` (achievements/discovery.py, #1606) — the shared
+    ceremony helper — but pulls the per-variant copy from
+    ``variant.discovery_narrative(is_first=...)``, so a ``CovenantRole``
+    sub-role and a ``TechniqueVariant`` manifestation each get their own
+    wording through this one path. Both bodies are fetched (the recipients
+    ``discovery_narrative`` returns are unused — ``announce_achievement``
+    owns recipient selection).
+
+    First-ever (``is_first=True``): gamewide — all active player character sheets.
+    Not first (``is_first=False``): personal — only the discovering sheet.
     """
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-
-    recipients, body = variant.discovery_narrative(is_first=is_first)
-    if not recipients:
-        recipients = [sheet]
+    from world.achievements.discovery import announce_achievement  # noqa: PLC0415
 
     # Covenant sub-roles use COVENANT category; technique-form manifestations use
     # VISIONS (a mystical manifestation). NarrativeCategory has no MAGIC value
     # (verified: STORY/ATMOSPHERE/VISIONS/HAPPENSTANCE/SYSTEM/COVENANT/RENOWN/WEATHER),
     # so VISIONS is the closest existing fit for a gift-awakening beat.
     from world.covenants.models import CovenantRole  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
 
     if isinstance(variant, CovenantRole):
         category = NarrativeCategory.COVENANT
     else:
         category = NarrativeCategory.VISIONS
 
-    send_narrative_message(
-        recipients=recipients,
-        body=body,
+    _first_recipients, first_body = variant.discovery_narrative(is_first=True)
+    _personal_recipients, personal_body = variant.discovery_narrative(is_first=False)
+    announce_achievement(
+        [sheet],
+        is_first=is_first,
+        first_body=first_body,
+        personal_body=personal_body,
         category=category,
-        sender_account=None,
     )

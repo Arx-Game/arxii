@@ -106,6 +106,7 @@ treat those names as hints to confirm, not gospel.
 - [0058 — NPC disposition is two-tier: ephemeral for mooks, durable for named NPCs, with persona-promotion as the seam](0058-npc-disposition-is-two-tier-ephemeral-and-durable.md)
 - [0059 — Allegiance is the unified substrate for summons and future charm/switch-sides](0059-allegiance-is-the-summon-charm-substrate.md)
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
+- [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

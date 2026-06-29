@@ -21,6 +21,7 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
+from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
@@ -69,6 +70,7 @@ from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.form import CmdForm
 from commands.gemit import CmdGemit
+from commands.gm_tables import CmdGMTable
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
@@ -224,6 +226,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
+            # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
+            CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).
             CmdTechnique,
             # Unified scene-adaptive cast (#1351)
@@ -245,6 +249,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdStory,
             # #1574 — project status + money donation (project/donate, +project).
             CmdProject,
+            # #1500 — staff: demand a crowdfundable ransom for a held captive.
+            CmdDemandRansom,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdManageRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.

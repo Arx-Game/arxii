@@ -197,9 +197,13 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
     Inherits the four specialization columns (``resonance``,
     ``unlock_thread_level``, ``discovery_achievement``, ``codex_entry``)
     from ``AbstractSpecializedVariant`` (#1578, ADR-0055) — the same base
-    ``TechniqueVariant`` uses. Schema no-op: the columns matched the base
-    verbatim, so this refactor changes only the Python class graph (and the
-    ``resonance`` reverse ``related_name``, which no live code reads).
+    ``TechniqueVariant`` uses. That base supersedes main's #1623
+    ``DiscoverableContent`` mixin here (it provides the same
+    ``discovery_achievement`` field), so ``CovenantRole`` does NOT also
+    inherit ``DiscoverableContent``; ``Technique`` keeps it. Schema no-op:
+    the columns matched the base verbatim, so this refactor changes only the
+    Python class graph (and the ``resonance`` reverse ``related_name``,
+    which no live code reads).
     """
 
     name = models.CharField(max_length=60, help_text="Display name, e.g. 'Vanguard'.")

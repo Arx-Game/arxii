@@ -31,6 +31,7 @@ from world.gm.models import (
 )
 from world.gm.permissions import IsGM, IsGMOrStaff
 from world.gm.serializers import (
+    DemandRansomSerializer,
     GMApplicationActionSerializer,
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
@@ -403,5 +404,27 @@ class GMInviteClaimView(APIView):
         application = serializer.save()
         return Response(
             {"application_id": application.pk},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DemandRansomView(APIView):
+    """Staff/GM raises a crowdfundable ransom for a held captive (#1500).
+
+    POST ``/api/gm/demand-ransom/`` with ``{captivity_id, amount?}``. Creates a
+    RANSOM project standing in the captive's cell that anyone may donate toward;
+    the captive is freed the instant it is fully funded. The same
+    ``demand_ransom_project`` service backs the telnet ``demandransom`` command.
+    """
+
+    permission_classes = [IsGMOrStaff]
+
+    @transaction.atomic
+    def post(self, request: Request) -> Response:
+        serializer = DemandRansomSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        project = serializer.save()
+        return Response(
+            {"project_id": project.pk, "threshold_target": project.threshold_target},
             status=status.HTTP_201_CREATED,
         )

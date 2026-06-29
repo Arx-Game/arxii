@@ -3975,28 +3975,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/currency/org-books/{id}/pay-ransom/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description Pay a held member's ransom from this org's treasury (#931).
-     *
-     *     Body: ``{"captivity_id": <int>}``. Member-gated like the books read;
-     *     the demand must be owed by this org. Returns the refreshed books.
-     */
-    post: operations['currency_org_books_pay_ransom_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -5174,6 +5152,30 @@ export interface paths {
      *     List/Retrieve/Update: staff only.
      */
     patch: operations['gm_applications_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/demand-ransom/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Staff/GM raises a crowdfundable ransom for a held captive (#1500).
+     *
+     *     POST ``/api/gm/demand-ransom/`` with ``{captivity_id, amount?}``. Creates a
+     *     RANSOM project standing in the captive's cell that anyone may donate toward;
+     *     the captive is freed the instant it is fully funded. The same
+     *     ``demand_ransom_project`` service backs the telnet ``demandransom`` command.
+     */
+    post: operations['gm_demand_ransom_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/gm/invites/': {
@@ -16249,13 +16251,6 @@ export interface components {
      * @enum {string}
      */
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
-    /** @description A ransom demand owed by this org for one of its captured members (#931). */
-    DemandRow: {
-      captivity_id: number;
-      captive_name: string;
-      captor: string;
-      amount: number;
-    };
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWrite: {
       target_persona_id: number;
@@ -19577,6 +19572,7 @@ export interface components {
      *     * `covenant` - Covenant
      *     * `renown` - Renown
      *     * `weather` - Weather
+     *     * `ability` - Ability access
      * @enum {string}
      */
     NarrativeCategoryEnum:
@@ -19587,7 +19583,8 @@ export interface components {
       | 'system'
       | 'covenant'
       | 'renown'
-      | 'weather';
+      | 'weather'
+      | 'ability';
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;
@@ -19785,7 +19782,6 @@ export interface components {
       obligations: components['schemas']['ObligationRow'][];
       contributions: components['schemas']['ContributionRow'][];
       ledger: components['schemas']['LedgerRow'][];
-      demands: components['schemas']['DemandRow'][];
     };
     Organization: {
       readonly id: number;
@@ -31675,48 +31671,6 @@ export interface operations {
       };
     };
   };
-  currency_org_books_pay_ransom_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['OrgBooks'];
-        };
-      };
-      /** @description The ransom could not be paid. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Not a member of the organization. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description No such organization. */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
   distinctions_categories_list: {
     parameters: {
       query?: never;
@@ -33591,6 +33545,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['GMApplicationDetail'];
         };
+      };
+    };
+  };
+  gm_demand_ransom_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

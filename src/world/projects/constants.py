@@ -9,11 +9,17 @@ class ProjectKind(models.TextChoices):
     Each kind maps to a per-kind details model (e.g., BuildingConstructionDetails
     for BUILDING_CONSTRUCTION) and a service handler registered via
     register_kind_handler. TEST_KIND is used only in Phase D's framework tests.
+
+    RANSOM is special: it has no per-kind details model (the ``Captivity`` that
+    points at the project via ``ransom_project`` *is* its details) and it
+    completes the instant its threshold is funded rather than on a cron tick —
+    see ``register_instant_completion_kind`` (#1500).
     """
 
     BUILDING_CONSTRUCTION = "BUILDING_CONSTRUCTION", "Building Construction"
     ROOM_FEATURE_PROGRESSION = "ROOM_FEATURE_PROGRESSION", "Room Feature Progression"
     RESEARCH = "RESEARCH", "Research"
+    RANSOM = "RANSOM", "Ransom"
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
 
 

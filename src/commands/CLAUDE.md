@@ -222,6 +222,14 @@ actions, backends, and service functions.
   to a *reach*: `gemit <msg>` (game-wide), `gemit/society <a>,<b> = <msg>`, or `gemit/org <a>,<b> =
   <msg>` (members of those societies/orgs, by active persona). No body is ever generated. Player/
   covenant-targeted story emits are a separate, non-public tool — not this command.
+- **`gm_tables.py`**: `CmdGMTable` (`gmtable`, #1505) — basic telnet parity for GM-table admin
+  (the React `frontend/src/tables/` module is the primary surface). Thin over `world.gm.services`,
+  subverb-dispatched: `gmtable [list]`, `gmtable create <name>[=<desc>]`, `gmtable members <id>`,
+  `gmtable invite <id>=<persona>`, `gmtable kick <membership-id>`, `gmtable archive <id>`,
+  `gmtable transfer <id>=<account>`. **Authorization mirrors the web exactly** so telnet can't
+  escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
+  `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
+  `IsAdminUser`). No business logic in the command.
 - **`locations.py`**: `CmdManageRoom` (`manageroom`, #1470) — owner-gated room editor.
   Thin over `RoomEditAction` (key `edit_room`): `manageroom/name <name>`,
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
@@ -231,10 +239,20 @@ actions, backends, and service functions.
   contribution surface. `+project <id>` shows a project's status (progress/target, remaining
   coin to fund); `project/donate <id>=<amount>` dispatches `DonateToProjectAction` (key
   `project_donate`), debiting the caller's `CharacterPurse` and recording a MONEY
-  `Contribution` via `world.projects.services.donate_to_project`. The `project/check` and
-  `project/story` switches (per-`ProjectKind` check-based contributions) land with the
-  check-method framework. The ransom flow reuses `donate` — a Ransom is a money-threshold
-  Project (#1500).
+  `Contribution` via `world.projects.services.donate_to_project`. `project/check
+  <id>=<method>` dispatches `CheckContributeAction` (key `project_check`) → rolls an authored
+  `ContributionMethod`'s check (spending `ap_cost` AP), advancing progress on success
+  (`contribute_check_to_project`); methods are keyed by `ProjectKind` (none for RANSOM →
+  no check path). `project/story <id>=<text>` (`StoryContributeAction`, key `project_story`)
+  records the narrative on the caller's latest contribution. The ransom flow reuses
+  `donate` — a Ransom is a money-threshold Project (#1500).
+- **`captivity.py`**: `CmdDemandRansom` (`demandransom`, staff-only `perm(Admin)`, #1500) — the
+  GM demand surface for the crowdfundable ransom. `demandransom <captive>` (default amount) or
+  `demandransom <captive> = <coppers>` finds the captive's held `Captivity` and calls
+  `world.captivity.ransom_project.demand_ransom_project`, raising a RANSOM `Project` in the cell
+  that anyone may `project/donate` toward (freed the instant it's funded). The same service backs
+  the web `DemandRansomView` (`POST /api/gm/demand-ransom/`). Thin over the service — no business
+  logic in the command (mirrors `gemit`).
 - **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
   `PositionBlueprint` into their current room: `setstage` shows this room's positions + default

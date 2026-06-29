@@ -853,6 +853,13 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
     )
     CharacterTechnique.objects.create(character=sheet, technique=technique)
 
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+
+    announce_access_change(
+        sheet, gained=[technique], lost=[], source=AccessChangeSource.CHARACTER_CREATION
+    )
+
 
 def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 3: apply tradition codex grants. No-op without a selected tradition."""

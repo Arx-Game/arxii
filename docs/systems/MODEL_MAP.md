@@ -114,7 +114,6 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
-  - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
@@ -132,7 +131,6 @@
 **Pointed to by:**
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
-  - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -156,7 +154,6 @@
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
-  - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
@@ -638,7 +635,7 @@
   - captive -> character_sheets.CharacterSheet [FK]
   - cell -> instances.InstancedRoom [FK] (nullable)
   - captor_organization -> societies.Organization [FK] (nullable)
-  - ransom_contract -> currency.Contract [FK] (nullable)
+  - ransom_project -> projects.Project [FK] (nullable)
   - rescue_template -> missions.MissionTemplate [FK] (nullable)
 **Pointed to by:**
   - rescue_clues <- clues.Clue
@@ -1175,7 +1172,6 @@
 **Pointed to by:**
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
-  - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
@@ -1193,7 +1189,6 @@
 **Pointed to by:**
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
-  - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
@@ -1217,7 +1212,6 @@
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
-  - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
@@ -1456,10 +1450,10 @@
 
 ### CovenantRole
 **Foreign Keys:**
-  - resonance -> magic.Resonance [FK] (nullable)
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
-  - codex_entry -> codex.CodexEntry [FK] (nullable)
   - parent_role -> covenants.CovenantRole [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
@@ -1567,7 +1561,7 @@
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
 - `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' — Rename a rank. Requires can_manage_ranks.`
 - `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' — Rewrite tiers for the given ranks atomically and uniquely.`
-- `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` (one-line shim over`
+- `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` if the character's`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
@@ -2100,7 +2094,6 @@
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
   - sanctums <- magic.SanctumDetails
-  - techniquevariant_subrole <- magic.TechniqueVariant
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
@@ -2113,7 +2106,7 @@
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - garment_mitigations <- items.GarmentMitigation
-  - covenantrole_subrole <- covenants.CovenantRole
+  - covenant_subroles <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
   - projects <- projects.Project
@@ -2127,7 +2120,6 @@
   - techniques <- magic.Technique
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
-  - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
 
 ### CharacterGift
@@ -2179,6 +2171,7 @@
 
 ### Technique
 **Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
   - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
@@ -2199,7 +2192,6 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
-  - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
@@ -2556,33 +2548,6 @@
   - sanctum -> magic.SanctumDetails [FK]
   - weaver_character_sheet -> character_sheets.CharacterSheet [FK]
 
-### TechniqueVariant
-**Foreign Keys:**
-  - resonance -> magic.Resonance [FK] (nullable)
-  - discovery_achievement -> achievements.Achievement [FK] (nullable)
-  - codex_entry -> codex.CodexEntry [FK] (nullable)
-  - parent_technique -> magic.Technique [FK]
-**Pointed to by:**
-  - capability_grants <- magic.TechniqueVariantCapabilityGrant
-  - damage_profiles <- magic.TechniqueVariantDamageProfile
-  - condition_applications <- magic.TechniqueVariantAppliedCondition
-
-### TechniqueVariantCapabilityGrant
-**Foreign Keys:**
-  - capability -> conditions.CapabilityType [FK]
-  - variant -> magic.TechniqueVariant [FK]
-  - prerequisite -> mechanics.Prerequisite [FK] (nullable)
-
-### TechniqueVariantDamageProfile
-**Foreign Keys:**
-  - damage_type -> conditions.DamageType [FK] (nullable)
-  - variant -> magic.TechniqueVariant [FK]
-
-### TechniqueVariantAppliedCondition
-**Foreign Keys:**
-  - condition -> conditions.ConditionTemplate [FK]
-  - variant -> magic.TechniqueVariant [FK]
-
 ### RitualSession
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
@@ -2702,7 +2667,6 @@
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - target_facet -> magic.Facet [FK] (nullable)
   - target_covenant_role -> covenants.CovenantRole [FK] (nullable)
-  - target_gift -> magic.Gift [FK] (nullable)
   - target_mantle -> items.Mantle [FK] (nullable)
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
 **Pointed to by:**
@@ -2832,7 +2796,6 @@
   - property -> mechanics.Property [FK]
 **Pointed to by:**
   - technique_grants <- magic.TechniqueCapabilityGrant
-  - technique_variant_grants <- magic.TechniqueVariantCapabilityGrant
   - capability_types <- conditions.CapabilityType
 
 ### PropertyCategory

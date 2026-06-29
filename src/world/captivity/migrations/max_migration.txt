@@ -1,1 +1,1 @@
-0004_captivityconfig_clue_description_and_more
+0006_remove_captivity_ransom_contract

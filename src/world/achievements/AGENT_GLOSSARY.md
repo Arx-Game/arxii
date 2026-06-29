@@ -19,3 +19,11 @@ _Avoid_: stat key, stat type
 **StatTracker**:
 The per-character row holding the current integer value of one StatDefinition for one character (unique per character + stat), incremented atomically by other systems and read by the achievements engine.
 _Avoid_: stat counter, stat value row
+
+**DiscoverableContent**:
+A Django abstract base class (no table of its own) that adds a nullable `discovery_achievement` FK to any content model whose instances can be "discovered for the first time" — i.e., when the first character ever gains that content, a Discovery is recorded and an Achievement is granted. Inherited by `Technique` and `CovenantRole`; null FK means the content is not discoverable.
+_Avoid_: discoverable mixin (it is a base class, not a mixin), achievement holder
+
+**Access change**:
+The event of a character gaining or losing access to techniques or capabilities, regardless of source (alternate-self shapeshift, covenant role engagement/disengagement, character creation). A single surface — `announce_access_change` in `achievements/discovery.py` — handles notification and fires any first-ever Discovery ceremony; callers never branch on the source.
+_Avoid_: ability change, capability notification, technique grant (too narrow)

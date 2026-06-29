@@ -10,6 +10,7 @@ class NarrativeCategory(models.TextChoices):
     COVENANT = "covenant", "Covenant"
     RENOWN = "renown", "Renown"
     WEATHER = "weather", "Weather"
+    ABILITY = "ability", "Ability access"
 
 
 class GemitReach(models.TextChoices):

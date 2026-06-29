@@ -905,7 +905,10 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
 
 - **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
-- **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM
+- **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM, COVENANT, RENOWN,
+  WEATHER (weather tick emits),
+  ABILITY (access-change notifications — gained/lost techniques or capabilities; also used
+  by `announce_achievement` for first-ever Discovery ceremonies on discoverable content)
 - **Key Services:**
   - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
   - `deliver_queued_messages(sheet)` — drains queued deliveries at login (called from `at_post_puppet` via stories login service)
@@ -913,6 +916,56 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
 - **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
 - **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
 - **Source:** `src/world/narrative/`
+
+### Achievements
+Cross-cutting meta-engagement layer: hidden milestones characters earn across every game system,
+plus the shared access-change announcement surface that fires discovery ceremonies when a character
+gains a discoverable content item for the first time.
+
+- **Models:** `StatDefinition` (normalized stat key — dot-separated, e.g.
+  `"relationships.total_established"`), `StatTracker` (per-character integer counter),
+  `Achievement` (staff-authored; `hidden` default True, `notification_level`, chained via
+  `prerequisite` self-FK, `is_active`), `AchievementRequirement` (stat threshold comparison per
+  achievement), `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
+  `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
+  `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE reward catalog),
+  `AchievementReward` (per-achievement reward with optional `reward_value` amount),
+  `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
+  `ConditionStatRule` (bridge: condition event type → stat increment),
+  **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
+  content model whose instances can be discovered for the first time; inherited by `Technique`
+  and `CovenantRole`; null = not discoverable; see ADR-0061)
+- **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
+  `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE), `ConditionEventType` (GAINED),
+  `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
+  COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
+- **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
+  `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
+- **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
+  sheets) -> list[CharacterAchievement]`, `apply_achievement_rewards(sheet, achievement)`,
+  `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
+- **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
+  - `announce_access_change(character_sheet, *, gained, lost, source)` — sends an ABILITY
+    `NarrativeMessage` to the character listing what techniques/capabilities changed, then for
+    each gained item with a non-null `discovery_achievement` FK fires `grant_achievement` and
+    `announce_achievement`. Source-agnostic: callers never branch on covenant vs. form vs. CG.
+  - `announce_achievement(earners, *, is_first, first_body, personal_body, category)` —
+    gamewide to all active player sheets when `is_first` (first-ever Discovery); otherwise
+    personal to the earner list.
+- **Wired callers of `announce_access_change`:** `world/forms/services.py` (assume/revert
+  alternate self), `world/covenants/services.py` (engage/disengage covenant role, via
+  `_announce_capability_diff`), `world/character_creation/services.py` (CG cantrip grant)
+- **API Endpoints:**
+  - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
+- **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
+  FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
+  (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
+  for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
+  societies (PRESTIGE reward → `award_deed_prestige`), conditions (`ConditionStatRule` bridge),
+  stories (reactivity hook `on_achievement_earned`)
+- **Source:** `src/world/achievements/`
+- **Glossary:** `src/world/achievements/AGENT_GLOSSARY.md`
+
 ### NPC Services
 Unified "ask NPC for thing" framework: per-NPC-role offer surface, persona-keyed standing,
 per-kind effect handler dispatch. Covers permits today; missions/loans/training/favors
@@ -975,18 +1028,53 @@ Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 
 ### Projects (delayed multi-tick endeavors)
 Project framework: kind-discriminated long-running endeavors with contributions and
-outcome rolls. Plan 1 shipped the framework + two kinds (BUILDING_CONSTRUCTION,
-ROOM_FEATURE_PROGRESSION).
+outcome rolls. Kinds: BUILDING_CONSTRUCTION, ROOM_FEATURE_PROGRESSION, RESEARCH, and
+RANSOM (#1500).
 
 - **Models:** `Project` (kind discriminator + status + completion_mode), `Contribution`
-  (per-actor per-project contribution log; privacy-aware), per-kind details models
-  (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
+  (per-actor per-project contribution log; privacy-aware; `contribution_method` FK on
+  CHECK rows), `ContributionMethod` (#1574 — admin-authorable, per-`ProjectKind`
+  check-based method: `check_type` + `ap_cost` + `progress_on_success`), per-kind details
+  models (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
 - **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
   `ContributionPrivacy`
+- **Contribution surface (#1574):** `donate_to_project` (money → progress at 1/100c),
+  `contribute_check_to_project` (spends a method's AP, rolls its check, advances on
+  success), `set_contribution_story`. Telnet `CmdProject` (`+project`, `project/donate`,
+  `project/check`, `project/story`); web via `DonateToProjectAction` /
+  `CheckContributeAction` / `StoryContributeAction`.
+- **Instant-completion kinds (#1500):** `register_instant_completion_kind` marks a kind
+  (RANSOM) that resolves the moment its threshold is funded — `maybe_complete_immediately`
+  fires the kind handler post-contribution instead of waiting for the cron resolver. (The
+  generic RESOLVING→COMPLETED cron driver is not built yet; `scan_active_projects` only
+  marks projects RESOLVING.)
 - **Stat definitions:** Project achievement stats are created lazily on first
   contribution (same pattern as combat achievement counters)
 - **Cross-app dependencies:** `world.scenes.Persona`, `societies.Organization`
 - **Source:** `src/world/projects/`
+
+### Captivity (held characters + crowdfundable ransom)
+A character can be held captive (#931): captured into an instanced cell by an NPC
+captor org, freed by escape, rescue, ransom, or release. #1500 reframes ransom as a
+**crowdfundable RANSOM Project** standing in the cell.
+
+- **Models:** `Captivity` (captive + cell + captor_organization + status; `ransom_project`
+  FK → the crowdfundable RANSOM Project #1500 — the single ransom route since the
+  org-treasury Contract path was retired), `CaptivityConfig` (singleton authored
+  cell/clue/mission defaults)
+- **Constants:** `CaptivityStatus` (HELD / ESCAPED / RESCUED / RANSOMED / RELEASED)
+- **Ransom-as-project (#1500):** `demand_ransom_project` (GM surface creates the RANSOM
+  project in the cell), `resolve_ransom_project` (kind handler — frees the captive on full
+  funding via `resolve_captivity(RANSOMED)`; idempotent). Anyone pays via the generic
+  `project/donate`; the cell-room appearance shows a red OOC captive-status banner. GM
+  demand surfaces: telnet `CmdDemandRansom` (staff) + web `DemandRansomView`
+  (`POST /api/gm/demand-ransom/`, `IsGMOrStaff`), both converging on `demand_ransom_project`.
+- **Other services (`world.captivity.services`):** `capture_character` / `capture_party`,
+  `resolve_captivity`, `rescue_captive`, `escape_captivity`
+- **Integrates with:** projects (RANSOM kind + instant-completion), missions
+  (escape/rescue loops), clues (rescue-clue planting), instances (the cell),
+  typeclasses (`return_appearance` captive banner)
+- **Source:** `src/world/captivity/`
 
 ### Buildings (Permits + Construction + Materials)
 Plan 3 (#668). Permits authorize **(ward × kind)** building construction via the

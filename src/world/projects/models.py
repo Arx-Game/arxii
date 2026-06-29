@@ -148,6 +148,16 @@ class Contribution(SharedMemoryModel):
         help_text="Populated when kind=CHECK. References perform_check's CheckOutcome.",
     )
 
+    # The authored check-based method used (CHECK contributions only); records which
+    # method's check/AP/progress applied (#1574).
+    contribution_method = models.ForeignKey(
+        "projects.ContributionMethod",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="contributions",
+    )
+
     intent_text = models.TextField(blank=True)
     privacy_setting = models.CharField(
         max_length=10,
@@ -177,3 +187,49 @@ class Contribution(SharedMemoryModel):
         if getattr(self, required) is None:
             msg = f"Contribution kind={self.kind} requires {required} to be set."
             raise ValidationError({required: msg})
+
+
+class ContributionMethod(SharedMemoryModel):
+    """An authored, check-based way to contribute to projects of a given ProjectKind (#1574).
+
+    Keyed by ``kind`` — every project of that kind offers the same methods (RANSOM has
+    none, so its only contribution path is money). A contributor rolls ``check_type``,
+    spending ``ap_cost`` AP; a successful check (``success_level >= 0``) advances the
+    project by ``progress_on_success``. Money / item contributions need no method.
+    """
+
+    kind = models.CharField(
+        max_length=40,
+        choices=ProjectKind.choices,
+        help_text="The ProjectKind whose projects offer this contribution method.",
+    )
+    name = models.CharField(
+        max_length=80,
+        help_text="Player-facing method name, picked in `project/check <id>=<name>`.",
+    )
+    description = models.TextField(blank=True)
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="project_contribution_methods",
+        help_text="The check rolled to make this contribution.",
+    )
+    ap_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Action points spent to attempt this contribution.",
+    )
+    progress_on_success = models.PositiveIntegerField(
+        help_text="Progress added to the project when the check succeeds (success_level >= 0).",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["kind", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "name"], name="uniq_contribution_method_kind_name"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ContributionMethod<{self.kind}>({self.name})"
