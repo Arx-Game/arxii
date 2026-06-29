@@ -23,6 +23,7 @@ from world.magic.constants import (
     ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER,
     ANCHOR_CAP_FACET_DIVISOR,
     ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE,
+    ANCHOR_CAP_GIFT_PER_STAGE,
     TargetKind,
     VitalBonusTarget,
 )
@@ -125,6 +126,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
       character clears higher mantle ranks via codex research.
     - SANCTUM: target_sanctum_details.feature_instance.level × 10 (Plan 4 §F).
       Cap scales with the Sanctum's upgrade level (1–5 → 10–50).
+    - GIFT: current_path_stage × ANCHOR_CAP_GIFT_PER_STAGE (#1580). Species gift
+      threads grow in lockstep with the character's path stage (stage 2 → cap 20).
     """
     match thread.target_kind:
         case TargetKind.TRAIT:
@@ -171,6 +174,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             return max_level * 10
         case TargetKind.SANCTUM:
             return thread.target_sanctum_details.feature_instance.level * 10
+        case TargetKind.GIFT:
+            return _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
     return 0
 
 

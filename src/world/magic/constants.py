@@ -215,6 +215,13 @@ At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
 extreme tail of lifetime accumulation.
 """
 
+ANCHOR_CAP_GIFT_PER_STAGE: int = 10
+"""GIFT thread anchor cap per path stage (#1580).
+
+path_stage × 10 = GIFT anchor cap. At stage 2, cap = 20 (matches path cap of 20).
+A species gift thread can grow in lockstep with the character's path progression.
+"""
+
 
 class ResonanceValence(models.TextChoices):
     ALIGNED = "aligned", "Aligned (amplifies)"
