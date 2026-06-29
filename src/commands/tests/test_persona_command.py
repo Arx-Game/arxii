@@ -131,6 +131,43 @@ class CmdPersonaCreateTests(TestCase):
         self.assertIn("Usage: persona create", sent)
 
 
+class CmdPersonaProfileTests(TestCase):
+    """`persona profile <name> [field=value …]` — view/author a cover's guise bio (#1270)."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.character.msg = MagicMock()
+        self.cover = PersonaFactory(
+            character_sheet=self.sheet, persona_type=PersonaType.ESTABLISHED, name="Robert"
+        )
+
+    def _sent(self) -> str:
+        return "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list)
+
+    def test_authors_the_guise_bio(self) -> None:
+        _cmd(self.character, "profile Robert concept=A wine merchant quote=In vino veritas").func()
+        self.cover.refresh_from_db()
+        assert self.cover.profile is not None
+        assert self.cover.profile.concept == "A wine merchant"
+        assert self.cover.profile.quote == "In vino veritas"
+
+    def test_shows_the_guise_bio_after_authoring(self) -> None:
+        _cmd(self.character, "profile Robert concept=A wine merchant").func()
+        self.character.msg.reset_mock()
+        _cmd(self.character, "profile Robert").func()
+        self.assertIn("A wine merchant", self._sent())
+
+    def test_unauthored_guise_prompts_to_create(self) -> None:
+        _cmd(self.character, "profile Robert").func()
+        self.assertIn("no guise bio yet", self._sent())
+
+    def test_cannot_author_a_guise_for_the_primary_face(self) -> None:
+        primary = self.sheet.primary_persona
+        _cmd(self.character, f"profile {primary.name} concept=nope").func()
+        self.assertIn("true face", self._sent().lower())
+
+
 class CmdPersonaActiveNoneTests(TestCase):
     """Listing must not crash when active_persona_for_sheet returns None."""
 

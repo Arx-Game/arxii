@@ -4089,6 +4089,7 @@
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`
+- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, personality: 'str | None' = None, background: 'str | None' = None) -> 'Profile' — Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 
 
 ## world.secrets

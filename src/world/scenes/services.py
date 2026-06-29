@@ -8,7 +8,7 @@ from world.scenes.models import Persona, Scene
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
-    from world.character_sheets.models import CharacterSheet
+    from world.character_sheets.models import CharacterSheet, Profile
     from world.forms.models import CharacterForm
 
 ActionType = SceneAction
@@ -198,6 +198,64 @@ def create_mask(
         apply_disguise(sheet.character, disguise_form, kind=kind)
     set_active_persona(sheet, mask)
     return mask
+
+
+class GuiseProfileError(ValueError):
+    """An invalid Guise-Sheet authoring request (#1270).
+
+    Carries a fixed ``user_message`` (per ``feedback_codeql_exceptions``) so the authoring surface
+    surfaces a safe string. Raised when authoring a guise for the PRIMARY face (whose real bio is
+    the sheet's ``true_profile``, edited through the sheet — never as a guise).
+    """
+
+    user_message = "You can't give your true face a cover bio — edit your real sheet instead."
+
+
+def set_persona_profile(
+    persona: Persona,
+    *,
+    concept: str | None = None,
+    quote: str | None = None,
+    personality: str | None = None,
+    background: str | None = None,
+) -> Profile:
+    """Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).
+
+    A cover/established persona needs its OWN concept/quote/personality/background so the *absence*
+    of a bio doesn't instantly out it as fake. This is the **sole mutator** of ``Persona.profile``:
+    it attaches a fresh ``Profile`` the first time the persona is given a bio, then updates only the
+    fields passed (``None`` leaves a field untouched, so callers can edit one field at a time).
+
+    PRIMARY is rejected — the real face's bio is the sheet's ``true_profile``, edited through the
+    sheet, never authored here. Only narrative text is set; **lineage stays display-only** (the
+    sheet's forwarding properties keep every *mechanical* lineage read on the real ``true_profile``,
+    so a fabricated guise can never leak into mechanics).
+    """
+    from world.character_sheets.models import Profile  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    if persona.persona_type == PersonaType.PRIMARY:
+        msg = "Cannot author a guise profile for a PRIMARY persona."
+        raise GuiseProfileError(msg)
+
+    profile = persona.profile
+    created = profile is None
+    if created:
+        profile = Profile()
+    updates = {
+        "concept": concept,
+        "quote": quote,
+        "personality": personality,
+        "background": background,
+    }
+    for field_name, value in updates.items():
+        if value is not None:
+            setattr(profile, field_name, value)
+    profile.save()
+    if created:
+        persona.profile = profile
+        persona.save(update_fields=["profile"])
+    return profile
 
 
 def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
