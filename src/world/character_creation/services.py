@@ -780,6 +780,31 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
     )
     CharacterGift.objects.create(character=sheet, gift=gift)
 
+    # Provision the latent level-0 GIFT thread at the player's CG-chosen
+    # resonance (#1578). Acquiring a gift IS weaving a (latent) thread.
+    from world.magic.specialization.services import (  # noqa: PLC0415
+        provision_latent_gift_thread,
+    )
+
+    chosen_resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    resonance = None
+    if chosen_resonance_id:
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(pk=chosen_resonance_id).first()
+    if resonance is None:
+        # Legacy/absent draft data: fall back to the gift's first supported
+        # resonance with a logged warning.
+        logger.warning(
+            "CG finalize: no selected_gift_resonance_id for draft %s; "
+            "falling back to gift %s first supported resonance.",
+            draft.pk,
+            gift.pk,
+        )
+        resonance = gift.resonances.first()
+    if resonance is not None:
+        provision_latent_gift_thread(sheet, gift, resonance=resonance)
+
     # The technique's action arena derives from the character's Path — no
     # off-path picks (noobtrap prevention). Falls back to the model default
     # if the path has no authored category.
