@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.conditions.models import CapabilityType
+    from world.forms.models import CharacterForm
     from world.magic.models import Resonance, Thread
 
 
@@ -52,6 +53,7 @@ class ResolvedPullEffect:
     narrative_snippet: str
     inactive: bool = False
     inactive_reason: str | None = None
+    target_form: CharacterForm | None = None
 
 
 @dataclass(frozen=True)

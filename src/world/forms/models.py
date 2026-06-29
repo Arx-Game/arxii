@@ -374,9 +374,13 @@ class FormCombatProfile(SharedMemoryModel):
         help_text="The ALTERNATE form this stat-suite belongs to.",
     )
     display_name = models.CharField(max_length=100, blank=True)
+    depth = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Profile tier within the form; higher bands select deeper profiles.",
+    )
 
     class Meta:
-        ordering = ["form", "display_name"]
+        ordering = ["form", "depth", "display_name"]
 
     def __str__(self) -> str:
         return self.display_name or f"{self.form} profile"

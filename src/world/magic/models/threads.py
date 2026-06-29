@@ -95,6 +95,14 @@ class ThreadPullEffect(SharedMemoryModel):
         related_name="thread_pull_effects",
     )
     narrative_snippet = models.TextField(blank=True)
+    target_form = models.ForeignKey(
+        "forms.CharacterForm",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="pull_effect_targets",
+        help_text="The form whose combat profiles are selected for ASSUME_ALTERNATE_SELF.",
+    )
 
     class Meta:
         indexes = [
@@ -115,6 +123,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_flat_bonus_payload",
@@ -129,6 +138,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_intensity_bump_payload",
@@ -143,6 +153,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(flat_bonus_amount__isnull=True)
                         & models.Q(intensity_bump_amount__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_vital_bonus_payload",
@@ -157,6 +168,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(intensity_bump_amount__isnull=True)
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_capability_grant_payload",
@@ -172,6 +184,7 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_narrative_only_payload",
@@ -187,9 +200,26 @@ class ThreadPullEffect(SharedMemoryModel):
                         & models.Q(vital_bonus_amount__isnull=True)
                         & models.Q(vital_target__isnull=True)
                         & models.Q(capability_grant__isnull=True)
+                        & models.Q(target_form__isnull=True)
                     )
                 ),
                 name="threadpulleffect_corruption_resistance_payload",
+            ),
+            # ASSUME_ALTERNATE_SELF: no numeric payload; requires a target form.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="ASSUME_ALTERNATE_SELF")
+                    | (
+                        models.Q(target_form__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                        & models.Q(narrative_snippet="")
+                    )
+                ),
+                name="threadpulleffect_assume_alternate_self_payload",
             ),
         ]
 
@@ -212,6 +242,7 @@ class ThreadPullEffect(SharedMemoryModel):
             EffectKind.VITAL_BONUS: self._clean_vital_bonus,
             EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
             EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+            EffectKind.ASSUME_ALTERNATE_SELF: self._clean_assume_alternate_self,
             # CORRUPTION_RESISTANCE: no payload validator needed — runtime value
             # derives from CharacterResonance.lifetime_helped (Spec B §15.3).
             # The DB CheckConstraint enforces all payload columns are null.
@@ -248,6 +279,17 @@ class ThreadPullEffect(SharedMemoryModel):
         for name, val in numeric_fields.items():
             if val is not None:
                 raise ValidationError({name: "Must be null for NARRATIVE_ONLY."})
+
+    def _clean_assume_alternate_self(self, numeric_fields: dict[str, int | None]) -> None:
+        if self.target_form is None:
+            raise ValidationError({"target_form": "ASSUME_ALTERNATE_SELF requires target_form."})
+        if self.capability_grant is not None:
+            raise ValidationError({"capability_grant": "Must be null for ASSUME_ALTERNATE_SELF."})
+        if self.narrative_snippet.strip():
+            raise ValidationError({"narrative_snippet": "Must be blank for ASSUME_ALTERNATE_SELF."})
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for ASSUME_ALTERNATE_SELF."})
 
     @staticmethod
     def _require_only(

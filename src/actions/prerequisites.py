@@ -63,6 +63,35 @@ class HasCharacterSheetPrerequisite(Prerequisite):
 
 
 @dataclass
+class HoldsCapabilityPrerequisite(Prerequisite):
+    """Actor must hold the named capability (effective value >= 1)."""
+
+    capability_name: str
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.conditions.models import CapabilityType  # noqa: PLC0415
+        from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "No active character."
+        capability = CapabilityType.objects.filter(name=self.capability_name).first()
+        if capability is None:
+            return False, "You cannot shift forms at will."
+        if get_effective_capability_value(sheet, capability) >= 1:
+            return True, ""
+        return False, "You cannot shift forms at will."
+
+
+@dataclass
 class StaffOnlyPrerequisite(Prerequisite):
     """The actor's account must be staff (GM tooling gate)."""
 

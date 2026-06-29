@@ -40,7 +40,7 @@ from world.forms.models import (
 | `CharacterFormValue` | Single trait value within a form | `form` (FK), `trait` (FK), `option` (FK) |
 | `CharacterFormState` | Tracks active form (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable) |
 | `TemporaryFormChange` | Temporary override on top of active form | `character` (FK), `trait` (FK), `option` (FK), `source_type`, `source_id`, `duration_type`, `expires_at`, `expires_after_scenes` |
-| `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name` |
+| `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name`, `depth` (band-selection axis; crit→highest, mid→middle, fail→lowest) |
 | `FormCombatProfileEffect` | One stat modifier inside a profile | `profile` (FK), `target` (FK mechanics.ModifierTarget), `value` |
 | `AlternateSelf` | A character's access to an alternate self/facet bundle | `character` (FK CharacterSheet), `form` (FK CharacterForm, nullable), `persona` (FK scenes.Persona, nullable), `combat_profile` (FK FormCombatProfile, nullable), `techniques` (M2M magic.Technique), `tuning_value`, `display_name` |
 | `ActiveAlternateSelf` | Currently-assumed alternate self + return anchors | `character` (OneToOne CharacterSheet), `alternate_self` (FK AlternateSelf, nullable), `return_form` (FK CharacterForm, nullable), `return_persona` (FK scenes.Persona, nullable) |
@@ -150,6 +150,18 @@ revert_alternate_self(sheet)                     # Raises RevertBlockedError whi
   `RevertBlockedError`. The canonical blocker is the fury `Berserk` condition,
   whose `Control` category has `alters_behavior=True`; it is cleared by the existing
   `RestoreSenseAction` (`restore_sense`) calm-down action.
+- `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (in
+  `world/forms/services/transformation.py`) — the single seam both non-command
+  cause-paths call. Wraps `assume_alternate_self(sheet, alt, instance_value=...)`;
+  `cause` is an audit tag (`"technique"` | `"trigger"` | `"command"`) and
+  `instance_value` is the per-instance multiplier (default `1.0` = no scaling).
+  Scales each granted `CharacterModifier.value` by `alt.tuning_value` (the
+  per-character baseline; `None`/`1` = neutral) and `instance_value`, divided by
+  `SCALE = 10`. The **neutral case** (`tuning_value` is `None`/`1` AND
+  `instance_value == 1.0`) short-circuits to the raw `effect.value` — a
+  regression guard so existing grants are unchanged. This is how two characters
+  sharing a form-template get differently-tuned stat-suites (#1604), and how a
+  strong cast / violent onset scales a single assumption.
 - `RevertBlockedError(user_message=...)` — the exception surfaced when revert is
   blocked.
 - `AlternateSelfActiveError(user_message=...)` — raised when a different alt-self is
@@ -164,17 +176,54 @@ and the web share the same `action.run()` path:
 
 - `ShiftFormAction` (key `"shift_form"`) — wraps `assume_alternate_self`. Receives
   kwarg `alternate_self_id`; validates the grant belongs to the actor's sheet.
-  **Not `in_control`-gated**. Catches `AlternateSelfActiveError`,
-  `ActivePersonaError`, and `FormOwnershipError` and surfaces each `user_message`
-  as a failure result — a cross-sheet `form`/`persona` FK never propagates uncaught
-  (`Action.run` calls `execute` bare, so an uncaught exception would 500 on web).
+  **Not `in_control`-gated**. Gated instead by `HoldsCapabilityPrerequisite`:
+  only characters holding the seeded `at_will_shifting` capability (effective
+  value `>= 1`) may shift at will — a niche escape hatch for characters who can
+  shift between forms freely without casting. Everyone else is refused by the
+  prerequisite with a clean failure result (never an exception). Catches
+  `AlternateSelfActiveError`, `ActivePersonaError`, and `FormOwnershipError`
+  and surfaces each `user_message` as a failure result — a cross-sheet
+  `form`/`persona` FK never propagates uncaught (`Action.run` calls `execute`
+  bare, so an uncaught exception would 500 on web).
 - `RevertFormAction` (key `"revert_form"`) — wraps `revert_alternate_self`.
   Catches `RevertBlockedError`, `ActivePersonaError`, `FormOwnershipError`, and
   `AlternateSelfActiveError` (each → `exc.user_message`); the no-active case uses a
   safe constant. Never surfaces `str(exc)` — the viewset maps every failure to a
   safe 400 via `detail.message`.
 
-### Web surface
+### Transformation cause-paths (#1604)
+
+Transformation is normally driven by a technique cast or an involuntary trigger,
+not by the at-will command above. All three paths converge on the
+`trigger_transformation` seam (and thus on `assume_alternate_self`) — the at-will
+command routes through it too (`cause="command"`, default `instance_value=1.0`):
+
+1. **Technique (primary).** A weave/technique carries an `EffectKind.ASSUME_ALTERNATE_SELF`
+   pull effect (in `world/magic/models/threads.py`), whose `target_form` FK names
+   which `CharacterForm` to assume. At cast resolution (`use_technique` in
+   `world/magic/services/techniques.py`), the success band selects a
+   `FormCombatProfile` by `depth` (fail → lowest, ordinary success → middle, crit
+   → highest) and scales the suite via `instance_value` (fail → `1.0`,
+   mid → `1.5`, crit → `2.0`), then calls `trigger_transformation(..., cause="technique")`.
+   The selected `AlternateSelf` grant must already exist for
+   `(sheet, form, combat_profile)`; a missing grant is a silent no-op with a
+   logged warning.
+2. **Involuntary trigger (primary).** A reactive condition (e.g. lycanthropy rage)
+   fires `CONDITION_APPLIED` → a `TriggerDefinition` launches a flow → a
+   `CALL_SERVICE_FUNCTION` step invokes `flow_trigger_transformation` (registered
+   in `flows/service_functions/forms.py`). The wrapper resolves the
+   `AlternateSelf` by `(sheet, form__name)` — the trigger author picks the form —
+   and calls `trigger_transformation(..., cause="trigger")`. A resist-check branch
+   (`flow_perform_check` → `EVALUATE_EQUALS` on the failure outcome) authors the
+   "fail a check to *not* change" journey: the shift is forced only when the
+   resist fails. While the rage is active `sheet.in_control` is `False`, so
+   `revert_alternate_self` raises `RevertBlockedError`; clearing the condition
+   re-derives `in_control=True` and unblocks a later self-revert.
+3. **At-will command (niche).** `ShiftFormAction` above — only for characters with
+   the `at_will_shifting` capability.
+
+The gift-level modulation of the resist check (minor-gift level easing/hardening
+the resist) is deferred to #1578 (the specialization engine).
 
 `frontend/src/game/components/FormSwitcher.tsx` mirrors `PersonaSwitcher.tsx`: a
  top-bar control next to the face switcher that shows the active alternate self (or

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.prerequisites import HoldsCapabilityPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 
 if TYPE_CHECKING:
@@ -46,6 +47,9 @@ class ShiftFormAction(Action):
     category: str = "forms"
     target_type: TargetType = TargetType.SELF
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HoldsCapabilityPrerequisite("at_will_shifting")]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -56,7 +60,9 @@ class ShiftFormAction(Action):
         from world.forms.services import (  # noqa: PLC0415
             AlternateSelfActiveError,
             FormOwnershipError,
-            assume_alternate_self,
+        )
+        from world.forms.services.transformation import (  # noqa: PLC0415
+            trigger_transformation,
         )
         from world.scenes.services import ActivePersonaError  # noqa: PLC0415
 
@@ -72,9 +78,12 @@ class ShiftFormAction(Action):
         # subclasses) on a cross-sheet FK — catch them here and surface the safe
         # message instead of letting them propagate uncaught (``Action.run``
         # calls ``execute`` bare, so an uncaught exception becomes a 500 on the
-        # web path).
+        # web path). Routes through ``trigger_transformation`` (the cause-path
+        # seam) so the at-will command shares the audit hook + variance path
+        # with the technique/trigger cause-paths (#1604); ``instance_value``
+        # defaults to 1.0 (the at-will baseline needs no per-instance scaling).
         try:
-            active = assume_alternate_self(sheet, alt)
+            active = trigger_transformation(sheet, alt, cause="command")
         except AlternateSelfActiveError as exc:
             # A different alt-self is already active — revert it first.
             return ActionResult(success=False, message=exc.user_message)

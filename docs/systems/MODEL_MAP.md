@@ -1608,6 +1608,7 @@
 **Foreign Keys:**
   - character -> objects.ObjectDB [FK]
 **Pointed to by:**
+  - pull_effect_targets <- magic.ThreadPullEffect
   - values <- forms.CharacterFormValue
   - active_for <- forms.CharacterFormState
   - overlay_for <- forms.CharacterFormState
@@ -1681,7 +1682,7 @@
 
 ### Service Functions
 - `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
-- `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf') -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
+- `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
 - `create_true_form(character, selections: 'dict[FormTrait, FormTraitOption]') -> 'CharacterForm' — Create the true form for a character during character creation.`
@@ -2654,6 +2655,7 @@
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK]
   - capability_grant -> conditions.CapabilityType [FK] (nullable)
+  - target_form -> forms.CharacterForm [FK] (nullable)
 
 ### ThreadSurvivabilityTuning
 

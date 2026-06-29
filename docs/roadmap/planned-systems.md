@@ -69,6 +69,24 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   / `RevertFormAction` (REGISTRY `target_type=SELF`) wrap the services; telnet `CmdForm`
   (`form shift`/`form revert`) and the web `AlternateSelfViewSet` + `FormSwitcher` both dispatch
   via `dispatch_player_action` → `action.run()` (ADR-0001). `PersonaType.ALTERNATE` added.
+- **Transformation cause-paths** — #1604, **DONE**: the at-will `form shift` command was
+  the only path to `assume_alternate_self`; the technique-driven and involuntary-trigger
+  cause-paths were never built. Added a single seam, `trigger_transformation(sheet, alt, *,
+  cause, instance_value=1.0)` (`world/forms/services/transformation.py`), that both new paths
+  call and that scales each granted `CharacterModifier.value` by the persistent per-character
+  `AlternateSelf.tuning_value` baseline × the per-instance `instance_value` (÷ `SCALE=10`;
+  neutral case short-circuits to identity). The **technique path**: an
+  `EffectKind.ASSUME_ALTERNATE_SELF` pull effect (new) whose `ThreadPullEffect.target_form` FK
+  names the form; at cast resolution the success band selects a `FormCombatProfile` by the new
+  `depth` field (fail→lowest, mid→middle, crit→highest) and sets `instance_value` (1.0/1.5/2.0).
+  The **involuntary-trigger path**: a reactive condition fires `CONDITION_APPLIED` → a flow
+  `CALL_SERVICE_FUNCTION` step invokes the registered `flow_trigger_transformation` wrapper
+  (`flows/service_functions/forms.py`), which resolves the alt by `(sheet, form__name)`; a
+  resist-check branch authors the "fail a check to *not* change" journey. The at-will command is
+  retained but gated behind a seeded `at_will_shifting` capability
+  (`HoldsCapabilityPrerequisite`) — a niche escape hatch. Revert-blocked-while-raging (the
+  #1111 invariant) is exercised end-to-end by the trigger test. Gift-level modulation of the
+  resist check is deferred to #1578 (specialization engine).
 - **Combo mechanics — fuller rules** — combos exist (upgrade/revert); the exact rules need design. `partial`, `unrecorded`.
 - **Soulfray-risk accept + fury commit** — player-chosen combat risk decisions. #1454, **DONE**:
   party-combat casts carry the player's `confirm_soulfray_risk` + fury (`fury_commitment` tier +

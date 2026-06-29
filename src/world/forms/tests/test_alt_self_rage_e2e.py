@@ -28,6 +28,7 @@ from world.forms.factories import (
     CharacterFormStateFactory,
 )
 from world.forms.models import ActiveAlternateSelf, CharacterFormState, FormType
+from world.forms.tests.test_views import _grant_at_will_shifting
 from world.magic.factories import (
     BerserkConditionTemplateFactory,
     RestoreToSenseActionTemplateFactory,
@@ -61,6 +62,11 @@ class AltSelfRageEndToEndTests(TestCase):
     def setUpTestData(cls):
         cls.character: ObjectDB = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
+
+        # ShiftFormAction is gated behind the at_will_shifting capability (#1604).
+        # This test uses the shift as scaffolding (not testing the gate), so grant
+        # it up front — mirroring test_views.py / test_forms.py.
+        _grant_at_will_shifting(cls.sheet)
 
         # True form + state so assume/revert have return anchors.
         cls.true_form = CharacterFormFactory(

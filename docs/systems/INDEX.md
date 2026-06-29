@@ -405,7 +405,7 @@ shapeshift lifecycle.
 - **Enums:** `TraitType` (color/style), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
-  `get_presented_appearance(character)`
+  `get_presented_appearance(character)`, `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604)
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`
 - **Integrates with:** character_sheets (appearance, character anchor), scenes (Persona),
   mechanics (ModifierSource / CharacterModifier), magic (CharacterTechnique)

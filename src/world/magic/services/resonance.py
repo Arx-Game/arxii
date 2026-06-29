@@ -391,12 +391,15 @@ def resolve_pull_effects(
                 authored = (
                     row.flat_bonus_amount or row.intensity_bump_amount or row.vital_bonus_amount
                 )
-                # CAPABILITY_GRANT, NARRATIVE_ONLY, and CORRUPTION_RESISTANCE have
-                # no numeric payload; their scaled_value must be None.
+                # ASSUME_ALTERNATE_SELF, CAPABILITY_GRANT, NARRATIVE_ONLY, and
+                # CORRUPTION_RESISTANCE have no numeric payload; their scaled_value
+                # must be None. ASSUME_ALTERNATE_SELF derives its runtime stat-suite
+                # from the target form's selected combat profile (crit/mid/fail bands).
                 # CORRUPTION_RESISTANCE derives its runtime value from
                 # CharacterResonance.lifetime_helped (Spec B §10.2) — it is applied
                 # directly in accrue_corruption, not via a scaled_value here.
                 has_numeric_payload = row.effect_kind not in (
+                    EffectKind.ASSUME_ALTERNATE_SELF,
                     EffectKind.CAPABILITY_GRANT,
                     EffectKind.NARRATIVE_ONLY,
                     EffectKind.CORRUPTION_RESISTANCE,
@@ -445,6 +448,7 @@ def resolve_pull_effects(
                         narrative_snippet=row.narrative_snippet,
                         inactive=inactive,
                         inactive_reason=("requires combat context" if inactive else None),
+                        target_form=row.target_form,
                     )
                 )
     return resolved
@@ -569,6 +573,13 @@ def _persist_combat_pull(  # noqa: PLR0913
     )
     pull.threads.set(threads)
     for r in resolved:
+        # ``ASSUME_ALTERNATE_SELF`` is applied at cast resolution (a transformative
+        # side-effect of the technique), never at combat-pull commit time, and
+        # ``CombatPullResolvedEffect`` has no ``target_form`` column — snapshotting
+        # it here would silently drop the form reference and write dead data. Skip
+        # it from the combat snapshot (#1604).
+        if r.kind == EffectKind.ASSUME_ALTERNATE_SELF:
+            continue
         CombatPullResolvedEffect.objects.create(
             pull=pull,
             kind=r.kind,

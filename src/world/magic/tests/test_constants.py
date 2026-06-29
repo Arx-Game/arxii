@@ -38,6 +38,7 @@ class EffectKindTests(SimpleTestCase):
                 "CAPABILITY_GRANT",
                 "NARRATIVE_ONLY",
                 "CORRUPTION_RESISTANCE",
+                "ASSUME_ALTERNATE_SELF",
             },
         )
 

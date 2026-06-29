@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -14,6 +15,7 @@ from world.forms.models import (
     CharacterFormState,
     CharacterFormValue,
     DisguiseKind,
+    FormCombatProfile,
     FormTrait,
     FormTraitOption,
     FormType,
@@ -22,6 +24,7 @@ from world.forms.models import (
     SpeciesFormTrait,
     TemporaryFormChange,
 )
+from world.forms.services.transformation import SCALE
 from world.forms.types import PresentedTrait
 from world.magic.models import CharacterTechnique
 from world.mechanics.models import CharacterModifier, ModifierSource
@@ -140,7 +143,35 @@ def revert_to_true_form(character) -> None:
     switch_form(character, true_form)
 
 
-def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> ModifierSource | None:
+def _grant_stat_suite(
+    sheet: CharacterSheet,
+    profile: FormCombatProfile,
+    source: ModifierSource,
+    multiplier: float,
+) -> None:
+    """Write one ``CharacterModifier`` per profile effect, scaled by ``multiplier``.
+
+    The neutral multiplier (``isclose(multiplier, 1.0)``) is the identity case:
+    the granted value equals ``effect.value`` exactly, preserving prior grants.
+    Float equality is avoided via ``math.isclose`` (SonarCloud S1244); any other
+    multiplier scales ``effect.value`` and divides by ``SCALE``.
+    """
+    for effect in profile.effects.all():
+        if math.isclose(multiplier, 1.0):
+            granted_value = effect.value
+        else:
+            granted_value = round(effect.value * multiplier / SCALE)
+        CharacterModifier.objects.create(
+            character=sheet,
+            target=effect.target,
+            value=granted_value,
+            source=source,
+        )
+
+
+def _create_assumption_grants(
+    sheet: CharacterSheet, alt: AlternateSelf, instance_value: float = 1.0
+) -> ModifierSource | None:
     """Create the stat-suite and ability-suite grants for an assumed alt-self.
 
     One ``ModifierSource`` owns both the ``CharacterModifier`` rows (CASCADE)
@@ -148,6 +179,18 @@ def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> Modi
     alt-self has no granted rows, so no source is created (and revert deletes
     none). Permanently-known techniques (existing rows with ``source=None``)
     are left untouched by the stacking guard.
+
+    Stat values are scaled by ``alt.tuning_value`` (the per-character template
+    factor) and ``instance_value`` (the per-assumption multiplier), then
+    divided by ``SCALE``. The neutral case is identity: when the combined
+    multiplier is ``1.0`` (no scaling requested), the granted value equals
+    ``effect.value`` exactly, preserving existing grants.
+
+    Formula::
+
+        multiplier = (alt.tuning_value or 1) * instance_value
+        value = effect.value if isclose(multiplier, 1.0)
+                else round(effect.value * multiplier / SCALE)
 
     Returns the created ``ModifierSource``, or ``None`` when nothing was
     granted (persona-only alt-self, or a techniques-only alt-self whose
@@ -162,15 +205,11 @@ def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> Modi
     source = ModifierSource.objects.create(form_combat_profile=profile)
     granted_any = profile is not None
 
-    # Stat-suite.
+    # Stat-suite. ``_grant_stat_suite`` writes one ``CharacterModifier`` per
+    # profile effect, scaled by the combined multiplier (identity when neutral).
     if profile is not None:
-        for effect in profile.effects.all():
-            CharacterModifier.objects.create(
-                character=sheet,
-                target=effect.target,
-                value=effect.value,
-                source=source,
-            )
+        multiplier = (alt.tuning_value or 1) * instance_value
+        _grant_stat_suite(sheet, profile, source, multiplier)
 
     # Ability-suite with stacking guard. ``get_or_create`` returns
     # ``created=False`` for a permanently-known technique (existing row with
@@ -195,7 +234,9 @@ def _create_assumption_grants(sheet: CharacterSheet, alt: AlternateSelf) -> Modi
 
 
 @transaction.atomic
-def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAlternateSelf:
+def assume_alternate_self(
+    sheet: CharacterSheet, alt: AlternateSelf, instance_value: float = 1.0
+) -> ActiveAlternateSelf:
     """Assume an alternate self — swap in form/persona facets, create the
     stat-suite (ModifierSource + CharacterModifier rows) and ability-suite
     (source-tagged CharacterTechnique rows), set return anchors.
@@ -218,6 +259,8 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
         sheet: the character (CharacterSheet — the service convention).
         alt: the AlternateSelf grant to assume (caller already validated the
             repertoire gate).
+        instance_value: per-assumption multiplier for the granted stat-suite
+            (default 1.0 = no scaling).
 
     Returns the ActiveAlternateSelf row.
     """
@@ -265,7 +308,7 @@ def assume_alternate_self(sheet: CharacterSheet, alt: AlternateSelf) -> ActiveAl
     if alt.persona is not None:
         set_active_persona(sheet, alt.persona)
 
-    source = _create_assumption_grants(sheet, alt)
+    source = _create_assumption_grants(sheet, alt, instance_value=instance_value)
     # ``_create_assumption_grants`` may have written/updated ``CharacterTechnique``
     # rows (the ability-suite). Invalidate the character's technique-handler cache
     # per its mutation contract (``world/magic/handlers.py``: services that grant or

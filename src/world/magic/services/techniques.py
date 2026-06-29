@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import logging
 from typing import TYPE_CHECKING
 
 from evennia_extensions.models import RoomProfile
@@ -34,6 +35,7 @@ from world.magic.types import (
     TechniqueUseResult,
 )
 from world.magic.types.power_ledger import PowerLedger, PowerLedgerBuilder
+from world.magic.types.pull import ResolvedPullEffect
 from world.mechanics.constants import (
     TECHNIQUE_STAT_CATEGORY_NAME,
     TECHNIQUE_STAT_CONTROL,
@@ -48,12 +50,16 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.forms.models import FormCombatProfile
     from world.magic.models import SoulfrayConfig, Technique
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
     from world.magic.types import MishapResult, SoulfrayResult
     from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
@@ -609,6 +615,95 @@ def _apply_technique_fatigue_step(
     )
 
 
+# The mid-band ceiling is a module constant for now; if tuning proves volatile
+# after shipping, move it into a staff-tunable config singleton
+# (TechniqueBudgetConfig-style). Kept as a constant here to avoid scope-creep
+# for the ASSUME_ALTERNATE_SELF path (#1604).
+_SUCCESS_BAND_MID_CEILING = 5
+
+
+def _select_profile_by_success_band(
+    profiles: list[FormCombatProfile],
+    success_level: int,
+) -> tuple[FormCombatProfile, float]:
+    """Select a form combat profile by cast-success band.
+
+    Profiles are ordered by ``depth`` ascending.  The success band maps to
+    index: failure/marginal -> lowest, ordinary success -> middle, crit ->
+    highest.  ``instance_value`` is mapped directly from the success band
+    regardless of how many profiles the form has: 1.0 / 1.5 / 2.0.
+    """
+    ordered = sorted(profiles, key=lambda p: p.depth)
+    n = len(ordered)
+    if success_level <= 0:
+        index = 0
+        instance_value = 1.0
+    elif success_level <= _SUCCESS_BAND_MID_CEILING:
+        index = n // 2
+        instance_value = 1.5
+    else:
+        index = n - 1
+        instance_value = 2.0
+    index = max(0, min(index, n - 1))
+    return ordered[index], instance_value
+
+
+def _apply_assume_alternate_self_effects(
+    *,
+    sheet: CharacterSheet | None,
+    resolved_effects: list[ResolvedPullEffect],
+    check_result: CheckResult | None,
+) -> None:
+    """Step 8c/9: apply ASSUME_ALTERNATE_SELF pull effects from a completed cast.
+
+    For each resolved ASSUME_ALTERNATE_SELF effect: select the target form's
+    combat profile by the cast's success band, compute a per-instance variance,
+    and trigger the alternate-self assumption through the shared cause-path seam.
+    No-op when ``sheet`` is None (NPCs without sheets) or when the caster has no
+    matching AlternateSelf grant for the form.
+    """
+    if sheet is None:
+        return
+    from world.forms.models import AlternateSelf, FormCombatProfile  # noqa: PLC0415
+    from world.forms.services.transformation import trigger_transformation  # noqa: PLC0415
+    from world.magic.constants import EffectKind  # noqa: PLC0415
+
+    success_level = check_result.success_level if check_result is not None else 0
+    for eff in resolved_effects:
+        if eff.kind != EffectKind.ASSUME_ALTERNATE_SELF:
+            continue
+        if eff.inactive:
+            # Combat-context-only effects pulled outside combat stay dormant.
+            continue
+        target_form = eff.target_form
+        if target_form is None:
+            continue
+        profiles = list(FormCombatProfile.objects.filter(form=target_form))
+        if not profiles:
+            continue
+        selected_profile, instance_value = _select_profile_by_success_band(profiles, success_level)
+        alt = AlternateSelf.objects.filter(
+            character=sheet,
+            form=target_form,
+            combat_profile=selected_profile,
+        ).first()
+        if alt is None:
+            logger.warning(
+                "ASSUME_ALTERNATE_SELF pull effect references form %r profile %r "
+                "but character %s has no matching AlternateSelf grant; effect no-ops.",
+                target_form.id,
+                selected_profile.id,
+                sheet.id,
+            )
+            continue
+        trigger_transformation(
+            sheet,
+            alt,
+            cause="technique",
+            instance_value=instance_value,
+        )
+
+
 def _accrue_cast_corruption(
     *,
     sheet: CharacterSheet | None,
@@ -712,16 +807,17 @@ def _charge_cast_pull(
     technique: Technique,
     cast_pull: CastPullDeclaration,
     effective_power: int,
-) -> tuple[int, int]:
-    """Charge a non-combat cast pull and return updated ``(pull_flat_bonus, effective_power)``.
+) -> tuple[int, int, list[ResolvedPullEffect]]:
+    """Charge a non-combat cast pull and return resolved effects.
 
     Spends the resonance, iterates resolved effects, accumulates FLAT_BONUS into
     *pull_flat_bonus* (forwarded to ``resolve_fn`` as ``extra_modifiers``), and
     adds INTENSITY_BUMP to *effective_power* in-place.
 
-    Returns the 2-tuple ``(pull_flat_bonus, effective_power)`` so callers don't
-    mutate upvalue locals.  Extracting this block reduces ``use_technique``'s
-    cognitive complexity (C901).
+    Returns ``(pull_flat_bonus, effective_power, resolved_effects)`` so callers
+    can apply further post-resolution steps (e.g. ASSUME_ALTERNATE_SELF) without
+    re-resolving.  Extracting this block reduces ``use_technique``'s cognitive
+    complexity (C901).
     """
     from world.magic.constants import EffectKind  # noqa: PLC0415
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
@@ -730,7 +826,7 @@ def _charge_cast_pull(
     pull_flat_bonus = 0
     pull_sheet = _get_character_sheet(character)
     if pull_sheet is None:
-        return pull_flat_bonus, effective_power
+        return pull_flat_bonus, effective_power, []
 
     pull_result = spend_resonance_for_pull(
         pull_sheet,
@@ -744,14 +840,14 @@ def _charge_cast_pull(
     )
     pull_intensity_bonus = 0
     for eff in pull_result.resolved_effects:
-        if eff.inactive or not eff.scaled_value:
+        if eff.inactive:
             continue
         if eff.kind == EffectKind.FLAT_BONUS:
-            pull_flat_bonus += eff.scaled_value
+            pull_flat_bonus += eff.scaled_value or 0
         elif eff.kind == EffectKind.INTENSITY_BUMP:
-            pull_intensity_bonus += eff.scaled_value
+            pull_intensity_bonus += eff.scaled_value or 0
     effective_power += pull_intensity_bonus
-    return pull_flat_bonus, effective_power
+    return pull_flat_bonus, effective_power, pull_result.resolved_effects
 
 
 def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibilities
@@ -877,8 +973,9 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     # raises InvalidImbueAmount here — the caller surfaces it as a cast failure.
     # Combat pulls are committed separately.
     pull_flat_bonus = 0
+    pull_resolved_effects: list[ResolvedPullEffect] = []
     if cast_pull is not None:
-        pull_flat_bonus, effective_power = _charge_cast_pull(
+        pull_flat_bonus, effective_power, pull_resolved_effects = _charge_cast_pull(
             character=character,
             technique=technique,
             cast_pull=cast_pull,
@@ -923,6 +1020,13 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         technique=technique,
         cost=cost,
         strain_commitment=strain_commitment,
+    )
+
+    # Step 8c/9: apply ASSUME_ALTERNATE_SELF pull effects post-resolution.
+    _apply_assume_alternate_self_effects(
+        sheet=sheet,
+        resolved_effects=pull_resolved_effects,
+        check_result=effective_check_result,
     )
 
     resonance_involvements = _build_resonance_involvements(
