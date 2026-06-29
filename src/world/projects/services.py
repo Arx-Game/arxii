@@ -17,10 +17,12 @@ from world.projects.constants import (
     ContributionKind,
     ProjectStatus,
 )
-from world.projects.models import Contribution, Project
+from world.projects.models import Contribution, ContributionMethod, Project
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from evennia.objects.models import ObjectDB
 
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
@@ -41,6 +43,7 @@ def add_contribution(  # noqa: PLR0913
     money_amount: int | None = None,
     item_instance: ItemInstance | None = None,
     check_outcome: CheckOutcome | None = None,
+    contribution_method: ContributionMethod | None = None,
     intent_text: str = "",
     privacy_setting: str = "PRIVATE",
 ) -> Contribution:
@@ -69,6 +72,7 @@ def add_contribution(  # noqa: PLR0913
         money_amount=money_amount,
         item_instance=item_instance,
         check_outcome=check_outcome,
+        contribution_method=contribution_method,
         intent_text=intent_text,
         privacy_setting=privacy_setting,
     )
@@ -131,6 +135,81 @@ def donate_to_project(project: Project, *, donor_persona: Persona, amount: int) 
             kind=ContributionKind.MONEY,
             money_amount=amount,
         )
+
+
+class ContributionMethodError(ValueError):
+    """Raised when a check-based contribution can't proceed (wrong kind, inactive, or AP)."""
+
+
+def contribute_check_to_project(
+    project: Project,
+    *,
+    actor: ObjectDB,
+    contributor_persona: Persona,
+    method: ContributionMethod,
+) -> Contribution:
+    """Make a check-based contribution: spend AP, roll the check, advance on success (#1574).
+
+    The method must belong to the project's ``kind`` and be active. Atomic: spends
+    ``method.ap_cost`` AP (raising ``ContributionMethodError`` if unaffordable), rolls
+    ``method.check_type``, records the CHECK contribution, and adds
+    ``method.progress_on_success`` when the check succeeds (``success_level >= 0``). The AP
+    spend rolls back with the contribution if anything downstream fails.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    if project.status != ProjectStatus.ACTIVE:
+        msg = f"Project #{project.pk} is not accepting contributions."
+        raise ProjectNotActiveError(msg)
+    if not method.is_active or method.kind != project.kind:
+        msg = "That contribution method isn't available for this project."
+        raise ContributionMethodError(msg)
+
+    with transaction.atomic():
+        if method.ap_cost > 0:
+            pool = ActionPointPool.get_or_create_for_character(actor)
+            if not pool.spend(method.ap_cost):
+                msg = "You don't have enough action points for that."
+                raise ContributionMethodError(msg)
+
+        result = perform_check(actor, method.check_type)
+        if result.outcome is None:
+            msg = "The check could not be resolved."
+            raise ContributionMethodError(msg)
+
+        contribution = add_contribution(
+            project=project,
+            contributor_persona=contributor_persona,
+            kind=ContributionKind.CHECK,
+            check_outcome=result.outcome,
+            contribution_method=method,
+        )
+        if result.success_level >= 0:
+            project.current_progress += method.progress_on_success
+            project.save(update_fields=["current_progress", "updated_at"])
+
+    return contribution
+
+
+def set_contribution_story(
+    project: Project, *, contributor_persona: Persona, text: str
+) -> Contribution | None:
+    """Attach the narrative of how a contributor helped to their most recent contribution (#1574).
+
+    Sets ``intent_text`` on the persona's latest contribution to ``project``. Returns the
+    updated contribution, or ``None`` if they haven't contributed yet.
+    """
+    contribution = (
+        Contribution.objects.filter(project=project, contributor_persona=contributor_persona)
+        .order_by("-occurred_at")
+        .first()
+    )
+    if contribution is None:
+        return None
+    contribution.intent_text = text
+    contribution.save(update_fields=["intent_text"])
+    return contribution
 
 
 def _increment_contribution_stat(persona: Persona) -> None:

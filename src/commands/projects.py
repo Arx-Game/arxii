@@ -1,8 +1,8 @@
 """Telnet surface for project contribution + status (#1574).
 
-``+project <id>`` shows a project's status; ``project/donate <id>=<amount>`` donates money
-from your purse. The check / story switches land alongside these once the per-ProjectKind
-check-method framework ships. Thin over ``DonateToProjectAction`` + the projects read layer;
+``+project <id>`` shows a project's status; ``project/donate`` gives money, ``project/check``
+makes an authored check-based contribution (spending AP), and ``project/story`` records the
+narrative of how you helped. Thin over the project-contribution actions + the read layer;
 no business logic in the command.
 """
 
@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from actions.definitions.projects import DonateToProjectAction
+from actions.base import Action
+from actions.definitions.projects import (
+    CheckContributeAction,
+    DonateToProjectAction,
+    StoryContributeAction,
+)
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -21,6 +26,8 @@ class CmdProject(ArxCommand):
     Usage:
       +project <id>                 — show a project's status
       project/donate <id>=<amount>  — donate money from your purse
+      project/check <id>=<method>   — make a check-based contribution (spends AP)
+      project/story <id>=<text>     — record how you helped (your latest contribution)
     """
 
     key = "project"
@@ -32,23 +39,44 @@ class CmdProject(ArxCommand):
     def _execute(self) -> None:
         switches = {s.lower() for s in (self.switches or [])}
         if "donate" in switches:  # noqa: STRING_LITERAL — Evennia switch name
-            kwargs = self._parse_donate()
-            result = self.action.run(actor=self.caller, **kwargs)
-            if result.message:
-                self.msg(result.message)
+            self._dispatch(self.action, self._parse_id_value("project/donate", numeric=True))
+            return
+        if "check" in switches:  # noqa: STRING_LITERAL — Evennia switch name
+            parsed = self._parse_id_value("project/check", numeric=False)
+            self._dispatch(
+                CheckContributeAction(),
+                {"project_id": parsed["project_id"], "method_name": parsed["value"]},
+            )
+            return
+        if "story" in switches:  # noqa: STRING_LITERAL — Evennia switch name
+            parsed = self._parse_id_value("project/story", numeric=False)
+            self._dispatch(
+                StoryContributeAction(),
+                {"project_id": parsed["project_id"], "text": parsed["value"]},
+            )
             return
         self._show_status()
 
-    def _parse_donate(self) -> dict[str, Any]:
+    def _dispatch(self, action: Action, kwargs: dict[str, Any]) -> None:
+        result = action.run(actor=self.caller, **kwargs)
+        if result.message:
+            self.msg(result.message)
+
+    def _parse_id_value(self, usage: str, *, numeric: bool) -> dict[str, Any]:
         raw = (self.args or "").strip()
         if "=" not in raw:
-            msg = "Usage: project/donate <id>=<amount>"
+            msg = f"Usage: {usage} <id>=<value>"
             raise CommandError(msg)
-        id_part, amount_part = (part.strip() for part in raw.split("=", 1))
-        if not id_part.isdigit() or not amount_part.isdigit():
-            msg = "Both the project id and the amount must be numbers."
+        id_part, value_part = (part.strip() for part in raw.split("=", 1))
+        if not id_part.isdigit() or not value_part:
+            msg = f"Usage: {usage} <id>=<value>"
             raise CommandError(msg)
-        return {"project_id": int(id_part), "amount": int(amount_part)}
+        if numeric:
+            if not value_part.isdigit():
+                msg = "The amount must be a number."
+                raise CommandError(msg)
+            return {"project_id": int(id_part), "amount": int(value_part)}
+        return {"project_id": int(id_part), "value": value_part}
 
     def _show_status(self) -> None:
         from world.currency.constants import format_coppers  # noqa: PLC0415
