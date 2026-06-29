@@ -59,7 +59,17 @@ Per inductee (ACCEPTED participants who are not the initiator):
 3. Officiant guard — `assert_can_officiate(officiant_sheet, inductee_sheet, target_level)`.
 4. Authored `ClassLevelUnlock` check — `AdvancementRequirementsNotMet` when absent or unmet.
 5. Post testament oration (+ cited deeds) as a POSE via `_post_testament`.
-6. `apply_class_level_advance` + `ClassLevelAdvancement.objects.create(...)`.
+6. `apply_class_level_advance`, then the **POTENTIAL semi-crossing** (step 6b), then
+   `ClassLevelAdvancement.objects.create(...)`.
+
+6b. **Level-3 POTENTIAL semi-crossing (#1579).** When the advance enters a new path
+   stage (past the step-2 tier-boundary refusal, that is only the PROSPECT→POTENTIAL
+   transition at level 3) and the inductee has declared an eligible advanced path
+   (`participant_kwargs["path_id"]`, else their `PathIntent`),
+   `_maybe_semi_cross_into_potential_path` switches them onto it and grants its
+   gift+techniques via the shared `cross_into_path` seam (`advancement.py`) — the
+   **same machinery an Audere Majora crossing uses, but with no crossing ceremony**.
+   Optional + non-breaking: a 2→3 advance with no declared path is level-only.
 
 ### Narrative ↔ mechanical mapping
 
@@ -67,10 +77,12 @@ Per inductee (ACCEPTED participants who are not the initiator):
 |----------------|-----------------|-------|
 | "the Durance" | A character's life-arc | Backend stays Class/Level-named |
 | "Ritual of the Durance" | `Ritual` (SERVICE / INDUCTION) | Seeded by `RitualOfTheDuranceFactory` |
-| tier crossing (5→6, 10→11, …) | Audere Majora (`cross_threshold`) | Never handled by the Durance rite |
+| tier crossing (5→6, 10→11, …) | Audere Majora (`cross_threshold`) | True crossings; ceremony + deed |
+| **semi-crossing (2→3, PROSPECT→POTENTIAL)** | Durance + `cross_into_path` (#1579) | Switches path + grants gift/techniques; **no** Audere Majora |
 | within-tier advance (1→2 … 4→5, 6→7 …) | `ClassLevelAdvancement` receipt | This module |
 | officiant | trainer / `ClassLevelAdvancement.officiant` | Same Path lineage, higher level |
 | testament | `participant_kwargs["testament"]` | Player-composed oration; no deed minted |
+| chosen Potential path | `participant_kwargs["path_id"]` / `PathIntent` | Drives the level-3 semi-crossing target |
 
 ---
 

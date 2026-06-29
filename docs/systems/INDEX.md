@@ -148,9 +148,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Path-crossing grant (ADR-0055 (Gift × Path) leg — #1579): `PathGiftGrant`
     (`world/magic/models/grants.py`, per `(path, gift)` curated `starter_techniques` M2M) +
     `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`world/magic/services/path_magic.py`,
-    idempotent — mints CharacterGift + latent GIFT thread + CharacterTechnique rows, announces via
-    `AccessChangeSource.PATH_ADVANCEMENT`); hooked into `cross_threshold` after the
-    `CharacterPathHistory` write. Proven by `test_path_crossing_grant_e2e.py`.
+    idempotent — mints CharacterGift + latent GIFT thread + CharacterTechnique rows via the shared
+    `grant_gift_to_character` primitive, announces via `AccessChangeSource.PATH_ADVANCEMENT`).
+    Fired through the `cross_into_path(sheet, path)` seam (`world/progression/services/advancement.py`)
+    used by **both** `cross_threshold` (Audere Majora) **and** the Ritual of the Durance level-3
+    POTENTIAL semi-crossing (`_maybe_semi_cross_into_potential_path`, ADR-0063 — no Audere Majora).
+    Proven by `test_path_crossing_grant_e2e.py` + `test_advancement.py::DuranceSemiCrossingTests`.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater

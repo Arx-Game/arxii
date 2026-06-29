@@ -999,6 +999,7 @@
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
   - ritual_grants <- magic.PathRitualGrant
+  - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - codex_grants <- codex.PathCodexGrant
 
@@ -2134,6 +2135,7 @@
   - species_grants <- species.SpeciesGiftGrant
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - path_grants <- magic.PathGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
   - thread_pull_effects <- magic.ThreadPullEffect
@@ -2210,6 +2212,7 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
@@ -2416,6 +2419,12 @@
 **Foreign Keys:**
   - path -> classes.Path [FK]
   - ritual -> magic.Ritual [FK]
+
+### PathGiftGrant
+**Foreign Keys:**
+  - path -> classes.Path [FK]
+  - gift -> magic.Gift [FK]
+  - starter_techniques -> magic.Technique [M2M]
 
 ### DistinctionRitualGrant
 **Foreign Keys:**
