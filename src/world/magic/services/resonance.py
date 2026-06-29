@@ -304,9 +304,9 @@ def spend_resonance_for_imbuing(  # noqa: C901
 
     recompute_max_health_with_threads(character_sheet)
 
-    from world.covenants.discovery import fire_subrole_discoveries  # noqa: PLC0415
+    from world.covenants.discovery import fire_variant_discoveries  # noqa: PLC0415
 
-    fire_subrole_discoveries(thread=thread, starting_level=starting_level, new_level=thread.level)
+    fire_variant_discoveries(thread=thread, starting_level=starting_level, new_level=thread.level)
 
     return ThreadImbueResult(
         resonance_spent=amount,

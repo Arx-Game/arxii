@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0011_conditioncategory_grants_intangibility_and_more"),
         ("forms", "0006_alter_formcombatprofile_options_and_more"),
-        ("magic", "0055_technique_discovery_achievement"),
+        ("magic", "0060_technique_discovery_achievement"),
     ]
 
     operations = [

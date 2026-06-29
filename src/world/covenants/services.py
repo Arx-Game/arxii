@@ -620,34 +620,12 @@ def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: st
 
 
 def resolve_effective_role(*, character: Character, role: CovenantRole) -> CovenantRole:
-    """Return the resonance-specialized sub-role for ``role`` if the character's
-    anchored COVENANT_ROLE thread has crossed a sub-role's unlock_thread_level,
-    else ``role`` unchanged. Derive-on-read; reads cached handlers only."""
-    from world.magic.constants import TargetKind  # noqa: PLC0415
+    """Return the resonance-specialized sub-role for ``role`` (one-line shim over
+    the shared specialization engine, #1578). Same callers, same result."""
+    from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
-    if role.parent_role_id is not None:
-        return role  # already a sub-role; never re-promote (single-depth)
-    thread = next(
-        (
-            t
-            for t in character.threads.all()
-            if t.target_kind == TargetKind.COVENANT_ROLE
-            and t.target_covenant_role_id == role.pk
-            and t.retired_at is None
-        ),
-        None,
-    )
-    if thread is None:
-        return role
-    best = None
-    for sub in role.sub_roles.all():
-        if (
-            sub.resonance_id == thread.resonance_id
-            and sub.unlock_thread_level <= thread.level
-            and (best is None or sub.unlock_thread_level > best.unlock_thread_level)
-        ):
-            best = sub
-    return best or role
+    resolved = resolve_specialized_variant(entity=role, character=character)
+    return resolved if resolved is not None else role
 
 
 def precedence_role_for_combat(character_sheet: CharacterSheet) -> CovenantRole | None:

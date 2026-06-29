@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionInstanceFactory
 from world.magic.audere import (
@@ -141,7 +142,12 @@ class UseTechniqueAudereHookTests(TestCase):
         cls.obj_ct = ContentType.objects.get_for_model(ObjectDB)
 
     def setUp(self) -> None:
-        self.character = ObjectDB.objects.create(db_key="audere_hook_char")
+        # use_technique resolves the character's GIFT-thread resonances via the
+        # cached ``character.threads`` handler, which lives on the Character
+        # typeclass — a bare ObjectDB with a sheet is an impossible-in-prod
+        # state (only PCs have sheets; PCs are Character typeclass), so exercise
+        # the cast path with a real Character rather than masking the mismatch.
+        self.character = CharacterFactory(db_key="audere_hook_char")
         self.sheet = CharacterSheetFactory(character=self.character)
         self.anima = CharacterAnimaFactory(character=self.character, current=50, maximum=50)
         self.engagement = CharacterEngagement.objects.create(

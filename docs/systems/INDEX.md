@@ -24,6 +24,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Specialization engine (ADR-0055 — #1578):** `AbstractSpecializedVariant`
+    (shared abstract base — the "one specialization engine"), `TechniqueVariant`
+    (concrete — resonance-specialized form of a parent `Technique`, `unlock_thread_level`≥3);
+    `CovenantRole` refactored to inherit the base (schema no-op). Resolved derive-on-read
+    via `resolve_specialized_variant(entity, character)` (`resolve_effective_role` is a
+    shim); discovery beat generalized as `fire_variant_discoveries` (dispatch on
+    `target_kind`). GIFT thread substrate: `TargetKind.GIFT` + `Thread.target_gift` +
+    latent provisioning at CG + `gift_resonances_for` (the four cast sites).
   - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`
@@ -31,9 +39,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
     `target_trait` / `target_technique` / `target_facet` / `target_relationship_track`
-    / `target_capstone` / `target_covenant_role` / `target_sanctum_details` — bare
-    `ROOM` removed; SANCTUM is the leveled room anchor, cap = sanctum level × 10,
-    in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
+    / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle`
+    / `target_sanctum_details` — bare `ROOM` removed; SANCTUM is the leveled room
+    anchor, cap = sanctum level × 10, in-sanctum pull boost), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
     `Ritual` (four dispatch kinds: SERVICE → `service_function_path`; FLOW →
     `FlowDefinition`; CEREMONY → `PendingRitualEffect` + finisher command; SCENE_ACTION →
@@ -125,6 +133,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     COVENANT_ROLE uses `current_level × 10`; SANCTUM uses
     `sanctum.feature_instance.level × 10`),
     `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+    (note: `compute_anchor_cap` has no `GIFT` case — returns 0; the GIFT anchor cap is a
+    deferred needs-design follow-up, #1578)
+  - Specialization engine (ADR-0055 — #1578, `world/magic/specialization/services.py`):
+    `resolve_specialized_variant(*, entity, character)` (the one resolver — Technique →
+    `_ResolvedTechnique` value object with variant deltas; CovenantRole → cached-handler
+    read; `resolve_effective_role` is a shim over it),
+    `gift_resonances_for(character, gift) -> list[Resonance]` (derive-on-read seam
+    replacing `technique.gift.resonances.all()` at the four cast sites),
+    `provision_latent_gift_thread(sheet, gift, *, resonance)` (idempotent level-0 GIFT
+    thread at CG, write-once on resonance). Discovery ceremony
+    `fire_variant_discoveries(*, thread, starting_level, new_level)` in
+    `world/covenants/discovery.py` dispatches on `target_kind` (COVENANT_ROLE → single
+    parent; GIFT → iterate `gift.techniques`); called from `spend_resonance_for_imbuing`.
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater

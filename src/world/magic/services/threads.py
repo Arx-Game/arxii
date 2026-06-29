@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         ThreadWeavingTeachingOffer,
         ThreadWeavingUnlock,
     )
+    from world.magic.models.gifts import Gift
 
 
 def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
@@ -267,6 +268,66 @@ def cross_thread_xp_lock(
 # =============================================================================
 
 
+def _weave_gift_thread(
+    character_sheet: CharacterSheet,
+    gift: Gift,
+    resonance: ResonanceModel,
+    *,
+    name: str = "",
+    description: str = "",
+) -> Thread:
+    """GIFT weave: commit/choose a resonance onto the existing latent thread.
+
+    Unlike other thread kinds (create-on-weave), a GIFT thread pre-exists (the
+    latent level-0 thread provisioned at CG). Weaving commits a resonance onto
+    it (validating the resonance is in the gift's supported set). Does not
+    create a second thread (#1578 decision 7: one active GIFT thread per gift).
+    """
+    # Resonance-in-supported-set check: read the gift's cached resonance list
+    # (list-comp) rather than ``gift.resonances.filter(pk=…).exists()`` per
+    # project cached-property rule.
+    if not any(r.pk == resonance.pk for r in gift.cached_resonances):
+        from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
+
+        raise UnsupportedGiftResonanceError
+
+    # Read the existing latent thread through the cached ``character.threads``
+    # handler (same cached queryset the resolver reads), not a fresh
+    # ``Thread.objects.filter()``. The handler's list is already filtered to
+    # retired_at__isnull=True.
+    character = character_sheet.character
+    thread = next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
+        ),
+        None,
+    )
+    if thread is None:
+        # No latent thread (e.g. post-CG acquisition, #1587 future): create one.
+        # For now (CG-provisioned), this branch is rare; provision on demand.
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            provision_latent_gift_thread,
+        )
+
+        return provision_latent_gift_thread(character_sheet, gift, resonance=resonance)
+
+    if thread.resonance_id != resonance.pk:
+        thread.resonance = resonance
+        if name:
+            thread.name = name
+        if description:
+            thread.description = description
+        thread.full_clean()
+        thread.save(update_fields=["resonance", "name", "description"])
+        # Resonance change mutates the cached thread list; invalidate so the
+        # next read through ``character.threads`` sees the new resonance.
+        character.threads.invalidate()
+    return thread
+
+
+@transaction.atomic
 def _has_weaving_unlock(
     character_sheet: CharacterSheet,
     target_kind: str,
@@ -328,6 +389,10 @@ def weave_thread(  # noqa: PLR0913
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
+    if target_kind == TargetKind.GIFT:
+        return _weave_gift_thread(
+            character_sheet, target, resonance, name=name, description=description
+        )
     if target_kind == TargetKind.COVENANT_ROLE:
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 

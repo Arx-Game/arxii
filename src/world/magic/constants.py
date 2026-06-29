@@ -90,6 +90,7 @@ class TargetKind(models.TextChoices):
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
     MANTLE = "MANTLE", "Mantle"
     SANCTUM = "SANCTUM", "Sanctum"
+    GIFT = "GIFT", "Gift"
 
 
 class GiftKind(models.TextChoices):
