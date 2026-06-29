@@ -63,10 +63,11 @@ latent GIFT thread (#1578, ADR-0055):
   thread (the specialization substrate), idempotent on `(owner, gift)` and write-once on
   resonance. One active GIFT thread per gift.
 - The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`. The
-  frontend CG resonance picker is a deferred needs-design follow-up; until it lands, the
-  draft data must be set directly (tests set it on `draft.draft_data`). When unset, the
-  provisioning falls back to `gift.resonances.first()` with a warning, and skips entirely
-  if the gift supports no resonances.
+  frontend CG resonance picker is a deferred needs-design follow-up; until it lands,
+  that draft key is never written in production or tests (the E2E test calls
+  `provision_latent_gift_thread(..., resonance=...)` directly). When unset, the
+  provisioning falls back to `gift.resonances.first()` with a warning, and skips
+  entirely if the gift supports no resonances.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.
