@@ -222,6 +222,14 @@ actions, backends, and service functions.
   to a *reach*: `gemit <msg>` (game-wide), `gemit/society <a>,<b> = <msg>`, or `gemit/org <a>,<b> =
   <msg>` (members of those societies/orgs, by active persona). No body is ever generated. Player/
   covenant-targeted story emits are a separate, non-public tool — not this command.
+- **`gm_tables.py`**: `CmdGMTable` (`gmtable`, #1505) — basic telnet parity for GM-table admin
+  (the React `frontend/src/tables/` module is the primary surface). Thin over `world.gm.services`,
+  subverb-dispatched: `gmtable [list]`, `gmtable create <name>[=<desc>]`, `gmtable members <id>`,
+  `gmtable invite <id>=<persona>`, `gmtable kick <membership-id>`, `gmtable archive <id>`,
+  `gmtable transfer <id>=<account>`. **Authorization mirrors the web exactly** so telnet can't
+  escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
+  `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
+  `IsAdminUser`). No business logic in the command.
 - **`locations.py`**: `CmdManageRoom` (`manageroom`, #1470) — owner-gated room editor.
   Thin over `RoomEditAction` (key `edit_room`): `manageroom/name <name>`,
   `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
