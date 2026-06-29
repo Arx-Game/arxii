@@ -163,7 +163,9 @@ def _build_resonance_involvements(
     thread_pull_resonance_spent sums CombatPull.resonance_spent for the
     character's active pulls per resonance.
     """
-    resonances = list(technique.gift.resonances.all())
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+    resonances = list(gift_resonances_for(character, technique.gift))
     if not resonances:
         return ()
 
@@ -205,11 +207,12 @@ def _power_term_label(provider: Callable[..., int]) -> str:
 def _partition_power_targets(
     *,
     technique: Technique | None,
+    character: object,
 ) -> tuple[ModifierTarget | None, list[ModifierTarget]]:
     """Split scope-matched power targets into (multiplier_target, flat_targets).
 
     A target matches when it passes both scope gates (AND semantics; null = global):
-    - Resonance: target_resonance is None, or matches a technique gift resonance.
+    - Resonance: target_resonance is None, or matches the character's GIFT-thread resonance.
     - Damage-type: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
     """
@@ -218,7 +221,9 @@ def _partition_power_targets(
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
     if technique is not None:
-        technique_resonance_ids = {r.id for r in technique.gift.resonances.all()}
+        from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+        technique_resonance_ids = {r.id for r in gift_resonances_for(character, technique.gift)}
         technique_damage_type_ids = {
             p.damage_type_id
             for p in technique.damage_profiles.all()
@@ -337,7 +342,9 @@ def _derive_power(
     if sheet is None:
         return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
 
-    multiplier_target, flat_targets = _partition_power_targets(technique=technique)
+    multiplier_target, flat_targets = _partition_power_targets(
+        technique=technique, character=character
+    )
 
     builder = PowerLedgerBuilder(base=channeled_intensity, base_label="channeled intensity")
 

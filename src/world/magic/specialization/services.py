@@ -32,8 +32,11 @@ def provision_latent_gift_thread(
 ) -> Thread:
     """Create the latent level-0 GIFT thread for ``gift`` at ``resonance``.
 
-    Idempotent: if an active GIFT thread for (owner, gift) already exists, return
-    it unchanged. Acquiring a gift IS intuitively weaving a (latent) thread — the
+    Idempotent on (owner, gift): if an active GIFT thread for (owner, gift)
+    already exists, return it unchanged. Write-once on resonance: calling this
+    again with a different ``resonance`` returns the existing thread unchanged
+    (the resonance param is ignored). This is intentional — one latent thread
+    per gift. Acquiring a gift IS intuitively weaving a (latent) thread — the
     Glimpse. Weaving (Rite of Weaving) commits a resonance; imbuing raises the
     level; crossing a variant's unlock_thread_level resolves the variant.
     """
@@ -83,13 +86,13 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
                 target_gift=gift,
                 retired_at__isnull=True,
             )
-            .select_related("resonance")
+            .select_related("resonance__affinity")
             .first()
         )
         if thread is not None:
             return [thread.resonance]
     # Fallback: the gift's supported set (authored M2M).
-    return list(gift.resonances.all())
+    return list(gift.resonances.select_related("affinity").all())
 
 
 def resolve_specialized_variant(*, entity, character):
