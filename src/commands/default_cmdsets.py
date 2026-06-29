@@ -69,6 +69,7 @@ from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.form import CmdForm
 from commands.gemit import CmdGemit
+from commands.gm_tables import CmdGMTable
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
@@ -224,6 +225,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRest,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
+            # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
+            CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).
             CmdTechnique,
             # Unified scene-adaptive cast (#1351)
