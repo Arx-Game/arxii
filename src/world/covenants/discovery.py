@@ -27,12 +27,6 @@ if TYPE_CHECKING:
     from world.magic.specialization.models import AbstractSpecializedVariant
 
 
-# Maintained for the existing covenant canary tests that import
-# ``fire_subrole_discoveries``. New code should call ``fire_variant_discoveries``.
-# TODO(#1578): drop this alias once test imports are migrated.
-fire_subrole_discoveries = None  # set at module bottom after definition
-
-
 def _variant_model_for(target_kind: str) -> type[AbstractSpecializedVariant] | None:
     """Return the variant model class for a Thread target_kind, or None."""
     from world.magic.constants import TargetKind  # noqa: PLC0415
@@ -173,6 +167,3 @@ def _notify(sheet: CharacterSheet, variant: AbstractSpecializedVariant, *, is_fi
         category=category,
         sender_account=None,
     )
-
-
-fire_subrole_discoveries = fire_variant_discoveries

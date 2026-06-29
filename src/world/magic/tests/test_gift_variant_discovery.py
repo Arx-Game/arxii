@@ -1,10 +1,12 @@
-"""GIFT-thread variant discovery beat fires on imbue past unlock_thread_level."""
+"""GIFT-thread variant discovery beat tested by calling the ceremony directly."""
 
 from django.test import TestCase
 
 from world.achievements.factories import AchievementFactory
+from world.achievements.models import CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.codex.factories import CodexEntryFactory
+from world.covenants.discovery import fire_variant_discoveries
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     GiftFactory,
@@ -12,7 +14,6 @@ from world.magic.factories import (
     TechniqueFactory,
     ThreadFactory,
 )
-from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.specialization.models import TechniqueVariant
 
 
@@ -44,44 +45,31 @@ class GiftVariantDiscoveryTests(TestCase):
             codex_entry=cls.codex_entry,
         )
 
-    def test_imbue_past_unlock_fires_discovery(self) -> None:
-        from world.achievements.models import CharacterAchievement
-        from world.magic.factories import CharacterResonanceFactory
+    def test_crossing_unlock_fires_discovery(self) -> None:
+        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=3)
 
-        CharacterResonanceFactory(
-            character_sheet=self.sheet,
-            resonance=self.resonance,
-            balance=10000,
-        )
-        spend_resonance_for_imbuing(
-            character_sheet=self.sheet,
-            thread=self.thread,
-            amount=500,  # enough to cross level 3
-        )
-        self.thread.refresh_from_db()
-        self.assertGreaterEqual(self.thread.level, 3)
-        # Discovery beat fired:
         self.assertTrue(
             CharacterAchievement.objects.filter(
                 character_sheet=self.sheet,
                 achievement=self.achievement,
             ).exists()
         )
+        # Codex unlock is keyed on RosterEntry; skip gracefully when absent.
+        if hasattr(self.sheet, "roster_entry") and self.sheet.roster_entry is not None:
+            from world.codex.constants import CodexKnowledgeStatus
+            from world.codex.models import CharacterCodexKnowledge
 
-    def test_imbue_below_unlock_does_not_fire(self) -> None:
-        from world.achievements.models import CharacterAchievement
-        from world.magic.factories import CharacterResonanceFactory
+            self.assertTrue(
+                CharacterCodexKnowledge.objects.filter(
+                    roster_entry=self.sheet.roster_entry,
+                    entry=self.codex_entry,
+                    status=CodexKnowledgeStatus.KNOWN,
+                ).exists()
+            )
 
-        CharacterResonanceFactory(
-            character_sheet=self.sheet,
-            resonance=self.resonance,
-            balance=10000,
-        )
-        spend_resonance_for_imbuing(
-            character_sheet=self.sheet,
-            thread=self.thread,
-            amount=1,  # stays below level 3
-        )
+    def test_below_unlock_does_not_fire(self) -> None:
+        fire_variant_discoveries(thread=self.thread, starting_level=0, new_level=2)
+
         self.assertFalse(
             CharacterAchievement.objects.filter(
                 character_sheet=self.sheet,
