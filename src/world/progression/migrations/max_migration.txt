@@ -1,1 +1,1 @@
-0009_classleveladvancement_witnesses
+0010_alter_kudosdifficultyweight_difficulty_choice

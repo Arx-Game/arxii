@@ -215,6 +215,16 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
             purge_scene_power_ledger(self)
 
+            # Very Attracted (the temporary allure double from a flirt/seduce) lasts to end of
+            # scene OR ~2 IC days, whichever first (#1697) — clear it for participants now.
+            from world.relationships.services import clear_very_attracted  # noqa: PLC0415
+
+            sheets = {
+                persona.character_sheet
+                for persona in self.persona_handler.active_participant_personas()
+            }
+            clear_very_attracted(sheets)
+
 
 class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
     """

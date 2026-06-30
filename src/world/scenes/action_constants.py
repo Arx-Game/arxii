@@ -21,6 +21,7 @@ class DifficultyChoice(models.TextChoices):
     NORMAL = "normal", "Normal"
     HARD = "hard", "Hard"
     DAUNTING = "daunting", "Daunting"
+    HARROWING = "harrowing", "Harrowing"
 
 
 class ConsentDecision(models.TextChoices):
@@ -53,6 +54,7 @@ DIFFICULTY_VALUES: dict[str, int] = {
     DifficultyChoice.NORMAL: 45,
     DifficultyChoice.HARD: 60,
     DifficultyChoice.DAUNTING: 75,
+    DifficultyChoice.HARROWING: 90,
 }
 
 

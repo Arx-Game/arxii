@@ -182,6 +182,7 @@ class ActionRegistryTests(TestCase):
             "persuade",
             "deceive",
             "flirt",
+            "seduce",
             "perform",
             "entrance",
             "challenge",

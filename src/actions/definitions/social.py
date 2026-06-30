@@ -165,6 +165,17 @@ class FlirtAction(_SocialTemplateAction):
 
 
 @dataclass
+class SeduceAction(_SocialTemplateAction):
+    key: str = "seduce"
+    name: str = "Seduce"
+    icon: str = "flame"
+    template_name: str = "Seduce"
+    description: str = (
+        "Press an attraction further — a harder roll than a flirt, with a deeper hold."
+    )
+
+
+@dataclass
 class PerformAction(_SocialTemplateAction):
     key: str = "perform"
     name: str = "Perform"
@@ -306,6 +317,7 @@ intimidate = IntimidateAction()
 persuade = PersuadeAction()
 deceive = DeceiveAction()
 flirt = FlirtAction()
+seduce = SeduceAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()

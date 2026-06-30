@@ -16325,18 +16325,20 @@ export interface components {
      *     * `normal` - Normal
      *     * `hard` - Hard
      *     * `daunting` - Daunting
+     *     * `harrowing` - Harrowing
      * @enum {string}
      */
-    DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
+    DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
     /**
      * @description * `trivial` - Trivial
      *     * `easy` - Easy
      *     * `normal` - Normal
      *     * `hard` - Hard
      *     * `daunting` - Daunting
+     *     * `harrowing` - Harrowing
      * @enum {string}
      */
-    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
+    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -24395,6 +24397,7 @@ export interface components {
        *     * `normal` - Normal
        *     * `hard` - Hard
        *     * `daunting` - Daunting
+       *     * `harrowing` - Harrowing
        */
       difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
       /** @description Numeric difficulty used for resolution. */

@@ -186,6 +186,7 @@ from actions.definitions.social import (
     persuade,
     resolve_entry_flourish,
     restore_sense,
+    seduce,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
@@ -331,6 +332,7 @@ _ALL_ACTIONS: list[Action] = [
     persuade,
     deceive,
     flirt,
+    seduce,
     perform,
     entrance,
     restore_sense,
@@ -366,7 +368,7 @@ for _action in _ALL_ACTIONS:
 # the ActionTemplate for a consent request.
 SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
     a.template_name: a
-    for a in (intimidate, persuade, deceive, flirt, perform, entrance, restore_sense)
+    for a in (intimidate, persuade, deceive, flirt, seduce, perform, entrance, restore_sense)
 }
 
 
