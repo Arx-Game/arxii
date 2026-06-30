@@ -520,11 +520,17 @@ def resolve_accepted_cast(
     return result  # result.power_ledger is already set from _resolve_cast
 
 
-def _guard_area_consent(technique: Technique) -> None:
-    """Raise InvalidCastTarget when a behavior-altering AREA cast would expand without consent."""
+def _guard_area_consent(technique: Technique, *, caster: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+    """Raise InvalidCastTarget when a behavior-altering AREA cast would expand without consent.
+
+    ``caster`` is the casting game Character so the caster's signed
+    ``SignatureMotifBonus`` conditions are included in the consent decision (#1582).
+    """
     from actions.constants import ActionTargetType  # noqa: PLC0415
 
-    if technique.target_type != ActionTargetType.AREA or not cast_requires_consent(technique):
+    if technique.target_type != ActionTargetType.AREA or not cast_requires_consent(
+        technique, caster=caster
+    ):
         return
     if derive_target_relationship(technique) == ConditionTargetKind.ALLY:
         # TODO(#1321 follow-up): mass-consent state machine for AREA behavior-altering
@@ -560,7 +566,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
             "use combat targeting instead."
         )
         raise InvalidCastTarget(msg)
-    if cast_requires_consent(technique):
+    if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         # TODO(#1321 follow-up): behavior-altering FILTERED_GROUP requires a
         # per-target consent state machine; not yet supported.
         msg = (
@@ -605,7 +611,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             target_persona=target_persona,
             technique=technique,
         )
-    if cast_requires_consent(technique):
+    if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
             scene=scene,
             initiator_persona=initiator_persona,
@@ -697,7 +703,7 @@ def request_technique_cast(  # noqa: PLR0913
         target_personas=[target_persona] if target_persona is not None else [],
     )
 
-    _guard_area_consent(technique)
+    _guard_area_consent(technique, caster=initiator_persona.character_sheet.character)
 
     if supplied_personas is not None and technique.target_type == ActionTargetType.FILTERED_GROUP:
         return _route_filtered_group_cast(

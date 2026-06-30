@@ -264,6 +264,14 @@ preserved.
   into `use_technique(power_intensity_bonus=…)`) + `apply_signature_bonus_conditions`
   (uses shared `apply_technique_conditions` seam via `applied_condition_rows=` param added
   in #1582). Both cast paths (non-combat + combat) wired.
+- **Consent (ADR-0024):** because a signature bonus lands its conditions on the resolved
+  target, `technique_alters_behavior` / `cast_requires_consent`
+  (`services/targeting.py`) take an optional `caster=` and fold in the caster's active
+  signature bonus's `cached_condition_applications`. A benign technique signed with a
+  bonus carrying a behavior-altering condition is consent-gated exactly as if the
+  technique itself carried it; a non-behavior-altering signature condition (e.g.
+  Entangled) stays consent-free. The non-combat cast routes (`world/scenes/cast_services.py`)
+  pass `caster=initiator_persona.character_sheet.character` at all three consent gates.
 - **Non-combat narration** (`narration.py`): `signature_clause(snippet)` builds the
   em-dash cosmetic line; folded into `render_cast_outcome_narration`.
 - **Actions** (`actions/definitions/signature.py`): `SignatureSetAction` (key

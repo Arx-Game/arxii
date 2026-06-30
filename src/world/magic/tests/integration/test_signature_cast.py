@@ -23,7 +23,7 @@ from django.test.utils import tag
 
 from actions.constants import ResolutionPhase
 from actions.types import PendingActionResolution, StepResult
-from world.conditions.factories import ConditionTemplateFactory
+from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.conditions.services import get_active_conditions
 from world.magic.constants import TargetKind
 from world.magic.factories import (
@@ -39,6 +39,7 @@ from world.magic.models import (
     Thread,
 )
 from world.magic.models.techniques import ConditionTargetKind
+from world.magic.services.targeting import cast_requires_consent, technique_alters_behavior
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -111,6 +112,46 @@ class SignatureCastMixin(CastScenarioMixin):
         )
         sheet.character.threads.invalidate()
         return technique, bonus
+
+
+class SignatureConsentGateTests(SignatureCastMixin):
+    """The consent decision incorporates the signature bonus's conditions (#1582).
+
+    ADR-0024: behavior-altering effects on another PC require consent. A benign
+    technique that the caster has *signed* with a bonus carrying a behavior-altering
+    condition must become consent-gated — otherwise the disguised compulsion would
+    land on another PC with no consent (the security gap this fix closes). A
+    non-behavior-altering signature condition (e.g. Entangled) must stay consent-free.
+    """
+
+    def test_behavior_altering_signature_condition_gates_consent(self):
+        """Benign technique + signature bonus carrying an alters_behavior condition → gated."""
+        behavior_cat = ConditionCategoryFactory(alters_behavior=True)
+        cond = ConditionTemplateFactory(category=behavior_cat)
+        technique, _bonus = self._sign_technique(
+            condition=cond, target_kind=ConditionTargetKind.ALLY
+        )
+        caster = self.caster.character_sheet.character
+
+        # The technique on its own carries no behavior-altering condition.
+        self.assertFalse(technique_alters_behavior(technique))
+        self.assertFalse(cast_requires_consent(technique))
+
+        # With the caster's signed bonus in scope, the cast must be consent-gated.
+        self.assertTrue(technique_alters_behavior(technique, caster=caster))
+        self.assertTrue(cast_requires_consent(technique, caster=caster))
+
+    def test_non_behavior_altering_signature_condition_stays_consent_free(self):
+        """Benign technique + benign signature condition (Entangled) → not consent-gated."""
+        entangle_cat = ConditionCategoryFactory(alters_behavior=False)
+        cond = ConditionTemplateFactory(category=entangle_cat)
+        technique, _bonus = self._sign_technique(
+            condition=cond, target_kind=ConditionTargetKind.ENEMY
+        )
+        caster = self.caster.character_sheet.character
+
+        self.assertFalse(technique_alters_behavior(technique, caster=caster))
+        self.assertFalse(cast_requires_consent(technique, caster=caster))
 
 
 @tag("postgres")

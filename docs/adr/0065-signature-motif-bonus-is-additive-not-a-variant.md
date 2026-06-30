@@ -48,7 +48,13 @@ technique, not a new form of it.
 
 3. The bonus's conditions apply through the SAME `apply_technique_conditions` seam
    (via the optional `applied_condition_rows` param added in #1582) — no parallel
-   condition-apply path.
+   condition-apply path. Because those conditions land on the resolved target, the
+   consent decision (`technique_alters_behavior` / `cast_requires_consent`,
+   `services/targeting.py`) MUST include the caster's active signature bonus's
+   behavior-altering conditions (ADR-0024) — a benign technique signed with a
+   behavior-altering bonus is consent-gated exactly as if the technique carried that
+   condition; a non-behavior-altering signature condition (Entangled) stays
+   consent-free. The cast routes thread `caster=` into the predicate.
 
 4. The bonus's `flat_intensity_delta` folds into the resolved cast intensity via
    `signature_intensity_delta(character, technique)` added to `use_technique(power_intensity_bonus=…)`.
