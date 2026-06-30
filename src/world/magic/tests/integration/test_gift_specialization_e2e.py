@@ -23,6 +23,7 @@ from typing import ClassVar
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.achievements.factories import AchievementFactory
 from world.achievements.models import Achievement, CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
@@ -31,7 +32,13 @@ from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.covenants.discovery import fire_variant_discoveries
 from world.magic.constants import TargetKind
-from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+from world.magic.factories import (
+    BinaryEffectTypeFactory,
+    CharacterTechniqueFactory,
+    GiftFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+)
 from world.magic.models import CharacterResonance, Gift, Resonance, Technique, Thread
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.specialization.models import TechniqueVariant
@@ -41,6 +48,8 @@ from world.magic.specialization.services import (
     resolve_specialized_variant,
 )
 from world.roster.factories import RosterEntryFactory
+from world.scenes.cast_services import request_technique_cast
+from world.scenes.tests.cast_test_helpers import CastScenarioMixin
 
 
 class GiftSpecializationE2ETest(TestCase):
@@ -221,3 +230,80 @@ class GiftSpecializationE2ETest(TestCase):
             ).exists(),
             "discovery achievement should be granted after imbuing across level 3",
         )
+
+
+class BaseFormCastE2ETest(CastScenarioMixin):
+    """E2E: use_base_form=True opts out of a gift-technique variant at cast time (#1581 Task 8).
+
+    With a level-3 GIFT thread (variant unlocked), ``request_technique_cast``
+    normally resolves the variant form and uses its name in the outcome pose.
+    Passing ``use_base_form=True`` bypasses the variant and casts the raw parent
+    technique (base name, base intensity, base anima cost).
+    """
+
+    gift: ClassVar[Gift]
+    resonance: ClassVar[Resonance]
+    technique: ClassVar[Technique]
+    variant: ClassVar[TechniqueVariant]
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.gift = GiftFactory()
+        cls.resonance = ResonanceFactory()
+        cls.gift.resonances.add(cls.resonance)
+        # Castable, non-hostile, non-consent technique anchored to the gift.
+        cls.technique = TechniqueFactory(
+            gift=cls.gift,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        # A resonance-specialized variant unlocking at level 3.
+        cls.variant = TechniqueVariant.objects.create(
+            parent_technique=cls.technique,
+            resonance=cls.resonance,
+            unlock_thread_level=3,
+            name_override="Celestial Form",
+            intensity_delta=5,
+            control_delta=0,
+        )
+        # Grant the technique to the caster.
+        CharacterTechniqueFactory(character=cls.caster.character_sheet, technique=cls.technique)
+        # Provision the GIFT thread and advance it to level 3 so the variant is unlocked.
+        provision_latent_gift_thread(cls.caster.character_sheet, cls.gift, resonance=cls.resonance)
+        thread = Thread.objects.get(
+            owner=cls.caster.character_sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=cls.gift,
+        )
+        thread.level = 3
+        thread.save(update_fields=["level"])
+        # Invalidate the cached thread handler so the variant is visible to the resolver.
+        cls.caster.character_sheet.character.threads.invalidate()
+
+    def test_base_form_cast_uses_base_technique_name(self) -> None:
+        """use_base_form=True: outcome pose uses base technique name, not the variant name."""
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+            use_base_form=True,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn(self.technique.name, content, "base technique name must appear in pose")
+        self.assertNotIn(
+            "Celestial Form", content, "variant name must not appear in base-form pose"
+        )
+
+    def test_default_cast_applies_variant_name(self) -> None:
+        """Default cast (no use_base_form): outcome pose uses the unlocked variant name."""
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn("Celestial Form", content, "variant name must appear in default cast pose")

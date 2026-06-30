@@ -878,6 +878,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     power_intensity_bonus: int = 0,
     lethal: bool = True,
     control_penalty: int = 0,
+    apply_variant: bool = True,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -912,7 +913,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
     # Step 1: Calculate runtime stats
-    stats = get_runtime_technique_stats(technique, character)
+    stats = get_runtime_technique_stats(technique, character, apply_variant=apply_variant)
     if control_penalty:
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
