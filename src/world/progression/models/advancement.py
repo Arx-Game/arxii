@@ -71,6 +71,11 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
         blank=True,
         related_name="class_level_advancements",
     )
+    witnesses = models.ManyToManyField(
+        "scenes.Persona",
+        related_name="witnessed_advancements",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]

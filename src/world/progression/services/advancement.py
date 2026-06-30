@@ -160,6 +160,24 @@ def _cite_deeds(inductee_sheet: CharacterSheet) -> str:
     return " Their deeds are remembered: " + "; ".join(titles) + "."
 
 
+def _record_witnesses(
+    receipt: ClassLevelAdvancement,
+    scene: Scene | None,
+    *,
+    inductee: CharacterSheet,
+    officiant: CharacterSheet,
+) -> None:
+    """Record the scene's attending personas as official witnesses (no boon — record only)."""
+    if scene is None:
+        return
+    from world.societies.knowledge_services import scene_witness_personas
+
+    excluded = {inductee.pk, officiant.pk}
+    personas = [p for p in scene_witness_personas(scene) if p.character_sheet_id not in excluded]
+    if personas:
+        receipt.witnesses.add(*personas)
+
+
 def _post_testament(
     inductee_sheet: CharacterSheet, *, testament: str
 ) -> tuple[Scene | None, Interaction | None]:
@@ -322,6 +340,7 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
             level_before=level_before,
             level_after=target_level,
         )
+        _record_witnesses(receipt, scene, inductee=inductee, officiant=officiant_sheet)
         receipts.append(receipt)
 
     return receipts
