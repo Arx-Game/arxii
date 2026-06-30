@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
+import { GossipPanel } from '@/secrets/components/GossipPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
@@ -56,6 +57,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -124,6 +126,15 @@ export function CharacterSheetPage() {
                 CharacterSheet pk the clues API filters by. Radix unmounts inactive tab content,
                 so the query only fires when this tab is opened. */}
             <CluesTab characterSheetId={entry.character.id} />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="gossip" className="space-y-4">
+            {/* Gossip is the active character's own spreadable Level-1 secrets, location-bound to a
+                social hub (#1572) — so it's a self-only tab keyed on the active RosterEntry, not the
+                viewed subject. Radix unmounts inactive tabs, so the query only fires when opened. */}
+            <GossipPanel viewerId={viewerEntryId} />
           </TabsContent>
         )}
       </Tabs>
