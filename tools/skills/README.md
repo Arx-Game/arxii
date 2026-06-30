@@ -1,6 +1,7 @@
-# Claude Code Skills
+# Agent Skills
 
-Project-specific skills for Claude Code that support development workflow.
+Project-specific skills (the open "Agent Skills" `SKILL.md` format) that support
+the development workflow. `tools/skills/` is the single canonical home.
 
 In the devcontainer, these skills are **installed automatically** —
 `.devcontainer/post-create.sh` symlinks every `tools/skills/<name>/`
@@ -9,6 +10,27 @@ copy needed; changes you make to a skill here are picked up
 immediately because the symlink points back at this directory.
 
 For bare-metal usage, see the options below.
+
+## Two harnesses: Claude Code and polytoken
+
+The devcontainer runs both Claude Code and the [polytoken](../../.devcontainer/polytoken.md)
+harness, and both read the same `SKILL.md` format. They differ only in **where**
+they discover skills:
+
+- **Claude Code** reads `~/.claude/skills/` and **follows symlinks**, so the
+  symlink loop above exposes *all* skills to it.
+- **polytoken** reads `.polytoken/skills/` (project-level) and **does not follow
+  symlinks**, so it needs real files there.
+
+A skill opts into the polytoken mirror by declaring **`compatibility: polytoken`**
+in its frontmatter. `.devcontainer/post-create.sh` runs
+`tools/skills/sync-polytoken-skills.sh`, which copies exactly those skills into
+the generated (gitignored) `.polytoken/skills/`. After editing a bridged skill
+mid-session, re-run `just sync-polytoken-skills`.
+
+Only harness-agnostic skills carry the marker. Skills coupled to Claude Code
+(e.g. `issue-to-merged-pr`, which orchestrates the `superpowers` plugin) stay
+Claude-Code-only — they have no marker and never reach polytoken.
 
 ## Bare-metal install
 

@@ -1,5 +1,6 @@
 ---
 name: codebase-indexing
+compatibility: polytoken
 description: Use when models have changed significantly, after migrations, or when cross-app relationship data in docs/systems/MODEL_MAP.md seems stale. Also use when you can't find how systems connect and need to regenerate the model map.
 ---
 

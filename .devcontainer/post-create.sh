@@ -113,3 +113,9 @@ for skill in /workspaces/arxii/tools/skills/*/; do
   ln -sfn "$skill" "/home/vscode/.claude/skills/$name"
 done
 shopt -u nullglob
+
+# Mirror polytoken-compatible skills into .polytoken/skills/ as real copies so
+# the polytoken harness discovers them too (it does not follow symlinks like
+# Claude Code does). Selects skills whose SKILL.md declares
+# `compatibility: polytoken`. Idempotent; re-run via `just sync-polytoken-skills`.
+bash /workspaces/arxii/tools/skills/sync-polytoken-skills.sh

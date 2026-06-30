@@ -1,5 +1,6 @@
 ---
 name: verify-against-code
+compatibility: polytoken
 description: Use when a feature design, spec, or implementation plan is about to propose a new code surface (model, dataclass, enum, serializer, component, hook, helper, field, endpoint) OR wire up an existing stub (a "not wired" button/endpoint/flow), or when relying on a systems/architecture/roadmap doc's claim about what exists or doesn't, OR when filing a follow-up/audit issue or writing a "deferred follow-up" into a spec (a deferral is a proposed future surface — verify its premise before it becomes a filed issue) — before committing the spec, filing the issue, or writing code.
 ---
 

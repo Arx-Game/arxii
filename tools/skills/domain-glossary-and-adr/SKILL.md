@@ -1,5 +1,6 @@
 ---
 name: domain-glossary-and-adr
+compatibility: polytoken
 description: Use when introducing or sharpening a domain term, when a design conversation lands a hard-to-reverse decision, or when working in an app whose AGENT_GLOSSARY.md or docs/adr/ needs updating — keeps the glossary and ADR log current and used.
 ---
 

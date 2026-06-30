@@ -1,5 +1,6 @@
 ---
 name: github-operations
+compatibility: polytoken
 description: Use before any GitHub operation via the gh CLI — creating/editing/closing/commenting on issues or PRs, assigning, labelling, or referencing an issue/PR number. Especially right after gh issue create / gh pr create when you need the new number, or when about to mutate an issue you "know" the number of.
 ---
 

@@ -222,6 +222,13 @@ dc-build:
 dc-shell:
     devcontainer exec --workspace-folder . bash
 
+# Re-copy polytoken-compatible skills (compatibility: polytoken) into
+# .polytoken/skills/ after editing a bridged skill. post-create.sh runs this at
+# container creation; this recipe is for picking up mid-session edits. Claude
+# Code needs no equivalent — it follows the ~/.claude/skills symlinks live.
+sync-polytoken-skills:
+    bash tools/skills/sync-polytoken-skills.sh
+
 # --- Demo content -------------------------------------------------------------
 
 # Spawn a playable combat scenario via the PlayableCombatScenarioFactory.

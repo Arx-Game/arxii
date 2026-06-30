@@ -1,5 +1,6 @@
 ---
 name: design-vocabulary
+compatibility: polytoken
 description: Use when designing or restructuring a subsystem's interface, deciding where a seam goes, judging whether a class/module earns its keep, or making code more testable — the shared deep-module design vocabulary.
 ---
 
