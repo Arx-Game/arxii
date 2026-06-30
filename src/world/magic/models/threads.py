@@ -594,11 +594,6 @@ class Thread(SharedMemoryModel):
                 condition=models.Q(target_kind=TargetKind.TRAIT),
                 name="uniq_thread_trait",
             ),
-            models.UniqueConstraint(
-                fields=["owner", "resonance", "target_technique"],
-                condition=models.Q(target_kind=TargetKind.TECHNIQUE),
-                name="uniq_thread_technique",
-            ),
             # One active signature (TECHNIQUE thread) per (owner, technique).
             # Retired threads are excluded so a character can retire a signature
             # and later weave a new one on the same technique at a different

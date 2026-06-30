@@ -28,7 +28,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.achievements.factories import AchievementFactory
-from world.achievements.models import Achievement
+from world.achievements.models import Achievement, CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.codex.factories import CodexEntryFactory
@@ -351,3 +351,71 @@ class SignatureTechniqueE2ETest(TestCase):
         # cast_resonances_for returns the signature's resonance (B).
         cast_resonances = cast_resonances_for(self.sheet.character, self.technique)
         self.assertEqual([r.pk for r in cast_resonances], [self.resonance_b.pk])
+
+    def test_weave_thread_rejects_technique_not_owned(self) -> None:
+        """weave_thread raises TechniqueNotOwned for a technique the character doesn't know."""
+        from world.magic.exceptions import TechniqueNotOwned
+        from world.magic.models import ThreadWeavingUnlock
+        from world.magic.services.threads import weave_thread
+
+        # Create a technique the character does NOT know.
+        unknown_technique = TechniqueFactory(gift=self.gift, name="Unknown Spell")
+
+        # Grant the gift-level weaving unlock so the ownership check is the gate.
+        unlock = ThreadWeavingUnlock.objects.create(
+            target_kind=TargetKind.TECHNIQUE,
+            unlock_gift=self.gift,
+            xp_cost=1,
+        )
+        from world.magic.models import CharacterThreadWeavingUnlock
+
+        CharacterThreadWeavingUnlock.objects.create(
+            character=self.sheet,
+            unlock=unlock,
+            xp_spent=1,
+        )
+
+        with self.assertRaises(TechniqueNotOwned):
+            weave_thread(
+                self.sheet,
+                TargetKind.TECHNIQUE,
+                unknown_technique,
+                self.resonance_a,
+            )
+
+    def test_signature_variant_discovery_fires(self) -> None:
+        """fire_variant_discoveries handles TargetKind.TECHNIQUE (#1582).
+
+        When a signature thread's level crosses a variant's unlock threshold,
+        the discovery beat should fire (achievement + codex), just like GIFT
+        threads. The signature variant is matched on the signature's resonance.
+        """
+        from world.covenants.discovery import fire_variant_discoveries
+
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance_b,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=0,
+        )
+        self.sheet.character.threads.invalidate()
+
+        # Advance from 0 to 3, crossing variant_b's unlock_thread_level=3.
+        sig = Thread.objects.get(
+            owner=self.sheet,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+        )
+        sig.level = 3
+        sig.save(update_fields=["level"])
+
+        fire_variant_discoveries(thread=sig, starting_level=0, new_level=3)
+
+        # The discovery beat should have granted the achievement for variant_b.
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet,
+                achievement=self.achievement_b,
+            ).exists()
+        )

@@ -417,6 +417,19 @@ def weave_thread(  # noqa: PLR0913
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
 
+    # A signature (TECHNIQUE) thread requires that the character actually knows
+    # the technique being signed — otherwise a player could invest in a
+    # technique they cannot cast (ADR-0056).
+    if target_kind == TargetKind.TECHNIQUE:
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        if not CharacterTechnique.objects.filter(
+            character=character_sheet, technique=target
+        ).exists():
+            from world.magic.exceptions import TechniqueNotOwned  # noqa: PLC0415
+
+            raise TechniqueNotOwned
+
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",
         TargetKind.TECHNIQUE: "target_technique",
@@ -438,6 +451,9 @@ def weave_thread(  # noqa: PLR0913
     kwargs[field_map[target_kind]] = target
     thread = Thread.objects.create(**kwargs)
     recompute_max_health_with_threads(character_sheet)
+    # Invalidate the cached thread list so the new row is visible to the next
+    # read through ``character.threads`` (mirrors _weave_gift_thread).
+    character_sheet.character.threads.invalidate()
     return thread
 
 

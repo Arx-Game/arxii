@@ -44,6 +44,13 @@ class MantleNotClearedError(MagicError):
     user_message = "You must clear this mantle's first rank before you can weave a thread to it."
 
 
+class TechniqueNotOwned(MagicError):
+    """Raised when weaving a signature (TECHNIQUE) thread on a technique the
+    character does not know (no CharacterTechnique row)."""
+
+    user_message = "You do not know this technique."
+
+
 class NoMatchingWornFacetItemsError(MagicError):
     user_message = "You aren't wearing anything bearing this facet."
 

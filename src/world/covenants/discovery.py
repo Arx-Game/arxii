@@ -40,6 +40,12 @@ def _variant_model_for(target_kind: str) -> type[AbstractSpecializedVariant] | N
         from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         return TechniqueVariant
+    if target_kind == TargetKind.TECHNIQUE:
+        # A signature thread (#1582, ADR-0056) also uses TechniqueVariant —
+        # the parent is the single anchored technique.
+        from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
+
+        return TechniqueVariant
     return None
 
 
@@ -70,19 +76,22 @@ def _parents_for(thread: Thread) -> Iterable:
 
     - COVENANT_ROLE: the thread's ``target_covenant_role``.
     - GIFT: each ``Technique`` of the thread's ``target_gift``.
+    - TECHNIQUE: the single anchored technique (a signature thread, #1582).
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
     if thread.target_kind == TargetKind.COVENANT_ROLE:
         if thread.target_covenant_role_id is not None:
             return [thread.target_covenant_role]
-        return []
-    if thread.target_kind == TargetKind.GIFT:
+    elif thread.target_kind == TargetKind.GIFT:
         if thread.target_gift_id is not None:
             # Read the gift's cached techniques list rather than
             # ``gift.techniques.all()`` per project cached-property rule.
             return thread.target_gift.cached_techniques
-        return []
+    elif thread.target_kind == TargetKind.TECHNIQUE:
+        # A signature thread's parent is the single anchored technique (#1582).
+        if thread.target_technique_id is not None:
+            return [thread.target_technique]
     return []
 
 
