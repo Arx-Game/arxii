@@ -528,6 +528,7 @@ def _resolve_action_against_persona(
         ValueError: If the request has no action_template set.
     """
     from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
 
@@ -569,12 +570,28 @@ def _resolve_action_against_persona(
         # technique-cast-only mechanic (spec: intensity rides power_intensity_bonus
         # inside use_technique). The serializer rejects fury_commitment_id on
         # plain actions, so fury_commitment is always None here.
+        #
+        # Social/scene actions are always plain, and this is the ONE place they
+        # enter the modifier seam: combat/challenge/vitals already funnel their
+        # checks through collect_check_modifiers, but the social path did not, so
+        # no condition / rollmod / scene / equipment / CHARACTER / fashion (and,
+        # once scoped, allure — #1696) modifier reached a social check. Fold the
+        # initiator's breakdown into extra_modifiers here, scene-scoped so the
+        # perception-relative fashion bonus resolves (#512). The technique branch
+        # collects its own modifiers downstream, so it is left untouched.
+        # ActionTemplate.check_type is NOT NULL, so the action always has a check to
+        # gather modifiers for.
+        breakdown = collect_check_modifiers(
+            action_request.initiator_persona.character_sheet,
+            action_template.check_type,
+            scene=action_request.scene,
+        )
         action_resolution = start_action_resolution(
             character=character,
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=check_modifiers,
+            extra_modifiers=check_modifiers + breakdown.total,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,

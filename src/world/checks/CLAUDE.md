@@ -51,6 +51,12 @@ penetration, flee, environmental, clash, **and defense** via `resolve_npc_attack
 through this seam with `scene=encounter.scene`, so fashion/covenant/conditions
 apply uniformly to attack and defense (#750/#512).
 
+**Social/scene actions** funnel their plain (non-technique) check through the same
+seam in `world.scenes.action_services._resolve_action_against_persona`
+(`scene=request.scene`), so conditions / rollmod / scene / equipment / CHARACTER /
+fashion — and, once scoped, **allure** — reach social checks too (#1696). The
+technique branch collects its own modifiers downstream and is left untouched.
+
 ## Integration Points
 
 - **Traits app**: Uses PointConversionRange, CheckRank, ResultChart, CheckOutcome
