@@ -145,10 +145,22 @@ class MagicContent:
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
         from actions.models import ActionEnhancement  # noqa: PLC0415
-        from world.magic.factories import GiftFactory  # noqa: PLC0415
+        from world.magic.factories import (  # noqa: PLC0415
+            AffinityFactory,
+            GiftFactory,
+            ResonanceFactory,
+        )
         from world.magic.models import EffectType, Technique, TechniqueStyle  # noqa: PLC0415
+        from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
+
+        # Wire one resonance into the Social Arts supported set so gift-thread
+        # variants can be authored against it (#1581).  Uses get_or_create on both
+        # the affinity and the resonance so repeated calls are a no-op.
+        social_affinity = AffinityFactory(name="Social")
+        social_resonance = ResonanceFactory(name="Social Influence", affinity=social_affinity)
+        gift.resonances.add(social_resonance)
 
         # Ensure a minimal style and effect_type exist for social techniques.
         # get_or_create so re-runs don't create duplicates.
@@ -197,6 +209,26 @@ class MagicContent:
                 },
             )
             enhancements[action_key] = enhancement
+
+        # #1581: author a resonance-specific variant per gift technique so deepening
+        # the gift-thread to level 3 surfaces a discoverable, slightly-stronger
+        # renamed form.  Keyed on the unique triple (parent_technique, resonance,
+        # unlock_thread_level); get_or_create makes repeated calls a no-op.
+        seeded_gift_techniques = list(techniques.values())
+        for technique in seeded_gift_techniques:
+            resonance = technique.gift.resonances.first()
+            if resonance is None:
+                continue
+            TechniqueVariant.objects.get_or_create(
+                parent_technique=technique,
+                resonance=resonance,
+                unlock_thread_level=3,
+                defaults={
+                    "name_override": f"{resonance.name} {technique.name}",
+                    "intensity_delta": 2,
+                    "control_delta": 1,
+                },
+            )
 
         return MagicContentResult(techniques=techniques, enhancements=enhancements)
 

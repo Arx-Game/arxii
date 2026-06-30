@@ -1897,3 +1897,23 @@ class SeedMagicDevMagicChecksTests(TestCase):
         self.assertEqual(len(result.magic_checks.check_types), 5)
         self.assertEqual(len(result.magic_checks.skills), 3)
         self.assertEqual(len(result.magic_checks.configs), 5)
+
+
+class TestSeedMagicDevVariants(TestCase):
+    """seed_magic_dev authors starter gift-technique variants (#1581)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.seed = seed_magic_dev()
+
+    def test_seed_authors_gift_technique_variants(self):
+        from world.magic.specialization.models import TechniqueVariant
+
+        variants = TechniqueVariant.objects.all()
+        self.assertTrue(variants.exists(), "dev seed authored no gift technique variants")
+        for v in variants:
+            self.assertGreaterEqual(v.unlock_thread_level, 3)
+            self.assertEqual(
+                v.parent_technique.gift.resonances.filter(id=v.resonance_id).count(),
+                1,
+            )
