@@ -190,12 +190,16 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     result: EnhancedSceneActionResult,
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
+    technique_name: str | None = None,
 ) -> Interaction:
     """Author the Narrator OUTCOME pose describing a resolved standalone cast.
 
     Args:
         fizzle_note: Optional explanatory note appended to the narration when a
             declared pull could not be charged (e.g. resonance drained mid-consent).
+        technique_name: Optional display name override. When provided (e.g. a
+            gift-technique's unlocked-variant name from #1581), uses this in the
+            narration instead of ``technique.name``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -204,7 +208,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
 
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
-        technique_name=technique.name,
+        technique_name=technique_name if technique_name is not None else technique.name,
         target_label=target_persona.name if target_persona is not None else None,
         outcome_label=outcome_label,
         success_level=success_level,
@@ -251,6 +255,12 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     """
     character = caster_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
+
+    # #1581: pose and cost reflect the gift-technique's unlocked variant.
+    from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
+
+    resolved = resolve_specialized_variant(entity=technique, character=character)
+
     difficulty = derive_cast_difficulty(technique)
 
     result, power_ledger, fury_res = _resolve_cast(
@@ -275,7 +285,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         if result.action_resolution.main_result is not None
         else 0
     )
-    eff_intensity = power_ledger.total if power_ledger is not None else technique.intensity
+    eff_intensity = power_ledger.total if power_ledger is not None else resolved.intensity
     relationship = derive_target_relationship(technique)
     if relationship == ConditionTargetKind.SELF:
         # A SELF technique's effect always lands on the caster, independent of the
@@ -331,6 +341,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         result=result,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
+        technique_name=resolved.name,
     )
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
@@ -341,7 +352,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     action_interaction = create_action_interaction_core(
         persona=caster_persona,
         scene=scene,
-        summary_label=f"{technique.name}",
+        summary_label=f"{resolved.name}",
         strain_committed=strain_commitment,
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
