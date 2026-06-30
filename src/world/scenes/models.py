@@ -610,6 +610,49 @@ class Block(SharedMemoryModel):
         return self.pending_removal_at is None or self.pending_removal_at > timezone.now()
 
 
+class Friendship(SharedMemoryModel):
+    """An OOC friend designation — a trusted-RP-partner list, Block's positive twin (#1727).
+
+    This is an **out-of-character** list (MMO friends-list style: people you like, have chemistry
+    with, want to keep playing), **entirely separate from the IC relationship tracker** — a friend
+    is NOT "positive affection". It drives login/logoff watch alerts and the ``FRIENDS_WHITELIST``
+    consent mode (#1698).
+
+    **Symmetric per-tenure scoping** — a friendship binds *this player's run of character A*
+    (``friender_tenure``) to *that player's run of character B* (``friend_tenure``). Tenure on both
+    sides makes it **re-roster-safe both ways** (the bond dies when either character is re-rostered
+    to a different player) and **alt-private** (friending from character A never marks your other
+    characters, and the target is a character, not the person behind it — neither side outs alts).
+    "Friend from all my characters" fans out into one row per *your current tenure*, each
+    independently removable.
+    """
+
+    friender_tenure = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="friendships_made",
+        help_text="The friender's tenure (this player's run of the character that friended).",
+    )
+    friend_tenure = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="friendships_received",
+        help_text="The friended character's tenure (a specific player's run of that character).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["friender_tenure", "friend_tenure"], name="unique_friendship"
+            ),
+        ]
+        indexes = [models.Index(fields=["friend_tenure"])]
+
+    def __str__(self) -> str:
+        return f"{self.friender_tenure} → {self.friend_tenure}"
+
+
 class Mute(SharedMemoryModel):
     """One player filtering a persona out of their own view (#1278) — the lighter sibling of Block.
 
