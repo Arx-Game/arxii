@@ -427,3 +427,20 @@ class TechniqueNotOwned(MagicError):
     character does not know (no CharacterTechnique row)."""
 
     user_message = "You do not know this technique."
+
+
+# =============================================================================
+# Signature-bonus selection exceptions (#1582)
+# =============================================================================
+
+
+class NotATechniqueThread(MagicError):
+    """Raised when set_signature_bonus is called on a non-TECHNIQUE-kind Thread."""
+
+    user_message = "A signature bonus can only be set on a technique thread."
+
+
+class SignatureBonusNotAvailable(MagicError):
+    """Raised when the requested SignatureMotifBonus does not qualify for the owner's Motif."""
+
+    user_message = "This bonus is not available for your motif."
