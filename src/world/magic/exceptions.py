@@ -24,6 +24,20 @@ class XPInsufficient(MagicError):
     user_message = "You do not have enough XP for this."
 
 
+class GiftUnlockMissing(MagicError):
+    user_message = "You must unlock this gift before learning its techniques."
+
+
+class TechniqueCapExceeded(MagicError):
+    user_message = (
+        "You have reached the maximum techniques for this gift at your current thread level."
+    )
+
+
+class GiftAlreadyOwnedError(MagicError):
+    user_message = "You already have this gift."
+
+
 class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
 

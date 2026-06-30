@@ -23,7 +23,11 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 Production runs Postgres exclusively. Tests run in TWO tiers:
 
 1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
-2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. Use before pushing, and for apps the SQLite tier can't cover. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
+2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. **Do NOT run this locally in the devcontainer** — Postgres test DB rebuilds are too slow and will time out (10+ minutes for a single app, 30+ for the full suite). Let CI be the parity gate. The only exception is reproducing a specific CI failure that the SQLite tier can't surface; in that case use `--keepdb` to avoid the rebuild. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
+
+### Local testing rule
+
+**Always use the SQLite fast tier (`just test-fast`) for local iteration.** Never run `just test-parity` or bare `arx test` (PG) locally in the devcontainer — it will time out. The PG parity tier is exclusively CI's job. If the app you're testing is PG-only (magic, scenes, etc.), run the SQLite tier anyway to catch logic errors — CI will catch PG-specific issues. The only time you should run PG locally is to reproduce a specific CI failure, and only with `--keepdb`.
 
 ### Working app set for `--sqlite`
 
