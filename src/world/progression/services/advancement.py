@@ -12,9 +12,15 @@ from evennia.objects.models import ObjectDB
 
 from world.progression.exceptions import (
     AdvancementRequirementsNotMet,
+    NoDuranceSiteError,
     OfficiantIneligibleError,
     TierBoundaryRequiresCrossing,
 )
+
+# Service-function path that the Ritual of the Durance's Ritual row references.
+# Defined here (the literal string is this module's own function) so the constant
+# can be used both in convene_durance_at_site and in tests.
+_DURANCE_SERVICE_PATH = "world.progression.services.advancement.advance_class_level_via_session"
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -258,6 +264,68 @@ def _maybe_semi_cross_into_potential_path(
     new_path = _resolve_declared_advanced_path(inductee, participant, new_stage)
     if new_path is not None:
         cross_into_path(inductee, new_path)
+
+
+def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -> RitualSession:
+    """Open a Durance session at a training site, with its trainer-of-record as officiant.
+
+    Pre-checks the same gates fire would (tier boundary, authored unlock, requirements)
+    so a doomed rite is refused up front with a specific message. Returns the drafted
+    session; the inductee then speaks their testament via ``ritual join`` (which
+    auto-fires, since the initiator is a site officiant).
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from world.areas.services import get_room_profile
+    from world.magic.audere_majora import AudereMajoraThreshold
+    from world.magic.models import Ritual
+    from world.magic.services.sessions import draft_session
+    from world.progression.models import ClassLevelUnlock, DuranceTrainingSite
+    from world.progression.services.spends import check_requirements_for_unlock
+
+    cl = primary_class_level(inductee_sheet.character)
+    if cl is None:
+        raise AdvancementRequirementsNotMet(["This character has no class level to advance."])
+    level_before, target_level = cl.level, cl.level + 1
+    if AudereMajoraThreshold.objects.filter(boundary_level=level_before).exists():
+        raise TierBoundaryRequiresCrossing
+    try:
+        unlock = ClassLevelUnlock.objects.get(
+            character_class=cl.character_class, target_level=target_level
+        )
+    except ClassLevelUnlock.DoesNotExist as exc:
+        raise AdvancementRequirementsNotMet(
+            ["No advancement path has been authored for this level."]
+        ) from exc
+    met, failed = check_requirements_for_unlock(inductee_sheet.character, unlock)
+    if not met:
+        raise AdvancementRequirementsNotMet(failed)
+
+    profile = get_room_profile(room)
+    for site in DuranceTrainingSite.objects.filter(room_profile=profile, is_active=True):
+        try:
+            assert_can_officiate(
+                officiant_sheet=site.officiant,
+                inductee_sheet=inductee_sheet,
+                target_level=target_level,
+            )
+        except OfficiantIneligibleError:
+            continue
+        ritual = Ritual.objects.get(service_function_path=_DURANCE_SERVICE_PATH)
+        return draft_session(
+            ritual=ritual,
+            initiator=site.officiant,
+            proposed_terms="",
+            session_kwargs={},
+            invitee_sheets=[inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+    raise NoDuranceSiteError
 
 
 def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLevelAdvancement]:
