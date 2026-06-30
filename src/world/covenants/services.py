@@ -1150,11 +1150,13 @@ def evaluate_scene_engagement(
     """Auto-engage a Durance covenant if co-presence prerequisites met, then
     fold the arriving character into any active rite in the room.
 
-    Calls _auto_engage_durance first (which may set the engaged membership),
-    then fold_arrival_into_active_rites so both newly-engaged and already-engaged
-    characters trigger the rite buff rescale on arrival.
+    Calls _auto_engage_durance + _auto_engage_court first (which may set the
+    engaged membership), then fold_arrival_into_active_rites so both
+    newly-engaged and already-engaged characters trigger the rite buff rescale
+    on arrival.
     """
     _auto_engage_durance(character_sheet=character_sheet, room=room)
+    _auto_engage_court(character_sheet=character_sheet)
     fold_arrival_into_active_rites(character_sheet=character_sheet, room=room)
 
 
@@ -1190,6 +1192,39 @@ def _auto_engage_durance(
     # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
     candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
     set_engaged_membership(membership=candidates[0][0])
+
+
+def _auto_engage_court(
+    *,
+    character_sheet: CharacterSheet,
+) -> None:
+    """Auto-engage a Court covenant the servant is "on the master's business" for.
+
+    Unlike Durance, the gate is the active mission (see can_engage_membership),
+    not co-presence — so no room ranking. Manual engagement sticks: this no-ops
+    if the character is already engaged for the COURT type. Among multiple
+    eligible Court memberships only one can be engaged per type (Slice A
+    invariant); the lowest covenant_id wins for deterministic behaviour.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
+
+    if (
+        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.COURT)
+        is not None
+    ):
+        return  # manual sticks; auto never overrides
+    eligible = [
+        membership
+        for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
+            CovenantType.COURT
+        )
+        if can_engage_membership(membership)
+    ]
+    if not eligible:
+        return
+    eligible.sort(key=lambda m: m.covenant_id)
+    set_engaged_membership(membership=eligible[0])
 
 
 def _rescale_other_participants(
