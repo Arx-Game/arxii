@@ -8,7 +8,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GiftKind
 from world.magic.exceptions import XPInsufficient
 from world.magic.factories import GiftFactory
-from world.magic.models import GiftUnlock
+from world.magic.models import GiftUnlock, TechniqueTeachingOffer
 from world.magic.services.gift_acquisition import (
     compute_gift_unlock_xp_cost,
     count_techniques_for_gift,
@@ -151,3 +151,176 @@ class TechniqueCapTest(TestCase):
         )
         # depth = max(1, 25 // 10) = 2, cap = 3 * 2 = 6
         self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 6)
+
+
+class AcceptTechniqueOfferTest(TestCase):
+    def setUp(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.action_points.models import ActionPointPool
+        from world.magic.factories import ResonanceFactory, TechniqueFactory
+        from world.progression.models.rewards import ExperiencePointsData
+        from world.roster.factories import RosterTenureFactory
+
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        self.technique = TechniqueFactory(gift=self.gift)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.sheet.character.account = self.account
+        self.sheet.character.save()
+        self.teacher_tenure = RosterTenureFactory()
+        self.unlock = GiftUnlock.objects.create(gift=self.gift, xp_cost=10)
+
+        self.xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
+            account=self.account,
+            defaults={"total_earned": 100, "total_spent": 0},
+        )
+        self.learner_ap = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.learner_ap.current = 200
+        self.learner_ap.save()
+        self.teacher_ap = ActionPointPool.get_or_create_for_character(self.teacher_tenure.character)
+        self.teacher_ap.current = 200
+        self.teacher_ap.save()
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_first_technique_acquires_gift(self, mock_gate):
+        mock_gate.return_value = None
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=self.technique,
+            pitch="I teach you",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        ct = accept_technique_offer(self.sheet, offer)
+        self.assertEqual(ct.character, self.sheet)
+        self.assertEqual(ct.technique, self.technique)
+
+        # Gift was implicitly acquired
+        from world.magic.models import CharacterGift
+
+        self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_first_technique_without_unlock_raises(self, mock_gate):
+        mock_gate.return_value = None
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=self.technique,
+            pitch="I teach you",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        from world.magic.exceptions import GiftUnlockMissing
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        with self.assertRaises(GiftUnlockMissing):
+            accept_technique_offer(self.sheet, offer)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_first_technique_costs_more_ap(self, mock_gate):
+        mock_gate.return_value = None
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=self.technique,
+            pitch="I teach you",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        accept_technique_offer(self.sheet, offer)
+        self.learner_ap.refresh_from_db()
+        # 5 * 3 (first_technique_ap_multiplier) = 15 AP
+        self.assertEqual(self.learner_ap.current, 200 - 15)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_second_technique_costs_base_ap(self, mock_gate):
+        mock_gate.return_value = None
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        tech1 = TechniqueFactory(gift=self.gift)
+        offer1 = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=tech1,
+            pitch="first",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        accept_technique_offer(self.sheet, offer1)
+
+        # Second technique (gift already owned — base AP, no multiplier)
+        tech2 = TechniqueFactory(gift=self.gift)
+        offer2 = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=tech2,
+            pitch="second",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        self.learner_ap.current = 200
+        self.learner_ap.save()
+        accept_technique_offer(self.sheet, offer2)
+        self.learner_ap.refresh_from_db()
+        # 5 AP (no multiplier, gift already owned)
+        self.assertEqual(self.learner_ap.current, 200 - 5)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_technique_cap_exceeded(self, mock_gate):
+        mock_gate.return_value = None
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+
+        from world.magic.constants import TargetKind
+        from world.magic.exceptions import TechniqueCapExceeded
+        from world.magic.factories import ResonanceFactory, TechniqueFactory
+        from world.magic.models import Thread
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        # Provision a level-10 GIFT thread (depth 1, cap 3)
+        resonance = ResonanceFactory()
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=10,
+        )
+
+        # Learn 3 techniques (fills the cap)
+        for _ in range(3):
+            tech = TechniqueFactory(gift=self.gift)
+            offer = TechniqueTeachingOffer.objects.create(
+                teacher=self.teacher_tenure,
+                technique=tech,
+                pitch="filling",
+                learn_ap_cost=5,
+                banked_ap=1,
+            )
+            self.learner_ap.current = 200
+            self.learner_ap.save()
+            accept_technique_offer(self.sheet, offer)
+
+        # 4th should fail
+        tech4 = TechniqueFactory(gift=self.gift)
+        offer4 = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=tech4,
+            pitch="over cap",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        with self.assertRaises(TechniqueCapExceeded):
+            accept_technique_offer(self.sheet, offer4)

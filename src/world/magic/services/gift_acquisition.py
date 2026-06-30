@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.character_sheets.models import CharacterSheet
 from world.magic.constants import TargetKind
 from world.magic.exceptions import XPInsufficient
 from world.magic.models import (
@@ -24,7 +25,12 @@ from world.progression.types import ProgressionReason
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Gift, GiftUnlock
+    from world.magic.models import (
+        CharacterTechnique,
+        Gift,
+        GiftUnlock,
+        TechniqueTeachingOffer,
+    )
 
 
 def get_gift_acquisition_config() -> GiftAcquisitionConfig:
@@ -164,3 +170,127 @@ def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
     config = get_gift_acquisition_config()
     depth = _gift_thread_depth(sheet, gift)
     return config.techniques_per_thread_level * depth
+
+
+# ---------------------------------------------------------------------------
+# Acquisition step
+# ---------------------------------------------------------------------------
+
+
+def _resolve_resonance_for(gift: Gift, claimed_ids: set[int]):
+    """Resonance for a newly-granted gift's latent thread.
+
+    Prefer a claimed resonance in the gift's supported set; otherwise
+    the gift's first supported resonance; None if the gift supports none.
+    Lifted from path_magic._grant_resonance_for.
+    """
+    supported = gift.cached_resonances
+    if not supported:
+        return None
+    return next((r for r in supported if r.pk in claimed_ids), supported[0])
+
+
+@transaction.atomic
+def accept_technique_offer(
+    learner: CharacterSheet,
+    offer: TechniqueTeachingOffer,
+) -> CharacterTechnique:
+    """Accept a TechniqueTeachingOffer — the acquisition step (#1587).
+
+    If the learner doesn't yet have the technique's gift, this implicitly
+    acquires it (via grant_gift_to_character). The first technique from
+    a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
+    and requires a CharacterGiftUnlock receipt (the XP gate).
+
+    Args:
+        learner: The character accepting the offer.
+        offer: The TechniqueTeachingOffer being accepted.
+
+    Returns:
+        The new CharacterTechnique.
+
+    Raises:
+        GiftUnlockMissing: First technique from a gift with no receipt.
+        TechniqueCapExceeded: At the cap for this gift at current thread level.
+    """
+    from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        GiftUnlockMissing,
+        TechniqueCapExceeded,
+    )
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterGift,
+        CharacterResonance,
+        CharacterTechnique,
+    )
+    from world.magic.specialization.services import (  # noqa: PLC0415
+        grant_gift_to_character,
+    )
+
+    # Lock the learner's sheet row to serialize first-acquisition (concurrency).
+    sheet = CharacterSheet.objects.select_for_update().get(pk=learner.pk)
+
+    technique = offer.technique
+    gift = technique.gift
+
+    # 1. Check learner doesn't already know this technique.
+    if CharacterTechnique.objects.filter(character=sheet, technique=technique).exists():
+        msg = f"{sheet} already knows {technique.name}."
+        raise ValueError(msg)
+
+    # 2. Check if learner has the gift.
+    has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()
+
+    # 3. Compute AP cost.
+    config = get_gift_acquisition_config()
+    if not has_gift:
+        # Check the XP gate (CharacterGiftUnlock receipt).
+        if not CharacterGiftUnlock.objects.filter(character=sheet, unlock__gift=gift).exists():
+            raise GiftUnlockMissing
+        ap_cost = offer.learn_ap_cost * config.first_technique_ap_multiplier
+    else:
+        ap_cost = offer.learn_ap_cost
+
+    # 4. Implicit gift acquisition (first technique).
+    if not has_gift:
+        claimed_ids = set(
+            CharacterResonance.objects.filter(character_sheet=sheet).values_list(
+                "resonance_id", flat=True
+            )
+        )
+        resonance = _resolve_resonance_for(gift, claimed_ids)
+        grant_gift_to_character(sheet, gift, resonance=resonance)
+
+    # 5. Check technique cap (after acquisition so the thread exists for depth).
+    current_count = count_techniques_for_gift(sheet, gift)
+    cap = get_technique_cap_for_gift(sheet, gift)
+    if current_count >= cap:
+        raise TechniqueCapExceeded
+
+    # 6. Spend learner AP. Consume teacher's banked AP.
+    # Gold transfer deferred — mirrors TODO in CodexTeachingOffer
+    # and accept_thread_weaving_unlock; no economy system exists yet.
+    learner_pool = ActionPointPool.get_or_create_for_character(sheet.character)
+    if not learner_pool.can_afford(ap_cost):
+        from world.magic.exceptions import MagicError  # noqa: PLC0415
+
+        msg = f"Insufficient action points (need {ap_cost}, have {learner_pool.current})."
+        raise MagicError(msg)
+    learner_pool.spend(ap_cost)
+    teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)
+    teacher_pool.consume_banked(offer.banked_ap)
+
+    # 7. Mint CharacterTechnique.
+    ct = CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+    # 8. Announce.
+    announce_access_change(
+        sheet,
+        gained=[technique],
+        lost=[],
+        source=AccessChangeSource.GIFT_ACQUISITION,
+    )
+
+    return ct
