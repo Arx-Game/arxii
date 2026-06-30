@@ -11,6 +11,7 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAura,
     CharacterGift,
+    CharacterGiftUnlock,
     CharacterResonance,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
@@ -18,6 +19,8 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    GiftAcquisitionConfig,
+    GiftUnlock,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -45,6 +48,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
+    TechniqueTeachingOffer,
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
@@ -793,3 +797,38 @@ class DramaticMomentTagAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(GiftUnlock)
+class GiftUnlockAdmin(admin.ModelAdmin):
+    list_display = ["gift", "xp_cost", "out_of_path_multiplier"]
+    list_filter = ["paths"]
+    search_fields = ["gift__name"]
+    filter_horizontal = ["paths"]
+
+
+@admin.register(CharacterGiftUnlock)
+class CharacterGiftUnlockAdmin(admin.ModelAdmin):
+    list_display = ["character", "unlock", "xp_spent", "teacher", "acquired_at"]
+    search_fields = ["character__name"]
+    readonly_fields = ["acquired_at"]
+
+
+@admin.register(TechniqueTeachingOffer)
+class TechniqueTeachingOfferAdmin(admin.ModelAdmin):
+    list_display = [
+        "teacher",
+        "technique",
+        "learn_ap_cost",
+        "gold_cost",
+        "banked_ap",
+    ]
+    search_fields = ["teacher__character__name", "technique__name"]
+
+
+@admin.register(GiftAcquisitionConfig)
+class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "techniques_per_thread_level",
+        "first_technique_ap_multiplier",
+    ]

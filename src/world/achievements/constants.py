@@ -45,3 +45,4 @@ class AccessChangeSource(models.TextChoices):
     COVENANT_ROLE_DISENGAGED = "covenant_role_disengaged", "setting down your covenant role"
     CHARACTER_CREATION = "character_creation", "your origins"
     PATH_ADVANCEMENT = "path_advancement", "advancing into a new path"
+    GIFT_ACQUISITION = "gift_acquisition", "acquiring a new gift"

@@ -66,7 +66,7 @@ technique, not a new form of it.
 - `SignatureMotifBonus` catalog (`world/magic/models/signature.py`) + three payload child
   rows inheriting the shared abstract bases: `SignatureMotifBonusCapabilityGrant`,
   `SignatureMotifBonusDamageProfile`, `SignatureMotifBonusAppliedCondition`.
-- `Thread.signature_bonus` nullable FK (TECHNIQUE-kind only). Migrations 0067 + 0068.
+- `Thread.signature_bonus` nullable FK (TECHNIQUE-kind only). Migrations 0068 + 0069.
 - Selection service (`world/magic/services/signature.py`):
   `available_signature_bonuses`, `set_signature_bonus`, `clear_signature_bonus`,
   `signature_bonus_for`.
