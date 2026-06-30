@@ -170,8 +170,8 @@ The within-tier class-level advancement ceremony is complete. Magic's contributi
   `cross_threshold` calls `apply_class_level_advance` (the shared spine) instead of
   inlining a level write.
 
-**Open follow-up:** telnet drivability of `RitualSession` dispatch (REST-only today;
-session-layer `action.run` / `CmdRitual` convergence is a tracked follow-up).
+**Open follow-up (#1700):** telnet drivability of `RitualSession` dispatch (REST-only today;
+a `CmdRitual` adapter for the Ritual of the Durance — under the telnet-E2E umbrella #1328).
 
 ---
 

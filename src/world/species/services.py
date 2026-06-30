@@ -33,8 +33,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     gift thread anchors to the same resonance as the player's Major-gift thread.
     """
     from world.conditions.services import apply_condition  # noqa: PLC0415
-    from world.magic.models.gifts import CharacterGift  # noqa: PLC0415
-    from world.magic.specialization.services import provision_latent_gift_thread  # noqa: PLC0415
+    from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
 
     if sheet.species_id is None:
         return []
@@ -45,11 +44,9 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     )
     minted: list[CharacterGift] = []
     for grant in grants:
-        cg, _ = CharacterGift.objects.get_or_create(character=sheet, gift=grant.gift)
-        minted.append(cg)
         res = resonance or grant.gift.resonances.first()
-        if res is not None:
-            provision_latent_gift_thread(sheet, grant.gift, resonance=res)
+        cg, _ = grant_gift_to_character(sheet, grant.gift, resonance=res)
+        minted.append(cg)
         if grant.drawback_condition_id is not None:
             from world.conditions.models import ConditionInstance  # noqa: PLC0415
 

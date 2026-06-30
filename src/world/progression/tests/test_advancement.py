@@ -525,3 +525,71 @@ class LegendRequirementWiredIntoUnlockCheckTests(TestCase):
             met, failed = check_requirements_for_unlock(sheet.character, unlock)
         assert met is True
         assert failed == []
+
+
+# ---------------------------------------------------------------------------
+# Durance: level-3 POTENTIAL semi-crossing (#1579) — switch path + grant, no Audere Majora
+# ---------------------------------------------------------------------------
+
+
+class DuranceSemiCrossingTests(TestCase):
+    """Advancing 2→3 (PROSPECT→POTENTIAL) in the Durance switches to the chosen
+    Potential path and grants its gift+techniques — the same machinery as a crossing,
+    but with no Audere Majora involved."""
+
+    def setUp(self) -> None:
+        from world.classes.models import PathStage
+        from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+        from world.magic.models import PathGiftGrant
+        from world.progression.models import ClassLevelUnlock, PathIntent
+        from world.progression.selectors import current_path_for_character
+
+        self.session, self.officiant, self.inductee, self.character_class = _build_durance_session(
+            officiant_level=10, inductee_level=2
+        )
+        ClassLevelUnlock.objects.create(character_class=self.character_class, target_level=3)
+
+        prospect = current_path_for_character(self.inductee.character)
+        self.potential = PathFactory(stage=PathStage.POTENTIAL)
+        self.potential.parent_paths.add(prospect)
+
+        self.gift = GiftFactory(name="Pyromancy_durance")
+        self.gift.resonances.add(ResonanceFactory(name="Ember_durance"))
+        self.tech = TechniqueFactory(name="Flame Lash_durance", gift=self.gift)
+        grant = PathGiftGrant.objects.create(path=self.potential, gift=self.gift)
+        grant.starter_techniques.add(self.tech)
+
+        # Declare intent to take the Potential path at the rite.
+        PathIntent.objects.create(character_sheet=self.inductee, intended_path=self.potential)
+
+    def test_semi_crossing_switches_path_and_grants(self) -> None:
+        from world.magic.models import CharacterGift, CharacterTechnique
+        from world.progression.selectors import current_path_for_character
+
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            advance_class_level_via_session(session=self.session)
+
+        self.inductee.invalidate_class_level_cache()
+        assert self.inductee.current_level == 3
+        assert current_path_for_character(self.inductee.character).pk == self.potential.pk
+        assert CharacterGift.objects.filter(character=self.inductee, gift=self.gift).exists()
+        assert CharacterTechnique.objects.filter(
+            character=self.inductee, technique=self.tech
+        ).exists()
+
+    def test_no_declared_path_advances_level_without_switch(self) -> None:
+        from world.magic.models import CharacterGift
+        from world.progression.models import PathIntent
+        from world.progression.selectors import current_path_for_character
+
+        PathIntent.objects.filter(character_sheet=self.inductee).delete()
+        prospect_pk = current_path_for_character(self.inductee.character).pk
+
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            advance_class_level_via_session(session=self.session)
+
+        self.inductee.invalidate_class_level_cache()
+        assert self.inductee.current_level == 3
+        # No declared Potential path → stays on the prospect path, grants nothing.
+        assert current_path_for_character(self.inductee.character).pk == prospect_pk
+        assert not CharacterGift.objects.filter(character=self.inductee).exists()

@@ -26,10 +26,13 @@ from world.magic.exceptions import (
     ProtagonismLockedError,
 )
 from world.magic.factories import (
+    GiftFactory,
     ResonanceFactory,
+    TechniqueFactory,
     wire_audere_power_multipliers,
     with_corruption_at_stage,
 )
+from world.magic.models import CharacterGift, CharacterTechnique, PathGiftGrant
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.magic.types import AlterationGateError
 from world.mechanics.engagement import CharacterEngagement
@@ -480,3 +483,45 @@ class TestPostDeclarationEmptyGuard(TestCase):
         result_scene, interaction = _post_declaration(self.character, "   ")
         self.assertEqual(result_scene, self.scene)
         self.assertIsNone(interaction)
+
+
+# ---------------------------------------------------------------------------
+# Path-crossing grants the new path's gift + techniques (#1579)
+# ---------------------------------------------------------------------------
+
+
+class CrossingGrantsPathMagicTests(TestCase):
+    """Accepting the crossing grants the chosen path's PathGiftGrant gift + techniques."""
+
+    def setUp(self) -> None:
+        wire_audere_power_multipliers()
+        (
+            self.character,
+            self.sheet,
+            self.threshold,
+            self.prospect_path,
+            self.puissant_path,
+            self.offer,
+        ) = build_crossing_world(5, "_grant")
+        self.gift = GiftFactory(name="Pyromancy_grant")
+        self.gift.resonances.add(ResonanceFactory(name="Ember_grant"))
+        self.technique = TechniqueFactory(name="Flame Lash_grant", gift=self.gift)
+        grant = PathGiftGrant.objects.create(path=self.puissant_path, gift=self.gift)
+        grant.starter_techniques.add(self.technique)
+
+    def test_crossing_grants_gift_and_starter_technique(self) -> None:
+        _accept(self.offer, self.puissant_path)
+
+        self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())
+        self.assertTrue(
+            CharacterTechnique.objects.filter(
+                character=self.sheet, technique=self.technique
+            ).exists()
+        )
+
+    def test_crossing_into_path_without_grant_mints_nothing(self) -> None:
+        # The prospect path has no PathGiftGrant; crossing to the puissant path
+        # must not grant the prospect path's (absent) kit — only the chosen path's.
+        PathGiftGrant.objects.all().delete()
+        _accept(self.offer, self.puissant_path)
+        self.assertFalse(CharacterGift.objects.filter(character=self.sheet).exists())

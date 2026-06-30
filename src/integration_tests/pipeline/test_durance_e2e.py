@@ -260,3 +260,74 @@ class DuranceE2EMultiInducteeTests(TestCase):
         for sheet in (self.inductee_a, self.inductee_b):
             sheet.invalidate_class_level_cache()
             self.assertEqual(sheet.current_level, 3)
+
+
+class DuranceSemiCrossingE2ETests(DuranceE2ESingleInducteeTests):
+    """Full draft → accept → fire journey for the level-3 POTENTIAL semi-crossing (#1579):
+    the inductee declares a Potential path, and firing the Durance switches them onto it
+    and grants its gift + techniques — no Audere Majora involved."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+        from world.magic.models import PathGiftGrant
+
+        # A Potential-stage child of the shared prospect path, with a gift + technique.
+        self.potential = PathFactory(stage=PathStage.POTENTIAL)
+        self.potential.parent_paths.add(self.path)
+        self.gift = GiftFactory(name="Pyromancy_durance_e2e")
+        self.gift.resonances.add(ResonanceFactory(name="Ember_durance_e2e"))
+        self.tech = TechniqueFactory(name="Flame Lash_durance_e2e", gift=self.gift)
+        grant = PathGiftGrant.objects.create(path=self.potential, gift=self.gift)
+        grant.starter_techniques.add(self.tech)
+
+    def test_fire_semi_crossing_switches_path_and_grants_magic(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.models import CharacterGift, CharacterTechnique, Thread
+        from world.progression.selectors import current_path_for_character
+
+        session = draft_session(
+            ritual=self.ritual,
+            initiator=self.officiant_sheet,
+            proposed_terms="Durance rite — the Potential semi-crossing.",
+            session_kwargs={},
+            invitee_sheets=[self.inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        inductee_participant = session.participants.get(character_sheet=self.inductee_sheet)
+        # Declare the chosen Potential path at the rite (the level-3 semi-crossing target).
+        accept_session(
+            participant=inductee_participant,
+            participant_kwargs={"testament": _ORATION, "path_id": self.potential.pk},
+            references=[],
+        )
+
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            fire_session(session=session)
+
+        # Level bumped to 3 (POTENTIAL).
+        self.inductee_sheet.invalidate_class_level_cache()
+        self.assertEqual(self.inductee_sheet.current_level, 3)
+        # Path switched onto the chosen Potential path — no Audere Majora crossing.
+        self.assertEqual(
+            current_path_for_character(self.inductee_sheet.character).pk, self.potential.pk
+        )
+        # The Potential path's gift + technique were granted, latent thread provisioned.
+        self.assertTrue(
+            CharacterGift.objects.filter(character=self.inductee_sheet, gift=self.gift).exists()
+        )
+        self.assertTrue(
+            CharacterTechnique.objects.filter(
+                character=self.inductee_sheet, technique=self.tech
+            ).exists()
+        )
+        self.assertTrue(
+            Thread.objects.filter(
+                owner=self.inductee_sheet,
+                target_kind=TargetKind.GIFT,
+                target_gift=self.gift,
+            ).exists()
+        )

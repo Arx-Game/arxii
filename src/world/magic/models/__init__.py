@@ -96,6 +96,7 @@ from world.magic.models.grants import (
     BeginningsRitualGrant,
     CodexEntryRitualGrant,
     DistinctionRitualGrant,
+    PathGiftGrant,
     PathRitualGrant,
     TraditionRitualGrant,
 )
@@ -255,6 +256,7 @@ __all__ = [
     "MotifResonance",
     "MotifResonanceAssociation",
     "MotifResonanceStyle",
+    "PathGiftGrant",
     "PathRitualGrant",
     "PendingAlteration",
     # audere majora offer (#543, re-exported from world.magic.audere_majora)

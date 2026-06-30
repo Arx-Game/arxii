@@ -479,6 +479,29 @@ resonance picker remains a needs-design follow-up. Proven end-to-end by
   `target_gift == thread.target_gift` first, falls back to `target_gift IS NULL`; all other
   kinds get only `target_gift IS NULL` rows.
 
+**Path-crossing grant — the (Gift × Path) base-technique-set leg (#1579, ADR-0055):**
+#1578 built the *resonance* leg (how a known technique manifests); #1579 builds the
+*(Gift × Path)* leg as an **acquisition** (which techniques you get):
+
+- `PathGiftGrant` (`models/grants.py`, the `PathRitualGrant` through-model shape) authors,
+  per `(path, gift)`, a curated `starter_techniques` M2M subset of *that gift's* techniques.
+  The same authored Gift grants a different set per path (a warrior-line and a spy-line path
+  both grant Pyromancy, but different techniques from it). `clean()` rejects a starter
+  technique not belonging to the grant's gift; unique per `(path, gift)`.
+- `grant_path_magic(sheet, path)` (`services/path_magic.py`, returns `PathMagicGrantResult`)
+  mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
+  `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`
+  sets, then announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`).
+  Resonance for the latent thread = a claimed resonance in the gift's supported set, else the
+  gift's first supported resonance (the player commits the real choice later via the Rite of
+  Weaving). XP/advancement *gates* the crossing (ADR-0053); the grant is a consequence of path
+  membership (ADR-0050), not an XP purchase.
+- **Hook:** `cross_threshold` (`audere_majora.py`) calls `grant_path_magic(sheet, chosen_path)`
+  right after writing `CharacterPathHistory` — so *which* levels grant is pure authored data
+  (`AudereMajoraThreshold` rows). A POTENTIAL (level-3) "pre-crossing" reuses the identical
+  machinery; its lesser-ceremony wording is authored on the threshold row.
+- Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`.
+
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 
 **Models (new):**

@@ -89,10 +89,10 @@ in-fiction trigger is plausible.
 | Capability | Tier | Evidence / home | MVP? |
 |---|---|---|---|
 | Author your **own** new techniques | ✅ PROVEN | `author_technique` | done |
-| Gain a **new Gift** in play (post-CG) | ❌ → DESIGNED | **ADR-0050** (Minor Gifts acquirable) + **ADR-0053** (XP unlocks the acquisition gate) | MVP |
+| Gain a **new Gift** in play (post-CG) | 🟨 PARTIAL | **Path-crossing grant ✅ PROVEN** — crossing into a new Path mints its Gift(s) via `PathGiftGrant` + `grant_path_magic` (#1579, `test_path_crossing_grant_e2e.py`). Weave/XP-buy acquisition of a standalone Minor Gift (**ADR-0050** + **ADR-0053**) is still → #1587. | MVP |
 | Grow stronger in a gift (more/stronger techniques) | ❌ → DESIGNED | **ADR-0051** (gift-thread strength, costliest kind) | MVP |
 | **Learn / train / buy** an existing technique | ❌ → DESIGNED | **ADR-0056** (signature thread for one technique) + **ADR-0053** (unlock gate) | MVP |
-| **Leveling grants magical power** (unlocks gifts/techniques) | ❌ → DESIGNED | **ADR-0053** (XP-unlock) + **ADR-0051** (thread strength); `Gift` docstring "powers unlock as you level" is not implemented | **now (foundational)** |
+| **Leveling grants magical power** (unlocks gifts/techniques) | 🟨 PARTIAL | **Path-crossing grant ✅ PROVEN** — advancing into a new Path (the `cross_threshold` ceremony) grants that Path's Gift + a curated starter technique set per (Path × Gift) (#1579, ADR-0055 grant leg; `test_path_crossing_grant_e2e.py`). The within-tier **gift-thread strength** axis (**ADR-0051**, more/stronger techniques by imbuing) is still → #1581. | **now (foundational)** |
 | Trainer / teaching system | ❌ ABSENT | (`MentorBond` is a combat bond, not teaching) | soon |
 | Path-crossing (Audere Majora) — change path in play | ✅ PROVEN | offer created by cast hook `maybe_create_audere_majora_offer` (`world/magic/services/techniques.py` Step 8c); journey driven E2E in `test_audere_telnet_e2e.py` | done |
 | Ritual of the Durance level-up | 🟨 WIRED-UNPROVEN | works via generic machinery but **unseeded** | fix |
@@ -106,7 +106,7 @@ in-fiction trigger is plausible.
 |---|---|---|---|
 | Covenant role resolution `(role × resonance × thread level)` → sub-role | ✅ PROVEN | `resolve_effective_role`; the **template** to generalize | done |
 | **One specialization primitive** `(entity × resonance) → customized capability` | ✅ PROVEN | **ADR-0055** — `AbstractSpecializedVariant` base + `resolve_specialized_variant(entity, character)` (the one resolver; `resolve_effective_role` is a shim); `test_gift_specialization_e2e.py` | done |
-| **Gift × Path → specialized techniques** | ✅ PROVEN | **ADR-0055** — `TechniqueVariant` (per-resonance sub-technique rows) resolved derive-on-read from the GIFT thread; `test_gift_specialization_e2e.py` | done |
+| **Gift × Path → specialized techniques** | ✅ PROVEN | **ADR-0055** — the (Gift × Path) leg sets the *base technique set*: `PathGiftGrant` + `grant_path_magic` mint a path-specific curated set from a shared Gift on crossing (#1579, `test_path_crossing_grant_e2e.py`); resonance then specializes each on read via `TechniqueVariant` (#1578, `test_gift_specialization_e2e.py`) | done |
 | **Resonance differentiates your magic** (gift affinity + technique form) | ✅ PROVEN | **ADR-0052** (gift affinity = thread resonance) + **ADR-0055** (derive-on-read); `gift_resonances_for` feeds the four cast sites; `test_gift_specialization_e2e.py` | done |
 | **Signature technique** (one technique deepened, own resonance, may diverge) | ❌ → DESIGNED | **ADR-0056** (re-scope `TargetKind.TECHNIQUE`) | soon |
 | **Fall / Redemption** resonance conversion (asymmetric) | ❌ → DESIGNED | **ADR-0054** (new conversion service; respect monotonic `lifetime_earned`) | soon |

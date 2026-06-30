@@ -447,14 +447,37 @@ CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the 
 resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
 
+### Path-crossing grant — (Gift × Path) → base technique set (grants.py, services/path_magic.py — #1579)
+
+The complement to the resonance engine above: #1578 specializes *how* a known technique
+manifests; #1579 grants *which* techniques you get when you advance into a new Path. This is
+ADR-0055's "(Gift × Path) sets the base technique set" leg, realized as an **acquisition** on
+advancement (not a derive-on-read), honoring ADR-0053 (advancement *gates*; the grant is a
+consequence of Path membership per ADR-0050, not an XP purchase).
+
+| Surface | Role | Notes |
+|---|---|---|
+| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
+| `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via the shared `grant_gift_to_character` primitive) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Already-owned gifts/techniques are skipped (kept), so the character retains everything and only *gains*. |
+| Path-change seam `cross_into_path(sheet, path)` (`world/progression/services/advancement.py`) | Wiring | Writes `CharacterPathHistory` + fires `grant_path_magic`. Used by **both** `cross_threshold` (Audere Majora, levels 5/10/15/20 → PUISSANT+) **and** the **Ritual of the Durance** when it advances into the POTENTIAL stage (level 3 — the "semi-crossing", no Audere Majora). So *which* levels grant is authored data; the level-3 rite reuses the identical grant machinery with no crossing ceremony. |
+
+Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`: the real
+Audere Majora `resolve_audere_majora_offer → cross_threshold` into the warrior path grants only
+the warrior technique set from a shared gift (spy set absent), keeps the character's prior
+gift+techniques while deepening that existing gift and adding the new one, and the granted
+technique resolves through the specialization path; plus the level-3 Durance semi-crossing
+journey. **Out of scope → #1581:** the within-tier gift-thread *strength* growth (imbue-driven
+more/stronger techniques) + per-target-kind cost tuning. (The GIFT anchor cap itself —
+`path_stage × 10` — shipped in #1580.)
+
 **Species gift extension (#1580) [BUILT & WIRED]:** `SpeciesGiftGrant` (`world/species/models.py`;
 natural key `(species, gift)`) is the through-model that links a species to one or more MINOR
 `Gift`s with an optional `drawback_condition` FK to `conditions.ConditionTemplate`.
 `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) is called
-from `finalize_magic_data` after the Major-gift block; it mints the MINOR `CharacterGift`,
-calls `provision_latent_gift_thread`, and applies any drawback idempotently. The gift's GIFT
-thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets against
-the drawback vulnerability at the combat-damage seam. `gift_thread_resistance(character,
+from `finalize_magic_data` after the Major-gift block; it mints the MINOR `CharacterGift`
+(via the shared `grant_gift_to_character` primitive) and applies any drawback idempotently. The
+gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets
+against the drawback vulnerability at the combat-damage seam. `gift_thread_resistance(character,
 damage_type) -> int` (services/threads.py) returns the aggregate resistance (passive +
 active paid-pull snapshots). See ADR-0050, ADR-0062. E2E:
 `world/magic/tests/integration/test_species_gift_e2e.py`.
@@ -553,9 +576,10 @@ the inductee.
 `Ritual` row (SERVICE / INDUCTION, `min_participants=2`, no upper-bound). The `@post_generation`
 hook creates the companion `RitualLiturgy` via `RitualLiturgyFactory`.
 
-**Telnet follow-up.** `RitualSession` dispatch is REST-only today
-(`POST /api/magic/ritual-sessions/draft/`, `accept/`, `fire/`). Telnet drivability
-(session-layer `action.run` / `CmdRitual` convergence) is a tracked follow-up.
+**Telnet follow-up (#1700).** `RitualSession` dispatch is REST-only today
+(`POST /api/magic/ritual-sessions/draft/`, `accept/`, `fire/`). Telnet drivability — a
+`CmdRitual` adapter for the Ritual of the Durance (mirroring the covenant adapters) — is
+tracked in **#1700** (under the telnet-E2E umbrella #1328).
 
 ---
 

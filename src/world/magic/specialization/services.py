@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.magic.models import Thread
     from world.magic.models.affinity import Resonance
-    from world.magic.models.gifts import Gift
+    from world.magic.models.gifts import CharacterGift, Gift
     from world.magic.models.techniques import Technique
 
 
@@ -73,6 +73,29 @@ def provision_latent_gift_thread(
     # contract in covenants/services._invalidate_role_caches).
     character.threads.invalidate()
     return thread
+
+
+def grant_gift_to_character(
+    sheet: CharacterSheet, gift: Gift, *, resonance: Resonance | None
+) -> tuple[CharacterGift, bool]:
+    """Mint (idempotently) the CharacterGift link + the latent GIFT thread.
+
+    The shared gift-acquisition primitive: a character gains a gift by linking it
+    (``CharacterGift``) and provisioning its latent level-0 GIFT thread. Used by the
+    path-crossing grant (#1579) and species-gift provisioning (#1580) so there is
+    one place that does this, not a per-source copy.
+
+    ``resonance`` is the already-resolved resonance for the latent thread — each
+    caller applies its own resonance-selection policy; ``None`` skips thread
+    provisioning (e.g. a gift that supports no resonances). Returns
+    ``(character_gift, created)``.
+    """
+    from world.magic.models import CharacterGift  # noqa: PLC0415
+
+    character_gift, created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
+    if resonance is not None:
+        provision_latent_gift_thread(sheet, gift, resonance=resonance)
+    return character_gift, created
 
 
 def gift_resonances_for(character, gift: Gift) -> list[Resonance]:

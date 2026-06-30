@@ -74,7 +74,8 @@ The central spine connecting every system in the game. Characters develop throug
     companion `RitualLiturgy` (the authored opening call).
   - Exceptions: `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`,
     `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all with `user_message`.
-  - **Open follow-up:** telnet drivability of `RitualSession` dispatch (REST-only today).
+  - **Open follow-up (#1700):** telnet drivability of `RitualSession` dispatch — a
+    `CmdRitual` adapter for the Ritual of the Durance (REST-only today; umbrella #1328).
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics
