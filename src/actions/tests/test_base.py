@@ -293,6 +293,9 @@ class ActionRegistryTests(TestCase):
             "resolve_battle_round",
             "conclude_battle",
             "declare_battle_action",
+            "signature_set",
+            "signature_clear",
+            "signature_list",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

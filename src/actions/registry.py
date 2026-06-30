@@ -177,6 +177,11 @@ from actions.definitions.scene_reactions import (
     ToggleReactionAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
+from actions.definitions.signature import (
+    SignatureClearAction,
+    SignatureListAction,
+    SignatureSetAction,
+)
 from actions.definitions.social import (
     deceive,
     entrance,
@@ -350,6 +355,9 @@ _ALL_ACTIONS: list[Action] = [
     ResolveBattleRoundAction(),
     ConcludeBattleAction(),
     DeclareBattleActionAction(),
+    SignatureSetAction(),
+    SignatureClearAction(),
+    SignatureListAction(),
 ]
 
 # Lookup by key

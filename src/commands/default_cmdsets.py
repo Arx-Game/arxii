@@ -92,6 +92,7 @@ from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
 from commands.setstage import CmdSetStage
+from commands.signature import CmdSignature
 from commands.social.blocking import (
     CmdBlock,
     CmdBlockList,
@@ -179,6 +180,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
             # weave/dissolve/absorb/sever).
             CmdSanctum,
+            # #1582 — signature-bonus selection namespace (set/clear/list).
+            CmdSignature,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
