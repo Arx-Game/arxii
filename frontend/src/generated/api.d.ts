@@ -5024,6 +5024,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/friends/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting player's OOC friends: list, add (this character or all), remove. */
+    get: operations['friends_list'];
+    put?: never;
+    /** @description The requesting player's OOC friends: list, add (this character or all), remove. */
+    post: operations['friends_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/friends/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description The requesting player's OOC friends: list, add (this character or all), remove. */
+    delete: operations['friends_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/global-story-progress/': {
     parameters: {
       query?: never;
@@ -17545,6 +17580,31 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
+    /** @description A friend row — the friended character's name + the tenures. */
+    Friendship: {
+      readonly id: number;
+      /** @description The friender's tenure (this player's run of the character that friended). */
+      readonly friender_tenure: number;
+      /** @description The friended character's tenure (a specific player's run of that character). */
+      readonly friend_tenure: number;
+      readonly friend_name: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Add a friend: which of your characters friends (or all), and the friended tenure. */
+    FriendshipCreate: {
+      friender_tenure: number;
+      friend_tenure: number;
+      /** @default false */
+      all_characters: boolean;
+    };
+    /** @description Add a friend: which of your characters friends (or all), and the friended tenure. */
+    FriendshipCreateRequest: {
+      friender_tenure: number;
+      friend_tenure: number;
+      /** @default false */
+      all_characters: boolean;
+    };
     /** @description Read-only representation of one selectable FuryTier (#1543). */
     FuryTierOption: {
       readonly id: number;
@@ -20484,6 +20544,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['FashionPresentation'][];
+    };
+    PaginatedFriendshipList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Friendship'][];
     };
     PaginatedGMApplicationDetailList: {
       /** @example 123 */
@@ -33367,6 +33442,71 @@ export interface operations {
         content: {
           'application/json': components['schemas']['FormTrait'];
         };
+      };
+    };
+  };
+  friends_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedFriendshipList'];
+        };
+      };
+    };
+  };
+  friends_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FriendshipCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FriendshipCreate'];
+        };
+      };
+    };
+  };
+  friends_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

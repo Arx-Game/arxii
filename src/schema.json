@@ -7701,6 +7701,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/FormTrait'
           description: ''
+  /api/friends/:
+    get:
+      operationId: friends_list
+      description: 'The requesting player''s OOC friends: list, add (this character
+        or all), remove.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - friends
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFriendshipList'
+          description: ''
+    post:
+      operationId: friends_create
+      description: 'The requesting player''s OOC friends: list, add (this character
+        or all), remove.'
+      tags:
+      - friends
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FriendshipCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FriendshipCreate'
+          description: ''
+  /api/friends/{id}/:
+    delete:
+      operationId: friends_destroy
+      description: 'The requesting player''s OOC friends: list, add (this character
+        or all), remove.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - friends
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/global-story-progress/:
     get:
       operationId: global_story_progress_list
@@ -31074,6 +31136,66 @@ components:
         * `true` - True Form
         * `alternate` - Alternate Form
         * `disguise` - Disguise
+    Friendship:
+      type: object
+      description: A friend row — the friended character's name + the tenures.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        friender_tenure:
+          type: integer
+          readOnly: true
+          description: The friender's tenure (this player's run of the character that
+            friended).
+        friend_tenure:
+          type: integer
+          readOnly: true
+          description: The friended character's tenure (a specific player's run of
+            that character).
+        friend_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - friend_name
+      - friend_tenure
+      - friender_tenure
+      - id
+    FriendshipCreate:
+      type: object
+      description: 'Add a friend: which of your characters friends (or all), and the
+        friended tenure.'
+      properties:
+        friender_tenure:
+          type: integer
+        friend_tenure:
+          type: integer
+        all_characters:
+          type: boolean
+          default: false
+      required:
+      - friend_tenure
+      - friender_tenure
+    FriendshipCreateRequest:
+      type: object
+      description: 'Add a friend: which of your characters friends (or all), and the
+        friended tenure.'
+      properties:
+        friender_tenure:
+          type: integer
+        friend_tenure:
+          type: integer
+        all_characters:
+          type: boolean
+          default: false
+      required:
+      - friend_tenure
+      - friender_tenure
     FuryTierOption:
       type: object
       description: Read-only representation of one selectable FuryTier (#1543).
@@ -36885,6 +37007,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FashionPresentation'
+    PaginatedFriendshipList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Friendship'
     PaginatedGMApplicationDetailList:
       type: object
       required:
