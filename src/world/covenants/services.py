@@ -139,7 +139,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
 
 
 @transaction.atomic
-def create_covenant(  # noqa: PLR0913
+def create_covenant(  # noqa: PLR0913, C901, PLR0912
     *,
     name: str,
     covenant_type: str,
@@ -147,6 +147,7 @@ def create_covenant(  # noqa: PLR0913
     founders: Sequence[CovenantFounder],
     battle_binding: str = "",
     campaign_story: Story | None = None,
+    leader: CharacterSheet | None = None,
     flat: bool = False,
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
@@ -175,6 +176,8 @@ def create_covenant(  # noqa: PLR0913
         BattleBindingNotAllowedError,
         BattleBindingRequiredError,
         CampaignStoryNotAllowedError,
+        CourtLeaderNotAllowedError,
+        CourtLeaderRequiredError,
     )
 
     if covenant_type == CovenantType.BATTLE:
@@ -186,12 +189,19 @@ def create_covenant(  # noqa: PLR0913
     if campaign_story is not None and battle_binding != BattleBinding.CAMPAIGN:
         raise CampaignStoryNotAllowedError
 
+    if covenant_type == CovenantType.COURT:
+        if leader is None:
+            raise CourtLeaderRequiredError
+    elif leader is not None:
+        raise CourtLeaderNotAllowedError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
         battle_binding=battle_binding,
         campaign_story=campaign_story,
+        leader=leader,
     )
 
     # Build rank ladder and determine which rank each founder gets.
