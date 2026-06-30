@@ -12145,6 +12145,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/secrets/gossip/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The Level-1 secrets the viewing character could spread + their heat in this region (#1572).
+     *
+     *     The web face of bare ``gossip`` (the telnet list). IC-scoped: ``viewer`` is a RosterEntry pk
+     *     validated by ``for_account``; no/unowned viewer → an empty list. Heat is read for the
+     *     character's current room's region (0 when the character is roomless).
+     */
+    get: operations['secrets_gossip_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/secrets/gossip/action/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Plant / seek / suppress gossip at a social hub (#1572) — the web face of ``CmdGossip``.
+     *
+     *     Converges on the same ``world.secrets.gossip`` services the telnet command calls. ``viewer`` is
+     *     validated by ``for_account``; the services enforce the Gossip-skill + social-hub gates and raise
+     *     ``GossipError`` (surfaced as its ``user_message``, never ``str(exc)``).
+     */
+    post: operations['secrets_gossip_action_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/secrets/grievance/': {
     parameters: {
       query?: never;
@@ -14175,13 +14221,6 @@ export interface components {
      * @enum {string}
      */
     ActionCategoryEnum: 'physical' | 'social' | 'mental';
-    /**
-     * @description * `submit` - Submit
-     *     * `edit` - Edit
-     *     * `agree` - Agree
-     * @enum {string}
-     */
-    ActionEnum: 'submit' | 'edit' | 'agree';
     /**
      * @description Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
      *
@@ -17903,6 +17942,37 @@ export interface components {
       readonly display_order: number;
       /** @description Check if this domain is optional (doesn't require point allocation). */
       readonly is_optional: boolean;
+    };
+    /**
+     * @description * `plant` - Plant
+     *     * `seek` - Seek
+     *     * `suppress` - Suppress
+     * @enum {string}
+     */
+    GossipActionActionEnum: 'plant' | 'seek' | 'suppress';
+    /**
+     * @description Input for a gossip action: the verb, the active character's RosterEntry pk, and — for
+     *     plant/suppress — the target secret (#1572).
+     */
+    GossipActionRequest: {
+      action: components['schemas']['GossipActionActionEnum'];
+      /** @description The active (viewing) character's RosterEntry pk. */
+      viewer: number;
+      /** @description Required for plant/suppress. */
+      secret?: number;
+    };
+    /** @description Outcome of a plant/seek/suppress gossip action (#1572). */
+    GossipResult: {
+      readonly success: boolean;
+      readonly heat: number;
+      readonly went_public: boolean;
+      readonly content: string | null;
+    };
+    /** @description A Level-1 secret the viewer holds + could spread, with its heat in this region (#1572). */
+    GossipSecret: {
+      readonly id: number;
+      readonly content: string;
+      readonly heat: number;
     };
     /** @description A preset grievance swing offered to a wronged character (#1429). */
     GrievanceOption: {
@@ -24529,10 +24599,17 @@ export interface components {
        *     * `edit` - Edit
        *     * `agree` - Agree
        */
-      action: components['schemas']['ActionEnum'];
+      action: components['schemas']['SceneSummaryRevisionActionEnum'];
       /** Format: date-time */
       readonly timestamp: string;
     };
+    /**
+     * @description * `submit` - Submit
+     *     * `edit` - Edit
+     *     * `agree` - Agree
+     * @enum {string}
+     */
+    SceneSummaryRevisionActionEnum: 'submit' | 'edit' | 'agree';
     SceneSummaryRevisionRequest: {
       /** @description The ephemeral scene this revision belongs to */
       scene: number;
@@ -24547,7 +24624,7 @@ export interface components {
        *     * `edit` - Edit
        *     * `agree` - Agree
        */
-      action: components['schemas']['ActionEnum'];
+      action: components['schemas']['SceneSummaryRevisionActionEnum'];
     };
     /**
      * @description * `unassigned` - Unassigned
@@ -44249,6 +44326,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  secrets_gossip_list: {
+    parameters: {
+      query?: {
+        /** @description Viewer's RosterEntry pk. */
+        viewer?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GossipSecret'][];
+        };
+      };
+    };
+  };
+  secrets_gossip_action_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GossipActionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GossipResult'];
         };
       };
     };

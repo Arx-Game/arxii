@@ -1,8 +1,14 @@
 /** React Query hooks for the secret tab (#1334) + the grievance flow (#1429). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { listGrievanceOptions, listKnownSecrets, submitGrievance } from './api';
-import type { SubmitGrievancePayload } from './api';
+import {
+  gossipAction,
+  listGossip,
+  listGrievanceOptions,
+  listKnownSecrets,
+  submitGrievance,
+} from './api';
+import type { GossipActionPayload, SubmitGrievancePayload } from './api';
 
 export const secretKeys = {
   known: (subjectId: number, viewerId: number) =>
@@ -35,6 +41,31 @@ export function useSubmitGrievanceMutation() {
     mutationFn: (payload: SubmitGrievancePayload) => submitGrievance(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['secrets', 'known'] });
+    },
+  });
+}
+
+export const gossipKeys = {
+  list: (viewerId: number) => ['secrets', 'gossip', viewerId] as const,
+};
+
+/** The active character's spreadable gossip + regional heat. Disabled until there's an active
+ * character — gossip is per character (and location-bound), never account-wide (#1572). */
+export function useGossipQuery(viewerId: number | null) {
+  return useQuery({
+    queryKey: gossipKeys.list(viewerId ?? 0),
+    queryFn: () => listGossip(viewerId as number),
+    enabled: viewerId != null,
+  });
+}
+
+/** Plant / seek / suppress gossip; refetches the list on success (#1572). */
+export function useGossipActionMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: GossipActionPayload) => gossipAction(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['secrets', 'gossip'] });
     },
   });
 }

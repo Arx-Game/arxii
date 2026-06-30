@@ -20424,6 +20424,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/secrets/gossip/:
+    get:
+      operationId: secrets_gossip_list
+      description: |-
+        The Level-1 secrets the viewing character could spread + their heat in this region (#1572).
+
+        The web face of bare ``gossip`` (the telnet list). IC-scoped: ``viewer`` is a RosterEntry pk
+        validated by ``for_account``; no/unowned viewer → an empty list. Heat is read for the
+        character's current room's region (0 when the character is roomless).
+      parameters:
+      - in: query
+        name: viewer
+        schema:
+          type: integer
+        description: Viewer's RosterEntry pk.
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GossipSecret'
+          description: ''
+  /api/secrets/gossip/action/:
+    post:
+      operationId: secrets_gossip_action_create
+      description: |-
+        Plant / seek / suppress gossip at a social hub (#1572) — the web face of ``CmdGossip``.
+
+        Converges on the same ``world.secrets.gossip`` services the telnet command calls. ``viewer`` is
+        validated by ``for_account``; the services enforce the Gossip-skill + social-hub gates and raise
+        ``GossipError`` (surfaced as its ``user_message``, never ``str(exc)``).
+      tags:
+      - secrets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GossipActionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GossipResult'
+          description: ''
   /api/secrets/grievance/:
     post:
       operationId: secrets_grievance_create
@@ -23858,16 +23912,6 @@ components:
         * `physical` - Physical
         * `social` - Social
         * `mental` - Mental
-    ActionEnum:
-      enum:
-      - submit
-      - edit
-      - agree
-      type: string
-      description: |-
-        * `submit` - Submit
-        * `edit` - Edit
-        * `agree` - Agree
     ActionRef:
       type: object
       description: |-
@@ -31864,6 +31908,73 @@ components:
       - id
       - is_optional
       - name
+    GossipActionActionEnum:
+      enum:
+      - plant
+      - seek
+      - suppress
+      type: string
+      description: |-
+        * `plant` - Plant
+        * `seek` - Seek
+        * `suppress` - Suppress
+    GossipActionRequest:
+      type: object
+      description: |-
+        Input for a gossip action: the verb, the active character's RosterEntry pk, and — for
+        plant/suppress — the target secret (#1572).
+      properties:
+        action:
+          $ref: '#/components/schemas/GossipActionActionEnum'
+        viewer:
+          type: integer
+          description: The active (viewing) character's RosterEntry pk.
+        secret:
+          type: integer
+          description: Required for plant/suppress.
+      required:
+      - action
+      - viewer
+    GossipResult:
+      type: object
+      description: Outcome of a plant/seek/suppress gossip action (#1572).
+      properties:
+        success:
+          type: boolean
+          readOnly: true
+        heat:
+          type: integer
+          readOnly: true
+        went_public:
+          type: boolean
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - content
+      - heat
+      - success
+      - went_public
+    GossipSecret:
+      type: object
+      description: A Level-1 secret the viewer holds + could spread, with its heat
+        in this region (#1572).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+        heat:
+          type: integer
+          readOnly: true
+      required:
+      - content
+      - heat
+      - id
     GrievanceOption:
       type: object
       description: A preset grievance swing offered to a wronged character (#1429).
@@ -44340,7 +44451,7 @@ components:
           description: The summary text for this revision
         action:
           allOf:
-          - $ref: '#/components/schemas/ActionEnum'
+          - $ref: '#/components/schemas/SceneSummaryRevisionActionEnum'
           description: |-
             Whether this is a submission, edit, or agreement
 
@@ -44359,6 +44470,16 @@ components:
       - persona_name
       - scene
       - timestamp
+    SceneSummaryRevisionActionEnum:
+      enum:
+      - submit
+      - edit
+      - agree
+      type: string
+      description: |-
+        * `submit` - Submit
+        * `edit` - Edit
+        * `agree` - Agree
     SceneSummaryRevisionRequest:
       type: object
       properties:
@@ -44374,7 +44495,7 @@ components:
           description: The summary text for this revision
         action:
           allOf:
-          - $ref: '#/components/schemas/ActionEnum'
+          - $ref: '#/components/schemas/SceneSummaryRevisionActionEnum'
           description: |-
             Whether this is a submission, edit, or agreement
 
