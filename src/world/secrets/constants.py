@@ -47,3 +47,15 @@ class SecretProvenance(models.TextChoices):
     GM_AUTHORED = "gm", "GM/Staff authored (canon)"
     ACTION_ANCHORED = "action", "Action-anchored (minted by play)"
     PLAYER_FLAVOR = "flavor", "Player flavor (unverified)"
+
+
+# --- Gossip (#1572): regional Level-1-secret spread "heat". ---
+# PLACEHOLDER magnitudes (Apostate's tuning pass later — build the mechanism, defer the numbers).
+GOSSIP_CHECK_TYPE_NAME = "Gossip"  # the seeded charm + Persuasion + Gossip-spec check
+GOSSIP_DECAY_FLOOR = 1  # heat decays toward this; once gossiped it lingers findable. Suppress → 0.
+GOSSIP_PUBLIC_THRESHOLD = 40  # heat ≥ this → public (ambient echo + region society exposure)
+GOSSIP_SPECIAL_SUCCESS_LEVEL = 2  # CheckOutcome.success_level ≥ this counts as a "special" success
+GOSSIP_PLANT_REGULAR = 1  # heat added by a regular-success plant
+GOSSIP_PLANT_SPECIAL = 2  # heat added by a special-success plant (spec counts double)
+GOSSIP_SUPPRESS_REGULAR = 1  # heat removed by a regular-success suppress
+GOSSIP_SUPPRESS_SPECIAL = 2  # heat removed by a special-success suppress

@@ -430,6 +430,12 @@ actions, backends, and service functions.
   `/api/tidings/feed/` endpoint calls). Lists recent deeds + scandals the active character's
   societies are aware of, newest first. (`gossip`/`news` are intentionally *not* used — `gossip`
   is reserved for level-1-secret access at hubs, `news` for OOC game news; criers are NPCs.)
+- **`gossip.py`**: `CmdGossip` (`gossip`, #1572) — work the rumor mill at a **social hub**. Thin over
+  `world.secrets.gossip`: `gossip` (list your gossipable Level-1 secrets + their heat here), `gossip
+  seek` (roll to overhear a hot secret you don't know), `gossip plant <#>` (spread it — raises
+  regional heat), `gossip suppress <#>` (lower heat). Gated on Gossip ≥ 1 + standing in an
+  `is_social_hub` room (the services enforce both; the command surfaces the skill gate). The reserved
+  `gossip` verb the tidings note above set aside.
 
 ### Frontend Integration
 - **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)

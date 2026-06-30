@@ -48,6 +48,7 @@ _SOCIAL_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None]] = {
     "Deception": ("charm", "Persuasion", "Manipulation"),
     "Seduction": ("charm", "Persuasion", "Seduction"),
     "Performance": ("presence", "Performance", None),
+    "Gossip": ("charm", "Persuasion", "Gossip"),  # #1572 — the gossip plant/seek/suppress check
 }
 
 

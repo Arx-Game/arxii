@@ -356,6 +356,20 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.secrets.gossip import gossip_decay_tick
+
+    register_task(
+        CronDefinition(
+            # Decay regional gossip heat toward the floor (#1572). Cadence is a PLACEHOLDER —
+            # the spec's intent is ~1 per IC day; 24h-real matches the other daily sweeps and
+            # is tunable in Apostate's later magnitude pass.
+            task_key="secrets.gossip_decay",
+            callable=gossip_decay_tick,
+            interval=timedelta(hours=24),
+            description="Decay regional gossip heat by 1 toward the floor (#1572).",
+        )
+    )
+
     from world.scenes.tasks import block_finalize_task
 
     register_task(
