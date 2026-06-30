@@ -9,7 +9,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0011_conditioncategory_grants_intangibility_and_more"),
-        ("magic", "0065_techniquedraftremovedcondition_and_more"),
+        ("magic", "0066_alter_threadpullcost_options_and_more"),
     ]
 
     operations = [

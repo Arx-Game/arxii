@@ -145,10 +145,22 @@ class MagicContent:
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
         from actions.models import ActionEnhancement  # noqa: PLC0415
-        from world.magic.factories import GiftFactory  # noqa: PLC0415
+        from world.magic.factories import (  # noqa: PLC0415
+            AffinityFactory,
+            GiftFactory,
+            ResonanceFactory,
+        )
         from world.magic.models import EffectType, Technique, TechniqueStyle  # noqa: PLC0415
+        from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
+
+        # Wire one resonance into the Social Arts supported set so gift-thread
+        # variants can be authored against it (#1581).  Uses get_or_create on both
+        # the affinity and the resonance so repeated calls are a no-op.
+        social_affinity = AffinityFactory(name="Social")
+        social_resonance = ResonanceFactory(name="Social Influence", affinity=social_affinity)
+        gift.resonances.add(social_resonance)
 
         # Ensure a minimal style and effect_type exist for social techniques.
         # get_or_create so re-runs don't create duplicates.
@@ -197,6 +209,26 @@ class MagicContent:
                 },
             )
             enhancements[action_key] = enhancement
+
+        # #1581: author a resonance-specific variant per gift technique so deepening
+        # the gift-thread to level 3 surfaces a discoverable, slightly-stronger
+        # renamed form.  Keyed on the unique triple (parent_technique, resonance,
+        # unlock_thread_level); get_or_create makes repeated calls a no-op.
+        seeded_gift_techniques = list(techniques.values())
+        for technique in seeded_gift_techniques:
+            resonance = technique.gift.resonances.first()
+            if resonance is None:
+                continue
+            TechniqueVariant.objects.get_or_create(
+                parent_technique=technique,
+                resonance=resonance,
+                unlock_thread_level=3,
+                defaults={
+                    "name_override": f"{resonance.name} {technique.name}",
+                    "intensity_delta": 2,
+                    "control_delta": 1,
+                },
+            )
 
         return MagicContentResult(techniques=techniques, enhancements=enhancements)
 
@@ -1666,6 +1698,8 @@ _CATALOG_RESONANCE_NAME: str = "Tideborne"
 _CATALOG_AFFINITY_NAME: str = "Primal (Tideborne)"
 
 #: Per-tier pull cost definitions: (tier, resonance_cost, anima_per_thread, label)
+#: These are the UNIVERSAL default rows (target_kind=None) that apply to all
+#: thread kinds without a kind-specific override.
 _PULL_COST_TIERS: list[tuple[int, int, int, str]] = [
     (1, 1, 1, "soft"),
     (2, 3, 2, "medium"),
@@ -1718,16 +1752,29 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     )
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
 
-    # --- ThreadPullCost rows (tier is the natural key via django_get_or_create) ---
+    # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
     pull_costs: dict[int, ThreadPullCost] = {}
     for tier, resonance_cost, anima_per_thread, label in _PULL_COST_TIERS:
         cost = ThreadPullCostFactory(
             tier=tier,
+            target_kind=None,
             resonance_cost=resonance_cost,
             anima_per_thread=anima_per_thread,
             label=label,
         )
         pull_costs[tier] = cost
+
+    # --- ThreadPullCost row (GIFT imbue premium only; #1581: pull cost is uniform) ---
+    # GIFT carries an IMBUE premium only (no pull-cost premium; #1581). One tier-1
+    # GIFT row carries imbue_cost_multiplier; its pull-cost fields mirror universal.
+    ThreadPullCostFactory(
+        tier=1,
+        target_kind=TargetKind.GIFT,
+        resonance_cost=_PULL_COST_TIERS[0][1],  # == universal tier-1 resonance_cost
+        anima_per_thread=_PULL_COST_TIERS[0][2],  # == universal tier-1 anima_per_thread
+        imbue_cost_multiplier=2,
+        label="gift-imbue",
+    )
 
     # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
     affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)

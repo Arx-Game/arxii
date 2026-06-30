@@ -5,19 +5,25 @@ provisioned with a latent GIFT thread at CG resolves to the base technique; once
 thread advances past the variant's unlock threshold the resolver derives the variant
 (derive-on-read, no regeneration) and the discovery beat fires (achievement + codex).
 
-NOTE: the thread is advanced past ``unlock_thread_level=3`` by setting ``level``
-directly, NOT via ``spend_resonance_for_imbuing``. The GIFT anchor cap
-(``compute_anchor_cap``) has no GIFT case and returns 0, so the cap-gated imbue path
-raises ``AnchorCapExceeded`` on a fresh GIFT thread. The GIFT anchor cap is a
-deliberately deferred needs-design follow-up (see the #1578 PR notes); until it lands,
-the E2E advances the level directly and calls the discovery ceremony explicitly — the
-same ceremony-direct pattern proven in ``test_gift_variant_discovery.py``.
+The GIFT anchor cap (``compute_anchor_cap``) is now handled: for a fresh character with
+no path history ``_current_path_stage`` returns 1, giving an effective cap of 10 (1
+stage × ANCHOR_CAP_GIFT_PER_STAGE=10), so ``spend_resonance_for_imbuing`` can advance
+a GIFT thread to level 3 without hitting the cap. The journey therefore exercises two
+paths:
+
+- ``test_full_journey`` / ``test_base_form_resolves_without_thread``: direct
+  level-setting + explicit ``fire_variant_discoveries`` ceremony (ceremony-direct pattern).
+- ``test_imbuing_to_unlock_fires_discovery``: real ``spend_resonance_for_imbuing`` path
+  (internally calls ``fire_variant_discoveries``).
+- ``test_variant_takes_effect_at_cast``: runtime-stat read via ``get_runtime_technique_stats``
+  proves variant deltas reach the cast power seam.
 """
 
 from typing import ClassVar
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.achievements.factories import AchievementFactory
 from world.achievements.models import Achievement, CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
@@ -26,8 +32,15 @@ from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.covenants.discovery import fire_variant_discoveries
 from world.magic.constants import TargetKind
-from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
-from world.magic.models import Gift, Resonance, Technique, Thread
+from world.magic.factories import (
+    BinaryEffectTypeFactory,
+    CharacterTechniqueFactory,
+    GiftFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+)
+from world.magic.models import CharacterResonance, Gift, Resonance, Technique, Thread
+from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import (
     gift_resonances_for,
@@ -35,6 +48,8 @@ from world.magic.specialization.services import (
     resolve_specialized_variant,
 )
 from world.roster.factories import RosterEntryFactory
+from world.scenes.cast_services import request_technique_cast
+from world.scenes.tests.cast_test_helpers import CastScenarioMixin
 
 
 class GiftSpecializationE2ETest(TestCase):
@@ -86,10 +101,10 @@ class GiftSpecializationE2ETest(TestCase):
         self.assertEqual([r.pk for r in resonances], [self.resonance.pk])
 
         # 4. Advance the thread past the variant's unlock threshold (level 3).
-        #    Set level directly — the GIFT anchor cap is 0 (deferred needs-design),
-        #    so the cap-gated imbue path would raise AnchorCapExceeded. See module
-        #    docstring. We then fire the discovery ceremony explicitly (the real
-        #    imbue path fires it internally; here we invoke it directly).
+        #    Set level directly + invoke fire_variant_discoveries explicitly —
+        #    this is the ceremony-direct pattern (as opposed to the real imbue
+        #    path in test_imbuing_to_unlock_fires_discovery, which calls
+        #    spend_resonance_for_imbuing and fires the ceremony internally).
         latent = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
@@ -135,3 +150,160 @@ class GiftSpecializationE2ETest(TestCase):
             entity=self.technique, character=other_sheet.character
         )
         self.assertEqual(resolved.name, self.technique.name)
+
+    def test_variant_takes_effect_at_cast(self) -> None:
+        """Variant intensity/control deltas are visible through the cast-power seam.
+
+        Uses the delta between a level-0 (base-form) read and a level-3 (variant)
+        read to isolate the variant contribution from social-safety, identity
+        modifier, and IntensityTier noise — the difference must equal the authored
+        ``intensity_delta=5`` and ``control_delta=2`` on the variant.
+        """
+        from world.magic.services.techniques import get_runtime_technique_stats
+
+        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        thread = next(
+            t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
+        )
+
+        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=3).
+        base_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
+
+        # Advance to level 3 to unlock the variant; invalidate the cached handler.
+        thread.level = 3
+        thread.save(update_fields=["level"])
+        self.sheet.character.threads.invalidate()
+
+        # Read again — the resolver should now return the variant form.
+        variant_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
+
+        # The delta must match the variant's authored deltas exactly, regardless of any
+        # constant modifier streams (social-safety, identity modifiers, IntensityTier).
+        self.assertEqual(
+            variant_stats.intensity - base_stats.intensity,
+            self.variant.intensity_delta,
+            "intensity delta should equal variant.intensity_delta",
+        )
+        self.assertEqual(
+            variant_stats.control - base_stats.control,
+            self.variant.control_delta,
+            "control delta should equal variant.control_delta",
+        )
+
+    def test_imbuing_to_unlock_fires_discovery(self) -> None:
+        """Real imbue path: spending resonance to level 3 fires the discovery ceremony.
+
+        ``spend_resonance_for_imbuing(character_sheet, thread, amount)`` advances the
+        thread greedily by spending ``amount`` developed-points.  Sub-10 levels each
+        cost 1 dp, so ``amount=3`` carries the thread from 0 → 3 (crossing
+        ``unlock_thread_level=3``).  The function internally calls
+        ``fire_variant_discoveries``, so the achievement should be granted without any
+        explicit ceremony call in this test.
+
+        The GIFT anchor cap for a fresh character with no path history is
+        ``_current_path_stage() × ANCHOR_CAP_GIFT_PER_STAGE = 1 × 10 = 10``, so the
+        cap does not block advancement to level 3.
+        """
+        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        thread = next(
+            t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
+        )
+
+        # Ensure the CharacterResonance row exists and has sufficient balance.
+        # ``provision_latent_gift_thread`` does not create this row; the imbue
+        # service requires it to debit the resonance currency bucket.
+        cr, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        cr.balance = 9999
+        cr.save(update_fields=["balance"])
+
+        # Spend 3 dp: levels 0→1, 1→2, 2→3 each cost 1 dp (sub-10 formula).
+        spend_resonance_for_imbuing(self.sheet, thread, 3)
+
+        # The discovery ceremony fires internally; achievement must now exist.
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet,
+                achievement=self.achievement,
+            ).exists(),
+            "discovery achievement should be granted after imbuing across level 3",
+        )
+
+
+class BaseFormCastE2ETest(CastScenarioMixin):
+    """E2E: use_base_form=True opts out of a gift-technique variant at cast time (#1581 Task 8).
+
+    With a level-3 GIFT thread (variant unlocked), ``request_technique_cast``
+    normally resolves the variant form and uses its name in the outcome pose.
+    Passing ``use_base_form=True`` bypasses the variant and casts the raw parent
+    technique (base name, base intensity, base anima cost).
+    """
+
+    gift: ClassVar[Gift]
+    resonance: ClassVar[Resonance]
+    technique: ClassVar[Technique]
+    variant: ClassVar[TechniqueVariant]
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.gift = GiftFactory()
+        cls.resonance = ResonanceFactory()
+        cls.gift.resonances.add(cls.resonance)
+        # Castable, non-hostile, non-consent technique anchored to the gift.
+        cls.technique = TechniqueFactory(
+            gift=cls.gift,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        # A resonance-specialized variant unlocking at level 3.
+        cls.variant = TechniqueVariant.objects.create(
+            parent_technique=cls.technique,
+            resonance=cls.resonance,
+            unlock_thread_level=3,
+            name_override="Celestial Form",
+            intensity_delta=5,
+            control_delta=0,
+        )
+        # Grant the technique to the caster.
+        CharacterTechniqueFactory(character=cls.caster.character_sheet, technique=cls.technique)
+        # Provision the GIFT thread and advance it to level 3 so the variant is unlocked.
+        provision_latent_gift_thread(cls.caster.character_sheet, cls.gift, resonance=cls.resonance)
+        thread = Thread.objects.get(
+            owner=cls.caster.character_sheet,
+            target_kind=TargetKind.GIFT,
+            target_gift=cls.gift,
+        )
+        thread.level = 3
+        thread.save(update_fields=["level"])
+        # Invalidate the cached thread handler so the variant is visible to the resolver.
+        cls.caster.character_sheet.character.threads.invalidate()
+
+    def test_base_form_cast_uses_base_technique_name(self) -> None:
+        """use_base_form=True: outcome pose uses base technique name, not the variant name."""
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+            use_base_form=True,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn(self.technique.name, content, "base technique name must appear in pose")
+        self.assertNotIn(
+            "Celestial Form", content, "variant name must not appear in base-form pose"
+        )
+
+    def test_default_cast_applies_variant_name(self) -> None:
+        """Default cast (no use_base_form): outcome pose uses the unlocked variant name."""
+        cast_result = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=self.technique,
+        )
+        self.assertIsNotNone(cast_result.outcome_interaction, "cast should resolve immediately")
+        content = cast_result.outcome_interaction.content
+        self.assertIn("Celestial Form", content, "variant name must appear in default cast pose")

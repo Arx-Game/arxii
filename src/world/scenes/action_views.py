@@ -543,6 +543,8 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         technique = get_object_or_404(Technique, pk=technique_id)
 
+        use_base_form: bool = vd.get("use_base_form", False)
+
         try:
             cast_result = request_technique_cast(
                 scene=scene,
@@ -552,6 +554,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 strain_commitment=strain_commitment,
                 cast_pull=cast_pull,
                 supplied_personas=supplied_personas,
+                use_base_form=use_base_form,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]

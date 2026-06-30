@@ -945,15 +945,21 @@ class MagicalAlterationEventFactory(factory.django.DjangoModelFactory):
 
 
 class ThreadPullCostFactory(factory.django.DjangoModelFactory):
-    """Factory for ThreadPullCost — per-tier pull cost lookup."""
+    """Factory for ThreadPullCost — per-tier pull cost lookup.
+
+    ``target_kind=None`` creates the universal default row; pass a TargetKind
+    value to create a kind-specific override row.
+    """
 
     class Meta:
         model = ThreadPullCost
-        django_get_or_create = ("tier",)
+        django_get_or_create = ("tier", "target_kind")
 
     tier = 1
+    target_kind = None
     resonance_cost = 1
     anima_per_thread = 1
+    imbue_cost_multiplier = 1
     label = "soft"
 
 

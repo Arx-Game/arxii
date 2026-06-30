@@ -390,12 +390,18 @@ def _derive_power(
 def get_runtime_technique_stats(
     technique: Technique,
     character: ObjectDB | None,
+    *,
+    apply_variant: bool = True,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
     Combines base values with identity modifiers (from CharacterModifier),
     process modifiers (from CharacterEngagement), social safety bonus
     (when not engaged), and IntensityTier control modifier.
+
+    ``apply_variant`` (default ``True``) controls whether the gift-technique
+    variant is resolved.  Pass ``apply_variant=False`` to obtain the raw
+    base-form stats, e.g. for cost-clamping in ``use_technique`` (#1581 Task 7).
     """
     if character is None:
         return RuntimeTechniqueStats(
@@ -403,13 +409,26 @@ def get_runtime_technique_stats(
             control=technique.control,
         )
 
+    # Fetch the sheet once here so both the variant resolver and the identity-stream
+    # block below share the same result without a second DB round-trip (#1581 fix).
+    sheet = _get_character_sheet(character)
+
+    # #1581: gift techniques resolve to their resonance-specific variant once the
+    # gift-thread crosses unlock_thread_level. _ResolvedTechnique transparently
+    # exposes variant-adjusted intensity/control; all other reads pass through.
+    # Pass the pre-fetched sheet to skip the redundant _get_character_sheet call
+    # that would otherwise happen inside _resolve_technique_variant.
+    if apply_variant:
+        from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
+
+        technique = resolve_specialized_variant(entity=technique, character=character, _sheet=sheet)
+
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
     # Identity stream
     identity_intensity = 0
     identity_control = 0
-    sheet = _get_character_sheet(character)
     if sheet is not None:
         stat_targets = _get_technique_stat_targets()
         if TECHNIQUE_STAT_INTENSITY in stat_targets:
@@ -864,6 +883,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     power_intensity_bonus: int = 0,
     lethal: bool = True,
     control_penalty: int = 0,
+    apply_variant: bool = True,
 ) -> TechniqueUseResult:
     """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.
 
@@ -898,7 +918,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
     # Step 1: Calculate runtime stats
-    stats = get_runtime_technique_stats(technique, character)
+    stats = get_runtime_technique_stats(technique, character, apply_variant=apply_variant)
     if control_penalty:
         stats = replace(stats, control=max(stats.control - control_penalty, 0))
 
@@ -912,6 +932,21 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         strain_commitment=strain_commitment,
         lethal=lethal,
     )
+
+    # #1581 strict bonus: a variant must never cost more anima than the base form.
+    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
+    if control_penalty:
+        base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
+    base_cost = calculate_effective_anima_cost(
+        base_cost=technique.anima_cost,
+        runtime_intensity=base_stats.intensity,
+        runtime_control=base_stats.control,
+        current_anima=anima.current,
+        strain_commitment=strain_commitment,
+        lethal=lethal,
+    )
+    if base_cost.effective_cost < cost.effective_cost:
+        cost = base_cost
 
     # Step 3: Safety checkpoint (Soulfray stage-driven)
     soulfray_warning = get_soulfray_warning(character)

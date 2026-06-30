@@ -39,6 +39,7 @@ from world.magic.models import (
     CharacterThreadWeavingUnlock,
     Thread,
     ThreadLevelUnlock,
+    ThreadPullCost,
     ThreadXPLockedLevel,
 )
 from world.magic.types import ThreadSurvivabilitySaves, ThreadXPLockProspect
@@ -233,6 +234,59 @@ def compute_path_cap(character_sheet: CharacterSheet) -> int:
 def compute_effective_cap(thread: Thread) -> int:
     """Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4)."""
     return min(compute_path_cap(thread.owner), compute_anchor_cap(thread))
+
+
+# =============================================================================
+# Resonance Pivot Spec A — per-target-kind IMBUE premium (ADR-0051); pull cost is uniform
+# =============================================================================
+
+
+def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:
+    """Resolve the pull cost row for (tier, target_kind).
+
+    Prefers a kind-specific row (``target_kind`` set); falls back to the
+    universal default row (``target_kind=None``). Mirrors the
+    ``get_pull_effects_for_thread`` gift-specific-then-null fallback pattern.
+
+    ``target_kind`` is normalized through ``TargetKind(value)`` when not None
+    to fail fast on garbage input rather than silently falling back.
+
+    Args:
+        tier: Pull intensity tier (1, 2, or 3).
+        target_kind: A ``TargetKind`` value, or None for the universal default.
+
+    Returns:
+        The matching ``ThreadPullCost`` row.
+
+    Raises:
+        ValueError: If ``target_kind`` is not a valid ``TargetKind`` value.
+        ThreadPullCost.DoesNotExist: If no universal row exists for ``tier``.
+    """
+    if target_kind is not None:
+        TargetKind(target_kind)  # validate; raises ValueError on bad input
+        specific = ThreadPullCost.objects.filter(tier=tier, target_kind=target_kind).first()
+        if specific is not None:
+            return specific
+    return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
+
+
+def get_imbue_cost_multiplier(target_kind: str | None) -> int:
+    """Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).
+
+    Reads the multiplier from the tier-1 cost row for ``target_kind`` (or the
+    universal row). Defaults to 1 when no row is found. This keeps all tuning
+    in the ``ThreadPullCost`` data surface rather than a module constant.
+
+    Args:
+        target_kind: A ``TargetKind`` value, or None for the universal default.
+
+    Returns:
+        The imbue cost multiplier (default 1).
+    """
+    try:
+        return get_pull_cost(1, target_kind).imbue_cost_multiplier
+    except ThreadPullCost.DoesNotExist:
+        return 1
 
 
 # =============================================================================

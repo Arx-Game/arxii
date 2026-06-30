@@ -32,17 +32,50 @@ class ThreadPullCost(SharedMemoryModel):
     numbers (resonance_cost, anima_per_thread) live here as data; the
     cost-formula shape lives in spend_resonance_for_pull. Edit values
     here for per-tier tweaks; edit the service for shape changes.
+
+    The optional ``target_kind`` scopes a row to a specific thread kind
+    (ADR-0051: gift-threads are the costliest kind). A row with
+    ``target_kind=None`` is the universal default that applies to all
+    kinds without a kind-specific row. Resolvers prefer a kind-specific
+    row and fall back to the universal row (mirrors the
+    ``ThreadPullEffect.target_gift`` lookup pattern).
+
+    ``imbue_cost_multiplier`` (default 1) scales the imbue dp formula
+    for this kind — so GIFT threads cost more to raise via imbuing too.
     """
 
-    tier = models.PositiveSmallIntegerField(unique=True)
+    tier = models.PositiveSmallIntegerField()
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        null=True,
+        blank=True,
+    )
     resonance_cost = models.PositiveSmallIntegerField()
     anima_per_thread = models.PositiveSmallIntegerField()
+    imbue_cost_multiplier = models.PositiveSmallIntegerField(default=1)
     label = models.CharField(max_length=32)
 
     class Meta:
-        ordering = ("tier",)
+        ordering = ("tier", "target_kind")
+        constraints = [
+            # Universal default rows: one per tier (target_kind=None).
+            models.UniqueConstraint(
+                fields=["tier"],
+                condition=models.Q(target_kind__isnull=True),
+                name="threadpullcost_tier_universal",
+            ),
+            # Kind-specific rows: one per (tier, target_kind).
+            models.UniqueConstraint(
+                fields=["tier", "target_kind"],
+                condition=models.Q(target_kind__isnull=False),
+                name="threadpullcost_tier_kind",
+            ),
+        ]
 
     def __str__(self) -> str:
+        if self.target_kind:
+            return f"Tier {self.tier} ({self.label}, {self.target_kind})"
         return f"Tier {self.tier} ({self.label})"
 
 

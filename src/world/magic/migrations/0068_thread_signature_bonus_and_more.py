@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("covenants", "0017_role_inherits_specialization_base"),
         ("items", "0022_garmentmitigation"),
-        ("magic", "0066_signaturemotifbonus_and_more"),
+        ("magic", "0067_signaturemotifbonus_and_more"),
         ("relationships", "0006_writeupcomplaint_writeupkudos"),
         ("traits", "0001_initial"),
     ]

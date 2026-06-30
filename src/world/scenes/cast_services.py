@@ -92,6 +92,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     fury_anchor: CharacterSheet | None = None,
     cast_pull: CastPullDeclaration | None = None,
     confirm_soulfray_risk: bool = True,
+    apply_variant: bool = True,
 ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, FuryResolution | None]:
     """Resolve a standalone cast through use_technique + start_action_resolution.
 
@@ -171,6 +172,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         cast_pull=cast_pull,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
+        apply_variant=apply_variant,
     )
 
     # Soulfray gate: use_technique returned without resolving — propagate None result.
@@ -227,12 +229,16 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     result: EnhancedSceneActionResult,
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
+    technique_name: str | None = None,
 ) -> Interaction:
     """Author the Narrator OUTCOME pose describing a resolved standalone cast.
 
     Args:
         fizzle_note: Optional explanatory note appended to the narration when a
             declared pull could not be charged (e.g. resonance drained mid-consent).
+        technique_name: Optional display name override. When provided (e.g. a
+            gift-technique's unlocked-variant name from #1581), uses this in the
+            narration instead of ``technique.name``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -248,7 +254,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
 
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
-        technique_name=technique.name,
+        technique_name=technique_name if technique_name is not None else technique.name,
         target_label=target_persona.name if target_persona is not None else None,
         outcome_label=outcome_label,
         success_level=success_level,
@@ -280,6 +286,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     fizzle_note: str | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    use_base_form: bool = False,
 ) -> tuple[EnhancedSceneActionResult | None, PowerLedger | None, Interaction | None]:
     """Resolve a persisted standalone-cast request, mark it RESOLVED, author the OUTCOME pose.
 
@@ -296,6 +303,19 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     """
     character = caster_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
+
+    # #1581: pose and cost reflect the gift-technique's unlocked variant by default.
+    # When use_base_form=True, bypass variant resolution and use the raw technique.
+    if use_base_form:
+        resolved_name = technique.name
+        resolved_intensity = technique.intensity
+    else:
+        from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
+
+        resolved = resolve_specialized_variant(entity=technique, character=character)
+        resolved_name = resolved.name
+        resolved_intensity = resolved.intensity
+
     difficulty = derive_cast_difficulty(technique)
 
     result, power_ledger, fury_res = _resolve_cast(
@@ -308,6 +328,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        apply_variant=not use_base_form,
     )
 
     # Soulfray gate: use_technique returned unconfirmed — propagate without resolving.
@@ -320,7 +341,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         if result.action_resolution.main_result is not None
         else 0
     )
-    eff_intensity = power_ledger.total if power_ledger is not None else technique.intensity
+    eff_intensity = power_ledger.total if power_ledger is not None else resolved_intensity
     relationship = derive_target_relationship(technique)
     if relationship == ConditionTargetKind.SELF:
         # A SELF technique's effect always lands on the caster, independent of the
@@ -387,6 +408,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         result=result,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
+        technique_name=resolved_name,
     )
     request.result_interaction = pose
     request.save(update_fields=["result_interaction"])
@@ -397,7 +419,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
     action_interaction = create_action_interaction_core(
         persona=caster_persona,
         scene=scene,
-        summary_label=f"{technique.name}",
+        summary_label=f"{resolved_name}",
         strain_committed=strain_commitment,
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
@@ -553,6 +575,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     cast_pull: CastPullDeclaration | None,
     supplied_personas: list[Persona],
     confirm_soulfray_risk: bool = True,
+    use_base_form: bool = False,
 ) -> CastResult:
     """Route a FILTERED_GROUP cast that has a player-supplied persona list.
 
@@ -585,6 +608,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         cast_pull=cast_pull,
         supplied_personas=supplied_personas,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        use_base_form=use_base_form,
     )
 
 
@@ -599,6 +623,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None,
     cast_pull: CastPullDeclaration | None,
     confirm_soulfray_risk: bool = True,
+    use_base_form: bool = False,
 ) -> CastResult:
     """Route a cast directed at another PC (not the caster's own sheet)."""
     if is_technique_hostile(technique):
@@ -633,6 +658,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        use_base_form=use_base_form,
     )
 
 
@@ -648,6 +674,7 @@ def request_technique_cast(  # noqa: PLR0913
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    use_base_form: bool = False,
 ) -> CastResult:
     """Route a standalone technique cast per the consent/combat/immediate matrix.
 
@@ -716,6 +743,7 @@ def request_technique_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            use_base_form=use_base_form,
         )
 
     # Inline the other-PC check (rather than a bool var) so the type checker can
@@ -734,6 +762,7 @@ def request_technique_cast(  # noqa: PLR0913
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            use_base_form=use_base_form,
         )
 
     return _route_immediate_cast(
@@ -746,6 +775,7 @@ def request_technique_cast(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        use_base_form=use_base_form,
     )
 
 
@@ -875,6 +905,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    use_base_form: bool = False,
 ) -> CastResult:
     """Self/room/no-target cast → resolve now, persist RESOLVED, author OUTCOME pose.
 
@@ -915,6 +946,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            use_base_form=use_base_form,
         )
 
     return CastResult(
