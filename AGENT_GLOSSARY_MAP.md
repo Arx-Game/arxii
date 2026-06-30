@@ -243,6 +243,14 @@ weave threads. _Avoid_: mana, energy.
 **Intensity** is the authored tier/magnitude band of a technique's effect; **Power** is the
 realized force a particular casting brings to bear. Keep them distinct — they are not synonyms. _Avoid_: using "power" for "intensity".
 
+**Signature Motif Bonus**:
+A staff-authored catalog row (`world.magic.SignatureMotifBonus`) that a player attaches to a
+TECHNIQUE-kind Thread to *sign* that technique — applying their Motif above the Gift baseline.
+It is an **additive flourish** (intensity delta + conditions + cosmetic prose), NOT a
+`TechniqueVariant` and NOT a resonance-divergence. Gate: character's Motif must satisfy the
+bonus's `required_facet` / `required_resonance` (AND semantics). (ADR-0065, #1582.)
+_Avoid_: signature variant, signature specialization.
+
 ## Progression & legend
 
 **Durance**:

@@ -24,6 +24,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Signature Motif Bonus (ADR-0065 — #1582):** `SignatureMotifBonus` (staff-authored
+    catalog; `required_facet` FK, `required_resonance` FK, `flat_intensity_delta`,
+    `narrative_snippet`; `qualifies_for(character_sheet)` gate predicate),
+    `SignatureMotifBonusCapabilityGrant` / `SignatureMotifBonusDamageProfile` /
+    `SignatureMotifBonusAppliedCondition` (payload children inheriting the abstract bases).
+    `Thread.signature_bonus` (nullable FK, TECHNIQUE-kind only). Selection service
+    (`services/signature.py`): `available_signature_bonuses`, `set_signature_bonus`,
+    `clear_signature_bonus`, `signature_bonus_for`. Cast wiring
+    (`services/signature_effects.py`): `signature_intensity_delta` + `apply_signature_bonus_conditions`
+    (uses shared `apply_technique_conditions` seam). Narration: `signature_clause` in
+    `narration.py`. Actions: `SignatureSetAction` / `SignatureClearAction` /
+    `SignatureListAction` (REGISTRY). Telnet: `CmdSignature` (`commands/signature.py`,
+    key `"signature"`). E2E: `test_signature_motif_e2e.py`.
   - **Specialization engine (ADR-0055 — #1578):** `AbstractSpecializedVariant`
     (shared abstract base — the "one specialization engine"), `TechniqueVariant`
     (concrete — resonance-specialized form of a parent `Technique`, `unlock_thread_level`≥3);

@@ -115,6 +115,7 @@
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
+  - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
@@ -133,6 +134,7 @@
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
+  - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
@@ -161,6 +163,7 @@
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
+  - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
@@ -1269,6 +1272,7 @@
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
+  - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
@@ -1287,6 +1291,7 @@
   - techniquedamageprofile_damage_profiles <- magic.TechniqueDamageProfile
   - alteration_weaknesses <- magic.MagicalAlterationTemplate
   - techniquevariantdamageprofile_damage_profiles <- magic.TechniqueVariantDamageProfile
+  - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
@@ -1315,6 +1320,7 @@
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
+  - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
@@ -2210,6 +2216,7 @@
   - imbuing_prose <- magic.ImbuingProseTemplate
   - sanctums <- magic.SanctumDetails
   - techniquevariant_subrole <- magic.TechniqueVariant
+  - signature_bonuses <- magic.SignatureMotifBonus
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
@@ -2564,6 +2571,7 @@
   - cantrips <- magic.Cantrip
   - children <- magic.Facet
   - motif_usages <- magic.MotifResonanceAssociation
+  - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
   - item_attachments <- items.ItemFacet
   - vogue_momentum <- items.FacetVogueMomentum
@@ -2731,6 +2739,30 @@
   - ref_covenant -> covenants.Covenant [FK] (nullable)
   - ref_covenant_role -> covenants.CovenantRole [FK] (nullable)
 
+### SignatureMotifBonus
+**Foreign Keys:**
+  - required_facet -> magic.Facet [FK] (nullable)
+  - required_resonance -> magic.Resonance [FK] (nullable)
+**Pointed to by:**
+  - capability_grants <- magic.SignatureMotifBonusCapabilityGrant
+  - damage_profiles <- magic.SignatureMotifBonusDamageProfile
+  - condition_applications <- magic.SignatureMotifBonusAppliedCondition
+
+### SignatureMotifBonusCapabilityGrant
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK]
+  - signature_bonus -> magic.SignatureMotifBonus [FK]
+
+### SignatureMotifBonusDamageProfile
+**Foreign Keys:**
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - signature_bonus -> magic.SignatureMotifBonus [FK]
+
+### SignatureMotifBonusAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - signature_bonus -> magic.SignatureMotifBonus [FK]
+
 ### SineatingPendingOffer
 **Foreign Keys:**
   - sinner_sheet -> character_sheets.CharacterSheet [FK]
@@ -2840,6 +2872,7 @@
   - target_gift -> magic.Gift [FK] (nullable)
   - target_mantle -> items.Mantle [FK] (nullable)
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
+  - signature_bonus -> magic.SignatureMotifBonus [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
   - treatment_action_requests <- scenes.SceneActionRequest

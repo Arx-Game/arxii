@@ -227,10 +227,16 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 - Benign + capability/stat → resolves immediately, including on other PCs.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
-`apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character)`
+`apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`
 — extracted from combat's `_apply_conditions`; used by **both** combat and standalone
 cast paths. Callers build `targets_by_kind` before calling; the service iterates
 `TechniqueAppliedCondition` rows and batches them via `bulk_apply_conditions`.
+The optional `applied_condition_rows=` override was added in #1582 for the signature-bonus
+seam: when provided, those rows are applied instead of the technique's own condition rows;
+when `None` (default), all existing callers are byte-identical.
+`compute_severity` / `compute_duration_rounds` were relocated from `TechniqueAppliedCondition`
+to `AbstractAppliedCondition` (pure upward move, no behavior change) so `SignatureMotifBonusAppliedCondition`
+rows can be passed through the same seam.
 (`AppliedConditionResult` lives in `world/conditions/types.py` — the neutral condition
 layer both combat and magic depend on; no deferred import needed.)
 
@@ -261,6 +267,84 @@ magic checks at all is an open design question (#1363).
 | `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
 | `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
 
+### Signature Motif Bonus (#1582 — ADR-0065) [BUILT & WIRED]
+
+A **`SignatureMotifBonus`** is a staff-authored, facet/resonance-gated additive bonus
+that a player may attach to a TECHNIQUE-kind Thread. Signing a technique applies the
+character's Motif to that one technique above its Gift baseline — a cosmetic +
+mechanical flourish, NOT a `TechniqueVariant` and NOT a resonance divergence.
+
+**Design boundary:** `SignatureMotifBonus` must NOT inherit `AbstractSpecializedVariant`
+and must NOT participate in `fire_variant_discoveries`. It is an additive flourish; it
+never changes the technique's identity.
+
+**Catalog model** (`models/signature.py`):
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity). At least one gate must be set (`clean()` enforces). AND semantics when both gates set. |
+| `SignatureMotifBonusCapabilityGrant` | Capability granted by a bonus (inherits `AbstractCapabilityGrant`) | `signature_bonus` FK |
+| `SignatureMotifBonusDamageProfile` | Damage profile for a bonus (inherits `AbstractDamageProfile`) | `signature_bonus` FK |
+| `SignatureMotifBonusAppliedCondition` | Applied condition for a bonus (inherits `AbstractAppliedCondition`) | `signature_bonus` FK |
+
+**Gate predicate** — `SignatureMotifBonus.qualifies_for(character_sheet) -> bool`: checks
+the character's `Motif` against `required_resonance` (via `MotifResonance`) and
+`required_facet` (via `MotifResonanceAssociation`). Returns `False` when no Motif exists.
+
+**Thread FK** — `Thread.signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT).
+Only settable when `thread.target_kind == TargetKind.TECHNIQUE` — enforced by `clean()`
+and DB `CheckConstraint("thread_signature_bonus_technique_only")`. Migrations: 0066 +
+0067.
+
+**Selection service** (`services/signature.py`):
+
+| Function | Purpose |
+|----------|---------|
+| `available_signature_bonuses(character_sheet)` | Full catalog filtered by `qualifies_for` |
+| `set_signature_bonus(thread, bonus)` | Attach bonus; guards: TECHNIQUE-kind, qualifies, owner knows technique. Invalidates `character.threads` cache. |
+| `clear_signature_bonus(thread)` | Set `signature_bonus=None`; idempotent. Invalidates cache. |
+| `signature_bonus_for(character, technique) -> SignatureMotifBonus | None` | Cast-wiring read — finds the active TECHNIQUE thread for the technique via cached handler; returns its bonus or None. |
+
+**Cast wiring** (`services/signature_effects.py`):
+
+| Function | Purpose |
+|----------|---------|
+| `signature_intensity_delta(character, technique) -> int` | Returns `bonus.flat_intensity_delta` or 0; added to `use_technique(power_intensity_bonus=…)` on both cast paths |
+| `apply_signature_bonus_conditions(*, character, technique, success_level, eff_intensity, targets_by_kind, source_character)` | Applies `bonus.cached_condition_applications` through the SHARED `apply_technique_conditions` seam (`applied_condition_rows=` param) — NO parallel apply path |
+
+`apply_technique_conditions` gained an optional `applied_condition_rows` param (default
+`None` = use the technique's own rows; when provided, applies those rows instead). This
+keeps all existing callers byte-identical while enabling the signature seam.
+`compute_severity` / `compute_duration_rounds` were relocated from
+`TechniqueAppliedCondition` to `AbstractAppliedCondition` (pure upward move — no
+behavior change).
+
+**Non-combat narration** (`narration.py`): `signature_clause(snippet) -> str` builds a
+cosmetic em-dash clause from the bonus's `narrative_snippet`. Used in
+`render_cast_outcome_narration` (standalone cast pose) via the `signature_snippet=`
+param. Combat-path cosmetic narration is a deferred fast-follow.
+
+**Actions** (`actions/definitions/signature.py`, REGISTRY, `category="magic"`):
+- `SignatureSetAction` (key `"signature_set"`) — attach a bonus to a thread.
+- `SignatureClearAction` (key `"signature_clear"`) — remove the current bonus.
+- `SignatureListAction` (key `"signature_list"`) — list available bonuses + current settings.
+
+**Telnet command** — `CmdSignature` (`commands/signature.py`, key `"signature"`, `locks
+"cmd:all()"`): routes `signature set technique=<name> bonus=<name>` / `signature clear
+technique=<name>` / bare `signature` or `signature list` through `dispatch_player_action`.
+Namespaced to avoid broad one-word key collisions (same reasoning as `CmdSanctum`).
+
+**E2E test:** `world/magic/tests/integration/test_signature_motif_e2e.py` — full journey:
+Motif → weave TECHNIQUE thread → select bonus → cast → assert cosmetic snippet in pose
+Interaction, intensity delta applied, condition lands on caster. Also tests rejection
+(`SignatureBonusNotAvailable` / `TechniqueNotOwned`) and bonus portability between threads.
+
+**Deferred fast-follows (NOT in #1582):**
+- `damage_profiles` cast seam (combat `_apply_damage` fold).
+- `capability_grants` cast seam (no general technique-authored capability grant seam yet).
+- Combat cosmetic narration (`NARRATIVE_ONLY`-style hook for combat path).
+- Web selection surface (`SignatureViewSet`).
+
 ### Threads as Currency Consumers (Resonance Pivot Spec A §2.1)
 
 The legacy 5-axis `Thread` / `ThreadType` / `ThreadJournal` / `ThreadResonance`
@@ -272,7 +356,7 @@ RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER) |
+| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER), `signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT — only settable on TECHNIQUE-kind threads, enforced by `clean()` + `CheckConstraint`, #1582 ADR-0065) |
 | `ThreadLevelUnlock` | Per-thread XP-locked-boundary receipt | `thread` FK, `unlocked_level`, `xp_spent`, `acquired_at` (unique per (thread, unlocked_level)) |
 
 **Integrity layers on Thread.** (1) `clean()` asserts exactly one `target_*`
