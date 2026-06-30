@@ -221,7 +221,8 @@ def seek_gossip(character: ObjectDB, *, room: ObjectDB) -> GossipResult:
     )
     if not pool:
         return GossipResult(success=False)
-    chosen = random.choices(pool, weights=[row.heat for row in pool], k=1)[0]  # noqa: S311
+    weights = [row.heat for row in pool]
+    chosen = random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # NOSONAR game RNG
     grant_secret_knowledge(roster_entry=entry, secret=chosen.secret)
     return GossipResult(success=True, heat=chosen.heat, surfaced_secret_id=chosen.secret_id)
 
