@@ -976,6 +976,7 @@
 **Foreign Keys:**
   - consequence -> checks.Consequence [FK]
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
+  - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
   - property -> mechanics.Property [FK] (nullable)
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
@@ -3632,7 +3633,9 @@
 **Foreign Keys:**
   - gates_modifiers -> mechanics.ModifierTarget [M2M]
 **Pointed to by:**
+  - consequence_effects <- checks.ConsequenceEffect
   - character_relationships <- relationships.CharacterRelationship
+  - temporary_applications <- relationships.TemporaryRelationshipCondition
 
 ### RelationshipTrack
 **Pointed to by:**
@@ -3682,6 +3685,7 @@
   - developments <- relationships.RelationshipDevelopment
   - capstones <- relationships.RelationshipCapstone
   - changes <- relationships.RelationshipChange
+  - temporary_conditions <- relationships.TemporaryRelationshipCondition
 
 ### RelationshipTrackProgress
 **Foreign Keys:**
@@ -3744,7 +3748,13 @@
   - capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - complainant -> accounts.AccountDB [FK]
 
+### TemporaryRelationshipCondition
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - condition -> relationships.RelationshipCondition [FK]
+
 ### Service Functions
+- `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' — Record a capstone event — adds points to both capacity and developed_points.`
@@ -3756,6 +3766,7 @@
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
+- `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' — Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
 
 
 ## world.roster

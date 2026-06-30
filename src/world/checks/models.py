@@ -218,7 +218,7 @@ class ConsequenceEffect(SharedMemoryModel):
         related_name="effects",
     )
     effect_type = models.CharField(
-        max_length=20,
+        max_length=32,
         choices=EffectType.choices,
     )
     execution_order = models.PositiveIntegerField(default=0)
@@ -237,6 +237,18 @@ class ConsequenceEffect(SharedMemoryModel):
         related_name="consequence_effects",
     )
     condition_severity = models.PositiveIntegerField(null=True, blank=True)
+
+    # Relationship-condition effects (#1697) — the directed-allure write side. The flirt/seduce
+    # TARGET becomes Attracted To the actor; a null duration is permanent, a set duration creates a
+    # temporary (expiring) condition (e.g. Very Attracted). Direction is resolved in the handler.
+    relationship_condition = models.ForeignKey(
+        "relationships.RelationshipCondition",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+    relationship_condition_duration = models.DurationField(null=True, blank=True)
 
     # Property effects
     property = models.ForeignKey(
@@ -378,6 +390,9 @@ class ConsequenceEffect(SharedMemoryModel):
     _REQUIRED_FIELDS: dict[str, list[tuple[str, str]]] = {
         EffectType.APPLY_CONDITION: [("condition_template", "condition_template_id")],
         EffectType.REMOVE_CONDITION: [("condition_template", "condition_template_id")],
+        EffectType.SET_RELATIONSHIP_CONDITION: [
+            ("relationship_condition", "relationship_condition_id")
+        ],
         EffectType.ADD_PROPERTY: [("property", "property_id")],
         EffectType.REMOVE_PROPERTY: [("property", "property_id")],
         EffectType.DEAL_DAMAGE: [

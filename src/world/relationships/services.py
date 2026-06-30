@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
@@ -33,9 +35,11 @@ from world.relationships.models import (
     CharacterRelationship,
     RelationshipCapstone,
     RelationshipChange,
+    RelationshipCondition,
     RelationshipDevelopment,
     RelationshipTrackProgress,
     RelationshipUpdate,
+    TemporaryRelationshipCondition,
     WriteupComplaint,
     WriteupKudos,
 )
@@ -490,8 +494,10 @@ def relationship_gated_contributions(
     "double" effect falls out of the count, with no allure-specific code.
 
     Returns ``[]`` with no active relationship or no gating condition (the common case until
-    Flirt/Seduction seed the conditions — #1697). Condition expiry (Very Attracted dropping off) is
-    #1697's relationship-condition temporality; until then every attached condition counts.
+    Flirt/Seduction set the conditions). **Permanent** conditions ("Attracted To") live on the
+    ``conditions`` M2M; **temporary** ones ("Very Attracted") live in ``temporary_conditions`` with
+    an ``expires_at`` and are unioned here only while unexpired (#1697) — so a live Very Attracted
+    is the second, doubling allure application that lapses on its own.
     """
     from world.checks.constants import ModifierSourceKind
     from world.checks.types import ModifierContribution
@@ -499,13 +505,21 @@ def relationship_gated_contributions(
 
     relationship = (
         CharacterRelationship.objects.filter(source=perceiver, target=perceived, is_active=True)
-        .prefetch_related("conditions__gates_modifiers")  # noqa: PREFETCH_STRING
+        .prefetch_related(
+            "conditions__gates_modifiers",  # noqa: PREFETCH_STRING
+            "temporary_conditions__condition__gates_modifiers",  # noqa: PREFETCH_STRING
+        )
         .first()
     )
     if relationship is None:
         return []
+    now = timezone.now()
+    active_conditions = list(relationship.conditions.all())
+    active_conditions += [
+        temp.condition for temp in relationship.temporary_conditions.all() if temp.expires_at > now
+    ]
     contributions: list[ModifierContribution] = []
-    for condition in relationship.conditions.all():
+    for condition in active_conditions:
         for target in condition.gates_modifiers.all():
             value = get_modifier_total(perceived, target)
             if value:
@@ -517,3 +531,32 @@ def relationship_gated_contributions(
                     )
                 )
     return contributions
+
+
+def add_relationship_condition(
+    *,
+    source: CharacterSheet,
+    target: CharacterSheet,
+    condition: RelationshipCondition,
+    duration: timedelta | None = None,
+) -> None:
+    """Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).
+
+    ``duration is None`` → a **permanent** condition on the ``conditions`` M2M ("Attracted To").
+    A ``timedelta`` → a **temporary** condition (``TemporaryRelationshipCondition`` with
+    ``expires_at = now + duration``), refreshed in place if it already exists ("Very Attracted",
+    re-upped each flirt). Get-or-creates the relationship (left ``is_pending`` — the gating reader
+    only checks ``is_active``). The flirt/seduce TARGET becomes attracted to the actor, so callers
+    pass ``source=<the flirt's target>, target=<the actor>``.
+    """
+    relationship, _ = CharacterRelationship.objects.get_or_create(
+        source=source, target=target, defaults={"is_pending": True}
+    )
+    if duration is None:
+        relationship.conditions.add(condition)
+        return
+    TemporaryRelationshipCondition.objects.update_or_create(
+        relationship=relationship,
+        condition=condition,
+        defaults={"expires_at": timezone.now() + duration},
+    )

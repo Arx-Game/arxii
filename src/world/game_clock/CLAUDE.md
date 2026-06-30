@@ -52,6 +52,7 @@ Tasks registered in `tasks.py` via `register_all_tasks()`, called at server star
 | Relationship weekly reset | daily sweep | relationships |
 | Form expiration cleanup | hourly | forms |
 | Condition expiration cleanup | hourly | conditions |
+| Relationship temp-condition cleanup (Very Attracted drop-off) | hourly | relationships (#1697) |
 | Block finalize (lifted-block clear) | hourly | scenes (#1278) |
 | Weather roll + echo | 2h real (≈6 IC h) | weather (#1522) |
 | Gossip heat decay | 24h real | secrets (#1572) |
