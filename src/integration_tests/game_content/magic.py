@@ -1666,10 +1666,21 @@ _CATALOG_RESONANCE_NAME: str = "Tideborne"
 _CATALOG_AFFINITY_NAME: str = "Primal (Tideborne)"
 
 #: Per-tier pull cost definitions: (tier, resonance_cost, anima_per_thread, label)
+#: These are the UNIVERSAL default rows (target_kind=None) that apply to all
+#: thread kinds without a kind-specific override.
 _PULL_COST_TIERS: list[tuple[int, int, int, str]] = [
     (1, 1, 1, "soft"),
     (2, 3, 2, "medium"),
     (3, 6, 3, "hard"),
+]
+
+#: GIFT-specific pull cost rows (ADR-0051: gift-threads are the costliest kind).
+#: Values are tuning placeholders — roughly double the universal default.
+#: (tier, resonance_cost, anima_per_thread, imbue_cost_multiplier, label)
+_PULL_COST_TIERS_GIFT: list[tuple[int, int, int, int, str]] = [
+    (1, 2, 2, 2, "gift-soft"),
+    (2, 6, 4, 2, "gift-medium"),
+    (3, 12, 6, 2, "gift-hard"),
 ]
 
 #: Canonical capability name for CAPABILITY_GRANT effect.
@@ -1718,16 +1729,28 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     )
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
 
-    # --- ThreadPullCost rows (tier is the natural key via django_get_or_create) ---
+    # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
     pull_costs: dict[int, ThreadPullCost] = {}
     for tier, resonance_cost, anima_per_thread, label in _PULL_COST_TIERS:
         cost = ThreadPullCostFactory(
             tier=tier,
+            target_kind=None,
             resonance_cost=resonance_cost,
             anima_per_thread=anima_per_thread,
             label=label,
         )
         pull_costs[tier] = cost
+
+    # --- ThreadPullCost rows (GIFT-specific; ADR-0051 costliest kind) ---
+    for tier, resonance_cost, anima_per_thread, imbue_mult, label in _PULL_COST_TIERS_GIFT:
+        ThreadPullCostFactory(
+            tier=tier,
+            target_kind=TargetKind.GIFT,
+            resonance_cost=resonance_cost,
+            anima_per_thread=anima_per_thread,
+            imbue_cost_multiplier=imbue_mult,
+            label=label,
+        )
 
     # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
     affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)

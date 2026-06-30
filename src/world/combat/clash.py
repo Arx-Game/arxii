@@ -428,14 +428,19 @@ def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: 
     return entry.clash_npc_pressure or 0
 
 
-def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
+def _technique_effect_property_ids(
+    technique: Technique, *, character: object | None = None
+) -> frozenset[int]:
     """Derive effect Property pks from a Technique's Gift's Resonances.
 
-    Walks ``technique.gift.resonances.properties`` — the same chain
-    ``mechanics.services._get_technique_effect_property_ids`` uses (we
-    duplicate it here as a free function to avoid a circular import between
-    combat.clash and mechanics.services). Returns an empty frozenset for
-    techniques without a gift.
+    When a ``character`` is provided, resolves the gift's resonances via
+    ``gift_resonances_for(character, technique.gift)`` — the derive-on-read
+    seam that reads the woven GIFT thread's resonance (ADR-0052). Falls back
+    to ``technique.gift.cached_resonances`` (the authored supported set) when
+    no character is available (e.g. NPC techniques) — matching
+    ``gift_resonances_for``'s own sheetless fallback.
+
+    Returns an empty frozenset for techniques without a gift.
 
     Used by ``_detect_clash_flavor`` to compute the opposition surface for
     clash creation. The per-character ``CharacterTechniqueHandler`` is the
@@ -444,27 +449,39 @@ def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
     """
     if technique.gift_id is None:
         return frozenset()
-    from django.db.models import Prefetch  # noqa: PLC0415
 
-    from world.mechanics.models import Property  # noqa: PLC0415
+    if character is not None:
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            gift_resonances_for,
+        )
 
-    ids: set[int] = set()
-    resonances = technique.gift.resonances.prefetch_related(
-        Prefetch(
-            "properties",
-            queryset=Property.objects.all(),
-            to_attr="cached_properties",
-        ),
-    )
+        resonances = gift_resonances_for(character, technique.gift)
+    else:
+        resonances = technique.gift.cached_resonances
+
+    # Ensure properties are prefetched onto each resonance.
+    property_ids: set[int] = set()
     for resonance in resonances:
-        ids.update(p.pk for p in resonance.cached_properties)
-    return frozenset(ids)
+        try:
+            props = resonance.cached_properties
+        except AttributeError:
+            props = list(resonance.properties.all())
+            resonance.cached_properties = props
+        property_ids.update(p.pk for p in props)
+    return frozenset(property_ids)
 
 
-def _get_technique_affinity(technique: Technique) -> Affinity | None:
+def _get_technique_affinity(
+    technique: Technique, *, character: object | None = None
+) -> Affinity | None:
     """Derive the dominant affinity for a technique from its gift's first resonance.
 
-    Walks ``technique.gift.resonances.first()`` and returns its ``.affinity``.
+    When a ``character`` is provided, resolves the gift's resonances via
+    ``gift_resonances_for(character, technique.gift)`` — the derive-on-read
+    seam that reads the woven GIFT thread's resonance (ADR-0052). Falls back
+    to ``technique.gift.resonances`` (the authored supported set) when no
+    character is available.
+
     Returns ``None`` if the gift has no resonances (no affinity signal).
 
     This is the simplest defensible derivation: one technique → one gift →
@@ -476,9 +493,24 @@ def _get_technique_affinity(technique: Technique) -> Affinity | None:
 
     Private helper — call only from within this module.
     """
-    first_resonance = technique.gift.resonances.select_related("affinity").first()
-    if first_resonance is None:
+    if technique.gift_id is None:
         return None
+
+    if character is not None:
+        from world.magic.specialization.services import (  # noqa: PLC0415
+            gift_resonances_for,
+        )
+
+        resonances = gift_resonances_for(character, technique.gift)
+    else:
+        resonances = technique.gift.cached_resonances
+
+    if not resonances:
+        return None
+    first_resonance = resonances[0]
+    # Django lazy-loads .affinity if not select_related; acceptable for the
+    # one-off detect-time lookup (the cached CharacterTechniqueHandler is the
+    # hot path).
     return first_resonance.affinity
 
 
@@ -487,6 +519,7 @@ def affinity_tilt(
     contributor_technique: Technique,
     npc_attack_affinity: Affinity | None,
     config: ClashConfig,
+    character: object | None = None,
 ) -> int:
     """Compute the per-contributor check-modifier tilt for a clash contribution.
 
@@ -515,7 +548,7 @@ def affinity_tilt(
         return 0
 
     # 2. Derive the contributor's affinity; no affinity signal → no tilt.
-    tech_affinity = _get_technique_affinity(contributor_technique)
+    tech_affinity = _get_technique_affinity(contributor_technique, character=character)
     if tech_affinity is None:
         return 0
 
@@ -1272,7 +1305,9 @@ def _build_clash_for_action(
     # either side has no authored effect properties, fall through (we're
     # in pre-Phase-1 content territory). Once seed content authors
     # Properties for production, the gate engages naturally.
-    pc_props = _technique_effect_property_ids(technique)
+    pc_props = _technique_effect_property_ids(
+        technique, character=pc_action.participant.character_sheet.character
+    )
     npc_props = frozenset(npc_action.threat_entry.effect_properties.values_list("pk", flat=True))
     if pc_props and npc_props and not can_clash(pc_props, npc_props):
         return None
@@ -1669,6 +1704,7 @@ def run_clash_round(
             contributor_technique=contrib.technique,
             npc_attack_affinity=contrib.npc_attack_affinity,
             config=config_clash,
+            character=contrib.character_sheet.character,
         )
         result = commit_to_clash(
             character_sheet=contrib.character_sheet,

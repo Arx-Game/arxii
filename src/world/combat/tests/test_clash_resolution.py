@@ -248,6 +248,78 @@ class AffinityTiltTests(TestCase):
         self.assertIsInstance(result, int)
 
 
+class AffinityTiltGiftThreadTests(TestCase):
+    """ADR-0052: affinity_tilt reads the woven GIFT thread's resonance, not the
+    gift's authored supported set."""
+
+    def setUp(self) -> None:
+        AffinityInteraction.objects.clear_cache()
+        self.config = ClashConfigFactory()
+
+    def test_character_with_gift_thread_uses_thread_resonance(self) -> None:
+        """When a character has a woven GIFT thread, the thread's resonance
+        (and thus affinity) is used, not the gift's authored supported set."""
+        from world.magic.constants import TargetKind
+        from world.magic.factories import CharacterResonanceFactory
+        from world.magic.models import Thread
+        from world.magic.specialization.services import provision_latent_gift_thread
+
+        # Two affinities: the authored one (Celestial) and the woven one (Abyssal).
+        celestial = AffinityFactory(name="Celestial-thread-test")
+        abyssal = AffinityFactory(name="Abyssal-thread-test")
+        authored_resonance = ResonanceFactory(affinity=celestial)
+        thread_resonance = ResonanceFactory(affinity=abyssal)
+
+        # Gift's authored supported set is [celestial_resonance].
+        gift = GiftFactory()
+        gift.resonances.add(authored_resonance)
+        technique = TechniqueFactory(gift=gift)
+
+        # Character with a woven GIFT thread whose resonance is abyssal.
+        sheet = CharacterSheetFactory()
+        CharacterResonanceFactory(character_sheet=sheet, resonance=thread_resonance, balance=100)
+        provision_latent_gift_thread(sheet, gift, resonance=thread_resonance)
+        # Elevate the thread to level 3 so it's a real woven thread.
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift)
+        thread.level = 3
+        thread.save(update_fields=["level"])
+        # Invalidate the cached threads handler so gift_resonances_for sees it.
+        sheet.character.threads.invalidate()
+
+        # NPC attack affinity = celestial (same as authored, opposed to abyssal).
+        npc_affinity = celestial
+
+        # Create an OPPOSED interaction for (abyssal, celestial) → CASTER_DOMINANT.
+        # severity_multiplier=4.00 × coefficient=0.25 = 1.0 → magnitude=1 (non-zero).
+        AffinityInteractionFactory(
+            source_affinity=abyssal,
+            environment_affinity=celestial,
+            valence=ResonanceValence.OPPOSED,
+            kind=AffinityInteractionKind.CORRUPT,
+            aggressor=AffinityInteractionAggressor.CASTER,
+            severity_multiplier=Decimal("4.00"),
+        )
+        # Clear cache AFTER creating the row so the new row is visible.
+        AffinityInteraction.objects.clear_cache()
+
+        # With character → uses the thread's abyssal resonance → non-zero tilt.
+        result_with_char = affinity_tilt(
+            contributor_technique=technique,
+            npc_attack_affinity=npc_affinity,
+            config=self.config,
+            character=sheet.character,
+        )
+        self.assertNotEqual(result_with_char, 0)
+
+        # Without character → falls back to authored celestial → ALIGNED → 0.
+        result_without_char = affinity_tilt(
+            contributor_technique=technique,
+            npc_attack_affinity=npc_affinity,
+            config=self.config,
+        )
+        self.assertEqual(result_without_char, 0)
+
+
 class AggregateClashRoundTests(TestCase):
     """Unit tests for aggregate_clash_round — one test per flavor branch and audit invariant."""
 

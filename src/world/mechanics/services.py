@@ -955,6 +955,12 @@ def _get_technique_effect_property_ids(technique: object) -> list[int]:
 
     Expects technique.gift.cached_resonances[*].cached_properties to be
     pre-populated via the _get_technique_sources() prefetch chain.
+
+    Intentionally reads the authored supported set (cached_resonances), NOT
+    the per-character cast-time resonance. The cast-time value is resolved via
+    gift_resonances_for(character, gift) at the cast sites (ADR-0052); this is
+    the inventory/capability walk that enumerates what the technique *can* do,
+    not what it *does* for a specific character.
     """
     if not hasattr(technique, "gift_id") or not technique.gift_id:
         return []

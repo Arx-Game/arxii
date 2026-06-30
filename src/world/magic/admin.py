@@ -500,8 +500,16 @@ class TechniqueOutcomeModifierAdmin(admin.ModelAdmin):
 
 @admin.register(ThreadPullCost)
 class ThreadPullCostAdmin(admin.ModelAdmin):
-    list_display = ["tier", "label", "resonance_cost", "anima_per_thread"]
-    ordering = ["tier"]
+    list_display = [
+        "tier",
+        "target_kind",
+        "label",
+        "resonance_cost",
+        "anima_per_thread",
+        "imbue_cost_multiplier",
+    ]
+    list_filter = ["target_kind", "tier"]
+    ordering = ["tier", "target_kind"]
 
 
 @admin.register(ThreadXPLockedLevel)

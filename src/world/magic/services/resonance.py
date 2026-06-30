@@ -23,14 +23,15 @@ from world.magic.models import (
     ResonanceGrant,
     Thread,
     ThreadLevelUnlock,
-    ThreadPullCost,
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.threads import (
     compute_anchor_cap,
     compute_effective_cap,
     compute_path_cap,
+    get_imbue_cost_multiplier,
     recompute_max_health_with_threads,
+    resolve_pull_cost_for_threads,
 )
 from world.magic.types import (
     PullPreviewResult,
@@ -273,10 +274,11 @@ def spend_resonance_for_imbuing(  # noqa: C901
         thread.developed_points += amount
 
     blocked_by: str = "NONE"
+    imbue_multiplier = get_imbue_cost_multiplier(thread.target_kind)
     while True:
         n = thread.level
         next_level = n + 1
-        cost = max((n - 9) * 100, 1)  # sub-10 levels cost 1 dp each
+        cost = max((n - 9) * 100, 1) * imbue_multiplier  # sub-10 levels cost 1 dp each
         if thread.developed_points < cost:
             if amount == 0:
                 blocked_by = "INSUFFICIENT_BUCKET"
@@ -514,7 +516,7 @@ def preview_resonance_pull(
             msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
 
-    cost = ThreadPullCost.objects.get(tier=tier)
+    cost = resolve_pull_cost_for_threads(tier, threads)
     n_threads = len(threads)
     anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
 
@@ -649,7 +651,7 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    cost = ThreadPullCost.objects.get(tier=tier)
+    cost = resolve_pull_cost_for_threads(tier, threads)
     n_threads = len(threads)
 
     for t in threads:
