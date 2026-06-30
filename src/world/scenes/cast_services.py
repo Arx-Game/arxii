@@ -38,6 +38,7 @@ from world.magic.services.condition_application import (
     remove_technique_conditions,
 )
 from world.magic.services.hostility import is_technique_hostile
+from world.magic.services.signature_effects import apply_signature_bonus_conditions
 from world.magic.services.targeting import (
     InvalidCastTarget,
     cast_requires_consent,
@@ -128,6 +129,12 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
 
+    # Signature-motif bonus (#1582): a flat intensity delta on the signed technique's
+    # thread folds into the cast's power derivation (no-op / 0 when unsigned).
+    from world.magic.services.signature_effects import signature_intensity_delta  # noqa: PLC0415
+
+    sig_intensity_delta = signature_intensity_delta(character, technique)
+
     fury_res = run_fury_for_action(
         character=character,
         fury_commitment=fury_commitment,
@@ -162,7 +169,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
+        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
     )
 
     # Soulfray gate: use_technique returned without resolving — propagate None result.
@@ -301,6 +308,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         )
         targets_by_kind = {relationship: [p.character_sheet.character for p in resolved_personas]}
     apply_technique_conditions(
+        technique=technique,
+        success_level=success_level,
+        eff_intensity=eff_intensity,
+        targets_by_kind=targets_by_kind,
+        source_character=character,
+    )
+    # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
+    # through the SAME shared seam, over the same resolved targets. No-op when the
+    # technique is not signed or the bonus carries no condition rows.
+    apply_signature_bonus_conditions(
+        character=character,
         technique=technique,
         success_level=success_level,
         eff_intensity=eff_intensity,

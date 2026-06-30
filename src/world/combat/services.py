@@ -537,6 +537,23 @@ class CombatTechniqueResolver:
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
         )
+        # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
+        # through the SAME shared seam, over the same resolved targets. No-op when the
+        # technique is not signed or the bonus carries no condition rows.
+        from world.magic.services.signature_effects import (  # noqa: PLC0415
+            apply_signature_bonus_conditions,
+        )
+
+        applied.extend(
+            apply_signature_bonus_conditions(
+                character=caster_od,
+                technique=technique,
+                success_level=check_result.success_level,
+                eff_intensity=eff_intensity,
+                targets_by_kind=targets_by_kind,
+                source_character=caster_od,
+            )
+        )
         # Dispel/cleanse sibling (#1585): strip technique-authored conditions from
         # the same resolved targets. No-op when the technique has no
         # removed_conditions rows.
@@ -899,6 +916,15 @@ def resolve_combat_technique(
         source_technique=action.focused_action,
     )
 
+    # Signature-motif bonus (#1582): a flat intensity delta on the signed technique's
+    # thread folds into power derivation, exactly as in the standalone cast path
+    # (no-op / 0 when unsigned).
+    from world.magic.services.signature_effects import signature_intensity_delta  # noqa: PLC0415
+
+    sig_intensity_delta = signature_intensity_delta(
+        participant.character_sheet.character, action.focused_action
+    )
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
@@ -907,7 +933,7 @@ def resolve_combat_technique(
         targets=targets,
         lethal=encounter.is_lethal,
         control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
+        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
     )
 
     return _build_combat_result(
