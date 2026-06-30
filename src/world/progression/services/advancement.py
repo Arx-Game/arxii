@@ -195,6 +195,17 @@ def _post_testament(
     return _post_declaration(inductee_sheet.character, text)
 
 
+def _eligible_child_paths_at_stage(current: Path, target_stage: int) -> dict[int, Path]:
+    """Return a pk→Path dict of active child paths of *current* at *target_stage*.
+
+    Shared by ``_resolve_declared_advanced_path`` (post-level-write, receives an
+    explicit stage) and mirrors the query in ``eligible_advanced_paths_for`` in
+    selectors.py (pre-fire, derives stage from current_level). Both call the same
+    DB filter so the eligibility logic lives in one place.
+    """
+    return {p.pk: p for p in current.child_paths.filter(stage=target_stage, is_active=True)}
+
+
 def _resolve_declared_advanced_path(
     inductee: CharacterSheet, participant: RitualSessionParticipant, target_stage: int
 ) -> Path | None:
@@ -211,7 +222,7 @@ def _resolve_declared_advanced_path(
     current = current_path_for_character(inductee.character)
     if current is None:
         return None
-    eligible = {p.pk: p for p in current.child_paths.filter(stage=target_stage, is_active=True)}
+    eligible = _eligible_child_paths_at_stage(current, target_stage)
     if not eligible:
         return None
     path_id = participant.participant_kwargs.get("path_id")
