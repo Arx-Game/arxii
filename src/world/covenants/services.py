@@ -1628,11 +1628,12 @@ def swear_court_pact(
     ).exists():
         raise CourtPactExistsError
     try:
-        return CourtPact.objects.create(
-            covenant=covenant,
-            servant_sheet=servant_sheet,
-            granted_pull_cap=granted_pull_cap,
-        )
+        with transaction.atomic():
+            return CourtPact.objects.create(
+                covenant=covenant,
+                servant_sheet=servant_sheet,
+                granted_pull_cap=granted_pull_cap,
+            )
     except IntegrityError as exc:
         raise CourtPactExistsError from exc
 
