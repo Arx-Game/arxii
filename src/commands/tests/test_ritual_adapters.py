@@ -19,6 +19,9 @@ from commands.ritual_adapters import (
     SoulTetherAdapter,
     get_adapter,
 )
+from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory, PathFactory
+from world.classes.models import PathStage
 from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.constants import ParticipationRule, ReferenceKind, RitualExecutionKind
 from world.magic.factories import (
@@ -31,6 +34,7 @@ from world.magic.factories import (
     wire_soul_tether_content,
 )
 from world.magic.types.sessions import RitualSessionReferenceSpec
+from world.progression.models import CharacterPathHistory
 
 
 class SoulTetherAdapterDraftTests(TestCase):
@@ -283,6 +287,65 @@ class BannerCallAdapterJoinTests(TestCase):
     def test_parse_join_returns_empty(self) -> None:
         adapter = BannerCallAdapter()
         parse = adapter.parse_join(kwargs={}, caller=None)
+        self.assertIsInstance(parse, JoinParse)
+        self.assertEqual(parse.participant_kwargs, {})
+        self.assertEqual(parse.references, [])
+
+
+class DuranceAdapterTests(TestCase):
+    """Tests for DuranceAdapter parse_join — testament + path token resolution (#1700)."""
+
+    def setUp(self) -> None:
+        self.prospect = PathFactory(stage=PathStage.PROSPECT)
+        self.potential = PathFactory(stage=PathStage.POTENTIAL, name="Ember Road")
+        self.potential.parent_paths.add(self.prospect)
+        self.inductee = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=self.inductee.character,
+            character_class=CharacterClassFactory(),
+            level=2,
+            is_primary=True,
+        )
+        CharacterPathHistory.objects.create(character=self.inductee.character, path=self.prospect)
+
+    def test_durance_adapter_parses_testament_and_path(self) -> None:
+        from commands.ritual_adapters import DuranceAdapter
+
+        parse = DuranceAdapter().parse_join(
+            kwargs={"testament": "I have stood in the crucible", "path": "Ember Road"},
+            caller=self.inductee.character,
+        )
+        self.assertEqual(parse.participant_kwargs["testament"], "I have stood in the crucible")
+        self.assertEqual(parse.participant_kwargs["path_id"], self.potential.pk)
+
+    def test_durance_adapter_unknown_path_errors(self) -> None:
+        from commands.ritual_adapters import DuranceAdapter
+
+        with self.assertRaises(CommandError):
+            DuranceAdapter().parse_join(kwargs={"path": "nope"}, caller=self.inductee.character)
+
+    def test_durance_adapter_path_resolution_is_case_insensitive(self) -> None:
+        from commands.ritual_adapters import DuranceAdapter
+
+        parse = DuranceAdapter().parse_join(
+            kwargs={"path": "ember road"},
+            caller=self.inductee.character,
+        )
+        self.assertEqual(parse.participant_kwargs["path_id"], self.potential.pk)
+
+    def test_durance_adapter_empty_testament_omitted(self) -> None:
+        from commands.ritual_adapters import DuranceAdapter
+
+        parse = DuranceAdapter().parse_join(
+            kwargs={"testament": "   "},
+            caller=self.inductee.character,
+        )
+        self.assertNotIn("testament", parse.participant_kwargs)
+
+    def test_durance_adapter_no_kwargs_returns_empty(self) -> None:
+        from commands.ritual_adapters import DuranceAdapter
+
+        parse = DuranceAdapter().parse_join(kwargs={}, caller=self.inductee.character)
         self.assertIsInstance(parse, JoinParse)
         self.assertEqual(parse.participant_kwargs, {})
         self.assertEqual(parse.references, [])

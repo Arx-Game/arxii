@@ -342,6 +342,7 @@
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
+  - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - fame_reaction_lines <- societies.FameReactionLine
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
@@ -779,6 +780,7 @@
   - roster_entry <- roster.RosterEntry
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
+  - durance_training_roles <- progression.DuranceTrainingSite
   - path_intent <- progression.PathIntent
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
@@ -1001,6 +1003,7 @@
   - drafts <- character_creation.CharacterDraft
   - child_paths <- classes.Path
   - path_aspects <- classes.PathAspect
+  - durance_training_sites <- progression.DuranceTrainingSite
   - path_intents <- progression.PathIntent
   - character_selections <- progression.CharacterPathHistory
   - audere_majora_crossings <- magic.AudereMajoraCrossing
@@ -3328,6 +3331,13 @@
   - character_class -> classes.CharacterClass [FK]
   - officiant -> character_sheets.CharacterSheet [FK] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
+  - witnesses -> scenes.Persona [M2M]
+
+### DuranceTrainingSite
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - officiant -> character_sheets.CharacterSheet [FK]
+  - training_path -> classes.Path [FK] (nullable)
 
 ### CharacterXP
 **Foreign Keys:**
@@ -3901,6 +3911,7 @@
   - bug_reports <- player_submissions.BugReport
   - reports_submitted <- player_submissions.PlayerReport
   - reports_against <- player_submissions.PlayerReport
+  - witnessed_advancements <- progression.ClassLevelAdvancement
   - targeted_for_random_scene <- progression.RandomSceneTarget
   - random_scene_completed_by <- progression.RandomSceneCompletion
   - poseendorsement_set <- magic.PoseEndorsement

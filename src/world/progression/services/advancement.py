@@ -12,9 +12,15 @@ from evennia.objects.models import ObjectDB
 
 from world.progression.exceptions import (
     AdvancementRequirementsNotMet,
+    NoDuranceSiteError,
     OfficiantIneligibleError,
     TierBoundaryRequiresCrossing,
 )
+
+# Service-function path that the Ritual of the Durance's Ritual row references.
+# Defined here (the literal string is this module's own function) so the constant
+# can be used both in convene_durance_at_site and in tests.
+_DURANCE_SERVICE_PATH = "world.progression.services.advancement.advance_class_level_via_session"
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -160,6 +166,24 @@ def _cite_deeds(inductee_sheet: CharacterSheet) -> str:
     return " Their deeds are remembered: " + "; ".join(titles) + "."
 
 
+def _record_witnesses(
+    receipt: ClassLevelAdvancement,
+    scene: Scene | None,
+    *,
+    inductee: CharacterSheet,
+    officiant: CharacterSheet,
+) -> None:
+    """Record the scene's attending personas as official witnesses (no boon — record only)."""
+    if scene is None:
+        return
+    from world.societies.knowledge_services import scene_witness_personas
+
+    excluded = {inductee.pk, officiant.pk}
+    personas = [p for p in scene_witness_personas(scene) if p.character_sheet_id not in excluded]
+    if personas:
+        receipt.witnesses.add(*personas)
+
+
 def _post_testament(
     inductee_sheet: CharacterSheet, *, testament: str
 ) -> tuple[Scene | None, Interaction | None]:
@@ -175,6 +199,17 @@ def _post_testament(
     citation = _cite_deeds(inductee_sheet)
     text = (oration + citation).strip()
     return _post_declaration(inductee_sheet.character, text)
+
+
+def _eligible_child_paths_at_stage(current: Path, target_stage: int) -> dict[int, Path]:
+    """Return a pk→Path dict of active child paths of *current* at *target_stage*.
+
+    Shared by ``_resolve_declared_advanced_path`` (post-level-write, receives an
+    explicit stage) and mirrors the query in ``eligible_advanced_paths_for`` in
+    selectors.py (pre-fire, derives stage from current_level). Both call the same
+    DB filter so the eligibility logic lives in one place.
+    """
+    return {p.pk: p for p in current.child_paths.filter(stage=target_stage, is_active=True)}
 
 
 def _resolve_declared_advanced_path(
@@ -193,7 +228,7 @@ def _resolve_declared_advanced_path(
     current = current_path_for_character(inductee.character)
     if current is None:
         return None
-    eligible = {p.pk: p for p in current.child_paths.filter(stage=target_stage, is_active=True)}
+    eligible = _eligible_child_paths_at_stage(current, target_stage)
     if not eligible:
         return None
     path_id = participant.participant_kwargs.get("path_id")
@@ -229,6 +264,68 @@ def _maybe_semi_cross_into_potential_path(
     new_path = _resolve_declared_advanced_path(inductee, participant, new_stage)
     if new_path is not None:
         cross_into_path(inductee, new_path)
+
+
+def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -> RitualSession:
+    """Open a Durance session at a training site, with its trainer-of-record as officiant.
+
+    Pre-checks the same gates fire would (tier boundary, authored unlock, requirements)
+    so a doomed rite is refused up front with a specific message. Returns the drafted
+    session; the inductee then speaks their testament via ``ritual join`` (which
+    auto-fires, since the initiator is a site officiant).
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from world.areas.services import get_room_profile
+    from world.magic.audere_majora import AudereMajoraThreshold
+    from world.magic.models import Ritual
+    from world.magic.services.sessions import draft_session
+    from world.progression.models import ClassLevelUnlock, DuranceTrainingSite
+    from world.progression.services.spends import check_requirements_for_unlock
+
+    cl = primary_class_level(inductee_sheet.character)
+    if cl is None:
+        raise AdvancementRequirementsNotMet(["This character has no class level to advance."])
+    level_before, target_level = cl.level, cl.level + 1
+    if AudereMajoraThreshold.objects.filter(boundary_level=level_before).exists():
+        raise TierBoundaryRequiresCrossing
+    try:
+        unlock = ClassLevelUnlock.objects.get(
+            character_class=cl.character_class, target_level=target_level
+        )
+    except ClassLevelUnlock.DoesNotExist as exc:
+        raise AdvancementRequirementsNotMet(
+            ["No advancement path has been authored for this level."]
+        ) from exc
+    met, failed = check_requirements_for_unlock(inductee_sheet.character, unlock)
+    if not met:
+        raise AdvancementRequirementsNotMet(failed)
+
+    profile = get_room_profile(room)
+    for site in DuranceTrainingSite.objects.filter(room_profile=profile, is_active=True):
+        try:
+            assert_can_officiate(
+                officiant_sheet=site.officiant,
+                inductee_sheet=inductee_sheet,
+                target_level=target_level,
+            )
+        except OfficiantIneligibleError:
+            continue
+        ritual = Ritual.objects.get(service_function_path=_DURANCE_SERVICE_PATH)
+        return draft_session(
+            ritual=ritual,
+            initiator=site.officiant,
+            proposed_terms="",
+            session_kwargs={"site_convened": "1"},
+            invitee_sheets=[inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+    raise NoDuranceSiteError
 
 
 def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLevelAdvancement]:
@@ -322,6 +419,7 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
             level_before=level_before,
             level_after=target_level,
         )
+        _record_witnesses(receipt, scene, inductee=inductee, officiant=officiant_sheet)
         receipts.append(receipt)
 
     return receipts

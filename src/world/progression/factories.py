@@ -15,6 +15,7 @@ from world.progression.models import (
     CharacterXPTransaction,
     DevelopmentPoints,
     DevelopmentTransaction,
+    DuranceTrainingSite,
     ExperiencePointsData,
     KudosClaimCategory,
     KudosDifficultyWeight,
@@ -280,6 +281,17 @@ class PathIntentFactory(factory_django.DjangoModelFactory):
 
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     intended_path = factory.SubFactory("world.classes.factories.PathFactory")
+
+
+class DuranceTrainingSiteFactory(factory_django.DjangoModelFactory):
+    """Factory for DuranceTrainingSite."""
+
+    class Meta:
+        model = DuranceTrainingSite
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    officiant = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    is_active = True
 
 
 def seed_kudos_difficulty_weights() -> None:
