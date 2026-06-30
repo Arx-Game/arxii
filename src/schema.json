@@ -28506,6 +28506,7 @@ components:
       - normal
       - hard
       - daunting
+      - harrowing
       type: string
       description: |-
         * `trivial` - Trivial
@@ -28513,6 +28514,7 @@ components:
         * `normal` - Normal
         * `hard` - Hard
         * `daunting` - Daunting
+        * `harrowing` - Harrowing
     DifficultyEnum:
       enum:
       - trivial
@@ -28520,6 +28522,7 @@ components:
       - normal
       - hard
       - daunting
+      - harrowing
       type: string
       description: |-
         * `trivial` - Trivial
@@ -28527,6 +28530,7 @@ components:
         * `normal` - Normal
         * `hard` - Hard
         * `daunting` - Daunting
+        * `harrowing` - Harrowing
     Discovery:
       type: object
       description: Serializer for discovery records.
@@ -43976,6 +43980,7 @@ components:
             * `normal` - Normal
             * `hard` - Hard
             * `daunting` - Daunting
+            * `harrowing` - Harrowing
         resolved_difficulty:
           type: integer
           readOnly: true
