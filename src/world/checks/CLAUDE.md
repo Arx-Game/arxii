@@ -54,8 +54,14 @@ apply uniformly to attack and defense (#750/#512).
 **Social/scene actions** funnel their plain (non-technique) check through the same
 seam in `world.scenes.action_services._resolve_action_against_persona`
 (`scene=request.scene`), so conditions / rollmod / scene / equipment / CHARACTER /
-fashion — and, once scoped, **allure** — reach social checks too (#1696). The
-technique branch collects its own modifiers downstream and is left untouched.
+fashion reach social checks too (#1702). The technique branch collects its own
+modifiers downstream and is left untouched. That call also passes
+`extra_contributions=` the result of
+`world.relationships.services.relationship_gated_contributions(perceiver=target, perceived=initiator)`
+— the **directed allure** path (#1696): when the *target* holds a gating relationship-condition
+("Attracted To") toward the *initiator*, the initiator's allure rides the roll, once per gating
+condition (so "Very Attracted" doubles it). `RELATIONSHIP`-kind contributions; empty until #1697
+seeds the conditions.
 
 ## Integration Points
 

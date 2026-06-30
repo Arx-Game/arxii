@@ -57,3 +57,4 @@ class ModifierSourceKind(models.TextChoices):
     STRAIN = "strain", "Strain"
     AFFINITY = "affinity", "Affinity"
     PULL = "pull", "Combat Pull"
+    RELATIONSHIP = "relationship", "Relationship"
