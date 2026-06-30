@@ -39,7 +39,9 @@ def _failure_result(level: int = -3) -> types.SimpleNamespace:
 
 class DeclareBattleActionTests(TestCase):
     def setUp(self) -> None:
+        from actions.factories import ActionTemplateFactory
         from world.battles.services import create_battle
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 
         self.battle = create_battle(name="Declaration Test Battle")
         self.side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -55,6 +57,11 @@ class DeclareBattleActionTests(TestCase):
             unit_type="archers",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
+        # Castable technique (action_template set) for the happy-path declarations
+        # below; test_declare_raises_when_technique_has_no_action_template covers
+        # the bare-technique (no action_template) rejection path separately.
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
 
     def test_declare_strike_action(self) -> None:
         from world.battles.services import declare_battle_action
@@ -62,11 +69,13 @@ class DeclareBattleActionTests(TestCase):
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
         self.assertEqual(declaration.participant, self.participant)
         self.assertEqual(declaration.action_kind, BattleActionKind.STRIKE)
+        self.assertEqual(declaration.technique, self.technique)
         self.assertEqual(declaration.target_unit, self.unit)
         self.assertFalse(declaration.resolved)
 
@@ -79,6 +88,7 @@ class DeclareBattleActionTests(TestCase):
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
             target_ally=ally,
         )
 
@@ -92,10 +102,12 @@ class DeclareBattleActionTests(TestCase):
         declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
         )
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
@@ -115,6 +127,37 @@ class DeclareBattleActionTests(TestCase):
             declare_battle_action(
                 participant=self.participant,
                 action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+            )
+
+    def test_declare_raises_when_character_does_not_know_technique(self) -> None:
+        from world.battles.exceptions import CharacterDoesNotKnowTechniqueError
+        from world.battles.services import declare_battle_action
+        from world.magic.factories import TechniqueFactory
+
+        unknown_technique = TechniqueFactory()
+        with self.assertRaises(CharacterDoesNotKnowTechniqueError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=unknown_technique,
+                target_unit=self.unit,
+            )
+
+    def test_declare_raises_when_technique_has_no_action_template(self) -> None:
+        from world.battles.exceptions import TechniqueNotBattleReadyError
+        from world.battles.services import declare_battle_action
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        # Default TechniqueFactory leaves action_template unset (None).
+        bare_technique = TechniqueFactory()
+        CharacterTechniqueFactory(character=self.sheet, technique=bare_technique)
+        with self.assertRaises(TechniqueNotBattleReadyError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=bare_technique,
+                target_unit=self.unit,
             )
 
 
