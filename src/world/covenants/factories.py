@@ -868,23 +868,19 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     # ------------------------------------------------------------------
     # Per resonance: a tier-1 FLAT_BONUS pull. Keyed (target_kind, resonance,
     # tier, min_thread_level) — the unique lookup.
+    #
+    # FLAT_BONUS effects carry NO narrative_snippet: the combat-commit snapshot
+    # (CombatPullResolvedEffect's flat_bonus_payload CheckConstraint) requires
+    # narrative_snippet="" for FLAT_BONUS, so a snippet here would make the pull
+    # un-committable in combat (IntegrityError in _persist_combat_pull). Pull
+    # flavour belongs on NARRATIVE_ONLY effects, not the mechanical FLAT_BONUS.
     # ------------------------------------------------------------------
     flat_effects: list[ThreadPullEffect] = []
     pulls = (
-        (
-            res_whisper,
-            3,
-            "You pull on the Court's whispered malice and it answers — a borrowed "
-            "edge of cultivated cruelty behind the strike.",
-        ),
-        (
-            res_garrote,
-            3,
-            "You draw the velvet garrote taut and it answers — the soft, final "
-            "pressure of the Court at your back.",
-        ),
+        (res_whisper, 3),
+        (res_garrote, 3),
     )
-    for resonance, amount, snippet in pulls:
+    for resonance, amount in pulls:
         effect, _ = ThreadPullEffect.objects.get_or_create(
             target_kind=TargetKind.COVENANT_ROLE,
             resonance=resonance,
@@ -893,7 +889,6 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
             defaults={
                 "effect_kind": EffectKind.FLAT_BONUS,
                 "flat_bonus_amount": amount,
-                "narrative_snippet": snippet,
             },
         )
         flat_effects.append(effect)
