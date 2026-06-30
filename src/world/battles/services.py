@@ -21,9 +21,10 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
 )
-from world.battles.exceptions import BattleConcludedError
+from world.battles.exceptions import BattleConcludedError, RoundNotOpenError
 from world.battles.models import (
     Battle,
+    BattleActionDeclaration,
     BattleParticipant,
     BattlePlace,
     BattleRound,
@@ -195,6 +196,52 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         status=RoundStatus.DECLARING,
         round_started_at=timezone.now(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Declaration service (Task 6)
+# ---------------------------------------------------------------------------
+
+
+def declare_battle_action(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    target_unit: BattleUnit | None = None,
+    target_ally: BattleParticipant | None = None,
+) -> BattleActionDeclaration:
+    """Record or update the participant's action declaration for the current round.
+
+    Uses ``update_or_create`` so a second call in the same round replaces the
+    first (participants may redeclare until the round closes).
+
+    Args:
+        participant: The ``BattleParticipant`` declaring the action.
+        action_kind: A ``BattleActionKind`` value.
+        target_unit: The ``BattleUnit`` being struck (STRIKE only).
+        target_ally: The ``BattleParticipant`` being supported (SUPPORT only).
+
+    Raises:
+        RoundNotOpenError: If the battle has no DECLARING round.
+
+    Returns:
+        The created or updated ``BattleActionDeclaration``.
+    """
+    battle_round = participant.battle.current_round
+    if battle_round is None or battle_round.status != RoundStatus.DECLARING:
+        raise RoundNotOpenError
+
+    declaration, _ = BattleActionDeclaration.objects.update_or_create(
+        battle_round=battle_round,
+        participant=participant,
+        defaults={
+            "action_kind": action_kind,
+            "target_unit": target_unit,
+            "target_ally": target_ally,
+            "resolved": False,
+        },
+    )
+    return declaration
 
 
 # ---------------------------------------------------------------------------
