@@ -8,6 +8,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 
 from world.battles.constants import (
     DECISIVE_MARGIN,
@@ -23,6 +24,7 @@ from world.battles.services import (
     conclude_battle,
     maybe_conclude_on_timer,
 )
+from world.scenes.constants import RoundStatus
 
 
 class CheckVictoryTests(TestCase):
@@ -139,9 +141,7 @@ class MaybeConcludeOnTimerTests(TestCase):
         """Advance and complete round_limit rounds so timer fires."""
         for _ in range(self.battle.round_limit):
             r = begin_battle_round(battle=self.battle)
-            r.status = "completed"
-            from django.utils import timezone
-
+            r.status = RoundStatus.COMPLETED
             r.completed_at = timezone.now()
             r.save()
 
@@ -156,9 +156,7 @@ class MaybeConcludeOnTimerTests(TestCase):
     def test_no_conclusion_when_rounds_below_limit(self) -> None:
         # Only 1 completed round with limit=2
         r = begin_battle_round(battle=self.battle)
-        from django.utils import timezone
-
-        r.status = "completed"
+        r.status = RoundStatus.COMPLETED
         r.completed_at = timezone.now()
         r.save()
 

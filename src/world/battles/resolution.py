@@ -17,11 +17,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
     BATTLE_CHECK_TYPE_NAME,
+    ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
@@ -78,7 +80,7 @@ def _resolve_strike_success(
     if unit.strength == 0:
         unit.status = BattleUnitStatus.DESTROYED
         result.units_destroyed.append(unit.pk)
-    elif unit.strength <= 30:  # noqa: PLR2004 — strength ≤ 30 = routed threshold
+    elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
         unit.status = BattleUnitStatus.ROUTED
         result.units_routed.append(unit.pk)
 
@@ -113,12 +115,13 @@ def _resolve_failure(
     Damage is non-progressive (damage_type=None, source_character=None) so
     the SQLite fast tier can handle it without DISTINCT ON queries.
     """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
     from world.vitals.services import process_damage_consequences  # noqa: PLC0415
 
     sheet = declaration.participant.character_sheet
     try:
         vitals = sheet.vitals
-    except Exception:  # noqa: BLE001 — graceful if vitals not seeded
+    except CharacterVitals.DoesNotExist:
         result.casualties.append(declaration.participant.pk)
         return
 
@@ -135,6 +138,7 @@ def _resolve_failure(
     result.casualties.append(declaration.participant.pk)
 
 
+@transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
