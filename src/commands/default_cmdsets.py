@@ -42,6 +42,7 @@ from commands.covenant import CmdCovenant
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
+from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
@@ -170,6 +171,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLock,
             CmdUnlock,
             CmdRitual,
+            # #1700 — Durance status/intent/convene telnet namespace.
+            CmdDurance,
             # #1349 — telnet face of the mission play services (resolve/abandon/group pick+vote).
             CmdMission,
             # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
