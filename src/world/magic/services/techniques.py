@@ -409,13 +409,19 @@ def get_runtime_technique_stats(
             control=technique.control,
         )
 
+    # Fetch the sheet once here so both the variant resolver and the identity-stream
+    # block below share the same result without a second DB round-trip (#1581 fix).
+    sheet = _get_character_sheet(character)
+
     # #1581: gift techniques resolve to their resonance-specific variant once the
     # gift-thread crosses unlock_thread_level. _ResolvedTechnique transparently
     # exposes variant-adjusted intensity/control; all other reads pass through.
+    # Pass the pre-fetched sheet to skip the redundant _get_character_sheet call
+    # that would otherwise happen inside _resolve_technique_variant.
     if apply_variant:
         from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
-        technique = resolve_specialized_variant(entity=technique, character=character)
+        technique = resolve_specialized_variant(entity=technique, character=character, _sheet=sheet)
 
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
@@ -423,7 +429,6 @@ def get_runtime_technique_stats(
     # Identity stream
     identity_intensity = 0
     identity_control = 0
-    sheet = _get_character_sheet(character)
     if sheet is not None:
         stat_targets = _get_technique_stat_targets()
         if TECHNIQUE_STAT_INTENSITY in stat_targets:

@@ -37,9 +37,17 @@ class CharacterThreadHandler:
 
     @cached_property
     def _all(self) -> list[Thread]:
-        sheet = self.character.sheet_data
+        # CharacterSheet uses the ObjectDB pk as its own pk (primary_key=True
+        # on CharacterSheet.character), so owner_id == character.pk.  Filtering
+        # by the raw id avoids a round-trip SELECT on character_sheets_charactersheet
+        # that the ``self.character.sheet_data`` reverse accessor would trigger
+        # — the Django FK descriptor cache is not reliably populated across the
+        # SharedMemoryModel identity-map boundary, so every ``character.sheet_data``
+        # access without a prior cache warm-up issues a fresh query (#1581).
         return list(
-            Thread.objects.filter(owner=sheet, retired_at__isnull=True).select_related(
+            Thread.objects.filter(
+                owner_id=self.character.pk, retired_at__isnull=True
+            ).select_related(
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",

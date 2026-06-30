@@ -25661,6 +25661,8 @@ export interface components {
       fury_commitment_id?: number | null;
       fury_anchor_id?: number | null;
       pull?: components['schemas']['CastPullRequestRequest'] | null;
+      /** @default false */
+      use_base_form: boolean;
     };
     /**
      * @description * `same` - Same position

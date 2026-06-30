@@ -95,7 +95,7 @@ class GetPlayerActionsEnhancementsTests(TestCase):
 
 
 class GetPlayerActionsQueryCountTests(TestCase):
-    """get_player_actions performs <= 8 queries for a non-trivial setup."""
+    """get_player_actions performs <= 13 queries for a non-trivial setup."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -131,11 +131,17 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # get_active_round_context (#520) adds one SceneRoundParticipant lookup per resolution.
         # Task 5 (#520) dedupes the three round-context resolutions into one in get_player_actions,
         # reducing the cost from 16 → 12 (one combat + one scene-round lookup instead of three
-        # pairs). Cap set at 12 to give margin without masking regressions. Raise only with a
-        # documented justification — the goal remains a single-digit cost.
+        # pairs).
+        # #1581 (gift-thread anchor + specialization): resolve_specialized_variant now reads the
+        # character's active Thread list to find the matching GIFT thread; this is one additional
+        # fixed-cost query (Thread SELECT via CharacterThreadHandler._all). The CharacterSheet fetch
+        # is shared between the variant resolver and the identity-stream calculation via the
+        # _sheet pass-through introduced to avoid a duplicate round-trip, so the net addition is
+        # +1 (Thread only). Cap raised from 12 → 13. Raise only with a documented justification —
+        # the goal remains a single-digit cost.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            12,
+            13,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

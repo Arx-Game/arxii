@@ -46681,6 +46681,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/CastPullRequestRequest'
           nullable: true
+        use_base_form:
+          type: boolean
+          default: false
       required:
       - initiator_persona
       - scene

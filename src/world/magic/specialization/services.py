@@ -24,6 +24,10 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import Technique
 
 
+# Sentinel: caller has not yet fetched the sheet (distinct from None = "no sheet").
+_SHEET_UNSET: object = object()
+
+
 def provision_latent_gift_thread(
     sheet: CharacterSheet,
     gift: Gift,
@@ -135,7 +139,7 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     return gift.cached_resonances
 
 
-def resolve_specialized_variant(*, entity, character):
+def resolve_specialized_variant(*, entity, character, _sheet: object = _SHEET_UNSET):
     """Return the resonance-specialized variant of ``entity`` for ``character``,
     else ``entity`` unchanged. Derive-on-read (ADR-0014).
 
@@ -144,21 +148,28 @@ def resolve_specialized_variant(*, entity, character):
     the parent + matching variant (or just the parent). For a CovenantRole:
     reads the active COVENANT_ROLE thread via the cached ``character.threads``
     handler and returns the matching sub-role variant (proven path, #1578).
+
+    ``_sheet`` is an internal optimisation parameter: callers that have already
+    fetched the ``CharacterSheet`` for ``character`` may pass it here to avoid a
+    redundant DB round-trip inside the variant resolver.  Pass the sentinel
+    ``_SHEET_UNSET`` (the default) to let the resolver fetch it itself.
     """
     from world.covenants.models import CovenantRole  # noqa: PLC0415
     from world.magic.models import Technique  # noqa: PLC0415
 
     if isinstance(entity, Technique):
-        return _resolve_technique_variant(entity, character)
+        return _resolve_technique_variant(entity, character, _sheet=_sheet)
     if isinstance(entity, CovenantRole):
         return _resolve_covenant_role_variant(entity, character)
     return entity
 
 
-def _resolve_technique_variant(technique: Technique, character) -> Technique | _ResolvedTechnique:
-    from world.magic.services.techniques import (  # noqa: PLC0415
-        _get_character_sheet,
-    )
+def _resolve_technique_variant(
+    technique: Technique,
+    character,
+    *,
+    _sheet: object = _SHEET_UNSET,
+) -> Technique | _ResolvedTechnique:
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
     # Read the active GIFT thread through the cached ``character.threads``
@@ -168,7 +179,16 @@ def _resolve_technique_variant(technique: Technique, character) -> Technique | _
     # unchanged; the sheet guard handles that precondition rather than catching
     # the handler's ``sheet_data`` raise. A non-Character object has no
     # ``.threads`` and is left to raise ``AttributeError``.
-    if _get_character_sheet(character) is None:
+    #
+    # ``_sheet`` may be a pre-fetched CharacterSheet (or explicit None for NPCs)
+    # from the caller; use it directly to avoid a redundant DB round-trip.
+    if _sheet is _SHEET_UNSET:
+        from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+        sheet = _get_character_sheet(character)
+    else:
+        sheet = _sheet  # type: ignore[assignment]  # caller verified type
+    if sheet is None:
         return technique
 
     thread = next(
