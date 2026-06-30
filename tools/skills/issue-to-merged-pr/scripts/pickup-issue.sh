@@ -25,12 +25,31 @@ usage() {
 ISSUE="$1"
 [[ "$ISSUE" =~ ^[0-9]+$ ]] || usage
 
-# 1. Superpowers precheck
-if ! claude plugin list 2>/dev/null | grep -q "superpowers@claude-plugins-official"; then
-  echo "ERROR: superpowers plugin not installed." >&2
-  echo "Install with:" >&2
-  echo "  claude plugin marketplace add anthropics/claude-plugins-official" >&2
-  echo "  claude plugin install superpowers@claude-plugins-official" >&2
+# 1. Skill-availability precheck (harness-aware).
+# The brainstorming + writing-plans skills must be reachable. They can come from
+# EITHER source, so pass if either is present:
+#   (a) the `superpowers` Claude Code plugin (Claude Code harness), OR
+#   (b) the harness-agnostic ported skills under tools/skills/ (Polytoken),
+#       which the sync script mirrors into .polytoken/skills/.
+# This keeps the script usable under both harnesses without a flag.
+SKILLS_AVAILABLE=0
+if command -v claude >/dev/null 2>&1 \
+  && claude plugin list 2>/dev/null | grep -q "superpowers@claude-plugins-official"; then
+  SKILLS_AVAILABLE=1
+fi
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [[ "$SKILLS_AVAILABLE" -eq 0 ]] \
+  && [[ -f "$REPO_ROOT/tools/skills/brainstorming/SKILL.md" ]] \
+  && [[ -f "$REPO_ROOT/tools/skills/writing-plans/SKILL.md" ]] \
+  && [[ -f "$REPO_ROOT/tools/skills/using-git-worktrees/SKILL.md" ]]; then
+  SKILLS_AVAILABLE=1
+fi
+if [[ "$SKILLS_AVAILABLE" -eq 0 ]]; then
+  echo "ERROR: neither the superpowers plugin nor the ported skills are available." >&2
+  echo "Install one of:" >&2
+  echo "  [Claude Code] claude plugin marketplace add anthropics/claude-plugins-official" >&2
+  echo "                claude plugin install superpowers@claude-plugins-official" >&2
+  echo "  [Polytoken]   just sync-polytoken-skills   (mirrors tools/skills/ -> .polytoken/skills/)" >&2
   exit 2
 fi
 
@@ -103,10 +122,16 @@ git checkout -b "$BRANCH" origin/main
 # 7. Emit JSON (includes model recommendation from complexity:* label)
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")
 COMPLEXITY=$(jq -r '.labels[] | select(.name | startswith("complexity:")) | .name' <<<"$ISSUE_JSON" | head -1)
+# Model selection is harness-dependent. Claude Code uses claude-* models; this
+# repo's Polytoken config uses umans-* models. The model name for each
+# complexity tier is overridable via env var so neither harness is hardcoded:
+#   ISSUE_MODEL_HIGH / ISSUE_MODEL_MEDIUM / ISSUE_MODEL_LOW
+# Defaults are the Claude Code tiers (backwards-compatible with the prior
+# behavior). Set the env vars (e.g. in .devcontainer/dev.env) to retarget.
 case "$COMPLEXITY" in
-  "complexity:high")   MODEL="claude-opus-4-8" ;;
-  "complexity:medium") MODEL="claude-sonnet-4-6" ;;
-  "complexity:low")    MODEL="claude-sonnet-4-6" ;;
+  "complexity:high")   MODEL="${ISSUE_MODEL_HIGH:-claude-opus-4-8}" ;;
+  "complexity:medium") MODEL="${ISSUE_MODEL_MEDIUM:-claude-sonnet-4-6}" ;;
+  "complexity:low")    MODEL="${ISSUE_MODEL_LOW:-claude-sonnet-4-6}" ;;
   *)                   MODEL="" ;;
 esac
 jq -n \

@@ -4,10 +4,11 @@ Project-specific skills (the open "Agent Skills" `SKILL.md` format) that support
 the development workflow. `tools/skills/` is the single canonical home.
 
 In the devcontainer, these skills are **installed automatically** —
-`.devcontainer/post-create.sh` symlinks every `tools/skills/<name>/`
-directory into `~/.claude/skills/` on container creation. No manual
-copy needed; changes you make to a skill here are picked up
-immediately because the symlink points back at this directory.
+`.devcontainer/post-create.sh` symlinks each `tools/skills/<name>/` directory
+into `~/.claude/skills/` on container creation, except skills marked
+`compatibility: polytoken-only` (those are Polytoken-exclusive; see below). No
+manual copy needed; changes you make to a skill here are picked up immediately
+because the symlink points back at this directory.
 
 For bare-metal usage, see the options below.
 
@@ -18,7 +19,9 @@ harness, and both read the same `SKILL.md` format. They differ only in **where**
 they discover skills:
 
 - **Claude Code** reads `~/.claude/skills/` and **follows symlinks**, so the
-  symlink loop above exposes *all* skills to it.
+  symlink loop above exposes harness-agnostic skills to it (but skips
+  `polytoken-only` skills to avoid colliding with same-named `superpowers`
+  plugin skills).
 - **polytoken** reads `.polytoken/skills/` (project-level) and **does not follow
   symlinks**, so it needs real files there.
 
@@ -27,6 +30,19 @@ in its frontmatter. `.devcontainer/post-create.sh` runs
 `tools/skills/sync-polytoken-skills.sh`, which copies exactly those skills into
 the generated (gitignored) `.polytoken/skills/`. After editing a bridged skill
 mid-session, re-run `just sync-polytoken-skills`.
+
+There are two marker variants:
+
+- **`compatibility: polytoken`** — additive. The skill is mirrored into
+  `.polytoken/skills/` *and* still symlinked into Claude Code via
+  `~/.claude/skills/`. Use for harness-agnostic skills that don't collide with
+  anything (e.g. `github-operations`, `verify-against-code`).
+- **`compatibility: polytoken-only`** — Polytoken-exclusive. Mirrored into
+  `.polytoken/skills/` but **skipped** by the Claude Code symlink loop. Use for
+  skills that would collide with a same-named `superpowers` plugin skill in
+  Claude Code (e.g. the ported `brainstorming`, `writing-plans`,
+  `using-git-worktrees`, and the `issue-to-merged-pr-polytoken` orchestration
+  skill). This keeps a colleague's Claude Code setup untouched.
 
 Only harness-agnostic skills carry the marker. Skills coupled to Claude Code
 (e.g. `issue-to-merged-pr`, which orchestrates the `superpowers` plugin) stay
@@ -39,13 +55,17 @@ Claude-Code-only — they have no marker and never reach polytoken.
 ```bash
 for skill in tools/skills/*/; do
   name=$(basename "$skill")
+  # Skip Polytoken-exclusive skills — they'd collide with same-named
+  # superpowers plugin skills in Claude Code.
+  grep -q '^compatibility:[[:space:]]*polytoken-only$' "$skill/SKILL.md" 2>/dev/null && continue
   ln -sfn "$(pwd)/${skill%/}" "$HOME/.claude/skills/$name"
 done
 ```
 
 `-sfn` is idempotent — re-run any time. Edits to skill files are picked
 up immediately by Claude Code (the symlink points back at this
-directory).
+directory). To mirror the `polytoken` / `polytoken-only` skills into
+Polytoken on bare metal, run `bash tools/skills/sync-polytoken-skills.sh`.
 
 ### Windows
 
