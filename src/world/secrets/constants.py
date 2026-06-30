@@ -59,3 +59,11 @@ GOSSIP_PLANT_REGULAR = 1  # heat added by a regular-success plant
 GOSSIP_PLANT_SPECIAL = 2  # heat added by a special-success plant (spec counts double)
 GOSSIP_SUPPRESS_REGULAR = 1  # heat removed by a regular-success suppress
 GOSSIP_SUPPRESS_SPECIAL = 2  # heat removed by a special-success suppress
+
+
+class GossipAction(models.TextChoices):
+    """The web gossip verbs (the #1572 web face of the telnet ``gossip`` subcommands)."""
+
+    PLANT = "plant", "Plant"
+    SEEK = "seek", "Seek"
+    SUPPRESS = "suppress", "Suppress"

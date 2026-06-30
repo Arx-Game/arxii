@@ -62,6 +62,14 @@ class RitualDraftAdapter:
         """Translate flat kwargs into a ``JoinParse``. Default: empty."""
         return JoinParse()
 
+    def should_auto_fire(self, *, session: Any) -> bool:
+        """Return True iff the session should fire immediately without a manual ``ritual fire``.
+
+        Default: False (all sessions require an explicit fire command).
+        Subclasses may override to enable auto-fire for specific ritual types.
+        """
+        return False
+
 
 # ---------------------------------------------------------------------------
 # Soul-tether adapter
@@ -195,6 +203,57 @@ class CovenantInductionAdapter(RitualDraftAdapter):
 
 
 # ---------------------------------------------------------------------------
+# Durance (class-level advancement) adapter
+# ---------------------------------------------------------------------------
+
+_DURANCE_SERVICE_PATH = "world.progression.services.advancement.advance_class_level_via_session"
+
+
+class DuranceAdapter(RitualDraftAdapter):
+    """Adapter for the Ritual of the Durance (class-level advancement session).
+
+    parse_join translates the inductee's ``testament=`` (oration) and ``path=<name>``
+    (the level-3 Potential semi-crossing target, #1579) into participant_kwargs the
+    advancement service reads. The officiant supplies nothing at draft.
+    """
+
+    def parse_join(self, *, kwargs: dict[str, str], caller: Any) -> JoinParse:
+        from world.progression.selectors import resolve_advanced_path_by_name  # noqa: PLC0415
+
+        participant_kwargs: dict[str, Any] = {}
+        testament = kwargs.get("testament", "").strip()
+        if testament:
+            participant_kwargs["testament"] = testament
+        path_token = kwargs.get("path", "").strip()
+        if path_token:
+            sheet = getattr(caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            path = resolve_advanced_path_by_name(sheet, path_token) if sheet else None
+            if path is None:
+                from world.progression.selectors import eligible_advanced_paths_for  # noqa: PLC0415
+
+                options = (
+                    ", ".join(p.name for p in eligible_advanced_paths_for(sheet)) if sheet else ""
+                )
+                fallback = "You have no eligible paths right now."
+                suffix = f"Options: {options}." if options else fallback
+                msg = f"'{path_token}' is not an eligible Potential path. " + suffix
+                raise CommandError(msg)
+            participant_kwargs["path_id"] = path.pk
+        return JoinParse(participant_kwargs=participant_kwargs, references=[])
+
+    def should_auto_fire(self, *, session: Any) -> bool:
+        """Return True only for genuinely site-convened sessions.
+
+        A site-convened session carries ``session_kwargs["site_convened"] == "1"`` stamped
+        by ``convene_durance_at_site`` at draft time.  A live-officiant ceremony drafted via
+        ``ritual draft`` (where the officiant fires manually) does **not** set that key, so
+        this returns False even when the officiant happens to be a ``DuranceTrainingSite``
+        trainer-of-record at another room.
+        """
+        return bool(session.session_kwargs.get("site_convened"))
+
+
+# ---------------------------------------------------------------------------
 # Banner-call (battle covenant rise) adapter
 # ---------------------------------------------------------------------------
 
@@ -224,6 +283,7 @@ _REGISTRY: dict[str, RitualDraftAdapter] = {
     _SOUL_TETHER_SERVICE_PATH: SoulTetherAdapter(),
     _COVENANT_INDUCTION_SERVICE_PATH: CovenantInductionAdapter(),
     _BANNER_CALL_SERVICE_PATH: BannerCallAdapter(),
+    _DURANCE_SERVICE_PATH: DuranceAdapter(),
 }
 _DEFAULT_ADAPTER = RitualDraftAdapter()
 

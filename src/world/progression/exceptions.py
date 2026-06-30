@@ -41,3 +41,9 @@ class OfficiantIneligibleError(ClassLevelAdvancementError):
     """The officiant is not eligible to induct this advancement."""
 
     user_message = "You are not eligible to officiate this advancement."
+
+
+class NoDuranceSiteError(ClassLevelAdvancementError):
+    """No active DuranceTrainingSite in this room has an eligible trainer."""
+
+    user_message = "There is no Durance training site with an eligible trainer here."

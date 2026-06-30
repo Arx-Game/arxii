@@ -74,8 +74,25 @@ The central spine connecting every system in the game. Characters develop throug
     companion `RitualLiturgy` (the authored opening call).
   - Exceptions: `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`,
     `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all with `user_message`.
-  - **Open follow-up (#1700):** telnet drivability of `RitualSession` dispatch — a
-    `CmdRitual` adapter for the Ritual of the Durance (REST-only today; umbrella #1328).
+  - **Telnet Durance (#1700) — BUILT.** Both a live-officiant ceremony and a
+    site-convened session are now supported from telnet:
+    - `DuranceTrainingSite` model: room + trainer-of-record pairs; `is_active` flag;
+      unique per `(room_profile, officiant)`.
+    - `ClassLevelAdvancement.witnesses` M2M → `scenes.Persona` (populated by
+      `_record_witnesses` via `scene_witness_personas`).
+    - `eligible_advanced_paths_for(sheet)` / `resolve_advanced_path_by_name(sheet, name)`
+      in `selectors.py` — support the `path=<name>` adapter token.
+    - `DuranceAdapter` in `ritual_adapters.py`: `parse_join` translates `testament=` +
+      `path=<name>` → `participant_kwargs`; `should_auto_fire` returns True for
+      site-convened sessions (inductee's `ritual join` auto-fires).
+    - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` in
+      `services/advancement.py`; `NoDuranceSiteError` exception.
+    - `CmdDurance` (`durance`, Progression) in `commands/durance.py`: status hub,
+      `durance intent <path|clear>`, `durance convene`.
+    - `CmdRitual` gains `_maybe_auto_fire`, `_handle_fire`,
+      `_advancement_error_message` for auto-fire + error surfacing.
+    - E2E tests: `integration_tests/pipeline/test_durance_telnet_e2e.py`.
+    - ADR-0065: trainer-of-record-bound-to-room enables automated self-conduct.
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics

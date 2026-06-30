@@ -729,7 +729,8 @@ so web and telnet converge on the same write path.
 XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
-  **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`)
+  **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
+  **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -745,6 +746,8 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `CharacterXP.can_spend(amount) -> bool`
   - `current_path_for_character(character) -> Path | None` (`selectors.py`) — returns the character's most-recent `CharacterPathHistory` path
   - `next_path_options(character) -> list[Path]` (`selectors.py`) — returns active child paths of the current path (or all top-level paths if no current path); used by `PathOptionsView`
+  - `eligible_advanced_paths_for(sheet) -> list[Path]` (`selectors.py`, #1700) — active child paths at the next level's stage (for the semi-crossing resolver); empty when not at a stage boundary
+  - `resolve_advanced_path_by_name(sheet, name) -> Path | None` (`selectors.py`, #1700) — case-insensitive name match against `eligible_advanced_paths_for`
 - **API Endpoints (progression):**
   - `GET /api/progression/path-options/` — current path + selectable next paths (character via `X-Character-ID` header) → `PathOptions` schema; transition-generic, reused beyond any single transition type
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
@@ -760,7 +763,8 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `SetPathIntentAction` / `ClearPathIntentAction` (`"set_path_intent"` / `"clear_path_intent"`) — declare/clear preferred next path for Audere Majora (#1348)
 - **New service module (#1348):** `world.progression.services.path_intent` — `set_path_intent(sheet, path)` / `clear_path_intent(sheet)`; single seam for `PathIntentViewSet` + `CmdPathIntent`
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
-  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348)
+  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
+  `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
@@ -769,8 +773,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `primary_class_level(character) -> CharacterClassLevel | None` — primary (or highest-level) class level row; None when absent.
   - `apply_class_level_advance(sheet, *, level_after) -> None` — shared level-write + cache invalidation; no receipt, no scene side-effects. Called by both `cross_threshold` and the Durance service.
   - `assert_can_officiate(*, officiant_sheet, inductee_sheet, target_level) -> None` — raises `OfficiantIneligibleError` when level gate or Path-lineage gate fails.
-  - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, writes receipts.
-- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all carry `user_message`.
+  - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, records witnesses, writes receipts.
+  - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` (#1700) — drafts a Durance session using the room's `DuranceTrainingSite` trainer as initiator; raises `NoDuranceSiteError` when no eligible site is present.
+- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`; `advance_class_level_via_session` dispatched from `fire_session` on the Ritual of the Durance; `AudereMajoraCrossing` inherits `AbstractClassLevelAdvancement`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
 - **Source:** `src/world/progression/`
@@ -1423,7 +1428,8 @@ crafting framework and check-driven facet/style attachment.
 
 ### Covenants
 Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
-ladder, and a Mentor's Vow bond system for level-mismatched parties (#1165).
+ladder, a Mentor's Vow bond system for level-mismatched parties (#1165), and a Covenant
+of the Court type for master/servant pacts (#1589).
 
 **Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
 Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
@@ -1447,6 +1453,14 @@ These two axes are orthogonal — never re-merge them.
     Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
     `can_invite`, `can_kick`, `can_manage_ranks`. Unique `(covenant, tier)` and
     `(covenant, name)`.
+  - **`Covenant.leader`** (#1589) — FK → `character_sheets.CharacterSheet`
+    (`null=True`, `on_delete=SET_NULL`). Required for COURT covenants, forbidden for others.
+    Identifies the master character.
+  - **`CourtPact`** (#1589) — per-(Court covenant, servant) sworn-fealty bond. Fields:
+    `covenant` FK (PROTECT), `servant_sheet` FK → `CharacterSheet` (PROTECT),
+    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling),
+    `sworn_at` (auto), `released_at` (null = active). Partial-unique on
+    `(covenant, servant_sheet)` when active. Custom queryset: `.active()`.
   - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
     `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
     Staff-tunable in Django admin.
@@ -1504,9 +1518,25 @@ These two axes are orthogonal — never re-merge them.
     - `is_bond_graduated(bond) -> bool` — True when adjusted party is now in band.
     - `assert_membership_level_allowed(*, covenant, character_sheet) -> None` — **Vow gate**:
       raises `VowGateError` if character is out-of-band and has no active bond in this
-      covenant. Called by `add_member`; `create_covenant` is ungated.
+      covenant (for non-COURT types); raises `CourtGulfViolationError` if the servant's
+      power tier is not strictly below the leader's (for COURT). Called by `add_member`;
+      `create_covenant` is ungated.
     - `establish_mentor_bond_via_session(*, session) -> MentorBond` — service function
       wired to `MentorsVowRitualFactory` (consensual BILATERAL_SERVICE ritual).
+  - **Court services** (`world.covenants.services`, #1589):
+    - `swear_court_pact(*, covenant, servant_sheet, granted_pull_cap) -> CourtPact` —
+      creates an active pact; raises `CourtPactExistsError` if one already exists.
+    - `release_court_pact(*, pact) -> None` — sets `released_at = now()`.
+    - `active_court_pact_for(*, covenant, servant_sheet) -> CourtPact | None`
+  - **Court engagement** (`world.covenants.court_missions`, #1589):
+    - `has_active_court_mission(*, character_sheet, covenant) -> bool` — True iff
+      the character participates in an ACTIVE `MissionInstance` whose
+      `source_offer.role.faction_affiliation_id == covenant.organization_id`. Single
+      `.exists()` query; lazy-imports `world.missions` to avoid circular deps.
+  - **Court gulf helper** (`world.covenants.power_tier`, #1589):
+    - `power_tier_for_level(level: int) -> int` — maps levels 1–5 → tier 1,
+      6–10 → tier 2, 11–15 → tier 3, etc. (`ceil(level / TIER_ONE_MAX_LEVEL)`).
+      Used by the COURT gulf check in `assert_membership_level_allowed`.
 - **Combat seams (#985, #1174, #1165):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
@@ -1527,7 +1557,9 @@ These two axes are orthogonal — never re-merge them.
   `CrossCovenantRankError`, `IncompleteRankReorderError`,
   `CannotTransferToDepartedMemberError` (rank management, #1027),
   `NotAuthorizedToInviteError` (induction draft gate, #1231),
-  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate)
+  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate),
+  `CourtGulfViolationError` (servant tier not below leader's, #1589),
+  `CourtPactExistsError` (duplicate active pact for pair, #1589)
 - **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
   `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
   `transfer_covenant_top_rank`, `stand_down_battle_covenant`
@@ -1678,6 +1710,54 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/combat-magic-integration.md`,
   `docs/architecture/damage-scaling.md`,
   `docs/architecture/combat-conditions.md`
+
+### Battles (#1592)
+Large-scale battle scenes (war covenant engagements, sieges, pitched fields) resolved
+through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scenes.Scene`.
+
+- **Models:** `Battle` (O2O Scene, `campaign_story` FK, `round_limit`, `outcome` / `concluded_at`;
+  `is_concluded` property; `current_round` property), `BattleSide` (`role` ATTACKER/DEFENDER,
+  `victory_points`, `victory_threshold`; unique `(battle, role)`), `BattlePlace` (named front;
+  `combat_encounter` FK bridge seam), `BattleUnit` (`unit_type`, `strength`, `status`;
+  attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
+  constraint: one active round per battle), `BattleParticipant` (`character_sheet` FK,
+  `side`, `place`, `status`; unique `(battle, character_sheet)`),
+  `BattleActionDeclaration` (`action_kind` STRIKE/SUPPORT, `target_unit`, `target_ally`,
+  `resolved`, `success_level`; unique `(battle_round, participant)`)
+- **Key Services (`world.battles.services`):**
+  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`
+  - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
+    `declare_battle_action` (update_or_create; raises `RoundNotOpenError`)
+  - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
+    `conclude_battle` (sets outcome + ends scene; **no `complete_story` call** — #1716),
+    `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
+- **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
+  `BattleRoundResult` — rolls `perform_check` per declaration; STRIKE success attrites unit
+  + awards VP; failure debits PC health + `process_damage_consequences`. Returns
+  `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+- **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
+  wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`
+  finds the character's ACTIVE participant in an active-scene battle.
+- **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
+  `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`)
+- **Telnet:** `battle [declare strike <unit>|declare support <ally>|round|resolve|conclude]`
+- **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
+  `BattleActionKind`, `BattleOutcome`
+- **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
+  `RoundNotOpenError`, `NotAParticipantError`
+- **#1716 dependency:** `Battle.campaign_story` FK stores the parent Story; outcome →
+  campaign-stakes propagation + win-gated Legend is explicitly deferred to #1716.
+- **Deferred follow-ups:** peril/rescue (#1710), AFK knobs (#1711), battle writeup page
+  (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/aerial/siege (#1715),
+  campaign propagation (#1716).
+- **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
+  E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
+- **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals
+  (damage consequences), checks (`perform_check` with "Battle Action" CheckType), combat
+  (`BattlePlace.combat_encounter` bridge; shared `RoundStatus` / `AbstractRound`),
+  stories (`campaign_story` FK → #1716), actions (REGISTRY + `get_active_round_context` seam)
+- **Source:** `src/world/battles/`
+- **Details:** [battles.md](battles.md)
 
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by

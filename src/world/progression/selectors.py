@@ -5,10 +5,18 @@ but it queries the progression model `CharacterPathHistory`; it belongs here.
 Magic imports it back for `eligible_paths_for_threshold`.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from evennia.objects.models import ObjectDB
 
 from world.classes.models import Path
+from world.classes.services import stage_for_level
 from world.progression.models import CharacterPathHistory
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 def current_path_for_character(character: ObjectDB) -> Path | None:  # noqa: OBJECTDB_PARAM
@@ -36,3 +44,26 @@ def next_path_options(character: ObjectDB) -> list[Path]:  # noqa: OBJECTDB_PARA
     # pins the crossing's target_stage): this is the generic "what can I pursue next"
     # picker. The path tree's children are the immediate next stage by construction.
     return list(current.child_paths.filter(is_active=True))
+
+
+def eligible_advanced_paths_for(sheet: CharacterSheet) -> list[Path]:
+    """Active child paths of the character's current path at their next level's stage.
+
+    Mirrors the gate in advance_class_level_via_session's semi-crossing resolver
+    (pre-fire semantics: target stage = stage_for_level(current_level + 1)).
+    Empty when not at a stage boundary / no current path.
+    """
+    current = current_path_for_character(sheet.character)
+    if current is None:
+        return []
+    target_stage = stage_for_level(sheet.current_level + 1)
+    return list(current.child_paths.filter(stage=target_stage, is_active=True))
+
+
+def resolve_advanced_path_by_name(sheet: CharacterSheet, name: str) -> Path | None:
+    """Case-insensitive match of *name* against eligible_advanced_paths_for(sheet)."""
+    needle = (name or "").strip().casefold()
+    for path in eligible_advanced_paths_for(sheet):
+        if path.name.casefold() == needle:
+            return path
+    return None

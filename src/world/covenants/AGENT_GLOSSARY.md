@@ -16,6 +16,23 @@ _Avoid_: setting active=true / "activating" a covenant (a dormant covenant rises
 The `CovenantType.COURT` covenant — a master/servants oath: a single powerful leader and the servants/apprentices/acolytes sworn to them across a wide power gulf (by design ≥1 power tier), explicitly not a co-adventuring party (e.g. "the Court of Shadows" serving the Shadowlord). Lets a peerless puissant hold a covenant role. (ADR-0057.)
 _Avoid_: retinue covenant (descriptive only), guild, household, mentor bond.
 
+**Court Pact**:
+The per-(Court covenant, servant) sworn-fealty bond (`CourtPact` in `world/covenants/models.py`).
+Active while `released_at IS NULL`; at most one active pact per `(covenant, servant_sheet)`
+(partial-unique constraint). Carries `granted_pull_cap` — the master-set ceiling on the servant's
+Court-role thread pull level. A servant with no active pact has an effective cap of 0 and cannot
+pull their Court-role thread at all; the grant is the gate. Sworn via `swear_court_pact`; released
+via `release_court_pact`; queried via `active_court_pact_for`.
+_Avoid_: mentor bond, patron, indenture.
+
+**Court mission / mission-driven engagement**:
+The engagement gate for a Court servant: `has_active_court_mission(character_sheet, covenant)` is
+True iff the character is a participant in an ACTIVE `MissionInstance` whose
+`source_offer.role.faction_affiliation` matches the Court's backing organization. A servant may
+only engage their Court role while on active business for the Court's org — mission-driven, not
+presence-driven.
+_Avoid_: mission assignment (use "Court mission").
+
 **Covenant Role**:
 The combat-power axis of membership: a role's archetype (Sword / Shield / Crown), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
 _Avoid_: rank, position, office.

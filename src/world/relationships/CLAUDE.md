@@ -144,6 +144,18 @@ not compel or provoke the target's behavior (ADR-0024).
   — **once per gating condition**, so two allure-gating conditions ("Attracted To" + "Very
   Attracted") count allure twice (the directed "double"). Consumed at social resolution via
   `world.scenes.action_services._resolve_action_against_persona`'s `extra_contributions` seam.
-  Returns `[]` until Flirt/Seduction seed the conditions (#1697); condition expiry is #1697.
+  **Permanent** conditions ("Attracted To") live on the `conditions` M2M; **temporary** ones ("Very
+  Attracted") live on `TemporaryRelationshipCondition` (relationship + condition + `expires_at`) and
+  the reader unions only the unexpired ones — a live Very Attracted is the second, self-lapsing
+  allure application (#1697). Expired rows are pruned hourly by the
+  `relationships.temp_condition_cleanup` game_clock task.
+- **Setting attraction (#1697)** — `add_relationship_condition(*, source, target, condition,
+  duration=None)` get-or-creates the directed relationship and adds the condition (null duration =
+  permanent M2M; a `timedelta` = an expiring `TemporaryRelationshipCondition`, refreshed in place on
+  re-up). Driven structurally by the `SET_RELATIONSHIP_CONDITION` `ConsequenceEffect` (a
+  `world.checks.EffectType`; handler in `world.mechanics.effect_handlers`): on a successful social
+  action the effect's TARGET becomes attracted to the actor (`source=target, target=actor`). The
+  allure target + Attracted To / Very Attracted rows are seeded by the `social_relationships` cluster
+  (`world/seeds/social_relationships.py`). Flirt/Seduce success-effect content wiring is a follow-up.
 - **Secret reputation consequences (#1429):** a secret's persona-victim, on learning who wronged
   them, registers a grievance via `register_grievance` (the relationship effect they *decide*).

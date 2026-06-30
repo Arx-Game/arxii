@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from actions.base import Action
 from actions.definitions.alterations import ResolveAlterationAction
+from actions.definitions.battles import (
+    BeginBattleRoundAction,
+    ConcludeBattleAction,
+    DeclareBattleActionAction,
+    ResolveBattleRoundAction,
+)
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
@@ -180,6 +186,7 @@ from actions.definitions.social import (
     persuade,
     resolve_entry_flourish,
     restore_sense,
+    seduce,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
@@ -325,6 +332,7 @@ _ALL_ACTIONS: list[Action] = [
     persuade,
     deceive,
     flirt,
+    seduce,
     perform,
     entrance,
     restore_sense,
@@ -337,6 +345,11 @@ _ALL_ACTIONS: list[Action] = [
     SanctumDissolveAction(),
     SanctumAbsorbAction(),
     SanctumSeverAction(),
+    # #1592 — battle system lifecycle: GM verbs + player declare.
+    BeginBattleRoundAction(),
+    ResolveBattleRoundAction(),
+    ConcludeBattleAction(),
+    DeclareBattleActionAction(),
 ]
 
 # Lookup by key
@@ -355,7 +368,7 @@ for _action in _ALL_ACTIONS:
 # the ActionTemplate for a consent request.
 SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
     a.template_name: a
-    for a in (intimidate, persuade, deceive, flirt, perform, entrance, restore_sense)
+    for a in (intimidate, persuade, deceive, flirt, seduce, perform, entrance, restore_sense)
 }
 
 

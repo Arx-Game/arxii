@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError
 from django.db.models import BooleanField, Exists, ExpressionWrapper, OuterRef
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -24,9 +25,13 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.relationships.models import GrievanceOption, RelationshipTrack
 from world.roster.models import RosterEntry
+from world.secrets.constants import GossipAction
 from world.secrets.filters import KnownSecretFilter
 from world.secrets.models import Secret, SecretKnowledge
 from world.secrets.serializers import (
+    GossipActionSerializer,
+    GossipResultSerializer,
+    GossipSecretSerializer,
     GrievanceOptionSerializer,
     KnownSecretSerializer,
     SecretGrievanceSerializer,
@@ -145,3 +150,107 @@ class SecretGrievanceView(APIView):
         except ValidationError as exc:
             return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GossipListView(APIView):
+    """The Level-1 secrets the viewing character could spread + their heat in this region (#1572).
+
+    The web face of bare ``gossip`` (the telnet list). IC-scoped: ``viewer`` is a RosterEntry pk
+    validated by ``for_account``; no/unowned viewer → an empty list. Heat is read for the
+    character's current room's region (0 when the character is roomless).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("viewer", int, description="Viewer's RosterEntry pk.")],
+        responses=GossipSecretSerializer(many=True),
+    )
+    def get(self, request: Request) -> Response:
+        from world.secrets.gossip import region_heat_for, spreadable_secrets  # noqa: PLC0415
+
+        raw = request.query_params.get("viewer")  # noqa: use_filterset — auth scope, not a filter
+        if not raw or not raw.isdigit():
+            return Response([])
+        viewer = RosterEntry.objects.for_account(request.user).filter(pk=int(raw)).first()
+        if viewer is None:
+            return Response([])
+        character = viewer.character_sheet.character
+        room = character.location
+        rows = [
+            {
+                "id": secret.pk,
+                "content": secret.content,
+                "heat": region_heat_for(secret, room=room) if room is not None else 0,
+            }
+            for secret in spreadable_secrets(character)
+        ]
+        return Response(GossipSecretSerializer(rows, many=True).data)
+
+
+class GossipActionView(APIView):
+    """Plant / seek / suppress gossip at a social hub (#1572) — the web face of ``CmdGossip``.
+
+    Converges on the same ``world.secrets.gossip`` services the telnet command calls. ``viewer`` is
+    validated by ``for_account``; the services enforce the Gossip-skill + social-hub gates and raise
+    ``GossipError`` (surfaced as its ``user_message``, never ``str(exc)``).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=GossipActionSerializer, responses=GossipResultSerializer)
+    def post(self, request: Request) -> Response:
+        from world.secrets.gossip import (  # noqa: PLC0415
+            GossipError,
+            plant_gossip,
+            seek_gossip,
+            suppress_gossip,
+        )
+
+        data = GossipActionSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        payload = data.validated_data
+
+        viewer = RosterEntry.objects.for_account(request.user).filter(pk=payload["viewer"]).first()
+        if viewer is None:
+            return Response(
+                {"detail": "No such active character."}, status=status.HTTP_403_FORBIDDEN
+            )
+        character = viewer.character_sheet.character
+        room = character.location
+        if room is None:
+            return Response(
+                {"detail": "Your character isn't anywhere to gossip."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        action = payload["action"]
+        try:
+            if action == GossipAction.SEEK:
+                result = seek_gossip(character, room=room)
+            else:
+                secret = Secret.objects.filter(pk=payload["secret"]).first()
+                if secret is None:
+                    return Response({"detail": "No such secret."}, status=status.HTTP_404_NOT_FOUND)
+                spread = plant_gossip if action == GossipAction.PLANT else suppress_gossip
+                result = spread(character, secret, room=room)
+        except GossipError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+
+        content = None
+        if result.surfaced_secret_id is not None and action == GossipAction.SEEK and result.success:
+            content = (
+                Secret.objects.filter(pk=result.surfaced_secret_id)
+                .values_list("content", flat=True)
+                .first()
+            )
+        return Response(
+            GossipResultSerializer(
+                {
+                    "success": result.success,
+                    "heat": result.heat,
+                    "went_public": result.went_public,
+                    "content": content,
+                }
+            ).data
+        )

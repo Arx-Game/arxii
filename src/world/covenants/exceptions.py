@@ -110,6 +110,28 @@ class CampaignStoryNotAllowedError(CovenantFormationError):
     )
 
 
+class CourtLeaderRequiredError(CovenantFormationError):
+    """Raised when a COURT covenant is created without specifying a leader."""
+
+    user_message = "A Court covenant must specify a leader."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A Court covenant must specify a leader.",
+        }
+    )
+
+
+class CourtLeaderNotAllowedError(CovenantFormationError):
+    """Raised when a non-COURT covenant is created with a leader set."""
+
+    user_message = "Only Court covenants may set a leader."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only Court covenants may set a leader.",
+        }
+    )
+
+
 class CovenantEngagementPrerequisiteNotMetError(CovenantError):
     """Raised when attempting scene engagement without members present."""
 
@@ -336,5 +358,33 @@ class MentorBondError(CovenantError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
             "The Mentor's Vow bond cannot be established.",
+        }
+    )
+
+
+class CourtPactExistsError(CovenantError):
+    """Raised when swearing a Court pact that already exists (active pact for the same pair)."""
+
+    user_message = "An active Court pact already exists for this servant in this covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "An active Court pact already exists for this servant in this covenant.",
+        }
+    )
+
+
+class CourtGulfViolationError(CovenantError):
+    """Raised when a servant joining a Court is not at least one power tier below the leader.
+
+    Courts require a clear power gulf: the servant's tier must be strictly less than
+    the leader's tier. Equal or higher tiers are rejected to preserve narrative hierarchy.
+    """
+
+    user_message = (
+        "You must be at least one power tier below the Court's leader to swear fealty here."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You must be at least one power tier below the Court's leader to swear fealty here.",
         }
     )

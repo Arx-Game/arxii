@@ -238,6 +238,80 @@ The covenant induction flow is wired end-to-end through the UI:
 rendering, `emits_reference` → `references` conversion on accept, and `candidate_only`
 field hiding for the initiator.
 
+## Covenant of the Court (#1589)
+
+A `CovenantType.COURT` covenant models a single powerful master and the servants/apprentices sworn
+to them across a ≥1-tier power gulf. See ADR-0057 (amended 2026-06-30) for the design rationale.
+
+### Model additions
+
+- **`Covenant.leader`** — FK → `character_sheets.CharacterSheet` (`null=True`,
+  `on_delete=SET_NULL`, `related_name="led_courts"`). Required for COURT, forbidden for other
+  types (enforced in `Covenant.clean()`). The structural analogue of `campaign_story` on Battle
+  covenants. An NPC master is an account-less `CharacterSheet` seated as the `is_leader` founder.
+
+- **`CourtPact`** — per-(Court, servant) sworn-fealty bond.
+  - `covenant` FK (PROTECT, `related_name="court_pacts"`)
+  - `servant_sheet` FK → `CharacterSheet` (PROTECT, `related_name="court_pacts"`)
+  - `granted_pull_cap` (PositiveSmallIntegerField) — master-set ceiling on the servant's
+    Court-role thread pull level. A servant with no active pact has an effective cap of 0 and
+    cannot pull their Court-role thread.
+  - `sworn_at` (auto DateTimeField), `released_at` (null = still active)
+  - Partial-unique constraint `uniq_court_pact_active`: at most one active pact per
+    `(covenant, servant_sheet)`. Released pacts are retained as an audit trail.
+  - Custom queryset: `.active()` → `released_at__isnull=True`.
+
+### Services (`world.covenants.services`)
+
+- **`swear_court_pact(*, covenant, servant_sheet, granted_pull_cap) -> CourtPact`** — creates an
+  active pact. Raises `CourtPactExistsError` if an active pact already exists for the pair.
+- **`release_court_pact(*, pact) -> None`** — soft-releases by setting `released_at = now()`.
+- **`active_court_pact_for(*, covenant, servant_sheet) -> CourtPact | None`** — returns the single
+  active pact or `None`.
+
+### Gulf enforcement (`world.covenants.mentorship`)
+
+`assert_membership_level_allowed` (COURT arm) enforces the ≥1 power-tier gulf before a servant
+may join. Uses `power_tier_for_level(level) -> int` (`world/covenants/power_tier.py`): levels
+1–5 → tier 1, 6–10 → tier 2, 11–15 → tier 3, etc. (band width = `TIER_ONE_MAX_LEVEL` = 5).
+Raises `CourtGulfViolationError` if `power_tier_for_level(servant) >= power_tier_for_level(leader)`.
+This check runs before the `MentorBondConfig` gate so it fires even without a seeded config.
+
+### Mission-driven engagement (`world.covenants.court_missions`)
+
+`has_active_court_mission(*, character_sheet, covenant) -> bool` — single `.exists()` query;
+True iff the character participates in an ACTIVE `MissionInstance` whose
+`source_offer.role.faction_affiliation_id` matches `covenant.organization_id`. A `NULL`
+`source_offer` (legacy/staff-seeded runs) never matches — correct behavior.
+
+`can_engage_membership` (COURT branch in `world/covenants/handlers.py`) gates engagement on this
+predicate. `_auto_engage_court` in `services.py` auto-engages newly inducted Court servants when
+the predicate is satisfied. Battle covenants use `not is_dormant` as their gate; the Court
+mission-gate is new dedicated machinery.
+
+### Pull-cap enforcement (`world.magic.services.threads`)
+
+`compute_anchor_cap` delegates to `_bound_covenant_role_cap_by_court_grant` for
+`TargetKind.COVENANT_ROLE` threads on COURT covenants. This bounds the anchor cap by the
+servant's `granted_pull_cap` from the active `CourtPact`. No pact → cap 0 → the grant is the gate.
+
+### Fealty ceremony
+
+`induct_member_via_session` (the ritual fire-handler) was extended for COURT covenants: after
+creating the `CharacterCovenantRole`, it calls `swear_court_pact` with `granted_pull_cap` read
+from `participant_kwargs` and emits a servant-spotlight narration alongside the induction message.
+
+### Exceptions (added in `world.covenants.exceptions`)
+
+- `CourtGulfViolationError` — servant's power tier is not strictly below the leader's.
+- `CourtPactExistsError` — an active pact already exists for `(covenant, servant_sheet)`.
+
+### Test coverage
+
+`src/world/covenants/tests/integration/test_court_e2e.py` — full E2E journey: create Court,
+induct servant (gulf enforced), swear pact, mission-driven engage, pull-cap bounded, dissolve
+(last servant leaves → Court auto-dissolves).
+
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —
@@ -304,11 +378,17 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   future display-label layer with no model surface in v1.
 - **Graduation auto-dissolve** — `begin_declaration_phase` dissolves graduated bonds;
   a separate async/background path for non-combat graduation is a follow-up.
+- **Court deferred items** — the convince-the-master economy, enemy-of-master substrate,
+  per-instance authored roles, and active capability surge were deliberately NOT built in #1589;
+  they are follow-up design items.
 
 ## Integrates With
 
-- Magic (`COVENANT_ROLE` Thread anchor cap = `current_level × 10`; `MentorsVowRitualFactory`;
+- Magic (`COVENANT_ROLE` Thread anchor cap = `current_level × 10`, bounded for COURT roles by
+  `CourtPact.granted_pull_cap` via `_bound_covenant_role_cap_by_court_grant`; `MentorsVowRitualFactory`;
   `spend_resonance_for_imbuing` hooks `fire_subrole_discoveries` after each imbue)
+- Missions (`has_active_court_mission` queries `MissionInstance` + `NPCServiceOffer` + `NPCRole`
+  + `faction_affiliation` to gate COURT engagement)
 - Mechanics (`covenant_role_bonus` in modifier walk; `level_override` via `bond_adjusted_level`)
 - Items (`gear_archetype` on `ItemTemplate`)
 - Combat (`apply_equipped_armor_soak` + `_weapon_augmented_budget`; `compute_party_profile`
@@ -325,14 +405,19 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 
 `src/world/covenants/`
 
-- `models.py` — all covenant + mentor bond models
+- `models.py` — all covenant + mentor bond + CourtPact models
 - `handlers.py` — `CharacterCovenantRoleHandler`; `currently_engaged_roles()` calls
-  `resolve_effective_role` (defined in `services.py`) per row
+  `resolve_effective_role` (defined in `services.py`) per row; `can_engage_membership` (COURT arm)
 - `services.py` — covenant lifecycle + `resolve_effective_role` + `establish_mentor_bond_via_session`
+  + `swear_court_pact` / `release_court_pact` / `active_court_pact_for` + `induct_member_via_session`
+  (extended for COURT)
 - `selectors.py` — `resolve_actor_membership` / `get_active_memberships`; shared by viewsets
   and the covenant Actions
 - `discovery.py` — `fire_subrole_discoveries` (sub-role discovery beat)
-- `mentorship.py` — `effective_combat_level` and Mentor's Vow math
+- `mentorship.py` — `effective_combat_level` and Mentor's Vow math; `assert_membership_level_allowed`
+  (COURT gulf arm)
+- `court_missions.py` — `has_active_court_mission` (mission-driven engagement predicate)
+- `power_tier.py` — `power_tier_for_level` (gulf enforcement helper)
 - `factories.py` — `seed_resonance_subrole_slice`, `SubroleCovenantRoleFactory`
 - `exceptions.py` — all exceptions
 

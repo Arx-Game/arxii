@@ -132,16 +132,16 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # Task 5 (#520) dedupes the three round-context resolutions into one in get_player_actions,
         # reducing the cost from 16 → 12 (one combat + one scene-round lookup instead of three
         # pairs).
-        # #1581 (gift-thread anchor + specialization): resolve_specialized_variant now reads the
-        # character's active Thread list to find the matching GIFT thread; this is one additional
-        # fixed-cost query (Thread SELECT via CharacterThreadHandler._all). The CharacterSheet fetch
-        # is shared between the variant resolver and the identity-stream calculation via the
-        # _sheet pass-through introduced to avoid a duplicate round-trip, so the net addition is
-        # +1 (Thread only). Cap raised from 12 → 13. Raise only with a documented justification —
-        # the goal remains a single-digit cost.
+        # #1592 (BattleRoundContext): get_active_round_context adds one BattleParticipant lookup.
+        # #1581 (gift-thread specialization): resolve_specialized_variant reads the character's
+        # active Thread list to find the matching GIFT thread — one fixed-cost Thread SELECT (via
+        # CharacterThreadHandler._all). The CharacterSheet fetch is shared between the variant
+        # resolver and the identity-stream calculation via a _sheet pass-through (no duplicate
+        # round-trip). Both additions are fixed-cost over the #520 baseline of 12. Raise only with
+        # a documented justification — the goal remains a single-digit-ish cost.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            13,
+            14,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

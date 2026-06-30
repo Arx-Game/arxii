@@ -102,6 +102,42 @@ def _current_path_stage(character_sheet: CharacterSheet) -> int:
     return int(history.path.stage)
 
 
+def _bound_covenant_role_cap_by_court_grant(
+    thread: Thread,
+    base_cap: int,
+    covenant_ids: list[int],
+) -> int:
+    """Bound a COVENANT_ROLE thread's anchor cap by the master's granted cap (#1589 Task 6).
+
+    Durance/Battle roles return ``base_cap`` byte-for-byte unchanged. For a COURT
+    role the cap is additionally bounded by what the servant's master granted them
+    (``CourtPact.granted_pull_cap``): ONE query, reusing the already-warmed
+    ``covenant_ids`` — no per-covenant loop.
+
+    Semantics: a Court servant with NO active pact (master granted nothing) →
+    ``granted = 0`` → cap ``0`` → they cannot pull their Court-role thread. This is
+    intended; the grant is the gate.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    if thread.target_covenant_role.covenant_type != CovenantType.COURT:
+        return base_cap
+
+    from world.covenants.models import CourtPact  # noqa: PLC0415
+
+    granted = (
+        CourtPact.objects.filter(
+            covenant_id__in=covenant_ids,
+            servant_sheet=thread.owner,
+            released_at__isnull=True,
+        )
+        .order_by("-granted_pull_cap")
+        .values_list("granted_pull_cap", flat=True)
+        .first()
+    )
+    return min(base_cap, granted if granted is not None else 0)
+
+
 def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
@@ -154,22 +190,26 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
 
             role = thread.target_covenant_role
             handler = thread.owner.character.covenant_roles
+            # covenant_ids come from the warmed handler cache (0 queries); reused by
+            # both the legend lookup and the Court-pact bound below.
+            covenant_ids = handler.covenant_ids_for_role(role)
             covenant_component = (
                 handler.max_covenant_level_for_role(role) * ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER
             )
-            # covenant_ids come from the warmed handler cache (0 queries); the legend
-            # lookup then needs only its own credit query rather than re-fetching membership.
+            # The legend lookup then needs only its own credit query rather than
+            # re-fetching membership.
             legend = get_character_role_legend(
                 character_sheet=thread.owner,
                 role=role,
-                covenant_ids=handler.covenant_ids_for_role(role),
+                covenant_ids=covenant_ids,
             )
             days = handler.days_held_in_role(role)
-            return (
+            base_cap = (
                 covenant_component
                 + legend // ANCHOR_CAP_COVENANT_LEGEND_DIVISOR
                 + days // ANCHOR_CAP_COVENANT_DAYS_DIVISOR
             )
+            return _bound_covenant_role_cap_by_court_grant(thread, base_cap, covenant_ids)
         case TargetKind.MANTLE:
             mantle = thread.target_mantle
             max_level = thread.owner.character.mantle_clearances.max_cleared_level(mantle)

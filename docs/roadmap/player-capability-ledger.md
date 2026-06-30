@@ -78,7 +78,7 @@ in-fiction trigger is plausible.
 | **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN | `effect_palette_content.py`; 9 seeded effects; summon E2E `integration_tests/pipeline/test_effect_summon_telnet_e2e.py`; reactive interceptor E2Es `integration_tests/pipeline/test_effect_reactive_families.py` (#1584) | done |
 | **Companions / pets / summons** w/ breath weapons & ordered abilities | ✅ PROVEN (basic) | ALLY `CombatOpponent` via `allegiance`/`summoned_by`; opponent-vs-opponent damage; advanced ordered abilities are a follow-up | done (ADR-0059; #672 folds in) |
 | **Roles grant techniques** (resonance-spec at lvl 3) | ✅ PROVEN | **ADR-0055** (the specialization engine); `CovenantRole` inherits `AbstractSpecializedVariant` + `fire_variant_discoveries` generalizes the discovery beat across `target_kind`; proven by `covenants/tests/integration/test_resonance_subrole_flow.py` (covenant) + `magic/tests/integration/test_gift_specialization_e2e.py` (gift) | done |
-| **War / battle system** | ❌ ABSENT | war covenants have nowhere to resolve | soon |
+| **War / battle system** | ✅ PROVEN (spine) | **#1592** — spine landed: `Battle` (1:1 Scene extension), `BattleSide` / `BattlePlace` / `BattleUnit` / `BattleRound` / `BattleParticipant` / `BattleActionDeclaration`; `BattleRoundContext` wired into `get_active_round_context`; services + REGISTRY actions + `CmdBattle` (`battle declare\|round\|resolve\|conclude`); E2E `test_battle_telnet_e2e.py` proves stage → declare → resolve → conclude. Deferred: peril/rescue (#1710), AFK knobs (#1711), battle page (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/siege (#1715), campaign-stakes propagation + win-gated Legend (#1716). | soon |
 | Mounts / charging · flying mounts / dragons | ❌ ABSENT | planned-systems (aerial positioning exists, no mount) | P2 |
 | Ranged / archery mechanics | 🟡 SUBSTRATE | range bands + RANGED class exist | soon |
 
@@ -110,7 +110,7 @@ in-fiction trigger is plausible.
 | **Resonance differentiates your magic** (gift affinity + technique form) | ✅ PROVEN | **ADR-0052** (gift affinity = thread resonance) + **ADR-0055** (derive-on-read); `gift_resonances_for` feeds the four cast sites; `test_gift_specialization_e2e.py` | done |
 | **Signature technique** (one technique deepened, own resonance, may diverge) | ❌ → DESIGNED | **ADR-0056** (re-scope `TargetKind.TECHNIQUE`) | soon |
 | **Fall / Redemption** resonance conversion (asymmetric) | ❌ → DESIGNED | **ADR-0054** (new conversion service; respect monotonic `lifetime_earned`) | soon |
-| **Covenant of the Court** lets a peerless puissant hold a role | ❌ → DESIGNED | **ADR-0057** (new `CovenantType.COURT`, reuses covenant substrate) | soon |
+| **Covenant of the Court** lets a peerless puissant hold a role | ✅ PROVEN | **ADR-0057** (amended 2026-06-30, #1589) — `CovenantType.COURT` + `Covenant.leader` FK + `CourtPact` (grant cap) + gulf enforcement (`power_tier_for_level`) + mission-driven engagement (`has_active_court_mission`) + fealty ceremony; proven by `world/covenants/tests/integration/test_court_e2e.py` | done |
 | Multi-PC group combos `(effect-type × resonance)` | ✅ PROVEN | `ComboDefinition`/`ComboSlot` (group, not personal) | done |
 
 ---
@@ -127,7 +127,7 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
 ### Build-new (ABSENT / substrate — build to the ADR, or greenfield)
 - **Identity (ADR-0050):** species abilities / lineage / khati / vampire / lycan as Minor Gifts — the infrastructure is built (#1580: `SpeciesGiftGrant` + `provision_species_gifts` + RESISTANCE substrate); pending: seed real species Minor Gift data. Broad immunity/vulnerability framework + environmental triggers → #1588 (ADR-0062).
 - **Gift/resonance economy (ADR-0050–0056):** Minor-Gift acquisition; GIFT thread anchor + per-target-kind cost (0051); gift-resonance-from-thread refactor (0052); the specialization engine (0055); signature re-scope of `TargetKind.TECHNIQUE` (0056); fall/redemption conversion service (0054).
-- **Covenants:** `CovenantType.COURT` + Court roles (ADR-0057).
+- **Covenants:** `CovenantType.COURT` + Court roles (ADR-0057) — **SHIPPED #1589** (see PROVEN row above).
 - **Effects:** the effect palette — **SHIPPED #1584** (9 effects: summon/reflect [Mirror Ward]/
   incorporeal [Ghostform]/sink [Earthmeld]/telekinesis [Force Grip]/teleport [Phase Jump]/
   obstacle [Barricade]/force-field [Aegis Field]/blink [Phase Step]; allegiance-aware summon

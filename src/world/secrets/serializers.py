@@ -8,6 +8,8 @@ unplaced, renders as **"Unknown"** (a first-class state, not a blank).
 
 from rest_framework import serializers
 
+from world.secrets.constants import GossipAction
+
 # Runtime import (not TYPE_CHECKING): drf-spectacular calls get_type_hints() on the method
 # fields, which evaluates the ``obj: SecretKnowledge`` annotations — they must resolve at runtime.
 from world.secrets.models import SecretKnowledge
@@ -97,4 +99,37 @@ class SecretGrievanceSerializer(serializers.Serializer):
         if has_option == has_custom:
             msg = "Provide either an option or both custom_points and custom_track."
             raise serializers.ValidationError(msg)
+        return attrs
+
+
+class GossipSecretSerializer(serializers.Serializer):
+    """A Level-1 secret the viewer holds + could spread, with its heat in this region (#1572)."""
+
+    id = serializers.IntegerField(read_only=True)
+    content = serializers.CharField(read_only=True)
+    heat = serializers.IntegerField(read_only=True)
+
+
+class GossipResultSerializer(serializers.Serializer):
+    """Outcome of a plant/seek/suppress gossip action (#1572)."""
+
+    success = serializers.BooleanField(read_only=True)
+    heat = serializers.IntegerField(read_only=True)
+    went_public = serializers.BooleanField(read_only=True)
+    # For a successful seek: the overheard rumor's text (null otherwise).
+    content = serializers.CharField(read_only=True, allow_null=True)
+
+
+class GossipActionSerializer(serializers.Serializer):
+    """Input for a gossip action: the verb, the active character's RosterEntry pk, and — for
+    plant/suppress — the target secret (#1572)."""
+
+    action = serializers.ChoiceField(choices=GossipAction.choices)
+    viewer = serializers.IntegerField(help_text="The active (viewing) character's RosterEntry pk.")
+    secret = serializers.IntegerField(required=False, help_text="Required for plant/suppress.")
+
+    def validate(self, attrs: dict) -> dict:
+        needs_secret = attrs["action"] in (GossipAction.PLANT, GossipAction.SUPPRESS)
+        if needs_secret and attrs.get("secret") is None:
+            raise serializers.ValidationError({"secret": "Required for plant and suppress."})
         return attrs

@@ -21,6 +21,7 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
+from commands.battle import CmdBattle
 from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
@@ -42,6 +43,7 @@ from commands.covenant import CmdCovenant
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
+from commands.durance import CmdDurance
 from commands.encounter import CmdEncounter
 from commands.endorse import CmdEndorse, CmdPoses
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
@@ -170,6 +172,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLock,
             CmdUnlock,
             CmdRitual,
+            # #1700 — Durance status/intent/convene telnet namespace.
+            CmdDurance,
             # #1349 — telnet face of the mission play services (resolve/abandon/group pick+vote).
             CmdMission,
             # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
@@ -288,6 +292,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.
             CmdCovenant,
+            # #1592 — battle system: GM lifecycle + player declare namespace.
+            CmdBattle,
         )
         for command_cls in command_classes:
             self.add(command_cls())

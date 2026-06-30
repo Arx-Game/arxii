@@ -182,6 +182,7 @@ class ActionRegistryTests(TestCase):
             "persuade",
             "deceive",
             "flirt",
+            "seduce",
             "perform",
             "entrance",
             "challenge",
@@ -288,6 +289,10 @@ class ActionRegistryTests(TestCase):
             "sanctum_dissolve",
             "sanctum_absorb",
             "sanctum_sever",
+            "begin_battle_round",
+            "resolve_battle_round",
+            "conclude_battle",
+            "declare_battle_action",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

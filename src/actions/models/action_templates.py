@@ -102,6 +102,13 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="Base social fatigue charged on resolution, scaled by effort_level.",
     )
+    difficulty_tier_modifier = models.IntegerField(
+        default=0,
+        help_text=(
+            "Shifts this action's resolved difficulty by N tiers relative to the derived base "
+            "(#1697). Seduce = +1 (one tier harder than Flirt). 0 for ordinary actions."
+        ),
+    )
     grants_entry_flourish = models.BooleanField(
         default=False,
         help_text=(

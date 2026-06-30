@@ -120,6 +120,52 @@ def _remove_condition(
     )
 
 
+def _set_relationship_condition(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Set a directed relationship-condition: the TARGET becomes attracted to the actor (#1697).
+
+    The actor (``context.character``) is the one found attractive; the effect's TARGET becomes
+    Attracted To them, so the directed relationship is ``source=target, target=actor`` — exactly the
+    direction ``relationship_gated_contributions`` reads. A null duration is permanent, a set
+    duration is temporary (Very Attracted).
+    """
+    from world.relationships.services import add_relationship_condition  # noqa: PLC0415
+
+    actor = context.character
+    recipient = _resolve_target(effect, context)
+    try:
+        actor_sheet = actor.sheet_data
+        recipient_sheet = recipient.sheet_data
+    except ObjectDoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.SET_RELATIONSHIP_CONDITION,
+            description="Actor or target has no character sheet; skipped.",
+            applied=False,
+            skip_reason="missing_sheet",
+        )
+    if recipient_sheet.pk == actor_sheet.pk:
+        return AppliedEffect(
+            effect_type=EffectType.SET_RELATIONSHIP_CONDITION,
+            description="Actor and target are the same character; skipped.",
+            applied=False,
+            skip_reason="self_target",
+        )
+    add_relationship_condition(
+        source=recipient_sheet,
+        target=actor_sheet,
+        condition=effect.relationship_condition,
+        duration=effect.relationship_condition_duration,
+    )
+    condition_name = effect.relationship_condition.name
+    return AppliedEffect(
+        effect_type=EffectType.SET_RELATIONSHIP_CONDITION,
+        description=f"{recipient.db_key} is now '{condition_name}' toward {actor.db_key}",
+        applied=True,
+    )
+
+
 def _add_property(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -848,6 +894,7 @@ def _apply_rescue_captive(
 _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.APPLY_CONDITION: _apply_condition,
     EffectType.REMOVE_CONDITION: _remove_condition,
+    EffectType.SET_RELATIONSHIP_CONDITION: _set_relationship_condition,
     EffectType.ADD_PROPERTY: _add_property,
     EffectType.REMOVE_PROPERTY: _remove_property,
     EffectType.DEAL_DAMAGE: _deal_damage,

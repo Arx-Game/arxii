@@ -13,6 +13,7 @@ class CovenantType(models.TextChoices):
 
     DURANCE = "durance", "Covenant of the Durance"
     BATTLE = "battle", "Covenant of Battle"
+    COURT = "court", "Covenant of the Court"
 
 
 class RoleArchetype(models.TextChoices):

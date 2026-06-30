@@ -190,6 +190,14 @@ A magical affinity-tied charge a character earns and spends (a `balance` with
 A piece of concealed canon scoped per knower; the `secrets` app stays dependency-free and
 other systems FK into it. _Avoid_: rumor, mystery.
 
+## Covenants
+
+**Court Pact**:
+The per-(Court covenant, servant) sworn-fealty bond carrying the master's `granted_pull_cap`; the
+cap bounds the servant's Court-role thread pull level. The grant is the gate: no active pact → an
+effective cap of 0 → cannot pull. _Avoid_: mentor bond, patron, indenture.
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 ## Combat-magic surface (#1584)
 
 **Allegiance**:

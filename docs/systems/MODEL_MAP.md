@@ -157,10 +157,12 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
+  - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -342,6 +344,7 @@
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
+  - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - fame_reaction_lines <- societies.FameReactionLine
   - fame_reaction_cooldowns <- societies.FameReactionCooldown
@@ -495,6 +498,78 @@
 - `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
 - `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies' fashion is perceived in a scene's location.`
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
+
+
+## world.battles
+
+### Battle
+**Foreign Keys:**
+  - scene -> scenes.Scene [OneToOne]
+  - campaign_story -> stories.Story [FK] (nullable)
+**Pointed to by:**
+  - sides <- battles.BattleSide
+  - places <- battles.BattlePlace
+  - units <- battles.BattleUnit
+  - rounds <- battles.BattleRound
+  - participants <- battles.BattleParticipant
+
+### BattleSide
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+**Pointed to by:**
+  - units <- battles.BattleUnit
+  - participants <- battles.BattleParticipant
+
+### BattlePlace
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - combat_encounter -> combat.CombatEncounter [FK] (nullable)
+**Pointed to by:**
+  - units <- battles.BattleUnit
+  - participants <- battles.BattleParticipant
+
+### BattleUnit
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - side -> battles.BattleSide [FK]
+  - place -> battles.BattlePlace [FK] (nullable)
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+
+### BattleRound
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+
+### BattleParticipant
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - side -> battles.BattleSide [FK]
+  - place -> battles.BattlePlace [FK] (nullable)
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+  - support_declarations <- battles.BattleActionDeclaration
+
+### BattleActionDeclaration
+**Foreign Keys:**
+  - battle_round -> battles.BattleRound [FK]
+  - participant -> battles.BattleParticipant [FK]
+  - target_unit -> battles.BattleUnit [FK] (nullable)
+  - target_ally -> battles.BattleParticipant [FK] (nullable)
+
+### Service Functions
+- `add_place(*, battle: 'Battle', name: 'str') -> 'BattlePlace' — Add a named front/zone to a battle.`
+- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
+- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', unit_type: 'str', strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
+- `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
+- `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
+- `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 
 
 ## world.buildings
@@ -779,6 +854,7 @@
   - roster_entry <- roster.RosterEntry
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
+  - durance_training_roles <- progression.DuranceTrainingSite
   - path_intent <- progression.PathIntent
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
@@ -863,10 +939,12 @@
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
   - fatigue <- fatigue.FatiguePool
+  - led_courts <- covenants.Covenant
   - covenant_role_assignments <- covenants.CharacterCovenantRole
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds_as_mentor <- covenants.MentorBond
   - mentor_bonds_as_sidekick <- covenants.MentorBond
+  - court_pacts <- covenants.CourtPact
   - vitals <- vitals.CharacterVitals
   - duels_won <- combat.CombatEncounter
   - summoned_combatants <- combat.CombatOpponent
@@ -875,6 +953,7 @@
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - duel_challenges_issued <- combat.DuelChallenge
   - duel_challenges_received <- combat.DuelChallenge
+  - battle_participations <- battles.BattleParticipant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - detected_traps <- room_features.Trap
 
@@ -972,6 +1051,7 @@
 **Foreign Keys:**
   - consequence -> checks.Consequence [FK]
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
+  - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
   - property -> mechanics.Property [FK] (nullable)
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
@@ -1001,6 +1081,7 @@
   - drafts <- character_creation.CharacterDraft
   - child_paths <- classes.Path
   - path_aspects <- classes.PathAspect
+  - durance_training_sites <- progression.DuranceTrainingSite
   - path_intents <- progression.PathIntent
   - character_selections <- progression.CharacterPathHistory
   - audere_majora_crossings <- magic.AudereMajoraCrossing
@@ -1230,10 +1311,12 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
+  - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -1459,6 +1542,7 @@
 **Foreign Keys:**
   - organization -> societies.Organization [OneToOne]
   - campaign_story -> stories.Story [FK] (nullable)
+  - leader -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - storylines <- stories.Story
@@ -1468,6 +1552,7 @@
   - memberships <- covenants.CharacterCovenantRole
   - rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds <- covenants.MentorBond
+  - court_pacts <- covenants.CourtPact
 
 ### CovenantRole
 **Foreign Keys:**
@@ -1552,7 +1637,13 @@
   - mentor_sheet -> character_sheets.CharacterSheet [FK]
   - sidekick_sheet -> character_sheets.CharacterSheet [FK]
 
+### CourtPact
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [FK]
+  - servant_sheet -> character_sheets.CharacterSheet [FK]
+
 ### Service Functions
+- `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' — Return the single active CourtPact for (covenant, servant_sheet), or None.`
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' — Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
@@ -1563,7 +1654,7 @@
 - `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
 - `complete_rites_for_encounter(*, encounter: 'CombatEncounter') -> 'None' — Sweep covenant rite buffs when a combat encounter ends.`
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
-- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
+- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
 - `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
 - `delete_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', reassign_to: 'CovenantRank') -> 'None' — Delete a rank after reassigning all active members to ``reassign_to``.`
@@ -1580,6 +1671,7 @@
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' — Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`
 - `precedence_role_for_combat(character_sheet: 'CharacterSheet') -> 'CovenantRole | None' — Pick the single covenant role that governs combat for a character.`
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
+- `release_court_pact(*, pact: 'CourtPact') -> 'None' — Soft-release an active CourtPact by setting released_at to now.`
 - `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' — Rename a rank. Requires can_manage_ranks.`
 - `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' — Rewrite tiers for the given ranks atomically and uniquely.`
 - `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` (one-line shim over`
@@ -1587,6 +1679,7 @@
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
+- `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' — Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
 
 
@@ -2216,7 +2309,7 @@
   - capability_requirements <- magic.TechniqueCapabilityRequirement
   - character_grants <- magic.CharacterTechnique
   - condition_applications <- magic.TechniqueAppliedCondition
-  - removed_conditions <- magic.TechniqueRemovedCondition (#1585)
+  - removed_conditions <- magic.TechniqueRemovedCondition
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
@@ -2257,7 +2350,6 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - technique -> magic.Technique [FK]
-  *(#1585 dispel/cleanse payload; adds remove_all_stacks bool. See ADR-0064.)*
 
 ### TechniqueDamageProfile
 **Foreign Keys:**
@@ -2699,6 +2791,7 @@
   - capability_grants <- magic.TechniqueDraftCapabilityGrant
   - damage_profiles <- magic.TechniqueDraftDamageProfile
   - applied_conditions <- magic.TechniqueDraftAppliedCondition
+  - removed_conditions <- magic.TechniqueDraftRemovedCondition
 
 ### TechniqueDraftCapabilityGrant
 **Foreign Keys:**
@@ -2711,6 +2804,11 @@
   - draft -> magic.TechniqueDraft [FK]
 
 ### TechniqueDraftAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftRemovedCondition
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - draft -> magic.TechniqueDraft [FK]
@@ -3328,6 +3426,13 @@
   - character_class -> classes.CharacterClass [FK]
   - officiant -> character_sheets.CharacterSheet [FK] (nullable)
   - ritual -> magic.Ritual [FK] (nullable)
+  - witnesses -> scenes.Persona [M2M]
+
+### DuranceTrainingSite
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - officiant -> character_sheets.CharacterSheet [FK]
+  - training_path -> classes.Path [FK] (nullable)
 
 ### CharacterXP
 **Foreign Keys:**
@@ -3610,7 +3715,9 @@
 **Foreign Keys:**
   - gates_modifiers -> mechanics.ModifierTarget [M2M]
 **Pointed to by:**
+  - consequence_effects <- checks.ConsequenceEffect
   - character_relationships <- relationships.CharacterRelationship
+  - temporary_applications <- relationships.TemporaryRelationshipCondition
 
 ### RelationshipTrack
 **Pointed to by:**
@@ -3660,6 +3767,7 @@
   - developments <- relationships.RelationshipDevelopment
   - capstones <- relationships.RelationshipCapstone
   - changes <- relationships.RelationshipChange
+  - temporary_conditions <- relationships.TemporaryRelationshipCondition
 
 ### RelationshipTrackProgress
 **Foreign Keys:**
@@ -3722,9 +3830,16 @@
   - capstone -> relationships.RelationshipCapstone [FK] (nullable)
   - complainant -> accounts.AccountDB [FK]
 
+### TemporaryRelationshipCondition
+**Foreign Keys:**
+  - relationship -> relationships.CharacterRelationship [FK]
+  - condition -> relationships.RelationshipCondition [FK]
+
 ### Service Functions
+- `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
+- `clear_very_attracted(sheets) -> 'None' — Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' — Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' — Add permanent (developed) points to a track, up to capacity.`
 - `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' — Create a pending relationship with an initial update and track progress.`
@@ -3734,6 +3849,7 @@
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' — Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
+- `relationship_gated_contributions(*, perceiver: 'CharacterSheet', perceived: 'CharacterSheet') -> 'list[ModifierContribution]' — Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).`
 
 
 ## world.roster
@@ -3883,6 +3999,7 @@
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combat_encounters <- combat.CombatEncounter
+  - battle <- battles.Battle
 
 ### SceneParticipation
 **Foreign Keys:**
@@ -3901,6 +4018,7 @@
   - bug_reports <- player_submissions.BugReport
   - reports_submitted <- player_submissions.PlayerReport
   - reports_against <- player_submissions.PlayerReport
+  - witnessed_advancements <- progression.ClassLevelAdvancement
   - targeted_for_random_scene <- progression.RandomSceneTarget
   - random_scene_completed_by <- progression.RandomSceneCompletion
   - poseendorsement_set <- magic.PoseEndorsement
@@ -4523,6 +4641,7 @@
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
+  - battles <- battles.Battle
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute

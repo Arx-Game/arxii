@@ -305,6 +305,18 @@ def batch_condition_expiration_cleanup() -> None:
     logger.info("Condition expiration cleanup: %d expired conditions deleted", count)
 
 
+def batch_relationship_temp_condition_cleanup() -> None:
+    """Delete expired temporary relationship-conditions (Very Attracted drop-off) (#1697)."""
+    from django.utils import timezone
+
+    from world.relationships.models import TemporaryRelationshipCondition
+
+    count, _ = TemporaryRelationshipCondition.objects.filter(
+        expires_at__lt=timezone.now(),
+    ).delete()
+    logger.info("Relationship temp-condition cleanup: %d expired rows deleted", count)
+
+
 def register_all_tasks() -> None:
     """Register all periodic tasks with the scheduler."""
     register_task(
@@ -353,6 +365,14 @@ def register_all_tasks() -> None:
             callable=batch_condition_expiration_cleanup,
             interval=timedelta(hours=1),
             description="Delete expired time-based conditions.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="relationships.temp_condition_cleanup",
+            callable=batch_relationship_temp_condition_cleanup,
+            interval=timedelta(hours=1),
+            description="Delete expired temporary relationship-conditions (Very Attracted).",
         )
     )
 

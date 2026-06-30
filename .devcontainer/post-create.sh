@@ -106,10 +106,21 @@ claude plugin install superpowers@claude-plugins-official 2>/dev/null || true
 # skills committed to tools/skills/ appear on the next container creation.
 # nullglob: if tools/skills/ is empty, the loop body should NOT run with the
 # literal pattern (which would create a dangling "*" symlink).
+#
+# A skill that declares `compatibility: polytoken-only` in its SKILL.md
+# frontmatter is Polytoken-exclusive and is SKIPPED here — it would collide
+# with a same-named superpowers plugin skill (brainstorming, writing-plans,
+# using-git-worktrees) in Claude Code. The plain `compatibility: polytoken`
+# marker is additive: such skills are mirrored into Polytoken (below) AND
+# symlinked into Claude Code as before. The sync-polytoken-skills step mirrors
+# both marker variants into .polytoken/skills/.
 mkdir -p /home/vscode/.claude/skills
 shopt -s nullglob
 for skill in /workspaces/arxii/tools/skills/*/; do
   name=$(basename "$skill")
+  if grep -q "^compatibility:[[:space:]]*polytoken-only$" "$skill/SKILL.md" 2>/dev/null; then
+    continue
+  fi
   ln -sfn "$skill" "/home/vscode/.claude/skills/$name"
 done
 shopt -u nullglob
