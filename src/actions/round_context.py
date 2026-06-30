@@ -118,6 +118,12 @@ def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     if combat_ctx is not None:
         return combat_ctx
 
+    from world.battles.round_context import resolve_battle_round_context  # noqa: PLC0415
+
+    battle_ctx = resolve_battle_round_context(character)
+    if battle_ctx is not None:
+        return battle_ctx
+
     from world.scenes.round_context import resolve_scene_round_context  # noqa: PLC0415
 
     return resolve_scene_round_context(character)
