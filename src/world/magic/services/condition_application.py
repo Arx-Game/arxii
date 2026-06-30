@@ -10,8 +10,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.conditions.services import bulk_apply_conditions
-from world.conditions.types import AppliedConditionResult, BulkConditionApplication
+from world.checks.services import perform_check
+from world.conditions.services import (
+    bulk_apply_conditions,
+    get_condition_instance,
+    remove_condition,
+)
+from world.conditions.types import (
+    AppliedConditionResult,
+    BulkConditionApplication,
+    RemovedConditionResult,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -103,3 +112,112 @@ def apply_technique_conditions(
             )
         )
     return out
+
+
+def remove_technique_conditions(
+    *,
+    technique: Technique,
+    success_level: int,
+    targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
+    source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+) -> list[RemovedConditionResult]:
+    """Remove technique-authored conditions from pre-resolved targets (dispel/cleanse).
+
+    The removal sibling of :func:`apply_technique_conditions`. Iterates all
+    ``TechniqueRemovedCondition`` rows on *technique* and, for each row passing the
+    cast success-level gate, attempts to strip the named condition from every
+    ``ObjectDB`` in ``targets_by_kind.get(row.target_kind, [])``.
+
+    Three independent gates per target, evaluated in order:
+      1. Row cast-SL gate: ``success_level < row.minimum_success_level`` skips the row
+         entirely (mirrors the apply path at ``condition_application.py``). A botched
+         cast (SL 0) removes nothing; SL >= 1 passes the default.
+      2. ``can_be_dispelled`` hard gate: a condition whose template has
+         ``can_be_dispelled=False`` is a no-op (skipped, never an error).
+      3. Opposed cure check: when ``row.condition.cure_check_type`` is set, rolls
+         ``perform_check(source_character, cure_check_type, cure_difficulty)``. Removal
+         succeeds iff ``check_result.success_level > 0``; otherwise it is resisted (no-op
+         for that target, cast continues). When ``cure_check_type`` is null, removal
+         proceeds unconditionally (uncontested dispel).
+
+    Delegates to :func:`world.conditions.services.remove_condition`, which handles
+    stack decrement (``remove_all_stacks=False``), ``CONDITION_REMOVED`` emission,
+    deferred-death resolution, and stories re-evaluation.
+
+    Args:
+        technique: The ``Technique`` whose ``removed_conditions`` rows are iterated.
+        success_level: The cast technique's check success level (SL).
+        targets_by_kind: Mapping from ``ConditionTargetKind`` value (str) to resolved
+            ``ObjectDB`` targets. Callers build this before calling.
+        source_character: The caster's ``ObjectDB``, used as the opposed-cure-check
+            roller.
+
+    Returns:
+        List of ``RemovedConditionResult``, one per (row, target) attempted, in order.
+        Empty when no rows pass the SL gate or all resolved target lists are empty.
+    """
+    rows = list(
+        technique.removed_conditions.select_related("condition", "condition__cure_check_type").all()
+    )
+    if not rows:
+        return []
+
+    out: list[RemovedConditionResult] = []
+    for row in rows:
+        # Gate 1: cast success-level gate (mirrors the apply path).
+        if success_level < row.minimum_success_level:
+            continue
+        condition = row.condition
+        targets = targets_by_kind.get(row.target_kind, [])
+        out.extend(
+            _attempt_removal(
+                target=target,
+                condition=condition,
+                remove_all_stacks=row.remove_all_stacks,
+                source_character=source_character,
+            )
+            for target in targets
+        )
+    return out
+
+
+def _attempt_removal(
+    *,
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM
+    condition,
+    remove_all_stacks: bool,
+    source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+) -> RemovedConditionResult:
+    """Resolve gates 2-4 for one (target, condition) and perform the removal."""
+    # Gate 2: can_be_dispelled hard gate.
+    if not condition.can_be_dispelled:
+        return RemovedConditionResult(
+            target=target, condition=condition, success=False, skipped_reason="not_dispellable"
+        )
+
+    # Absent condition: nothing to remove.
+    if get_condition_instance(target, condition) is None:
+        return RemovedConditionResult(
+            target=target, condition=condition, success=False, skipped_reason="not_present"
+        )
+
+    # Gate 3: opposed cure check (only when the condition defines one).
+    cure_check_type = condition.cure_check_type
+    if cure_check_type is not None:
+        check_result = perform_check(
+            source_character,
+            cure_check_type,
+            condition.cure_difficulty,
+        )
+        if check_result.success_level <= 0:
+            return RemovedConditionResult(
+                target=target, condition=condition, success=False, skipped_reason="resisted"
+            )
+
+    removed = remove_condition(target, condition, remove_all_stacks=remove_all_stacks)
+    return RemovedConditionResult(
+        target=target,
+        condition=condition,
+        success=removed,
+        skipped_reason="" if removed else "not_present",
+    )

@@ -376,5 +376,11 @@ export interface TechniqueDesignRequest {
     base_severity?: number;
     base_duration_rounds?: number | null;
   }[];
+  removed_conditions?: {
+    condition_id: number;
+    target_kind: 'self' | 'ally' | 'enemy';
+    minimum_success_level?: number;
+    remove_all_stacks?: boolean;
+  }[];
   character_id?: number;
 }

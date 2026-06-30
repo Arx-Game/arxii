@@ -8,6 +8,7 @@ Tests that mock bulk_apply_conditions can run on SQLite.
 """
 
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -20,6 +21,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
+    TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.condition_application import apply_technique_conditions
@@ -291,3 +293,221 @@ class ApplyTechniqueConditionsPostgresTest(TestCase):
             any(inst.condition == cond for inst in active),
             "Condition was not found active on caster after apply.",
         )
+
+
+class RemoveTechniqueConditionsTest(TestCase):
+    """Unit tests for remove_technique_conditions (dispel/cleanse, #1585).
+
+    The real remove_condition path routes through get_active_conditions, which uses
+    PG-only DISTINCT ON. These gate-logic tests mock remove_condition + perform_check
+    so they run on the SQLite fast tier; the end-to-end journey (real apply + remove
+    through request_technique_cast) lives in
+    world/magic/tests/integration/test_dispel_cast_e2e.py.
+    """
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.caster_od = self.sheet.character
+        self.technique = TechniqueFactory(gift=GiftFactory())
+
+    def test_no_rows_returns_empty_list(self) -> None:
+        """Technique with no removed_conditions returns []."""
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        result = remove_technique_conditions(
+            technique=self.technique,
+            success_level=2,
+            targets_by_kind={},
+            source_character=self.caster_od,
+        )
+        self.assertEqual(result, [])
+
+    def test_skips_row_below_minimum_sl(self) -> None:
+        """Row with minimum_success_level=3 is skipped when success_level=2."""
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="HighGateDispel")
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+            minimum_success_level=3,
+        )
+        with (
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.perform_check"),
+        ):
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=2,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(result, [])
+        mock_remove.assert_not_called()
+
+    def test_can_be_dispelled_false_is_noop(self) -> None:
+        """A condition with can_be_dispelled=False is skipped, not removed."""
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="PlotLocked", can_be_dispelled=False)
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        with (
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()  # condition is present
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0].success)
+        self.assertEqual(result[0].skipped_reason, "not_dispellable")
+        mock_remove.assert_not_called()
+
+    def test_absent_condition_is_noop(self) -> None:
+        """A condition not present on the target is a not_present no-op."""
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="AbsentDispel", can_be_dispelled=True)
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        with (
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = None  # condition absent
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0].success)
+        self.assertEqual(result[0].skipped_reason, "not_present")
+        mock_remove.assert_not_called()
+
+    def test_opposed_cure_check_failure_resists(self) -> None:
+        """When cure_check_type is set and the check fails (SL<=0), removal is resisted."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cure_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="ResistedDispel",
+            can_be_dispelled=True,
+            cure_check_type=cure_check,
+            cure_difficulty=15,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        fake_result = SimpleNamespace(success_level=0)
+        with (
+            patch(
+                "world.magic.services.condition_application.perform_check", return_value=fake_result
+            ),
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0].success)
+        self.assertEqual(result[0].skipped_reason, "resisted")
+        mock_remove.assert_not_called()
+
+    def test_opposed_cure_check_success_removes(self) -> None:
+        """When cure_check_type is set and the check succeeds (SL>0), removal proceeds."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cure_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="CuredDispel",
+            can_be_dispelled=True,
+            cure_check_type=cure_check,
+            cure_difficulty=15,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+            remove_all_stacks=False,
+        )
+        fake_result = SimpleNamespace(success_level=2)
+        with (
+            patch(
+                "world.magic.services.condition_application.perform_check", return_value=fake_result
+            ),
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()
+            mock_remove.return_value = True
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].success)
+        mock_remove.assert_called_once_with(self.caster_od, cond, remove_all_stacks=False)
+
+    def test_null_cure_check_uncontested(self) -> None:
+        """When cure_check_type is null, no opposed check is rolled; removal proceeds."""
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="UncontestedDispel", can_be_dispelled=True)
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        with (
+            patch("world.magic.services.condition_application.perform_check") as mock_check,
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()
+            mock_remove.return_value = True
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].success)
+        mock_check.assert_not_called()

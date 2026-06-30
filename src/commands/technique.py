@@ -17,6 +17,8 @@ Grammar::
     technique damage remove <row-id>
     technique condition add template=<n> severity=<n> [duration=<n>]
     technique condition remove <row-id>
+    technique dispel add template=<n> [target=self|ally|enemy] [minsl=<n>] [allstacks=yes|no]
+    technique dispel remove <row-id>
     technique price
     technique author
     technique discard
@@ -47,6 +49,8 @@ _USAGE = (
     "  technique damage remove <row-id>\n"
     "  technique condition add template=<n> severity=<n> [duration=<n>]\n"
     "  technique condition remove <row-id>\n"
+    "  technique dispel add template=<n> [target=self|ally|enemy] [minsl=<n>] [allstacks=yes|no]\n"
+    "  technique dispel remove <row-id>\n"
     "  technique price                 — dry-run budget check\n"
     "  technique author                — author the technique (staff path)\n"
     "  technique discard               — discard current draft"
@@ -68,7 +72,7 @@ _SET_FIELDS = frozenset(
 )
 
 # Subcommands that forward their rest-of-line argument to the handler.
-_REST_SUBCMDS = frozenset({"draft", "set", "restrict", "grant", "damage", "condition"})
+_REST_SUBCMDS = frozenset({"draft", "set", "restrict", "grant", "damage", "condition", "dispel"})
 # Subcommands that take no argument.
 _NO_ARG_SUBCMDS = frozenset({"show", "price", "author", "discard"})
 
@@ -126,6 +130,8 @@ class CmdTechnique(ArxCommand):
             self._handle_damage(rest)
         elif first == "condition":  # noqa: STRING_LITERAL
             self._handle_condition(rest)
+        elif first == "dispel":  # noqa: STRING_LITERAL
+            self._handle_dispel(rest)
 
     def _route_no_arg(self, first: str) -> None:
         """Handle subcommands that take no argument."""
@@ -239,6 +245,12 @@ class CmdTechnique(ArxCommand):
             dur_text = f"  duration={c.base_duration_rounds}" if c.base_duration_rounds else ""
             lines.append(
                 f"  Condition [{idx}]: {c.condition}  severity={c.base_severity}{dur_text}"
+            )
+        for idx, d in enumerate(draft.removed_conditions.all().select_related("condition"), 1):
+            stacks_text = "all" if d.remove_all_stacks else "one"
+            lines.append(
+                f"  Dispel [{idx}]: removes {d.condition}  target={d.target_kind}"
+                f"  minsl={d.minimum_success_level}  stacks={stacks_text}"
             )
         try:
             design = draft_to_design(draft)
@@ -502,6 +514,71 @@ class CmdTechnique(ArxCommand):
             self.caller.msg(f"Applied condition #{row_id} removed.")
         else:
             msg = "Usage: technique condition add|remove …"
+            raise CommandError(msg)
+
+    def _handle_dispel(self, rest: str) -> None:
+        """Add or remove a removed-condition (dispel) row from the draft (#1585)."""
+        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+        from world.magic.services.technique_draft import (  # noqa: PLC0415
+            add_draft_removed_condition,
+            remove_draft_removed_condition,
+        )
+
+        tokens = rest.split(None, 1)
+        if not tokens:
+            msg = (
+                "Usage: technique dispel add template=<n> [target=self|ally|enemy]"
+                " [minsl=<n>] [allstacks=yes|no] | technique dispel remove <row-id>"
+            )
+            raise CommandError(msg)
+        action = tokens[0].lower()
+        args = tokens[1].strip() if len(tokens) > 1 else ""
+        draft = self._get_draft()
+
+        if action == "add":  # noqa: STRING_LITERAL
+            kw = self._parse_simple_kwargs(args)
+            if "template" not in kw:  # noqa: STRING_LITERAL
+                msg = "Missing 'template=<name or id>'."
+                raise CommandError(msg)
+            condition = self.resolve_by_name_or_id(
+                ConditionTemplate,
+                kw["template"],
+                not_found_msg=f"No condition template found for '{kw['template']}'.",
+            )
+            target_map = {
+                "self": ConditionTargetKind.SELF,
+                "ally": ConditionTargetKind.ALLY,
+                "enemy": ConditionTargetKind.ENEMY,
+            }
+            target_str = kw.get("target", "self").lower()  # noqa: STRING_LITERAL
+            if target_str not in target_map:
+                msg = f"Invalid target='{target_str}' (use self|ally|enemy)."
+                raise CommandError(msg)
+            target_kind = target_map[target_str]
+            min_sl = self._int_required(kw.get("minsl", "1"), "minsl")  # noqa: STRING_LITERAL
+            allstacks_str = kw.get("allstacks", "yes").lower()  # noqa: STRING_LITERAL
+            if allstacks_str not in {"yes", "no"}:
+                msg = f"Invalid allstacks='{allstacks_str}' (use yes|no)."
+                raise CommandError(msg)
+            remove_all_stacks = allstacks_str == "yes"  # noqa: STRING_LITERAL
+            row = add_draft_removed_condition(
+                draft,
+                condition=condition,
+                target_kind=target_kind,
+                minimum_success_level=min_sl,
+                remove_all_stacks=remove_all_stacks,
+            )
+            self.caller.msg(
+                f"Dispel row added [#{row.pk}]: removes {condition}  target={target_str}"
+                f"  minsl={min_sl}  allstacks={allstacks_str}"
+            )
+        elif action == "remove":  # noqa: STRING_LITERAL
+            row_id = self._int_required(args.strip(), "row-id")
+            remove_draft_removed_condition(row_id)
+            self.caller.msg(f"Dispel row #{row_id} removed.")
+        else:
+            msg = "Usage: technique dispel add|remove …"
             raise CommandError(msg)
 
     def _handle_price(self) -> None:

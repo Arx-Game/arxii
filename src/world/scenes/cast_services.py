@@ -33,7 +33,10 @@ from world.combat.cast_seed import (
 from world.combat.services import acknowledge_encounter_risk
 from world.magic.models.techniques import CharacterTechnique, ConditionTargetKind
 from world.magic.narration import render_cast_outcome_narration
-from world.magic.services.condition_application import apply_technique_conditions
+from world.magic.services.condition_application import (
+    apply_technique_conditions,
+    remove_technique_conditions,
+)
 from world.magic.services.hostility import is_technique_hostile
 from world.magic.services.targeting import (
     InvalidCastTarget,
@@ -301,6 +304,16 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         technique=technique,
         success_level=success_level,
         eff_intensity=eff_intensity,
+        targets_by_kind=targets_by_kind,
+        source_character=character,
+    )
+    # Dispel/cleanse sibling (#1585): strip technique-authored conditions from the
+    # same resolved targets. Independent of the apply call — a technique may apply
+    # some conditions and remove others. No-op when the technique has no
+    # removed_conditions rows.
+    remove_technique_conditions(
+        technique=technique,
+        success_level=success_level,
         targets_by_kind=targets_by_kind,
         source_character=character,
     )

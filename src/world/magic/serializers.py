@@ -51,6 +51,7 @@ from world.magic.models import (
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.models.sessions import RitualSession
+from world.magic.models.techniques import ConditionTargetKind
 from world.roster.models import RosterEntry
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
@@ -3008,6 +3009,15 @@ class _AppliedConditionSpecSerializer(serializers.Serializer):
     base_duration_rounds = serializers.IntegerField(allow_null=True, required=False)
 
 
+class _RemovedConditionSpecSerializer(serializers.Serializer):
+    """A dispel/cleanse payload row for technique authoring (#1585)."""
+
+    condition_id = serializers.PrimaryKeyRelatedField(queryset=ConditionTemplate.objects.all())
+    target_kind = serializers.ChoiceField(choices=ConditionTargetKind.choices, default="enemy")
+    minimum_success_level = serializers.IntegerField(min_value=0, default=1)
+    remove_all_stacks = serializers.BooleanField(default=True)
+
+
 class TechniqueDesignSerializer(serializers.Serializer):
     """Policy-aware write input for the technique builder.
 
@@ -3037,6 +3047,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
     capability_grants = _CapabilityGrantSpecSerializer(many=True, required=False, default=list)
     damage_profiles = _DamageProfileSpecSerializer(many=True, required=False, default=list)
     applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
+    removed_conditions = _RemovedConditionSpecSerializer(many=True, required=False, default=list)
 
     def validate(self, attrs):
         from world.magic.exceptions import MagicError  # noqa: PLC0415
@@ -3066,6 +3077,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
             AppliedConditionSpec,
             CapabilityGrantSpec,
             DamageProfileSpec,
+            RemovedConditionSpec,
             TechniqueDesignInput,
         )
 
@@ -3109,6 +3121,15 @@ class TechniqueDesignSerializer(serializers.Serializer):
                     base_duration_rounds=a.get("base_duration_rounds"),
                 )
                 for a in attrs["applied_conditions"]
+            ),
+            removed_conditions=tuple(
+                RemovedConditionSpec(
+                    condition_id=r["condition_id"].id,
+                    target_kind=r["target_kind"],
+                    minimum_success_level=r["minimum_success_level"],
+                    remove_all_stacks=r["remove_all_stacks"],
+                )
+                for r in attrs["removed_conditions"]
             ),
         )
 

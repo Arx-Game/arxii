@@ -12,6 +12,7 @@ ConditionTemplate with formula-based severity/duration scaling.
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils.functional import cached_property
@@ -436,6 +437,14 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         """
         return list(self.condition_applications.all())
 
+    @cached_property
+    def cached_removed_conditions(self) -> list:
+        """Removed conditions (dispel payloads) for this technique. Supports Prefetch.
+
+        To invalidate: ``del instance.cached_removed_conditions``.
+        """
+        return list(self.removed_conditions.all())
+
     def has_property(self, name: str) -> bool:
         """Return True if this technique carries the named Property tag."""
         return self.properties.filter(name=name).exists()
@@ -838,6 +847,90 @@ class TechniqueAppliedCondition(AbstractAppliedCondition):
             success_level,
             self.minimum_success_level,
         )
+
+
+class TechniqueRemovedCondition(AbstractAppliedCondition):
+    """Authored row binding a Technique to a ConditionTemplate it *removes* on cast.
+
+    Mirrors ``TechniqueAppliedCondition`` but for dispel/cleanse: when the technique
+    is cast, each row strips the named condition from the resolved target. The
+    severity / duration / stack-count knobs inherited from ``AbstractAppliedCondition``
+    are inert for removal — ``clean()`` enforces they stay at defaults. The one
+    removal-specific field is ``remove_all_stacks`` (forwarded to
+    ``remove_condition(remove_all_stacks=...)``).
+
+    A condition whose template has ``can_be_dispelled=False`` is a no-op (hard gate).
+    When ``cure_check_type`` is set on the condition template, an opposed
+    ``perform_check`` is rolled before removal (#1585).
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="removed_conditions",
+    )
+    remove_all_stacks = models.BooleanField(
+        default=True,
+        help_text=(
+            "If True, all stacks of the condition are removed. If False, only one "
+            "stack is decremented (the condition persists with stacks - 1)."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "condition", "target_kind"],
+                name="unique_removed_condition_per_technique",
+            ),
+        ]
+        verbose_name = "Technique Removed Condition"
+        verbose_name_plural = "Technique Removed Conditions"
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} → removes {self.condition.name} ({self.target_kind})"
+
+    def clean(self) -> None:
+        """Enforce that inert apply-only knobs stay at their defaults.
+
+        Severity, duration, and stack_count are meaningless for removal — a removal
+        row deletes (or decrements) a condition instance; it does not apply one.
+        Keeping these at defaults prevents authored-but-inert data from misleading
+        the budget pricer or future readers.
+        """
+        super().clean()
+        if self.base_severity != 1:
+            raise ValidationError(
+                {"base_severity": "Severity is inert for a removal row; leave at default 1."}
+            )
+        if self.severity_intensity_multiplier != Decimal(0):
+            raise ValidationError(
+                {
+                    "severity_intensity_multiplier": (
+                        "Severity scaling is inert for a removal row; leave at 0."
+                    )
+                }
+            )
+        if self.severity_per_extra_sl != 0:
+            raise ValidationError({"severity_per_extra_sl": "Inert for a removal row; leave at 0."})
+        if self.base_duration_rounds is not None:
+            raise ValidationError(
+                {"base_duration_rounds": "Duration is inert for a removal row; leave null."}
+            )
+        if self.duration_intensity_multiplier != Decimal(0):
+            raise ValidationError(
+                {
+                    "duration_intensity_multiplier": (
+                        "Duration scaling is inert for a removal row; leave at 0."
+                    )
+                }
+            )
+        if self.duration_per_extra_sl != 0:
+            raise ValidationError({"duration_per_extra_sl": "Inert for a removal row; leave at 0."})
+        if self.stack_count != 1:
+            raise ValidationError(
+                {"stack_count": "Stack count is inert for a removal row; leave at default 1."}
+            )
 
 
 class TechniqueDamageProfile(AbstractDamageProfile):

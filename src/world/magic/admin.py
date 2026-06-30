@@ -43,6 +43,7 @@ from world.magic.models import (
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
+    TechniqueRemovedCondition,
     TechniqueStyle,
     Thread,
     ThreadLevelUnlock,
@@ -147,6 +148,30 @@ class TechniqueCapabilityGrantInline(admin.TabularInline):
     autocomplete_fields = ["capability"]
 
 
+@admin.register(TechniqueRemovedCondition)
+class TechniqueRemovedConditionAdmin(admin.ModelAdmin):
+    """Dispel/cleanse payload rows (#1585) — also editable inline on Technique."""
+
+    list_display = [
+        "technique",
+        "condition",
+        "target_kind",
+        "minimum_success_level",
+        "remove_all_stacks",
+    ]
+    list_filter = ["target_kind", "remove_all_stacks"]
+    search_fields = ["technique__name", "condition__name"]
+    autocomplete_fields = ["technique", "condition"]
+
+
+class TechniqueRemovedConditionInline(admin.TabularInline):
+    """Inline dispel payload rows on the Technique admin (#1585)."""
+
+    model = TechniqueRemovedCondition
+    extra = 1
+    autocomplete_fields = ["condition"]
+
+
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
     list_display = [
@@ -166,7 +191,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     readonly_fields = ["get_tier"]
     autocomplete_fields = ["gift", "style", "effect_type", "source_cantrip"]
     list_select_related = ["gift", "style", "effect_type", "source_cantrip"]
-    inlines = [TechniqueCapabilityGrantInline]
+    inlines = [TechniqueCapabilityGrantInline, TechniqueRemovedConditionInline]
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:

@@ -130,7 +130,7 @@ world/combat/
 │   └── _resolve_pc_action         ← updated: removes "base_power None" no-op
 ├── types.py
 │   ├── AppliedConditionResult     ← NEW (later relocated to conditions/types.py, #1359)
-│   └── CombatTechniqueResolution  ← extend with applied_conditions list
+│   └── CombatTechniqueResolution  ← extend with applied_conditions + removed_conditions (#1585)
 ├── typeclasses/
 │   └── combat_npc.py              ← NEW: CombatNPC typeclass
 └── declare_action validators      ← XOR target validation, target_kind
@@ -640,11 +640,12 @@ class CombatTechniqueResolver:
     def __call__(self) -> CombatTechniqueResolution:
         check_result = self._roll_check()
         damage_results = self._apply_damage(check_result)
-        applied_conditions = self._apply_conditions(check_result)
+        applied_conditions, removed_conditions = self._apply_conditions(check_result)
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,
             applied_conditions=applied_conditions,
+            removed_conditions=removed_conditions,  # dispel/cleanse results (#1585)
             pull_flat_bonus=self.pull_flat_bonus,
             scaled_damage=sum(r.damage_dealt for r in damage_results),
         )
@@ -660,11 +661,13 @@ class CombatTechniqueResolver:
 
     def _apply_conditions(
         self, check_result: CheckResult,
-    ) -> list[AppliedConditionResult]:
+    ) -> tuple[list[AppliedConditionResult], list[RemovedConditionResult]]:
         """Condition path. Iterates technique.condition_applications,
         resolves target_kind to ObjectDB, computes severity/duration via
-        TechniqueAppliedCondition formulas, calls bulk_apply_conditions
-        in one batched call."""
+        TechniqueAppliedCondition formulas, calls bulk_apply_conditions;
+        then runs the remove_technique_conditions dispel sibling over the
+        same targets (#1585). Returns (applied, removed).
+        """
         ...
 ```
 

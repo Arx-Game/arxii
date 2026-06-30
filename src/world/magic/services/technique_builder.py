@@ -20,6 +20,7 @@ from world.magic.models import (
     TechniqueBudgetConfig,
     TechniqueCapabilityGrant,
     TechniqueDamageProfile,
+    TechniqueRemovedCondition,
     TechniqueTierBudget,
 )
 from world.magic.types.technique_builder import (
@@ -137,6 +138,14 @@ def price_design(
             + dur * config.condition_duration_unit_cost
         )
         lines.append(TechniqueCostLine("condition", "Applied condition", cost))
+    lines.extend(
+        TechniqueCostLine(
+            "condition",
+            "Removed condition (dispel)",
+            config.payload_base_cost,
+        )
+        for _spec in design.removed_conditions
+    )
 
     gross = sum(line.power_cost for line in lines)
     refund = 0
@@ -255,6 +264,17 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             condition_id=spec.condition_id,
             base_severity=spec.base_severity,
             base_duration_rounds=spec.base_duration_rounds,
+        )
+    for spec in design.removed_conditions:
+        # Removal rows carry no severity/duration/stack — leave the inherited
+        # defaults (enforced by TechniqueRemovedCondition.clean()). Only the
+        # authorable removal fields are set (#1585).
+        TechniqueRemovedCondition.objects.create(
+            technique=tech,
+            condition_id=spec.condition_id,
+            target_kind=spec.target_kind,
+            minimum_success_level=spec.minimum_success_level,
+            remove_all_stacks=spec.remove_all_stacks,
         )
     return tech
 

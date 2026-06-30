@@ -54,6 +54,15 @@ export interface AppliedConditionRow {
   base_duration_rounds: number | null;
 }
 
+/** A dispel/cleanse payload row (#1585). Diverges from AppliedConditionRow:
+ *  carries target_kind + minimum_success_level (dispel needs SELF/ALLY targeting). */
+export interface RemovedConditionRow {
+  condition_id: number;
+  target_kind: 'self' | 'ally' | 'enemy';
+  minimum_success_level: number;
+  remove_all_stacks: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Capability Grants Editor
 // ---------------------------------------------------------------------------
@@ -362,6 +371,138 @@ export function AppliedConditionsEditor({
                 })
               }
             />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-destructive"
+            disabled={disabled}
+            onClick={() => removeRow(i)}
+          >
+            ✕
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Removed Conditions (dispel/cleanse) Editor — #1585
+// ---------------------------------------------------------------------------
+
+interface RemovedConditionsEditorProps {
+  rows: RemovedConditionRow[];
+  conditions: ConditionOption[];
+  disabled?: boolean;
+  onChange: (rows: RemovedConditionRow[]) => void;
+}
+
+export function RemovedConditionsEditor({
+  rows,
+  conditions,
+  disabled = false,
+  onChange,
+}: RemovedConditionsEditorProps) {
+  function addRow() {
+    if (conditions.length === 0) return;
+    onChange([
+      ...rows,
+      {
+        condition_id: conditions[0].id,
+        target_kind: 'self',
+        minimum_success_level: 1,
+        remove_all_stacks: true,
+      },
+    ]);
+  }
+
+  function removeRow(index: number) {
+    onChange(rows.filter((_, i) => i !== index));
+  }
+
+  function updateRow(index: number, patch: Partial<RemovedConditionRow>) {
+    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Removed Conditions (Dispel)</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || conditions.length === 0}
+          onClick={addRow}
+        >
+          + Add
+        </Button>
+      </div>
+      {rows.map((row, i) => (
+        <div key={i} className="flex items-end gap-2 rounded-md border p-2">
+          <div className="flex-1 space-y-1">
+            <Label className="text-xs text-muted-foreground">Condition</Label>
+            <Select
+              value={String(row.condition_id)}
+              onValueChange={(val) => updateRow(i, { condition_id: Number(val) })}
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {conditions.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-24 space-y-1">
+            <Label className="text-xs text-muted-foreground">Target</Label>
+            <Select
+              value={row.target_kind}
+              onValueChange={(val) =>
+                updateRow(i, { target_kind: val as RemovedConditionRow['target_kind'] })
+              }
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="self">Self</SelectItem>
+                <SelectItem value="ally">Ally</SelectItem>
+                <SelectItem value="enemy">Enemy</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-20 space-y-1">
+            <Label className="text-xs text-muted-foreground">Min SL</Label>
+            <Input
+              type="number"
+              min={0}
+              className="h-8 text-xs"
+              value={row.minimum_success_level}
+              disabled={disabled}
+              onChange={(e) => updateRow(i, { minimum_success_level: Number(e.target.value) })}
+            />
+          </div>
+          <div className="flex items-center gap-1 pb-1">
+            <input
+              type="checkbox"
+              id={`rm-allstacks-${i}`}
+              className="h-4 w-4"
+              checked={row.remove_all_stacks}
+              disabled={disabled}
+              onChange={(e) => updateRow(i, { remove_all_stacks: e.target.checked })}
+            />
+            <Label htmlFor={`rm-allstacks-${i}`} className="text-xs text-muted-foreground">
+              All stacks
+            </Label>
           </div>
           <Button
             type="button"
