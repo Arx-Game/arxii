@@ -108,6 +108,7 @@ All carry `user_message` for safe 400 API responses.
 - **No boons, no resonance grants.** A Durance session is just a Scene — normal
   social-scene benefits apply (pose endorsements, entry endorsements, etc.) but the
   advancement service adds no special grants.
-- **Telnet follow-up open.** `RitualSession` dispatch is REST-only today; telnet
-  drivability (session-layer `action.run` / `CmdRitual` convergence) is a tracked
-  follow-up issue.
+- **Telnet follow-up open (#1700).** `RitualSession` dispatch is REST-only today; telnet
+  drivability of the Ritual of the Durance (a `CmdRitual` adapter mirroring
+  `CovenantInductionAdapter`/`BannerCallAdapter`, passing `testament` + the #1579
+  `path_id`) is tracked in **#1700** (under the telnet-E2E umbrella #1328).

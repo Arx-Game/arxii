@@ -576,9 +576,10 @@ the inductee.
 `Ritual` row (SERVICE / INDUCTION, `min_participants=2`, no upper-bound). The `@post_generation`
 hook creates the companion `RitualLiturgy` via `RitualLiturgyFactory`.
 
-**Telnet follow-up.** `RitualSession` dispatch is REST-only today
-(`POST /api/magic/ritual-sessions/draft/`, `accept/`, `fire/`). Telnet drivability
-(session-layer `action.run` / `CmdRitual` convergence) is a tracked follow-up.
+**Telnet follow-up (#1700).** `RitualSession` dispatch is REST-only today
+(`POST /api/magic/ritual-sessions/draft/`, `accept/`, `fire/`). Telnet drivability — a
+`CmdRitual` adapter for the Ritual of the Durance (mirroring the covenant adapters) — is
+tracked in **#1700** (under the telnet-E2E umbrella #1328).
 
 ---
 
