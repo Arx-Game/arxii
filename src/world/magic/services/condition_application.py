@@ -8,6 +8,7 @@ split is in target resolution, not in condition application.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from world.checks.services import perform_check
@@ -28,20 +29,20 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import Technique
 
 
-def apply_technique_conditions(
+def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-application params
     *,
     technique: Technique,
     success_level: int,
     eff_intensity: int,
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    applied_condition_rows: Iterable | None = None,
 ) -> list[AppliedConditionResult]:
-    """Apply technique-authored conditions to pre-resolved targets.
+    """Apply authored applied-condition rows to pre-resolved targets.
 
-    Iterates all ``TechniqueAppliedCondition`` rows on *technique*, skips rows
-    whose ``minimum_success_level`` exceeds *success_level*, and for each row
-    applies the condition to every ``ObjectDB`` in
-    ``targets_by_kind.get(row.target_kind, [])``.
+    Iterates the applied-condition rows, skips rows whose ``minimum_success_level``
+    exceeds *success_level*, and for each row applies the condition to every
+    ``ObjectDB`` in ``targets_by_kind.get(row.target_kind, [])``.
 
     Severity and duration are computed via the row's formula methods using
     *eff_intensity* and *success_level*.  The full batch is handed to
@@ -49,7 +50,10 @@ def apply_technique_conditions(
     ``AppliedConditionResult`` instances.
 
     Args:
-        technique: The ``Technique`` whose authored condition rows are iterated.
+        technique: The ``Technique`` being cast. Provenance — forwarded to
+            ``bulk_apply_conditions`` as ``source_technique`` so the resulting
+            condition instances point at the cast technique. (Also the default
+            source of rows when ``applied_condition_rows`` is omitted.)
         success_level: The check success level (SL) from the cast roll.
         eff_intensity: The effective intensity (injected power + pull bumps).
         targets_by_kind: Mapping from ``ConditionTargetKind`` value (str) to a
@@ -58,13 +62,25 @@ def apply_technique_conditions(
             (``_resolve_condition_target``) and standalone casts.
         source_character: The caster's ``ObjectDB``.  Forwarded to
             ``bulk_apply_conditions`` as ``source_character``.
+        applied_condition_rows: Optional override for the rows to apply. When
+            ``None`` (the default for every original caller — combat + standalone
+            casts), rows are read from ``technique.condition_applications``. When
+            provided (the #1582 signature-bonus seam), the given rows are applied
+            *as if* authored on the cast technique — they share the abstract
+            ``AbstractAppliedCondition`` interface (``compute_severity`` /
+            ``compute_duration_rounds`` / ``target_kind`` / ``stack_count``), and
+            provenance still points at *technique*. SHARED with the technique's own
+            conditions AND combat — keep the default branch byte-identical.
 
     Returns:
         List of ``AppliedConditionResult``, one per ``BulkConditionApplication``
         submitted, in the same order.  Empty list when no rows pass the SL gate
         or all resolved target lists are empty.
     """
-    rows = list(technique.condition_applications.select_related("condition").all())
+    if applied_condition_rows is None:
+        rows = list(technique.condition_applications.select_related("condition").all())
+    else:
+        rows = list(applied_condition_rows)
     if not rows:
         return []
 

@@ -103,24 +103,51 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     return ConditionTargetKind.SELF
 
 
-def technique_alters_behavior(technique: Technique) -> bool:
+def _signature_alters_behavior(caster, technique: Technique) -> bool:
+    """Return True if the caster's active signature bonus carries a behavior-altering condition.
+
+    A character may *sign* a technique (#1582, ADR-0065) by attaching a
+    ``SignatureMotifBonus`` to its TECHNIQUE-kind Thread. The bonus's
+    ``condition_applications`` land on the resolved target at cast time exactly
+    like the technique's own conditions — so a behavior-altering condition carried
+    by the signature must gate consent just as one authored on the technique does
+    (ADR-0024). ``caster`` is the casting game Character (not CharacterSheet).
+    """
+    from world.magic.services.signature import signature_bonus_for  # noqa: PLC0415
+
+    bonus = signature_bonus_for(caster, technique)
+    if bonus is None:
+        return False
+    return any(
+        row.condition.category.alters_behavior for row in bonus.cached_condition_applications
+    )
+
+
+def technique_alters_behavior(technique: Technique, *, caster=None) -> bool:
     """Return True if any applied condition belongs to a behavior-altering category.
 
     Behavior-altering conditions (compulsion, charm, fear, etc.) require the
     target's consent before being applied to another PC.
+
+    When ``caster`` is supplied (the casting game Character), the caster's active
+    ``SignatureMotifBonus`` conditions are folded into the check — a benign
+    technique signed with a behavior-altering bonus alters behavior just as if the
+    technique itself carried that condition (#1582, ADR-0024/ADR-0065). A
+    non-behavior-altering signature condition (e.g. Entangled) does not.
     """
-    return technique.condition_applications.filter(
-        condition__category__alters_behavior=True
-    ).exists()
+    if technique.condition_applications.filter(condition__category__alters_behavior=True).exists():
+        return True
+    return caster is not None and _signature_alters_behavior(caster, technique)
 
 
-def cast_requires_consent(technique: Technique) -> bool:
+def cast_requires_consent(technique: Technique, *, caster=None) -> bool:
     """Return True if casting this technique on another PC requires their consent.
 
     Hostile techniques are handled separately by routing; this predicate covers
-    the behavior-alteration consent path only.
+    the behavior-alteration consent path only. Passing ``caster`` includes the
+    caster's signed ``SignatureMotifBonus`` conditions in the decision (#1582).
     """
-    return technique_alters_behavior(technique)
+    return technique_alters_behavior(technique, caster=caster)
 
 
 def _collect_scene_personas(scene: Scene) -> list[Persona]:

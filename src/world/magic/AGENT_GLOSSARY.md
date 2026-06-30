@@ -25,8 +25,12 @@ _Avoid_: lesser gift, sub-gift.
 The Thread woven into a Gift: its level sets the Gift's strength (more and stronger techniques) and its resonance sets the Gift's affinity. The costliest thread kind, because it gates magical power. (ADR-0051, ADR-0052.)
 
 **Signature**:
-A Thread woven into a single Technique, deepening just that technique above its Gift baseline; it carries its own resonance, which usually matches the Gift but may deliberately diverge (a *discordant signature*). (ADR-0056.)
-_Avoid_: technique thread (use "signature").
+A Thread woven into a single Technique, deepening just that technique above its Gift baseline. The character applies their Motif to the signed technique via a `SignatureMotifBonus` — an ADDITIVE flourish (intensity delta, conditions, cosmetic prose) that fires alongside the technique at cast time. The bonus is NOT a `TechniqueVariant` and does NOT change the technique's identity. (ADR-0065, supersedes ADR-0056.)
+_Avoid_: technique thread (use "signature"); discordant signature (the resonance-divergence model was closed by ADR-0065).
+
+**Signature Motif Bonus**:
+The staff-authored catalog row (`SignatureMotifBonus`) that a player attaches to a TECHNIQUE-kind Thread to sign that technique. Gated on the character's Motif (facet and/or resonance). Carries `flat_intensity_delta`, `narrative_snippet`, and payload child rows (capability grants, damage profiles, applied conditions) sharing the `Abstract*` bases from `models/techniques.py`. (ADR-0065, #1582.)
+_Avoid_: signature variant, signature specialization (it is additive, not a variant form).
 
 **Specialization engine**:
 The one shared `(entity × resonance) → customized capability` resolution (a generalization of covenant sub-role resolution): the same Gift down different Paths, or with a different resonance, yields different specialized techniques, derived on read. (ADR-0055.)

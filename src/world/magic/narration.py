@@ -22,13 +22,35 @@ def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature
     success_level: int,  # noqa: ARG001  (reserved for future verb tuning)
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
+    signature_snippet: str | None = None,
 ) -> str:
     """One-line deterministic narration for a standalone scene cast. Pure."""
     clause = power_outcome_clause(power_ledger)
+    sig = signature_clause(signature_snippet)
     target_part = f" at {target_label}" if target_label else ""
     head = f"{actor_label} casts {technique_name}{target_part}: {outcome_label}"
-    base = f"{head} {clause}." if clause else f"{head}."
+    suffix_parts = [c for c in (clause, sig) if c]
+    base = f"{head} {' '.join(suffix_parts)}." if suffix_parts else f"{head}."
     return f"{base} {fizzle_note}" if fizzle_note else base
+
+
+def signature_clause(snippet: str | None) -> str:
+    """Build a cosmetic em-dash clause from an already-resolved signature snippet.
+
+    Returns ``""`` when ``snippet`` is falsy. The snippet is pre-resolved by the
+    caller (``create_cast_outcome_pose``) so this function stays pure / ORM-free.
+
+    Examples::
+
+        signature_clause("spectral webs shimmer")
+        # → "— spectral webs shimmer"
+
+        signature_clause("")   # → ""
+        signature_clause(None) # → ""
+    """
+    if not snippet:
+        return ""
+    return f"— {snippet}"
 
 
 def power_outcome_clause(power_ledger: PowerLedger | None) -> str:

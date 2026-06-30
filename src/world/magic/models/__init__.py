@@ -138,6 +138,12 @@ from world.magic.models.sessions import (
     RitualSessionParticipant,
     RitualSessionReference,
 )
+from world.magic.models.signature import (
+    SignatureMotifBonus,
+    SignatureMotifBonusAppliedCondition,
+    SignatureMotifBonusCapabilityGrant,
+    SignatureMotifBonusDamageProfile,
+)
 from world.magic.models.soul_tether import (
     PendingStageAdvanceOffer,
     Sineating,
@@ -312,6 +318,11 @@ __all__ = [
     "SanctumPendingPayout",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
+    # signature motif bonuses (#1582)
+    "SignatureMotifBonus",
+    "SignatureMotifBonusAppliedCondition",
+    "SignatureMotifBonusCapabilityGrant",
+    "SignatureMotifBonusDamageProfile",
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
     "SineatingPendingOffer",

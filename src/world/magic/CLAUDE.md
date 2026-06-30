@@ -241,6 +241,47 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 - New players see only their path's cantrips; returning players (advanced mode) see all cantrips
 - 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
 
+### Signature Motif Bonus (#1582 — ADR-0065)
+
+A character may *sign* one of their TECHNIQUE-kind Threads by attaching a
+`SignatureMotifBonus` (`models/signature.py`) — a staff-authored, Motif-gated ADDITIVE
+bonus. It is NOT a `TechniqueVariant`, does NOT inherit `AbstractSpecializedVariant`, and
+does NOT participate in `fire_variant_discoveries`. Invariant: this boundary must be
+preserved.
+
+- **Catalog model:** `SignatureMotifBonus` — `name`, `narrative_snippet`,
+  `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable),
+  `flat_intensity_delta`. At least one gate required (`clean()`). AND semantics.
+- **Payload child rows:** `SignatureMotifBonusCapabilityGrant` /
+  `SignatureMotifBonusDamageProfile` / `SignatureMotifBonusAppliedCondition` — inherit the
+  shared `Abstract*` bases from `models/techniques.py`.
+- **Thread FK:** `Thread.signature_bonus` (nullable FK, TECHNIQUE-kind only — enforced by
+  `clean()` + DB `CheckConstraint("thread_signature_bonus_technique_only")`). Migrations
+  0066 + 0067.
+- **Selection service** (`services/signature.py`): `available_signature_bonuses`,
+  `set_signature_bonus`, `clear_signature_bonus`, `signature_bonus_for`.
+- **Cast wiring** (`services/signature_effects.py`): `signature_intensity_delta` (folds
+  into `use_technique(power_intensity_bonus=…)`) + `apply_signature_bonus_conditions`
+  (uses shared `apply_technique_conditions` seam via `applied_condition_rows=` param added
+  in #1582). Both cast paths (non-combat + combat) wired.
+- **Consent (ADR-0024):** because a signature bonus lands its conditions on the resolved
+  target, `technique_alters_behavior` / `cast_requires_consent`
+  (`services/targeting.py`) take an optional `caster=` and fold in the caster's active
+  signature bonus's `cached_condition_applications`. A benign technique signed with a
+  bonus carrying a behavior-altering condition is consent-gated exactly as if the
+  technique itself carried it; a non-behavior-altering signature condition (e.g.
+  Entangled) stays consent-free. The non-combat cast routes (`world/scenes/cast_services.py`)
+  pass `caster=initiator_persona.character_sheet.character` at all three consent gates.
+- **Non-combat narration** (`narration.py`): `signature_clause(snippet)` builds the
+  em-dash cosmetic line; folded into `render_cast_outcome_narration`.
+- **Actions** (`actions/definitions/signature.py`): `SignatureSetAction` (key
+  `"signature_set"`), `SignatureClearAction` (key `"signature_clear"`),
+  `SignatureListAction` (key `"signature_list"`).
+- **Telnet:** `CmdSignature` (`commands/signature.py`, key `"signature"`) — namespaced
+  subverbs (`set`/`clear`/`list`) to avoid bare-key collisions.
+- **Deferred (fast-follow):** `damage_profiles` combat seam; capability-grant cast seam;
+  combat cosmetic narration; web `SignatureViewSet`.
+
 ### Motif System
 
 The Motif system is a **wired mechanical axis** — dressing in items whose styles match
@@ -347,8 +388,11 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   `target_gift`, `target_mantle`, `target_sanctum_details`. Fields: `owner` (FK CharacterSheet), `resonance`
   (FK Resonance), `name`, `description`, `developed_points`, `level`, timestamps,
   `retired_at` (soft-retire), `slot_kind` (required for SANCTUM threads —
-  `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER). All typed FKs use
-  `on_delete=PROTECT`. Three layers of integrity: `clean()`, per-kind
+  `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER),
+  `signature_bonus` (nullable FK → `SignatureMotifBonus`, PROTECT — only settable on
+  TECHNIQUE-kind threads; enforced by `clean()` + DB CheckConstraint
+  `"thread_signature_bonus_technique_only"`; #1582 ADR-0065).
+  All typed FKs use `on_delete=PROTECT`. Three layers of integrity: `clean()`, per-kind
   CheckConstraints, per-kind partial UniqueConstraints.
   **SANCTUM anchor:** `Thread.target_sanctum_details` (FK to `SanctumDetails`).
   Anchor cap = `sanctum.feature_instance.level × 10`. The thread is pull-applicable

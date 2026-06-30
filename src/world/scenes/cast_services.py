@@ -38,6 +38,7 @@ from world.magic.services.condition_application import (
     remove_technique_conditions,
 )
 from world.magic.services.hostility import is_technique_hostile
+from world.magic.services.signature_effects import apply_signature_bonus_conditions
 from world.magic.services.targeting import (
     InvalidCastTarget,
     cast_requires_consent,
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import FuryTier, Technique
+    from world.magic.models.signature import SignatureMotifBonus
     from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
@@ -129,6 +131,12 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
 
     applicable_threads = applicable_threads_for_cast(character, technique, cast_pull=cast_pull)
 
+    # Signature-motif bonus (#1582): a flat intensity delta on the signed technique's
+    # thread folds into the cast's power derivation (no-op / 0 when unsigned).
+    from world.magic.services.signature_effects import signature_intensity_delta  # noqa: PLC0415
+
+    sig_intensity_delta = signature_intensity_delta(character, technique)
+
     fury_res = run_fury_for_action(
         character=character,
         fury_commitment=fury_commitment,
@@ -163,7 +171,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
         control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
+        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
         apply_variant=apply_variant,
     )
 
@@ -181,6 +189,35 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         fury_committed=fury_res.realized_tier if fury_res else None,
     )
     return result, power_ledger, fury_res
+
+
+def _resolve_signature_snippet(
+    bonus: SignatureMotifBonus | None, character_sheet: CharacterSheet
+) -> str | None:
+    """Resolve the cosmetic narration snippet for a signed technique's bonus.
+
+    Prefers ``bonus.narrative_snippet`` (staff-authored prose). When blank, falls
+    back to the first facet name found in the character's Motif
+    (``MotifResonanceAssociation.facet.name``).  Returns ``None`` when no bonus is
+    set or no fallback facet is available.
+
+    Args:
+        bonus: The active ``SignatureMotifBonus`` (or ``None`` — early-return).
+        character_sheet: The caster's ``CharacterSheet`` (used for the Motif lookup).
+    """
+    if bonus is None:
+        return None
+    if bonus.narrative_snippet:
+        return bonus.narrative_snippet
+    # Fallback: primary Motif facet name (first MotifResonanceAssociation on record).
+    from world.magic.models.motifs import MotifResonanceAssociation  # noqa: PLC0415
+
+    first_assoc = (
+        MotifResonanceAssociation.objects.filter(motif_resonance__motif__character=character_sheet)
+        .select_related("facet")
+        .first()
+    )
+    return first_assoc.facet.name if first_assoc is not None else None
 
 
 def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; cohesive
@@ -208,6 +245,13 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     outcome_label = check_result.outcome_name if check_result is not None else "Unknown"
     success_level = check_result.success_level if check_result is not None else 0
 
+    # Signature-motif cosmetic (#1582): append the signed bonus's narrative snippet
+    # (or primary Motif facet name as fallback) to the cast-outcome narration.
+    from world.magic.services.signature import signature_bonus_for  # noqa: PLC0415
+
+    sig_bonus = signature_bonus_for(caster_persona.character_sheet.character, technique)
+    signature_snippet = _resolve_signature_snippet(sig_bonus, caster_persona.character_sheet)
+
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
         technique_name=technique_name if technique_name is not None else technique.name,
@@ -216,6 +260,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         success_level=success_level,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
+        signature_snippet=signature_snippet,
     )
 
     return create_interaction(
@@ -322,6 +367,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
         )
         targets_by_kind = {relationship: [p.character_sheet.character for p in resolved_personas]}
     apply_technique_conditions(
+        technique=technique,
+        success_level=success_level,
+        eff_intensity=eff_intensity,
+        targets_by_kind=targets_by_kind,
+        source_character=character,
+    )
+    # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
+    # through the SAME shared seam, over the same resolved targets. No-op when the
+    # technique is not signed or the bonus carries no condition rows.
+    apply_signature_bonus_conditions(
+        character=character,
         technique=technique,
         success_level=success_level,
         eff_intensity=eff_intensity,
@@ -486,11 +542,17 @@ def resolve_accepted_cast(
     return result  # result.power_ledger is already set from _resolve_cast
 
 
-def _guard_area_consent(technique: Technique) -> None:
-    """Raise InvalidCastTarget when a behavior-altering AREA cast would expand without consent."""
+def _guard_area_consent(technique: Technique, *, caster: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+    """Raise InvalidCastTarget when a behavior-altering AREA cast would expand without consent.
+
+    ``caster`` is the casting game Character so the caster's signed
+    ``SignatureMotifBonus`` conditions are included in the consent decision (#1582).
+    """
     from actions.constants import ActionTargetType  # noqa: PLC0415
 
-    if technique.target_type != ActionTargetType.AREA or not cast_requires_consent(technique):
+    if technique.target_type != ActionTargetType.AREA or not cast_requires_consent(
+        technique, caster=caster
+    ):
         return
     if derive_target_relationship(technique) == ConditionTargetKind.ALLY:
         # TODO(#1321 follow-up): mass-consent state machine for AREA behavior-altering
@@ -527,7 +589,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
             "use combat targeting instead."
         )
         raise InvalidCastTarget(msg)
-    if cast_requires_consent(technique):
+    if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         # TODO(#1321 follow-up): behavior-altering FILTERED_GROUP requires a
         # per-target consent state machine; not yet supported.
         msg = (
@@ -574,7 +636,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             target_persona=target_persona,
             technique=technique,
         )
-    if cast_requires_consent(technique):
+    if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
             scene=scene,
             initiator_persona=initiator_persona,
@@ -668,7 +730,7 @@ def request_technique_cast(  # noqa: PLR0913
         target_personas=[target_persona] if target_persona is not None else [],
     )
 
-    _guard_area_consent(technique)
+    _guard_area_consent(technique, caster=initiator_persona.character_sheet.character)
 
     if supplied_personas is not None and technique.target_type == ActionTargetType.FILTERED_GROUP:
         return _route_filtered_group_cast(

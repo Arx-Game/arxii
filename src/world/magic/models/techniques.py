@@ -575,6 +575,51 @@ class AbstractAppliedCondition(SharedMemoryModel):
     class Meta:
         abstract = True
 
+    def compute_severity(
+        self,
+        *,
+        effective_power: int,
+        success_level: int,
+    ) -> int:
+        """Return the severity to apply at the given power and success level.
+
+        Severity formula:
+            base_severity + floor(severity_intensity_multiplier * effective_power)
+                + severity_per_extra_sl * max(0, success_level - minimum_success_level)
+        """
+        return _scale_by_power_and_sl(
+            self.base_severity,
+            self.severity_intensity_multiplier,
+            effective_power,
+            self.severity_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
+
+    def compute_duration_rounds(
+        self,
+        *,
+        effective_power: int,
+        success_level: int,
+    ) -> int | None:
+        """Return the duration in rounds, falling back to condition.default_duration_value.
+
+        Shared by every concrete payload subclass (Technique / TechniqueVariant /
+        TechniqueDraft / SignatureMotifBonus) so the apply seam can read the same
+        formula off any applied-condition row.
+        """
+        base = self.base_duration_rounds
+        if base is None:
+            base = self.condition.default_duration_value
+        return _scale_by_power_and_sl(
+            base,
+            self.duration_intensity_multiplier,
+            effective_power,
+            self.duration_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
+
 
 class AbstractDamageProfile(SharedMemoryModel):
     """Abstract base holding the shared data columns for damage-profile payload rows.
@@ -812,41 +857,6 @@ class TechniqueAppliedCondition(AbstractAppliedCondition):
 
     def __str__(self) -> str:
         return f"{self.technique.name} → {self.condition.name} ({self.target_kind})"
-
-    def compute_severity(
-        self,
-        *,
-        effective_power: int,
-        success_level: int,
-    ) -> int:
-        """Return the severity to apply at the given power and success level."""
-        return _scale_by_power_and_sl(
-            self.base_severity,
-            self.severity_intensity_multiplier,
-            effective_power,
-            self.severity_per_extra_sl,
-            success_level,
-            self.minimum_success_level,
-        )
-
-    def compute_duration_rounds(
-        self,
-        *,
-        effective_power: int,
-        success_level: int,
-    ) -> int | None:
-        """Return the duration in rounds, falling back to condition.default_duration_value."""
-        base = self.base_duration_rounds
-        if base is None:
-            base = self.condition.default_duration_value
-        return _scale_by_power_and_sl(
-            base,
-            self.duration_intensity_multiplier,
-            effective_power,
-            self.duration_per_extra_sl,
-            success_level,
-            self.minimum_success_level,
-        )
 
 
 class TechniqueRemovedCondition(AbstractAppliedCondition):
