@@ -320,8 +320,23 @@ def assert_membership_level_allowed(
     """
     from django.db.models import Q  # noqa: PLC0415
 
-    from world.covenants.exceptions import VowGateError  # noqa: PLC0415
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.exceptions import CourtGulfViolationError, VowGateError  # noqa: PLC0415
     from world.covenants.models import MentorBond, MentorBondConfig  # noqa: PLC0415
+    from world.covenants.power_tier import power_tier_for_level  # noqa: PLC0415
+
+    # Court covenants enforce a >=1 power-tier gulf: the servant must be strictly
+    # below the leader's tier. This check runs BEFORE the MentorBondConfig gate so
+    # it is enforced even when the config singleton is not seeded (production default).
+    if covenant.covenant_type == CovenantType.COURT:
+        leader = covenant.leader
+        if leader is None:
+            raise CourtGulfViolationError
+        servant_level = _raw_primary_level(character_sheet)
+        leader_level = _raw_primary_level(leader)
+        if power_tier_for_level(servant_level) >= power_tier_for_level(leader_level):
+            raise CourtGulfViolationError
+        return
 
     # Gate is inactive when the config singleton has not been seeded.
     if not MentorBondConfig.objects.filter(pk=1).exists():
