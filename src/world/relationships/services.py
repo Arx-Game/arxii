@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from world.achievements.models import StatDefinition
@@ -560,3 +561,23 @@ def add_relationship_condition(
         condition=condition,
         defaults={"expires_at": timezone.now() + duration},
     )
+
+
+def clear_very_attracted(sheets) -> None:
+    """Drop Very Attracted for the given characters — the scene-end early clear (#1697).
+
+    Very Attracted (the temporary allure double) lasts to **end of scene OR ~2 IC days, whichever
+    first**; the duration cap is the backstop and this is the primary path. Deletes
+    ``TemporaryRelationshipCondition`` rows for "Very Attracted" whose directed relationship touches
+    any of ``sheets`` (source or target). Called from ``Scene.finish_scene``.
+    """
+    from world.seeds.social_relationships import VERY_ATTRACTED_CONDITION_NAME
+
+    sheet_ids = [sheet.pk for sheet in sheets]
+    if not sheet_ids:
+        return
+    TemporaryRelationshipCondition.objects.filter(
+        condition__name=VERY_ATTRACTED_CONDITION_NAME
+    ).filter(
+        Q(relationship__source_id__in=sheet_ids) | Q(relationship__target_id__in=sheet_ids)
+    ).delete()

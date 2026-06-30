@@ -154,3 +154,38 @@ class TemporaryConditionEngineUnionTests(TestCase):
             perceiver=self.perceiver, perceived=self.perceived
         )
         self.assertEqual(contribs, [])
+
+
+class ClearVeryAttractedTests(TestCase):
+    """The scene-end early clear drops Very Attracted for the scene's participants (#1697)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.a = CharacterSheetFactory()
+        cls.b = CharacterSheetFactory()
+        cls.outsider = CharacterSheetFactory()
+        cls.very = RelationshipConditionFactory(name="Very Attracted")
+
+    def _very_attracted(self, source, target):
+        rel = CharacterRelationshipFactory(source=source, target=target, is_active=True)
+        return TemporaryRelationshipCondition.objects.create(
+            relationship=rel, condition=self.very, expires_at=timezone.now() + timedelta(hours=16)
+        )
+
+    def test_clears_rows_touching_a_participant(self) -> None:
+        from world.relationships.services import clear_very_attracted
+
+        self._very_attracted(self.a, self.b)  # A very attracted to B (both participants)
+        clear_very_attracted({self.a, self.b})
+        self.assertFalse(TemporaryRelationshipCondition.objects.exists())
+
+    def test_leaves_unrelated_rows(self) -> None:
+        from world.relationships.services import clear_very_attracted
+
+        kept = self._very_attracted(self.outsider, self.a)  # touches outsider (not cleared set)...
+        # ...but A IS in the set, so source-or-target match clears it. Use a fully-outside pair:
+        kept.delete()
+        outside = CharacterSheetFactory()
+        kept = self._very_attracted(self.outsider, outside)
+        clear_very_attracted({self.a, self.b})
+        self.assertTrue(TemporaryRelationshipCondition.objects.filter(pk=kept.pk).exists())

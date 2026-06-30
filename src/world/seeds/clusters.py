@@ -51,6 +51,12 @@ def _seed_social_relationships() -> None:
     seed_social_relationship_content()
 
 
+def _seed_social_actions() -> None:
+    from world.seeds.social_actions import seed_social_action_content  # noqa: PLC0415
+
+    seed_social_action_content()
+
+
 def _seed_consent() -> None:
     from world.seeds.consent import seed_social_consent_categories  # noqa: PLC0415
 
@@ -78,6 +84,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social relationships: the allure ModifierTarget + Attracted To / Very Attracted conditions
     # the directed-allure engine reads + Flirt/Seduce effects set (#1697).
     "social_relationships": _seed_social_relationships,
+    # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
+    # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
+    "social_actions": _seed_social_actions,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
@@ -121,6 +130,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     content row). Keys are ordered to match :data:`CLUSTER_SEEDERS` insertion
     order so the admin hub lists clusters in their seed sequence.
     """
+    from actions.models import ActionTemplate  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
@@ -142,6 +152,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social relationships: the allure target + Attracted/Very-Attracted RelationshipConditions
         # (a shared lookup); represented by RelationshipCondition (#1697).
         "social_relationships": [RelationshipCondition],
+        # Social actions seed ActionTemplate rows (#1697).
+        "social_actions": [ActionTemplate],
         "magic": [Affinity, Resonance],
         "items": [ItemTemplate],
         # Combat seeds check-types used by the resolution spine, not standalone
