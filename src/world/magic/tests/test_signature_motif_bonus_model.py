@@ -14,19 +14,24 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     FacetFactory,
+    GiftFactory,
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
     ResonanceFactory,
+    TechniqueFactory,
 )
 from world.magic.models import (
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
     SignatureMotifBonusCapabilityGrant,
     SignatureMotifBonusDamageProfile,
+    Thread,
 )
+from world.traits.factories import TraitFactory
 
 
 class SignatureMotifBonusCreationTests(TestCase):
@@ -297,3 +302,87 @@ class SignatureMotifBonusQualifiesForTests(TestCase):
         # sheet_other has other_resonance (passes resonance gate)
         # but does NOT have cls.facet (fails facet gate)
         self.assertFalse(bonus.qualifies_for(self.sheet_other))
+
+
+class ThreadSignatureBonusFKTests(TestCase):
+    """Thread.signature_bonus FK: non-null only when target_kind==TECHNIQUE.
+
+    TDD step for Task 3 (#1582): these tests are written before the FK exists
+    and should initially FAIL with AttributeError / TypeError.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.facet = FacetFactory(name="Sig FK Test Facet")
+        cls.bonus = SignatureMotifBonus.objects.create(
+            name="FK Test Bonus",
+            required_facet=cls.facet,
+        )
+        # A Technique to anchor a TECHNIQUE-kind thread.
+        cls.gift = GiftFactory()
+        cls.technique = TechniqueFactory(gift=cls.gift, level=1, damage_profile=False)
+        # A Trait to anchor a TRAIT-kind thread.
+        cls.trait = TraitFactory()
+
+    def test_signature_bonus_on_technique_thread_passes_full_clean(self) -> None:
+        """Setting signature_bonus on a TECHNIQUE thread passes full_clean()."""
+        thread = Thread(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            signature_bonus=self.bonus,
+        )
+        # Should not raise.
+        thread.full_clean()
+
+    def test_signature_bonus_null_on_technique_thread_passes(self) -> None:
+        """signature_bonus=None on a TECHNIQUE thread is valid."""
+        thread = Thread(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            signature_bonus=None,
+        )
+        thread.full_clean()
+
+    def test_signature_bonus_on_trait_thread_raises_validation_error(self) -> None:
+        """Setting signature_bonus on a TRAIT thread raises ValidationError."""
+        thread = Thread(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TRAIT,
+            target_trait=self.trait,
+            signature_bonus=self.bonus,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            thread.full_clean()
+        self.assertIn("signature_bonus", ctx.exception.message_dict)
+
+    def test_signature_bonus_null_on_trait_thread_passes(self) -> None:
+        """signature_bonus=None on a TRAIT thread is valid."""
+        thread = Thread(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TRAIT,
+            target_trait=self.trait,
+            signature_bonus=None,
+        )
+        thread.full_clean()
+
+    def test_signature_bonus_on_facet_thread_raises_validation_error(self) -> None:
+        """Setting signature_bonus on a FACET thread raises ValidationError."""
+        facet = FacetFactory(name="Anchor Facet")
+        thread = Thread(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            signature_bonus=self.bonus,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            thread.full_clean()
+        self.assertIn("signature_bonus", ctx.exception.message_dict)

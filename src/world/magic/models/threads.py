@@ -585,6 +585,17 @@ class Thread(SharedMemoryModel):
             "PERSONAL_OWN + COVENANT slots are limited to one active per owner."
         ),
     )
+    signature_bonus = models.ForeignKey(
+        "magic.SignatureMotifBonus",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Player-chosen SignatureMotifBonus attached to this thread. "
+            "May only be non-null when target_kind=TECHNIQUE (#1582)."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -847,6 +858,14 @@ class Thread(SharedMemoryModel):
                 name="thread_slot_kind_only_for_sanctum",
                 check=(models.Q(target_kind=TargetKind.SANCTUM) | models.Q(slot_kind="")),
             ),
+            # ---- signature_bonus: only allowed on TECHNIQUE threads (#1582) ----
+            models.CheckConstraint(
+                name="thread_signature_bonus_technique_only",
+                check=(
+                    models.Q(signature_bonus__isnull=True)
+                    | models.Q(target_kind=TargetKind.TECHNIQUE)
+                ),
+            ),
         ]
 
     def __str__(self) -> str:
@@ -932,6 +951,17 @@ class Thread(SharedMemoryModel):
         elif self.slot_kind:
             raise ValidationError(
                 {"slot_kind": f"slot_kind must be empty for target_kind={self.target_kind}."},
+            )
+
+        # signature_bonus: only allowed on TECHNIQUE threads (#1582).
+        if self.signature_bonus_id is not None and self.target_kind != TargetKind.TECHNIQUE:
+            raise ValidationError(
+                {
+                    "signature_bonus": (
+                        "signature_bonus may only be set when target_kind=TECHNIQUE "
+                        f"(current target_kind={self.target_kind})."
+                    ),
+                },
             )
 
 
