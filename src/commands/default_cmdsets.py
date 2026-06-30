@@ -21,6 +21,7 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
+from commands.battle import CmdBattle
 from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
@@ -288,6 +289,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.
             CmdCovenant,
+            # #1592 — battle system: GM lifecycle + player declare namespace.
+            CmdBattle,
         )
         for command_cls in command_classes:
             self.add(command_cls())
