@@ -64,6 +64,75 @@ export interface RemovedConditionRow {
 }
 
 // ---------------------------------------------------------------------------
+// Shared sub-components — used by every row editor to avoid copy-paste blocks
+// ---------------------------------------------------------------------------
+
+/** The destructive "✕" button appended to every payload row. Identical across all
+ *  four editors (capability/damage/applied-condition/removed-condition). */
+function RemoveRowButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-8 px-2 text-destructive"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      ✕
+    </Button>
+  );
+}
+
+/** A labeled condition-template dropdown. Shared by the applied-condition and
+ *  removed-condition editors, whose condition selectors are byte-identical. */
+function ConditionSelect({
+  value,
+  conditions,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  conditions: ConditionOption[];
+  disabled: boolean;
+  onChange: (val: number) => void;
+}) {
+  return (
+    <Select
+      value={String(value)}
+      onValueChange={(val) => onChange(Number(val))}
+      disabled={disabled}
+    >
+      <SelectTrigger className="h-8 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {conditions.map((c) => (
+          <SelectItem key={c.id} value={String(c.id)}>
+            {c.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Immutable row-list mutation helpers shared by every payload editor.
+ *
+ *  `removeRow` and `updateRow` are byte-identical across all four editors aside
+ *  from the row type parameter; centralizing them here keeps CPD clean. */
+function useRowList<T>(rows: T[], onChange: (rows: T[]) => void) {
+  return {
+    removeRow(index: number) {
+      onChange(rows.filter((_, i) => i !== index));
+    },
+    updateRow(index: number, patch: Partial<T>) {
+      onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Capability Grants Editor
 // ---------------------------------------------------------------------------
 
@@ -88,13 +157,7 @@ export function CapabilityGrantsEditor({
     ]);
   }
 
-  function removeRow(index: number) {
-    onChange(rows.filter((_, i) => i !== index));
-  }
-
-  function updateRow(index: number, patch: Partial<CapabilityGrantRow>) {
-    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
+  const { removeRow, updateRow } = useRowList<CapabilityGrantRow>(rows, onChange);
 
   return (
     <div className="space-y-2">
@@ -154,16 +217,7 @@ export function CapabilityGrantsEditor({
               onChange={(e) => updateRow(i, { intensity_multiplier: Number(e.target.value) })}
             />
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-destructive"
-            disabled={disabled}
-            onClick={() => removeRow(i)}
-          >
-            ✕
-          </Button>
+          <RemoveRowButton disabled={disabled} onClick={() => removeRow(i)} />
         </div>
       ))}
     </div>
@@ -198,13 +252,7 @@ export function DamageProfilesEditor({
     ]);
   }
 
-  function removeRow(index: number) {
-    onChange(rows.filter((_, i) => i !== index));
-  }
-
-  function updateRow(index: number, patch: Partial<DamageProfileRow>) {
-    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
+  const { removeRow, updateRow } = useRowList<DamageProfileRow>(rows, onChange);
 
   return (
     <div className="space-y-2">
@@ -261,16 +309,7 @@ export function DamageProfilesEditor({
               }
             />
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-destructive"
-            disabled={disabled}
-            onClick={() => removeRow(i)}
-          >
-            ✕
-          </Button>
+          <RemoveRowButton disabled={disabled} onClick={() => removeRow(i)} />
         </div>
       ))}
     </div>
@@ -302,13 +341,7 @@ export function AppliedConditionsEditor({
     ]);
   }
 
-  function removeRow(index: number) {
-    onChange(rows.filter((_, i) => i !== index));
-  }
-
-  function updateRow(index: number, patch: Partial<AppliedConditionRow>) {
-    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
+  const { removeRow, updateRow } = useRowList<AppliedConditionRow>(rows, onChange);
 
   return (
     <div className="space-y-2">
@@ -328,22 +361,12 @@ export function AppliedConditionsEditor({
         <div key={i} className="flex items-end gap-2 rounded-md border p-2">
           <div className="flex-1 space-y-1">
             <Label className="text-xs text-muted-foreground">Condition</Label>
-            <Select
-              value={String(row.condition_id)}
-              onValueChange={(val) => updateRow(i, { condition_id: Number(val) })}
+            <ConditionSelect
+              value={row.condition_id}
+              conditions={conditions}
               disabled={disabled}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {conditions.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(val) => updateRow(i, { condition_id: val })}
+            />
           </div>
           <div className="w-20 space-y-1">
             <Label className="text-xs text-muted-foreground">Severity</Label>
@@ -372,16 +395,7 @@ export function AppliedConditionsEditor({
               }
             />
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-destructive"
-            disabled={disabled}
-            onClick={() => removeRow(i)}
-          >
-            ✕
-          </Button>
+          <RemoveRowButton disabled={disabled} onClick={() => removeRow(i)} />
         </div>
       ))}
     </div>
@@ -418,13 +432,7 @@ export function RemovedConditionsEditor({
     ]);
   }
 
-  function removeRow(index: number) {
-    onChange(rows.filter((_, i) => i !== index));
-  }
-
-  function updateRow(index: number, patch: Partial<RemovedConditionRow>) {
-    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
+  const { removeRow, updateRow } = useRowList<RemovedConditionRow>(rows, onChange);
 
   return (
     <div className="space-y-2">
@@ -444,22 +452,12 @@ export function RemovedConditionsEditor({
         <div key={i} className="flex items-end gap-2 rounded-md border p-2">
           <div className="flex-1 space-y-1">
             <Label className="text-xs text-muted-foreground">Condition</Label>
-            <Select
-              value={String(row.condition_id)}
-              onValueChange={(val) => updateRow(i, { condition_id: Number(val) })}
+            <ConditionSelect
+              value={row.condition_id}
+              conditions={conditions}
               disabled={disabled}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {conditions.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(val) => updateRow(i, { condition_id: val })}
+            />
           </div>
           <div className="w-24 space-y-1">
             <Label className="text-xs text-muted-foreground">Target</Label>
@@ -504,16 +502,7 @@ export function RemovedConditionsEditor({
               All stacks
             </Label>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-destructive"
-            disabled={disabled}
-            onClick={() => removeRow(i)}
-          >
-            ✕
-          </Button>
+          <RemoveRowButton disabled={disabled} onClick={() => removeRow(i)} />
         </div>
       ))}
     </div>

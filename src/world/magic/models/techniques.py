@@ -899,38 +899,21 @@ class TechniqueRemovedCondition(AbstractAppliedCondition):
         the budget pricer or future readers.
         """
         super().clean()
-        if self.base_severity != 1:
-            raise ValidationError(
-                {"base_severity": "Severity is inert for a removal row; leave at default 1."}
-            )
-        if self.severity_intensity_multiplier != Decimal(0):
-            raise ValidationError(
-                {
-                    "severity_intensity_multiplier": (
-                        "Severity scaling is inert for a removal row; leave at 0."
-                    )
-                }
-            )
-        if self.severity_per_extra_sl != 0:
-            raise ValidationError({"severity_per_extra_sl": "Inert for a removal row; leave at 0."})
-        if self.base_duration_rounds is not None:
-            raise ValidationError(
-                {"base_duration_rounds": "Duration is inert for a removal row; leave null."}
-            )
-        if self.duration_intensity_multiplier != Decimal(0):
-            raise ValidationError(
-                {
-                    "duration_intensity_multiplier": (
-                        "Duration scaling is inert for a removal row; leave at 0."
-                    )
-                }
-            )
-        if self.duration_per_extra_sl != 0:
-            raise ValidationError({"duration_per_extra_sl": "Inert for a removal row; leave at 0."})
-        if self.stack_count != 1:
-            raise ValidationError(
-                {"stack_count": "Stack count is inert for a removal row; leave at default 1."}
-            )
+        # Inert apply-only knobs must stay at defaults (removal neither applies
+        # severity/duration nor stacks). Defined as (field, expected, label) tuples
+        # so the check stays a single loop instead of seven near-identical blocks.
+        inert_defaults: list[tuple[str, object, str]] = [
+            ("base_severity", 1, "Severity is inert for a removal row; leave at default 1."),
+            ("severity_intensity_multiplier", Decimal(0), "Inert for a removal row; leave at 0."),
+            ("severity_per_extra_sl", 0, "Inert for a removal row; leave at 0."),
+            ("base_duration_rounds", None, "Duration is inert for a removal row; leave null."),
+            ("duration_intensity_multiplier", Decimal(0), "Inert for a removal row; leave at 0."),
+            ("duration_per_extra_sl", 0, "Inert for a removal row; leave at 0."),
+            ("stack_count", 1, "Stack count is inert for a removal row; leave at default 1."),
+        ]
+        for field_name, expected, message in inert_defaults:
+            if getattr(self, field_name) != expected:
+                raise ValidationError({field_name: message})
 
 
 class TechniqueDamageProfile(AbstractDamageProfile):

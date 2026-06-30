@@ -26,6 +26,7 @@ Grammar::
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from commands.command import ArxCommand
@@ -180,6 +181,34 @@ class CmdTechnique(ArxCommand):
         except (ValueError, TypeError) as exc:
             msg = f"'{label}' must be an integer."
             raise CommandError(msg) from exc
+
+    def _split_payload_action(self, rest: str, usage: str) -> tuple[str, str]:
+        """Split a ``<subverb> add|remove …`` payload command into (action, args).
+
+        The payload handlers (grant/damage/condition/dispel) share an identical
+        skeleton: tokenize the first word as ``add``/``remove``, keep the remainder
+        as args, and raise ``CommandError`` with *usage* when empty. Centralizing
+        it keeps the four handlers from duplicating the split + usage guard.
+        """
+        tokens = rest.split(None, 1)
+        if not tokens:
+            raise CommandError(usage)
+        action = tokens[0].lower()
+        args = tokens[1].strip() if len(tokens) > 1 else ""
+        return action, args
+
+    def _remove_payload_row(
+        self, rest: str, *, remove_fn: Callable[[int], None], label: str
+    ) -> None:
+        """Handle the ``<subverb> remove <row-id>`` branch for a payload handler.
+
+        Shared by every payload add/remove handler: parse the row id, call the
+        per-kind *remove_fn*, and confirm to the caller. *label* names the row
+        kind in the confirmation message (e.g. "Applied condition", "Dispel row").
+        """
+        row_id = self._int_required(rest.strip(), "row-id")
+        remove_fn(row_id)
+        self.caller.msg(f"{label} #{row_id} removed.")
 
     @staticmethod
     def _float_required(value: str, label: str) -> float:
@@ -378,15 +407,11 @@ class CmdTechnique(ArxCommand):
             remove_draft_capability_grant,
         )
 
-        tokens = rest.split(None, 1)
-        if not tokens:
-            msg = (
-                "Usage: technique grant add capability=<n> base=<n> mult=<f>"
-                " | technique grant remove <row-id>"
-            )
-            raise CommandError(msg)
-        action = tokens[0].lower()
-        args = tokens[1].strip() if len(tokens) > 1 else ""
+        usage = (
+            "Usage: technique grant add capability=<n> base=<n> mult=<f>"
+            " | technique grant remove <row-id>"
+        )
+        action, args = self._split_payload_action(rest, usage)
         draft = self._get_draft()
 
         if action == "add":  # noqa: STRING_LITERAL
@@ -411,9 +436,9 @@ class CmdTechnique(ArxCommand):
                 f"Capability grant added [#{row.pk}]: {capability}  base={base}  mult={mult}"
             )
         elif action == "remove":  # noqa: STRING_LITERAL
-            row_id = self._int_required(args.strip(), "row-id")
-            remove_draft_capability_grant(row_id)
-            self.caller.msg(f"Capability grant #{row_id} removed.")
+            self._remove_payload_row(
+                args, remove_fn=remove_draft_capability_grant, label="Capability grant"
+            )
         else:
             msg = "Usage: technique grant add|remove …"
             raise CommandError(msg)
@@ -426,15 +451,11 @@ class CmdTechnique(ArxCommand):
             remove_draft_damage_profile,
         )
 
-        tokens = rest.split(None, 1)
-        if not tokens:
-            msg = (
-                "Usage: technique damage add type=<n> base=<n> mult=<f>"
-                " | technique damage remove <row-id>"
-            )
-            raise CommandError(msg)
-        action = tokens[0].lower()
-        args = tokens[1].strip() if len(tokens) > 1 else ""
+        usage = (
+            "Usage: technique damage add type=<n> base=<n> mult=<f>"
+            " | technique damage remove <row-id>"
+        )
+        action, args = self._split_payload_action(rest, usage)
         draft = self._get_draft()
 
         if action == "add":  # noqa: STRING_LITERAL
@@ -459,9 +480,9 @@ class CmdTechnique(ArxCommand):
                 f"Damage profile added [#{row.pk}]: {damage_type}  base={base}  mult={mult}"
             )
         elif action == "remove":  # noqa: STRING_LITERAL
-            row_id = self._int_required(args.strip(), "row-id")
-            remove_draft_damage_profile(row_id)
-            self.caller.msg(f"Damage profile #{row_id} removed.")
+            self._remove_payload_row(
+                args, remove_fn=remove_draft_damage_profile, label="Damage profile"
+            )
         else:
             msg = "Usage: technique damage add|remove …"
             raise CommandError(msg)
@@ -474,15 +495,11 @@ class CmdTechnique(ArxCommand):
             remove_draft_applied_condition,
         )
 
-        tokens = rest.split(None, 1)
-        if not tokens:
-            msg = (
-                "Usage: technique condition add template=<n> severity=<n> [duration=<n>]"
-                " | technique condition remove <row-id>"
-            )
-            raise CommandError(msg)
-        action = tokens[0].lower()
-        args = tokens[1].strip() if len(tokens) > 1 else ""
+        usage = (
+            "Usage: technique condition add template=<n> severity=<n> [duration=<n>]"
+            " | technique condition remove <row-id>"
+        )
+        action, args = self._split_payload_action(rest, usage)
         draft = self._get_draft()
 
         if action == "add":  # noqa: STRING_LITERAL
@@ -509,9 +526,9 @@ class CmdTechnique(ArxCommand):
                 f"Applied condition added [#{row.pk}]: {condition}  severity={severity}"
             )
         elif action == "remove":  # noqa: STRING_LITERAL
-            row_id = self._int_required(args.strip(), "row-id")
-            remove_draft_applied_condition(row_id)
-            self.caller.msg(f"Applied condition #{row_id} removed.")
+            self._remove_payload_row(
+                args, remove_fn=remove_draft_applied_condition, label="Applied condition"
+            )
         else:
             msg = "Usage: technique condition add|remove …"
             raise CommandError(msg)
@@ -525,15 +542,11 @@ class CmdTechnique(ArxCommand):
             remove_draft_removed_condition,
         )
 
-        tokens = rest.split(None, 1)
-        if not tokens:
-            msg = (
-                "Usage: technique dispel add template=<n> [target=self|ally|enemy]"
-                " [minsl=<n>] [allstacks=yes|no] | technique dispel remove <row-id>"
-            )
-            raise CommandError(msg)
-        action = tokens[0].lower()
-        args = tokens[1].strip() if len(tokens) > 1 else ""
+        usage = (
+            "Usage: technique dispel add template=<n> [target=self|ally|enemy]"
+            " [minsl=<n>] [allstacks=yes|no] | technique dispel remove <row-id>"
+        )
+        action, args = self._split_payload_action(rest, usage)
         draft = self._get_draft()
 
         if action == "add":  # noqa: STRING_LITERAL
@@ -574,9 +587,9 @@ class CmdTechnique(ArxCommand):
                 f"  minsl={min_sl}  allstacks={allstacks_str}"
             )
         elif action == "remove":  # noqa: STRING_LITERAL
-            row_id = self._int_required(args.strip(), "row-id")
-            remove_draft_removed_condition(row_id)
-            self.caller.msg(f"Dispel row #{row_id} removed.")
+            self._remove_payload_row(
+                args, remove_fn=remove_draft_removed_condition, label="Dispel row"
+            )
         else:
             msg = "Usage: technique dispel add|remove …"
             raise CommandError(msg)
