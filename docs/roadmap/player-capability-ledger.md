@@ -72,7 +72,7 @@ in-fiction trigger is plausible.
 | Apply a condition to an **enemy NPC** (and it's consumed) | 🟨 WIRED-UNPROVEN | `combat/services.py:471-520`; only ally tested | prove-it |
 | Combo attack **full journey** | 🟨 WIRED-UNPROVEN | `services.py:3356-3367`; pieces unit-tested only | prove-it |
 | Thread pull changes a cast/clash **final outcome** | 🟨 WIRED-UNPROVEN | reaches check input; final outcome not asserted | prove-it |
-| **Remove / dispel** a condition (cleanse) | ❌ ABSENT | no `EffectKind` REMOVE | MVP |
+| **Remove / dispel** a condition (cleanse) | ✅ PROVEN | `TechniqueRemovedCondition` payload + `remove_technique_conditions` (`world/magic/services/condition_application.py`) wired into the cast seam; honors `can_be_dispelled` + opposed `cure_check_type`/`cure_difficulty`; E2E `world/magic/tests/integration/test_dispel_cast_e2e.py` (#1585, ADR-0064) | done |
 | **Charm / switch-sides** an enemy NPC | ✅ PROVEN | `derive_allegiance` → `select_npc_actions` (#1590, ADR-0058) | MVP |
 | **Negotiate / parley** an NPC down | ✅ PROVEN | `apply_social_disposition_delta` → `adjust_npc_affection`; durable + ephemeral tiers (#1591, ADR-0058) | MVP |
 | **Effect palette**: summon, reflect, incorporeal, sink, telekinesis, teleport, obstacle, force-field | ✅ PROVEN | `effect_palette_content.py`; 9 seeded effects; summon E2E `integration_tests/pipeline/test_effect_summon_telnet_e2e.py`; reactive interceptor E2Es `integration_tests/pipeline/test_effect_reactive_families.py` (#1584) | done |
@@ -132,7 +132,8 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
   incorporeal [Ghostform]/sink [Earthmeld]/telekinesis [Force Grip]/teleport [Phase Jump]/
   obstacle [Barricade]/force-field [Aegis Field]/blink [Phase Step]; allegiance-aware summon
   proven E2E; reactive interceptor trio proven E2E; ADR-0059 + ADR-0060). Remaining effects work:
-  charm/switch-sides (#1590, allegiance-flip); NPC negotiation (#1591); condition removal/dispel.
+  charm/switch-sides (#1590, allegiance-flip); NPC negotiation (#1591); condition removal/dispel
+  (#1585, shipped — `TechniqueRemovedCondition` + `remove_technique_conditions`, ADR-0064).
   Teleport/obstacle/telekinesis have placeholder position IDs — runtime destination selection
   deferred to a follow-up issue.
 - **Combat systems:** war/battle system; mounts & flying (P2, no-improv-flagged); ranged/archery enforcement.

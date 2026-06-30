@@ -60,6 +60,24 @@ class AppliedConditionResult:
     success: bool
 
 
+@dataclass(frozen=True)
+class RemovedConditionResult:
+    """Per-condition removal outcome from a dispel/cleanse technique cast.
+
+    Mirrors ``AppliedConditionResult`` for the removal path. ``success`` is True
+    when the condition was actually removed (or a stack decremented); False when
+    the condition was absent, not dispellable (``can_be_dispelled=False``), or
+    resisted (the opposed ``cure_check_type`` check failed). ``skipped_reason``
+    is empty on success, else a short stable token
+    ("not_present" / "not_dispellable" / "resisted").
+    """
+
+    target: "ObjectDB"
+    condition: "ConditionTemplate"
+    success: bool
+    skipped_reason: str = ""
+
+
 @dataclass
 class ApplyConditionResult:
     """Result of attempting to apply a condition."""

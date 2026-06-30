@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import ModifierContribution
     from world.relationships.constants import FirstImpressionColoring
     from world.relationships.models import GrievanceOption, RelationshipTrack
     from world.scenes.models import Scene
@@ -472,3 +473,47 @@ def register_grievance(  # noqa: PLR0913 — keyword-only; each arg is a distinc
         points=points,
         visibility=visibility,
     )
+
+
+def relationship_gated_contributions(
+    *, perceiver: CharacterSheet, perceived: CharacterSheet
+) -> list[ModifierContribution]:
+    """Modifier contributions the perceiver's regard for the perceived injects into a check (#1696).
+
+    Allure (and any future relationship-gated modifier) is a **directed, conditional** modifier: it
+    boosts the *perceived's* social checks against the *perceiver* only when the perceiver holds a
+    gating relationship-condition toward them. For the directed
+    ``CharacterRelationship(source=perceiver, target=perceived)``, each active
+    ``RelationshipCondition.gates_modifiers`` target folds in the **perceived's**
+    ``get_modifier_total`` of that target — **once per gating condition**. So two allure-gating
+    conditions (``Attracted To`` + ``Very Attracted``) count the perceived's allure twice — the
+    "double" effect falls out of the count, with no allure-specific code.
+
+    Returns ``[]`` with no active relationship or no gating condition (the common case until
+    Flirt/Seduction seed the conditions — #1697). Condition expiry (Very Attracted dropping off) is
+    #1697's relationship-condition temporality; until then every attached condition counts.
+    """
+    from world.checks.constants import ModifierSourceKind
+    from world.checks.types import ModifierContribution
+    from world.mechanics.services import get_modifier_total
+
+    relationship = (
+        CharacterRelationship.objects.filter(source=perceiver, target=perceived, is_active=True)
+        .prefetch_related("conditions__gates_modifiers")  # noqa: PREFETCH_STRING
+        .first()
+    )
+    if relationship is None:
+        return []
+    contributions: list[ModifierContribution] = []
+    for condition in relationship.conditions.all():
+        for target in condition.gates_modifiers.all():
+            value = get_modifier_total(perceived, target)
+            if value:
+                contributions.append(
+                    ModifierContribution(
+                        source_kind=ModifierSourceKind.RELATIONSHIP,
+                        source_label=f"{condition.name}: {target.name}",
+                        value=value,
+                    )
+                )
+    return contributions

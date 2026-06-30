@@ -74,6 +74,7 @@ from world.magic.models import (
     TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
     TechniqueOutcomeModifier,
+    TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTierBudget,
     Thread,
@@ -334,6 +335,27 @@ class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
     condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
     target_kind = "enemy"
     minimum_success_level = 1
+    base_severity = 1
+    severity_intensity_multiplier = Decimal(0)
+    severity_per_extra_sl = 0
+    base_duration_rounds = None
+    duration_intensity_multiplier = Decimal(0)
+    duration_per_extra_sl = 0
+    stack_count = 1
+
+
+class TechniqueRemovedConditionFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueRemovedCondition — dispel/cleanse payload row (#1585)."""
+
+    class Meta:
+        model = TechniqueRemovedCondition
+
+    technique = factory.SubFactory(TechniqueFactory)
+    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    target_kind = "enemy"
+    minimum_success_level = 1
+    remove_all_stacks = True
+    # Inert apply-only knobs held at defaults (enforced by clean()).
     base_severity = 1
     severity_intensity_multiplier = Decimal(0)
     severity_per_extra_sl = 0

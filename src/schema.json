@@ -27633,6 +27633,7 @@ components:
       - strain
       - affinity
       - pull
+      - relationship
       type: string
       description: |-
         * `condition` - Condition
@@ -27646,6 +27647,7 @@ components:
         * `strain` - Strain
         * `affinity` - Affinity
         * `pull` - Combat Pull
+        * `relationship` - Relationship
     ContributionRow:
       type: object
       properties:

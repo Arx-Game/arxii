@@ -92,7 +92,7 @@ The central spine connecting every system in the game. Characters develop throug
     - `CmdRitual` gains `_maybe_auto_fire`, `_handle_fire`,
       `_advancement_error_message` for auto-fire + error surfacing.
     - E2E tests: `integration_tests/pipeline/test_durance_telnet_e2e.py`.
-    - ADR-0064: trainer-of-record-bound-to-room enables automated self-conduct.
+    - ADR-0065: trainer-of-record-bound-to-room enables automated self-conduct.
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics

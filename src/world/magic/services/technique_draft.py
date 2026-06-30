@@ -20,12 +20,14 @@ from world.magic.models import (
     TechniqueDraftAppliedCondition,
     TechniqueDraftCapabilityGrant,
     TechniqueDraftDamageProfile,
+    TechniqueDraftRemovedCondition,
 )
 from world.magic.services.technique_builder import get_technique_tier_budget
 from world.magic.types.technique_builder import (
     AppliedConditionSpec,
     CapabilityGrantSpec,
     DamageProfileSpec,
+    RemovedConditionSpec,
     TechniqueDesignInput,
 )
 
@@ -170,6 +172,34 @@ def remove_draft_applied_condition(row_id: int) -> None:
 
 
 # =============================================================================
+# Payload children — removed conditions (dispel/cleanse, #1585)
+# =============================================================================
+
+
+def add_draft_removed_condition(
+    draft: TechniqueDraft,
+    *,
+    condition,
+    target_kind: str = "enemy",
+    minimum_success_level: int = 1,
+    remove_all_stacks: bool = True,
+) -> TechniqueDraftRemovedCondition:
+    """Append a removed-condition (dispel) row to the draft and return it."""
+    return TechniqueDraftRemovedCondition.objects.create(
+        draft=draft,
+        condition=condition,
+        target_kind=target_kind,
+        minimum_success_level=minimum_success_level,
+        remove_all_stacks=remove_all_stacks,
+    )
+
+
+def remove_draft_removed_condition(row_id: int) -> None:
+    """Delete a TechniqueDraftRemovedCondition row by primary key."""
+    TechniqueDraftRemovedCondition.objects.filter(pk=row_id).delete()
+
+
+# =============================================================================
 # draft → design conversion
 # =============================================================================
 
@@ -238,5 +268,14 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
                 base_duration_rounds=row.base_duration_rounds,
             )
             for row in draft.applied_conditions.all()
+        ),
+        removed_conditions=tuple(
+            RemovedConditionSpec(
+                condition_id=row.condition_id,
+                target_kind=row.target_kind,
+                minimum_success_level=row.minimum_success_level,
+                remove_all_stacks=row.remove_all_stacks,
+            )
+            for row in draft.removed_conditions.all()
         ),
     )

@@ -175,3 +175,32 @@ class TechniqueDraftAppliedCondition(AbstractAppliedCondition):
 
     def __str__(self) -> str:
         return f"{self.draft} → {self.condition} ({self.target_kind})"
+
+
+class TechniqueDraftRemovedCondition(AbstractAppliedCondition):
+    """A removed-condition (dispel) row belonging to a TechniqueDraft.
+
+    Mirrors ``TechniqueRemovedCondition`` for the draft workbench. Inherits all data
+    columns from ``AbstractAppliedCondition``; the severity/duration/stack knobs are
+    inert (enforced on the committed row's ``clean()``). Adds ``remove_all_stacks``.
+    """
+
+    draft = models.ForeignKey(
+        TechniqueDraft,
+        on_delete=models.CASCADE,
+        related_name="removed_conditions",
+    )
+    remove_all_stacks = models.BooleanField(
+        default=True,
+        help_text=(
+            "If True, all stacks of the condition are removed. If False, only one "
+            "stack is decremented."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Technique Draft Removed Condition"
+        verbose_name_plural = "Technique Draft Removed Conditions"
+
+    def __str__(self) -> str:
+        return f"{self.draft} → removes {self.condition} ({self.target_kind})"

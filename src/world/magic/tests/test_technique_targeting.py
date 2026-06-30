@@ -7,6 +7,7 @@ from world.magic.factories import (
     BinaryEffectTypeFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
+    TechniqueRemovedConditionFactory,
 )
 from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.targeting import (
@@ -78,6 +79,33 @@ class DeriveTargetRelationshipTests(TestCase):
             target_kind=ConditionTargetKind.ENEMY,
         )
         self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.ENEMY)
+
+    def test_ally_removed_condition_returns_ally(self):
+        """A non-hostile dispel technique cleansing an ALLY debuff → ALLY (#1585)."""
+        tech = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        TechniqueRemovedConditionFactory(
+            technique=tech,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.ALLY)
+
+    def test_enemy_removed_condition_makes_hostile(self):
+        """A dispel technique stripping an ENEMY buff is hostile → ENEMY (#1585)."""
+        tech = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        TechniqueRemovedConditionFactory(
+            technique=tech,
+            target_kind=ConditionTargetKind.ENEMY,
+        )
+        self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.ENEMY)
+
+    def test_self_removed_condition_returns_self(self):
+        """A self-cleanse dispel technique → SELF (#1585)."""
+        tech = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        TechniqueRemovedConditionFactory(
+            technique=tech,
+            target_kind=ConditionTargetKind.SELF,
+        )
+        self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.SELF)
 
 
 class TechniqueAltersBehaviorTests(TestCase):

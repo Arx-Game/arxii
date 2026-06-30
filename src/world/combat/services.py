@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from world.combat.models import ClashConfig, StrainConfig
     from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
-    from world.conditions.types import AppliedConditionResult
+    from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
@@ -477,12 +477,14 @@ class CombatTechniqueResolver:
         check_result: CheckResult,
         *,
         eff_intensity: int,
-    ) -> list[AppliedConditionResult]:
+    ) -> tuple[list[AppliedConditionResult], list[RemovedConditionResult]]:
         """Apply technique-authored conditions to appropriate targets.
 
         Resolves each ConditionTargetKind (SELF/ALLY/ENEMY) to a concrete list
         of ObjectDBs, builds the ``targets_by_kind`` mapping, and delegates to
-        the shared ``apply_technique_conditions`` service.
+        the shared ``apply_technique_conditions`` service — then runs the
+        ``remove_technique_conditions`` dispel sibling over the same resolved
+        targets (#1585).
 
         For AREA / FILTERED_GROUP techniques the ENEMY slot is expanded to ALL
         active (non-DEFEATED) opponents in ``_resolved_opponent_targets()`` rather
@@ -490,10 +492,15 @@ class CombatTechniqueResolver:
 
         ``eff_intensity`` is the combined effective intensity (injected power + pull bumps)
         computed by ``__call__`` and forwarded here.
+
+        Returns:
+            ``(applied, removed)`` — the apply results and the dispel results, both
+            over the same resolved ``targets_by_kind``.
         """
         from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
         from world.magic.services.condition_application import (  # noqa: PLC0415
             apply_technique_conditions,
+            remove_technique_conditions,
         )
 
         technique = self.action.focused_action
@@ -523,13 +530,23 @@ class CombatTechniqueResolver:
             if target is not None:
                 targets_by_kind[ConditionTargetKind.ENEMY] = [target]
 
-        return apply_technique_conditions(
+        applied = apply_technique_conditions(
             technique=technique,
             success_level=check_result.success_level,
             eff_intensity=eff_intensity,
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
         )
+        # Dispel/cleanse sibling (#1585): strip technique-authored conditions from
+        # the same resolved targets. No-op when the technique has no
+        # removed_conditions rows.
+        removed = remove_technique_conditions(
+            technique=technique,
+            success_level=check_result.success_level,
+            targets_by_kind=targets_by_kind,
+            source_character=caster_od,
+        )
+        return applied, removed
 
     def _apply_penetration(self, combat_ledger: PowerLedger) -> tuple[PowerLedger, bool]:
         """Run the penetration-vs-resistance contest (#639) against the ward.
@@ -656,7 +673,9 @@ class CombatTechniqueResolver:
             )
 
         damage_results = self._apply_damage(check_result, eff_intensity=eff_intensity)
-        applied_conditions = self._apply_conditions(check_result, eff_intensity=eff_intensity)
+        applied_conditions, removed_conditions = self._apply_conditions(
+            check_result, eff_intensity=eff_intensity
+        )
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,
@@ -664,6 +683,7 @@ class CombatTechniqueResolver:
             pull_flat_bonus=self.pull_flat_bonus,
             scaled_damage=sum(r.damage_dealt for r in damage_results),
             power_ledger=combat_ledger,
+            removed_conditions=removed_conditions,
         )
 
 
@@ -823,6 +843,7 @@ def _build_combat_result(
         technique_use_result=technique_use_result,
         power_ledger=resolution.power_ledger,
         fury_committed=fury_committed,
+        removed_conditions=list(resolution.removed_conditions),
     )
 
 

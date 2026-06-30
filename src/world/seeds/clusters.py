@@ -39,6 +39,12 @@ def _seed_social() -> None:
     seed_social_check_content()
 
 
+def _seed_investigation() -> None:
+    from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
+
+    seed_investigation_check_content()
+
+
 def _seed_consent() -> None:
     from world.seeds.consent import seed_social_consent_categories  # noqa: PLC0415
 
@@ -60,6 +66,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Persuasion/Performance skills + their specializations (#1688). After "checks" so the
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
+    # Investigation: the Search check (perception + Investigation) + the Investigation skill.
+    # After "checks" for the resolution spine; authoritative (#1705).
+    "investigation": _seed_investigation,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
@@ -117,6 +126,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social: seeds Persuasion/Performance skills + their specializations + the
         # stat+skill(+spec) social CheckType compositions (#1688).
         "social": [Specialization],
+        # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
+        # rows counted under "checks"); it still appears as a seeded cluster (#1705).
+        "investigation": [],
         "magic": [Affinity, Resonance],
         "items": [ItemTemplate],
         # Combat seeds check-types used by the resolution spine, not standalone

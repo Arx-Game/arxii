@@ -84,6 +84,12 @@ The magic system for Arx II. Power flows from identity and connection.
   `discard_draft`. No JSON; every field is a proper column.
 - `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` / `TechniqueDraftAppliedCondition`
   — payload child rows for `TechniqueDraft`; inherit the abstract bases above.
+- `TechniqueRemovedCondition` / `TechniqueDraftRemovedCondition` — dispel/cleanse payload rows
+  (#1585). Subclass of `AbstractAppliedCondition` (sibling to `TechniqueAppliedCondition`); adds
+  `remove_all_stacks` (bool, default True). The inherited severity/duration/stack knobs are inert
+  for removal — `clean()` enforces they stay at defaults. Removal diverges from the apply path by
+  authoring `target_kind` + `minimum_success_level` (dispel needs SELF/ALLY targeting the apply
+  path hardcodes to ENEMY/1). See ADR-0064.
 - `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
 - `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
 - `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: sineating anima/fatigue costs per unit, per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, rescue budget bases and multipliers. All fields are integers; multipliers encoded as integer-tenths or integer-hundredths. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`.
@@ -192,6 +198,39 @@ casting never hard-fails with "no template." The resolution chain:
 Follow-ups deferred to later issues: technique designer (players pick a consequence pool
 from a curated catalog), targeting model (targeting validity + AoE + per-technique target
 constraints + frontend target picker), and the optional resonance→aspect mapping.
+
+### Dispel / Cleanse (#1585)
+
+A technique carrying `TechniqueRemovedCondition` rows strips matching conditions from the
+resolved target on cast. The removal sibling of `apply_technique_conditions` is
+`remove_technique_conditions` (`services/condition_application.py`), wired into the same cast
+seam — `request_technique_cast` (`world/scenes/cast_services.py`) for standalone and
+`CombatTechniqueResolver._apply_conditions` (`world/combat/services.py`, returns
+`(applied, removed)`) for combat. No-op when the technique has no `removed_conditions` rows.
+
+Three independent gates per target, evaluated in order: (1) **cast-SL row gate** —
+`success_level < row.minimum_success_level` skips the row (mirrors the apply path; a botched cast
+removes nothing); (2) **`can_be_dispelled` hard gate** — a condition whose template has
+`can_be_dispelled=False` is a no-op (never an error); (3) **opposed cure check** — when the
+condition's `cure_check_type` is set, `perform_check(caster, cure_check_type, cure_difficulty)`
+is rolled; removal succeeds iff `check_result.success_level > 0`, else resisted (no-op for that
+target, cast continues). When `cure_check_type` is null, removal proceeds unconditionally
+(uncontested dispel). Delegates to `world.conditions.services.remove_condition`
+(`remove_all_stacks` forwarded → partial-stack decrement or full removal; reuses
+`CONDITION_REMOVED` emission + deferred-death resolution).
+
+**Targeting/hostility** (`services/hostility.py` + `services/targeting.py`): stripping an ENEMY's
+buff is hostile; cleansing an ALLY's debuff resolves ALLY; a self-cleanse resolves SELF. Dispel
+is **not** consent-gated — removing a behavior-altering condition (dispelling a charm) is
+beneficial, so `removed_conditions` is intentionally NOT added to
+`technique_alters_behavior`/`cast_requires_consent`.
+
+**Authoring:** mirrors `applied_conditions` through the budget builder (`RemovedConditionSpec` →
+`TechniqueDesignInput.removed_conditions` → `build_technique`; priced at flat
+`payload_base_cost`), draft workbench (`add_draft_removed_condition` / `draft_to_design`),
+serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditionInline`), telnet
+(`technique dispel add|remove`), and frontend (`RemovedConditionsEditor` in
+`TechniqueBuilderForm`). See ADR-0064 for why dispel is a payload row, not an `EffectKind`.
 
 ### Cantrips (Character Creation)
 - `Cantrip` - Staff-curated technique templates for CG magic stage selection
