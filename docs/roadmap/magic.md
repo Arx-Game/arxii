@@ -170,8 +170,10 @@ The within-tier class-level advancement ceremony is complete. Magic's contributi
   `cross_threshold` calls `apply_class_level_advance` (the shared spine) instead of
   inlining a level write.
 
-**Open follow-up (#1700):** telnet drivability of `RitualSession` dispatch (REST-only today;
-a `CmdRitual` adapter for the Ritual of the Durance — under the telnet-E2E umbrella #1328).
+**Telnet Durance (#1700) — BUILT.** Telnet drivability of the Ritual of the Durance is now
+complete. Both a live-officiant ceremony (`ritual draft` → inductee `ritual join` → `ritual fire`)
+and a site-convened session (`durance convene` → inductee `ritual join`, auto-fires) are
+supported. See `docs/roadmap/character-progression.md` and ADR-0064 for the full build record.
 
 ---
 

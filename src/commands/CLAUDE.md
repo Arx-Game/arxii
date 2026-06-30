@@ -74,6 +74,10 @@ actions, backends, and service functions.
     - soul-tether: `role=sinner|sineater`
     - covenant induction: `role=<covenant role name>` (inductee picks their role)
     - banner-call: no extra tokens (members simply accept)
+    - Durance: `testament=<oration>` (inductee's oration) + `path=<name>` (optional
+      Potential path for the level-3 semi-crossing). For site-convened sessions
+      (where `DuranceAdapter.should_auto_fire` returns `True`) the session fires
+      automatically on `ritual join` — no `ritual fire` is needed.
   - `ritual decline <id>` — decline your invitation
   - `ritual fire <id>` — fire the session (initiator only)
   - `ritual cancel <id>` — cancel a pending session (initiator only)
@@ -93,6 +97,12 @@ actions, backends, and service functions.
     induction service reads).
   - `BannerCallAdapter` — `covenant=<name>` on draft; no join tokens (members simply accept
     the rise).
+  - `DuranceAdapter` — Ritual of the Durance (class-level advancement). `parse_join`:
+    `testament=<oration>` → `participant_kwargs["testament"]`; `path=<name>` → path pk via
+    `resolve_advanced_path_by_name` (for the level-3 POTENTIAL semi-crossing). `should_auto_fire`:
+    True when the session's initiator is a `DuranceTrainingSite` trainer-of-record (site-convened
+    path — auto-fires on inductee join); False for a live-officiant ceremony (initiator fires
+    manually). `parse_draft`: no-op (officiant supplies nothing extra at draft time).
   Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
   before adapters were introduced). `get_adapter(ritual)` is the public entry point.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
@@ -326,6 +336,13 @@ actions, backends, and service functions.
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
   `InteractionSession` on `caller.session.ndb` between operations; delegates to the same registry
   Actions as the web `InteractionViewSet`.
+- **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
+  readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
+  gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`
+  declares path intent (reuses `SetPathIntentAction`); `durance intent clear` clears it
+  (reuses `ClearPathIntentAction`). `durance convene` calls `convene_durance_at_site` and
+  echoes the session pk for the inductee to issue `ritual join <id> testament=... path=...`.
+  This is setup + status only — the rite runs through `ritual` session verbs, never bypassed.
 - **`progression.py`**: `CmdTraining` (`training`) + `CmdProgressionUnlock` (`progression`) —
   telnet faces of `ManageTrainingAction` and `PurchaseUnlockAction`. `training [list]` shows
   weekly AP budget and allocations; `training add skill=<id>|spec=<id> ap=<n> [mentor=<id>]`,

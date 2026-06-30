@@ -729,7 +729,8 @@ so web and telnet converge on the same write path.
 XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
-  **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`)
+  **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
+  **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -745,6 +746,8 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `CharacterXP.can_spend(amount) -> bool`
   - `current_path_for_character(character) -> Path | None` (`selectors.py`) — returns the character's most-recent `CharacterPathHistory` path
   - `next_path_options(character) -> list[Path]` (`selectors.py`) — returns active child paths of the current path (or all top-level paths if no current path); used by `PathOptionsView`
+  - `eligible_advanced_paths_for(sheet) -> list[Path]` (`selectors.py`, #1700) — active child paths at the next level's stage (for the semi-crossing resolver); empty when not at a stage boundary
+  - `resolve_advanced_path_by_name(sheet, name) -> Path | None` (`selectors.py`, #1700) — case-insensitive name match against `eligible_advanced_paths_for`
 - **API Endpoints (progression):**
   - `GET /api/progression/path-options/` — current path + selectable next paths (character via `X-Character-ID` header) → `PathOptions` schema; transition-generic, reused beyond any single transition type
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
@@ -760,7 +763,8 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `SetPathIntentAction` / `ClearPathIntentAction` (`"set_path_intent"` / `"clear_path_intent"`) — declare/clear preferred next path for Audere Majora (#1348)
 - **New service module (#1348):** `world.progression.services.path_intent` — `set_path_intent(sheet, path)` / `clear_path_intent(sheet)`; single seam for `PathIntentViewSet` + `CmdPathIntent`
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
-  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348)
+  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
+  `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
   - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
@@ -769,8 +773,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `primary_class_level(character) -> CharacterClassLevel | None` — primary (or highest-level) class level row; None when absent.
   - `apply_class_level_advance(sheet, *, level_after) -> None` — shared level-write + cache invalidation; no receipt, no scene side-effects. Called by both `cross_threshold` and the Durance service.
   - `assert_can_officiate(*, officiant_sheet, inductee_sheet, target_level) -> None` — raises `OfficiantIneligibleError` when level gate or Path-lineage gate fails.
-  - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, writes receipts.
-- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError` — all carry `user_message`.
+  - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, records witnesses, writes receipts.
+  - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` (#1700) — drafts a Durance session using the room's `DuranceTrainingSite` trainer as initiator; raises `NoDuranceSiteError` when no eligible site is present.
+- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`; `advance_class_level_via_session` dispatched from `fire_session` on the Ritual of the Durance; `AudereMajoraCrossing` inherits `AbstractClassLevelAdvancement`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
 - **Source:** `src/world/progression/`

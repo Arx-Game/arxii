@@ -104,7 +104,8 @@ Durance) or a tier crossing (Audere Majora). Both concrete models inherit it.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ClassLevelAdvancement` | Receipt for one within-tier advance via the Ritual of the Durance. Survives character death. | inherits `AbstractClassLevelAdvancement` + `character_sheet` FK, `character_class` FK, `officiant` FK (nullable CharacterSheet — the trainer), `ritual` FK (nullable — the `Ritual` row that fired the session) |
+| `ClassLevelAdvancement` | Receipt for one within-tier advance via the Ritual of the Durance. Survives character death. | inherits `AbstractClassLevelAdvancement` + `character_sheet` FK, `character_class` FK, `officiant` FK (nullable CharacterSheet — the trainer), `ritual` FK (nullable — the `Ritual` row that fired the session), `witnesses` M2M → `scenes.Persona` (`related_name="witnessed_advancements"`) |
+| `DuranceTrainingSite` | A room registered as a Durance training site, bound to a trainer-of-record (officiant). Enables site-convened sessions without a live higher-level PC. (#1700) | `room_profile` FK → `RoomProfile` (PROTECT), `officiant` FK → `CharacterSheet` (PROTECT), `training_path` FK → `Path` (SET_NULL, nullable — display hint only), `is_active` Bool; unique `(room_profile, officiant)` |
 
 `AudereMajoraCrossing` (in `world/magic`) inherits `AbstractClassLevelAdvancement` for
 the same shape on tier crossings. The two share the `apply_class_level_advance` spine
@@ -124,7 +125,7 @@ in `world.progression.services.advancement`.
 |-------|---------|------------|
 | `PathIntent` | Player's declared preferred next path — one per character sheet | `character_sheet` (OneToOne FK → `CharacterSheet`), `intended_path` (FK → `Path`) |
 
-### Progression Exceptions (`exceptions.py` — #1352)
+### Progression Exceptions (`exceptions.py` — #1352 / #1700)
 
 All carry a `user_message` attribute for safe API responses (no `str(exc)` in views).
 
@@ -134,6 +135,7 @@ All carry a `user_message` attribute for safe API responses (no `str(exc)` in vi
 | `TierBoundaryRequiresCrossing` | The step would cross a tier boundary; must use Audere Majora instead |
 | `AdvancementRequirementsNotMet` | Authored `ClassLevelUnlock` requirements not met; `.failed: list[str]` carries the failed requirement descriptions |
 | `OfficiantIneligibleError` | Officiant level ≤ target level or wrong Path lineage |
+| `NoDuranceSiteError` | `convene_durance_at_site` — no active `DuranceTrainingSite` with an eligible trainer in the room |
 
 ---
 
@@ -326,6 +328,33 @@ receipts = advance_class_level_via_session(session=locked_ritual_session)
 4. Resolve authored `ClassLevelUnlock`; check requirements (`AdvancementRequirementsNotMet` when absent or unmet).
 5. Post the testament oration (+ cited deeds) as a POSE in the active scene.
 6. Apply the level write and create the `ClassLevelAdvancement` receipt.
+7. Record scene witnesses (`_record_witnesses`) into `receipt.witnesses` via `scene_witness_personas`,
+   excluding inductee + officiant.
+
+### Site-Convened Sessions (#1700)
+
+```python
+from world.progression.services.advancement import convene_durance_at_site
+from world.progression.exceptions import NoDuranceSiteError
+
+# One-shot: draft a Durance session with the room's trainer-of-record as initiator.
+# Does NOT fire — the inductee's `ritual join` auto-fires (DuranceAdapter.should_auto_fire).
+# Raises NoDuranceSiteError if no active DuranceTrainingSite with eligible trainer is here.
+session = convene_durance_at_site(inductee_sheet=sheet, room=room)
+```
+
+### Path Selectors (`selectors.py` — #1700)
+
+```python
+from world.progression.selectors import eligible_advanced_paths_for, resolve_advanced_path_by_name
+
+# Active child Paths at the character's next level's stage (for the semi-crossing resolver).
+# Empty when not at a stage boundary or no current path.
+paths = eligible_advanced_paths_for(sheet)  # -> list[Path]
+
+# Case-insensitive name match against eligible_advanced_paths_for(sheet); None if not found.
+path = resolve_advanced_path_by_name(sheet, "Path of the Pale")  # -> Path | None
+```
 
 ---
 
@@ -424,9 +453,9 @@ on the same `action.run()` seam:
 
 ## Telnet Commands
 
-Defined in `commands/progression.py` (training/unlock) and `commands/progression_rewards.py`
-(#1348, kudos/vote/random-scene/path-intent); all use namespaced subverb commands to avoid
-one-word key collisions.
+Defined in `commands/progression.py` (training/unlock), `commands/progression_rewards.py`
+(#1348, kudos/vote/random-scene/path-intent), and `commands/durance.py` (#1700, Durance
+readiness + site-convene); all use namespaced subverb commands to avoid one-word key collisions.
 
 ### `training` — Manage weekly skill-training allocations
 
@@ -486,6 +515,20 @@ randomscene reroll <id>    — reroll a target slot (once per week)
 Dispatches `ClaimRandomSceneAction` / `RerollRandomSceneAction`
 (`registry_key="claim_random_scene"` / `"reroll_random_scene"`); mirrors the web
 `RandomSceneViewSet`.
+
+### `durance` — Ritual of the Durance readiness hub (#1700)
+
+```
+durance [status]                      — show level, unlock gate, eligible paths, intent, site
+durance intent <path name or id>      — declare path intent (reuses SetPathIntentAction)
+durance intent clear                  — clear path intent (reuses ClearPathIntentAction)
+durance convene                       — open a site-convened Durance session at this room
+```
+
+`durance convene` calls `convene_durance_at_site` and echoes the session pk. The inductee
+then completes the rite via `ritual join <id> testament=<oration> [path=<name>]`. For a
+live-officiant ceremony the trainer drafts with `ritual draft`, the inductee joins, and
+the initiator fires with `ritual fire <id>`.
 
 ### `pathintent` — Declare preferred next path for Audere Majora (#1348)
 

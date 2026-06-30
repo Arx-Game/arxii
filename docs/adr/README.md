@@ -119,3 +119,4 @@ treat those names as hints to confirm, not gospel.
 - [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)
 - [0062 — Species-gift drawbacks are conditions the gift's own thread mitigates](0062-species-gift-drawbacks-mitigated-by-gift-thread.md)
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
+- [0064 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0064-durance-trainer-of-record-enables-automated-self-conduct.md)
