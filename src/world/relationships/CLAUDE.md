@@ -137,6 +137,13 @@ not compel or provoke the target's behavior (ADR-0024).
 - Achievement stats fired via `world.achievements.services.increment_stat()`
 - Mechanical bonus: cube root of developed absolute value (modest)
 - Magical tethers (future PR): XP-gated power built around capstones
-- Conditions gate modifier application in checks
+- **Conditions gate modifier application in checks** — `relationship_gated_contributions(*,
+  perceiver, perceived)` (#1696) reads the directed `CharacterRelationship(source=perceiver,
+  target=perceived)` and, for each active `RelationshipCondition.gates_modifiers` target, folds the
+  **perceived's** `get_modifier_total` of that target in as a `RELATIONSHIP` `ModifierContribution`
+  — **once per gating condition**, so two allure-gating conditions ("Attracted To" + "Very
+  Attracted") count allure twice (the directed "double"). Consumed at social resolution via
+  `world.scenes.action_services._resolve_action_against_persona`'s `extra_contributions` seam.
+  Returns `[]` until Flirt/Seduction seed the conditions (#1697); condition expiry is #1697.
 - **Secret reputation consequences (#1429):** a secret's persona-victim, on learning who wronged
   them, registers a grievance via `register_grievance` (the relationship effect they *decide*).

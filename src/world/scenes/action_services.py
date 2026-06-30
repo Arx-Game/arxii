@@ -531,6 +531,7 @@ def _resolve_action_against_persona(
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
     from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.relationships.services import relationship_gated_contributions  # noqa: PLC0415
 
     if difficulty_override is not None:
         difficulty = difficulty_override
@@ -581,10 +582,21 @@ def _resolve_action_against_persona(
         # collects its own modifiers downstream, so it is left untouched.
         # ActionTemplate.check_type is NOT NULL, so the action always has a check to
         # gather modifiers for.
+        #
+        # Directed relationship-gated modifiers (allure — #1696): when the TARGET holds a
+        # gating relationship-condition toward the initiator (e.g. "Attracted To"), fold the
+        # initiator's gated modifier (allure) in as a directed contribution — once per gating
+        # condition, so "Very Attracted" stacks the double. Empty until #1697 seeds the
+        # conditions + Flirt/Seduction wiring.
+        gated = relationship_gated_contributions(
+            perceiver=target_persona.character_sheet,
+            perceived=action_request.initiator_persona.character_sheet,
+        )
         breakdown = collect_check_modifiers(
             action_request.initiator_persona.character_sheet,
             action_template.check_type,
             scene=action_request.scene,
+            extra_contributions=gated,
         )
         action_resolution = start_action_resolution(
             character=character,

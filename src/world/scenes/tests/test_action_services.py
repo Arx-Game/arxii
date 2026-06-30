@@ -1708,11 +1708,50 @@ class SocialModifierSeamTests(TestCase):
         respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
 
         # collect_check_modifiers is asked for the initiator's sheet + the action's check type,
-        # scene-scoped so the perception-relative fashion bonus can resolve.
+        # scene-scoped so the perception-relative fashion bonus can resolve. No gating
+        # relationship exists here, so extra_contributions is empty (#1696).
         mock_collect.assert_called_once_with(
             request.initiator_persona.character_sheet,
             request.action_template.check_type,
             scene=request.scene,
+            extra_contributions=[],
         )
         expected = EFFORT_CHECK_MODIFIER.get(request.effort_level, 0) + 7
         self.assertEqual(mock_resolve.call_args.kwargs["extra_modifiers"], expected)
+
+    @patch("world.checks.services.collect_check_modifiers")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_target_attraction_folds_initiator_allure_as_contribution(
+        self, mock_resolve: MagicMock, mock_collect: MagicMock
+    ) -> None:
+        """When the TARGET is Attracted to the initiator, the allure rides along (#1696)."""
+        from world.checks.constants import ModifierSourceKind
+        from world.mechanics.factories import CharacterModifierFactory
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipConditionFactory,
+        )
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        mock_collect.return_value = SimpleNamespace(total=0)
+
+        row = self._make_request()
+        request = row.action_request
+        initiator_sheet = request.initiator_persona.character_sheet
+        target_sheet = row.target_persona.character_sheet
+
+        # Initiator carries an allure modifier; the TARGET is Attracted To the initiator.
+        modifier = CharacterModifierFactory(character=initiator_sheet, value=10)
+        condition = RelationshipConditionFactory(name="Attracted To")
+        condition.gates_modifiers.add(modifier.target)
+        rel = CharacterRelationshipFactory(
+            source=target_sheet, target=initiator_sheet, is_active=True
+        )
+        rel.conditions.add(condition)
+
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        contributions = mock_collect.call_args.kwargs["extra_contributions"]
+        self.assertEqual(len(contributions), 1)
+        self.assertEqual(contributions[0].value, 10)
+        self.assertEqual(contributions[0].source_kind, ModifierSourceKind.RELATIONSHIP)
