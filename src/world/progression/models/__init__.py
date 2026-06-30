@@ -16,6 +16,7 @@ This package organizes progression models into logical modules:
 from world.progression.models.advancement import (
     AbstractClassLevelAdvancement,
     ClassLevelAdvancement,
+    DuranceTrainingSite,
 )
 from world.progression.models.character_xp import (
     CharacterXP,
@@ -85,6 +86,7 @@ __all__ = [
     "ClassXPCost",
     "DevelopmentPoints",
     "DevelopmentTransaction",
+    "DuranceTrainingSite",
     "ExperiencePointsData",
     "KudosClaimCategory",
     "KudosDifficultyWeight",

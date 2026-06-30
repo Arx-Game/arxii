@@ -82,3 +82,45 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
             f"ClassLevelAdvancement(sheet={self.character_sheet_id}, "
             f"{self.character_class_id}, level {self.level_before}→{self.level_after})"
         )
+
+
+class DuranceTrainingSite(SharedMemoryModel):
+    """A room registered as a Durance training site, bound to a trainer-of-record.
+
+    The trainer (an officiant CharacterSheet, possibly off-stage) lets an inductee
+    self-conduct their Durance at this room without a live higher-level PC. The
+    actual eligibility gate is the unchanged ``assert_can_officiate`` on the trainer.
+    """
+
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.PROTECT,
+        related_name="durance_training_sites",
+    )
+    officiant = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="durance_training_roles",
+    )
+    # NOT named "path": Evennia's idmapper metaclass shadows a `path` attribute.
+    training_path = models.ForeignKey(
+        "classes.Path",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="durance_training_sites",
+        help_text="Display/filtering hint; the real gate is assert_can_officiate.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["room_profile_id", "officiant_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room_profile", "officiant"],
+                name="unique_durance_site_officiant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"DuranceTrainingSite(room={self.room_profile_id}, officiant={self.officiant_id})"
