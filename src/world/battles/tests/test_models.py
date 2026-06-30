@@ -32,3 +32,7 @@ class BattleModelTests(TestCase):
         self.assertEqual(self.battle.sides.count(), 1)
         self.assertEqual(defender.units.count(), 1)
         self.assertEqual(self.battle.outcome, BattleOutcome.UNRESOLVED)
+
+    def test_unit_factory_side_matches_battle(self) -> None:
+        unit = BattleUnitFactory()
+        self.assertEqual(unit.battle_id, unit.side.battle_id)
