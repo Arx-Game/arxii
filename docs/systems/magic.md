@@ -406,6 +406,18 @@ with variant deltas applied), or the raw parent `Technique` when no variant matc
 `resolve_effective_role` cache coherence). `resolve_effective_role` is now a one-line shim
 over this resolver — no parallel specialization systems (ADR-0016).
 
+**Cast-time variant wiring [BUILT & WIRED, #1581]:** `resolve_specialized_variant` is called
+at two cast seams so unlocked variants shape every cast automatically: (1)
+`get_runtime_technique_stats` (`world/magic/services/techniques.py`) — combat runtime stats;
+variant `intensity`/`control` deltas reach the power ledger. (2) `_resolve_and_pose_cast`
+(`world/scenes/cast_services.py`) — the non-combat standalone-cast path; variant form drives
+cost, narration, and outcome. Both seams are gated on `unlock_thread_level`: below the
+threshold the parent technique is returned unchanged. The dev seed (`seeds_magic.py`) authors
+starter `TechniqueVariant` rows so a fresh dev environment has variants to exercise. The
+gift-thread confers the standard always-in-action thread bonus (passive `ThreadPullEffect`
+tier-0 rows; `_ALWAYS_IN_ACTION_KINDS` — already wired in #1580); cast-time variant
+resolution is the new addition in #1581.
+
 **Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
 (`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
 dispatch on `thread.target_kind` — `COVENANT_ROLE` → the single parent role;

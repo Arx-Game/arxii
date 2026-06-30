@@ -92,10 +92,10 @@ class GiftSpecializationE2ETest(TestCase):
         self.assertEqual([r.pk for r in resonances], [self.resonance.pk])
 
         # 4. Advance the thread past the variant's unlock threshold (level 3).
-        #    Set level directly — the GIFT anchor cap is 0 (deferred needs-design),
-        #    so the cap-gated imbue path would raise AnchorCapExceeded. See module
-        #    docstring. We then fire the discovery ceremony explicitly (the real
-        #    imbue path fires it internally; here we invoke it directly).
+        #    Set level directly + invoke fire_variant_discoveries explicitly —
+        #    this is the ceremony-direct pattern (as opposed to the real imbue
+        #    path in test_imbuing_to_unlock_fires_discovery, which calls
+        #    spend_resonance_for_imbuing and fires the ceremony internally).
         latent = Thread.objects.get(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
