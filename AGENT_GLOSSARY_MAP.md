@@ -190,6 +190,14 @@ A magical affinity-tied charge a character earns and spends (a `balance` with
 A piece of concealed canon scoped per knower; the `secrets` app stays dependency-free and
 other systems FK into it. _Avoid_: rumor, mystery.
 
+## Covenants
+
+**Court Pact**:
+The per-(Court covenant, servant) sworn-fealty bond carrying the master's `granted_pull_cap`; the
+cap bounds the servant's Court-role thread pull level. The grant is the gate: no active pact → an
+effective cap of 0 → cannot pull. _Avoid_: mentor bond, patron, indenture.
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 ## Combat-magic surface (#1584)
 
 **Allegiance**:
@@ -197,12 +205,6 @@ Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default
 `ALLY` (fights for the party). Mutable: summons create `ALLY` opponents; future charm
 or switch-sides flips an existing `ENEMY`. One `CombatOpponent` model covers both cases
 (ADR-0059). _Avoid_: faction, team (as model-attribute names).
-
-**Court Pact**:
-The per-(Court covenant, servant) sworn-fealty bond carrying the master's `granted_pull_cap`; the
-cap bounds the servant's Court-role thread pull level. The grant is the gate: no active pact → cap
-0 → cannot pull. See the covenants per-app glossary for the full entry and `_Avoid_` terms.
-Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
 **Summon** (in-combat):
 An `ALLY` `CombatOpponent` conjured during combat by a technique

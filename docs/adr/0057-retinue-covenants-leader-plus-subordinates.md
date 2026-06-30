@@ -43,8 +43,8 @@ ADR framing that "role power is peer-independent / not a level-clamp"**: a Court
 combat pull is now bounded by what the master granted, so the servant's power is "own level PLUS
 what the master grants via the cap." It is still NOT `MentorBond`'s level-clamp — it is a separate
 grant axis on the thread-pull cap rather than a level adjustment, and the master remains
-never-level-adjacent. The grant is the gate: a servant with no active pact has `granted_pull_cap = 0`
-and cannot pull their Court-role thread. Services: `swear_court_pact(*, covenant, servant_sheet,
+never-level-adjacent. The grant is the gate: a servant with no active pact has an effective cap of 0
+(there is no `CourtPact` row to read) and cannot pull their Court-role thread. Services: `swear_court_pact(*, covenant, servant_sheet,
 granted_pull_cap) -> CourtPact`, `release_court_pact(*, pact) -> None`, `active_court_pact_for(*,
 covenant, servant_sheet) -> CourtPact | None`. The cap is enforced inside `compute_anchor_cap`
 (`world/magic/services/threads.py`) via `_bound_covenant_role_cap_by_court_grant`.
