@@ -37,6 +37,14 @@ _THREAD_ID_KEY = "thread_id"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 
 
+def _advancement_error_message(exc: Exception) -> str:
+    """Return a caller-safe error string from a ``ClassLevelAdvancementError``."""
+    failed = getattr(exc, "failed", None)  # noqa: GETATTR_LITERAL
+    if failed:
+        return "; ".join(failed)
+    return getattr(exc, "user_message", "This advancement could not be completed.")  # noqa: GETATTR_LITERAL
+
+
 def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
     """Parse ``<name> invite=<a>[,<b>] key=value …`` into ``(name, invitee_names, kwargs)``.
 
@@ -296,7 +304,35 @@ class CmdRitual(ArxCommand):
         except SessionNotInPendingError:
             msg = f"You have already responded to session #{session_id}."
             raise CommandError(msg) from None
+        if self._maybe_auto_fire(participant, session_id):
+            return
         self.caller.msg(f"You have joined ritual session #{session_id}.")
+
+    def _maybe_auto_fire(self, participant: Any, session_id: int) -> bool:
+        """Auto-fire *participant*'s session if the adapter says to; return True if handled.
+
+        Sends a completion or error message and returns True so ``_handle_join`` can
+        return early.  Returns False when the adapter says not to auto-fire, leaving
+        the normal "You have joined" message path intact.
+        """
+        from commands.ritual_adapters import get_adapter  # noqa: PLC0415
+
+        adapter = get_adapter(participant.session.ritual)
+        if not adapter.should_auto_fire(session=participant.session):
+            return False
+        from world.magic.exceptions import ThresholdNotMetError  # noqa: PLC0415
+        from world.magic.services.sessions import fire_session  # noqa: PLC0415
+        from world.progression.exceptions import ClassLevelAdvancementError  # noqa: PLC0415
+
+        try:
+            fire_session(session=participant.session)
+        except ThresholdNotMetError:
+            self.caller.msg(f"You have spoken; the rite awaits the others (session #{session_id}).")
+            return True
+        except ClassLevelAdvancementError as exc:
+            raise CommandError(_advancement_error_message(exc)) from exc
+        self.caller.msg(f"The rite is complete — session #{session_id}.")
+        return True
 
     def _handle_decline(self, rest: str) -> None:
         """Decline a session invitation: ``decline <id>``."""
@@ -341,11 +377,15 @@ class CmdRitual(ArxCommand):
         if session is None:
             msg = f"Session #{session_id} not found or you are not its initiator."
             raise CommandError(msg)
+        from world.progression.exceptions import ClassLevelAdvancementError  # noqa: PLC0415
+
         try:
             fire_session(session=session)
         except ThresholdNotMetError:
             msg = f"Session #{session_id} cannot fire yet — not all participants have responded."
             raise CommandError(msg) from None
+        except ClassLevelAdvancementError as exc:
+            raise CommandError(_advancement_error_message(exc)) from exc
         self.caller.msg(f"Ritual session #{session_id} has been fired. The ritual is complete.")
 
     def _handle_cancel(self, rest: str) -> None:
