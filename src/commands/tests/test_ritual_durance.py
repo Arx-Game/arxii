@@ -2,13 +2,14 @@
 
 Covers:
   (a) Joining a site-convened Durance session auto-fires — level rises, session gone.
+      The session is stamped with ``session_kwargs={"site_convened": "1"}`` (set by
+      ``convene_durance_at_site``); ``DuranceAdapter.should_auto_fire`` keys on that
+      marker, NOT on whether the initiator is a ``DuranceTrainingSite`` trainer.
   (b) ``_handle_fire`` on a Durance whose requirements are unmet surfaces the
       ``.failed`` reason instead of propagating the exception.
-
-Non-site live-officiant flow is verified implicitly: a session whose officiating sheet
-has no active ``DuranceTrainingSite`` has ``should_auto_fire == False``, so
-``_handle_join`` falls through to the normal "You have joined" message — tested in
-``test_non_site_join_falls_through_to_joined_message``.
+  (c) Overlap case: when an officiant IS a registered trainer but the session was drafted
+      via plain ``ritual draft`` (no ``site_convened`` marker), ``should_auto_fire``
+      returns False and ``ritual join`` falls through to the normal "joined" message.
 """
 
 from __future__ import annotations
@@ -82,7 +83,13 @@ def _setup_durance_participants(path):
 
 
 class DuranceAutoFireOnJoinTests(TestCase):
-    """Joining a site-convened Durance session auto-fires without a manual 'ritual fire'."""
+    """Joining a site-convened Durance session auto-fires without a manual 'ritual fire'.
+
+    The session is stamped with ``session_kwargs={"site_convened": "1"}`` — the marker
+    that ``convene_durance_at_site`` sets when drafting a session at a training site.
+    ``DuranceAdapter.should_auto_fire`` keys on that marker alone; no ``DuranceTrainingSite``
+    DB query is needed here.
+    """
 
     def setUp(self) -> None:
         self.path = PathFactory(stage=PathStage.PROSPECT)
@@ -100,20 +107,17 @@ class DuranceAutoFireOnJoinTests(TestCase):
             target_level=3,
         )
 
-        # Site-convened: DuranceTrainingSite → DuranceAdapter.should_auto_fire returns True.
-        DuranceTrainingSiteFactory(officiant=self.officiant_sheet, is_active=True)
-
         # Active scene at inductee's location so the testament POSE can be posted.
         SceneFactory(location=self.inductee_char.location, is_active=True)
 
         self.ritual = RitualOfTheDuranceFactory()
 
-        # Officiant drafts the session via service.
+        # Stamp the session with the site_convened marker as convene_durance_at_site would.
         self.session = draft_session(
             ritual=self.ritual,
             initiator=self.officiant_sheet,
             proposed_terms="",
-            session_kwargs={},
+            session_kwargs={"site_convened": "1"},
             invitee_sheets=[self.inductee_sheet],
             session_references=[],
             initiator_participant_kwargs={},
@@ -192,6 +196,74 @@ class NonSiteDuranceJoinFallsThrough(TestCase):
 
         msg_text = self.inductee_char.msg.call_args[0][0]
         self.assertIn("joined", msg_text.lower())
+
+
+class DuranceSiteOfficiantPlainDraftNoAutoFireTests(TestCase):
+    """Overlap case: officiant is a registered trainer, but the session was drafted via
+    ``ritual draft`` (no site_convened marker) — should_auto_fire must return False.
+
+    This guards the deliberate live-officiant ceremony: the trainer uses ``ritual draft``
+    to open a witnessed ceremony, invites the inductee, and fires with ``ritual fire``
+    at the moment of their choosing.  The auto-fire path must NOT trigger just because
+    the officiant happens to be a trainer-of-record at a training site.
+    """
+
+    def setUp(self) -> None:
+        self.path = PathFactory(stage=PathStage.PROSPECT)
+        (
+            self.officiant_char,
+            self.officiant_sheet,
+            self.inductee_char,
+            self.inductee_sheet,
+            self.inductee_class,
+        ) = _setup_durance_participants(self.path)
+        ClassLevelUnlock.objects.create(character_class=self.inductee_class, target_level=3)
+
+        # Officiant IS a registered trainer-of-record at a site — the bug condition.
+        DuranceTrainingSiteFactory(officiant=self.officiant_sheet, is_active=True)
+
+        self.ritual = RitualOfTheDuranceFactory()
+
+        # Session drafted via plain ritual draft — NO site_convened marker.
+        self.session = draft_session(
+            ritual=self.ritual,
+            initiator=self.officiant_sheet,
+            proposed_terms="",
+            session_kwargs={},  # no site_convened → manual fire required
+            invitee_sheets=[self.inductee_sheet],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+    def test_should_auto_fire_is_false_without_site_convened_marker(self) -> None:
+        """should_auto_fire returns False when the session has no site_convened key."""
+        from commands.ritual_adapters import DuranceAdapter
+
+        self.assertFalse(DuranceAdapter().should_auto_fire(session=self.session))
+
+    def test_ritual_join_does_not_auto_fire(self) -> None:
+        """``ritual join`` falls through to normal join message; session survives."""
+        cmd = _run(CmdRitual, self.inductee_char, f"join {self.session.pk}")
+        cmd.func()
+
+        # Session must still exist (no auto-fire fired it).
+        self.assertTrue(RitualSession.objects.filter(pk=self.session.pk).exists())
+
+        msg_text = self.inductee_char.msg.call_args[0][0]
+        self.assertIn("joined", msg_text.lower())
+
+    def test_no_class_level_advancement_written_on_plain_join(self) -> None:
+        """No ClassLevelAdvancement receipt is written when auto-fire is suppressed."""
+        from world.progression.models import ClassLevelAdvancement
+
+        cmd = _run(CmdRitual, self.inductee_char, f"join {self.session.pk}")
+        cmd.func()
+
+        self.assertFalse(
+            ClassLevelAdvancement.objects.filter(character_sheet=self.inductee_sheet).exists()
+        )
 
 
 class DuranceHandleFireAdvancementErrorTests(TestCase):

@@ -242,11 +242,15 @@ class DuranceAdapter(RitualDraftAdapter):
         return JoinParse(participant_kwargs=participant_kwargs, references=[])
 
     def should_auto_fire(self, *, session: Any) -> bool:
-        from world.progression.models import DuranceTrainingSite  # noqa: PLC0415
+        """Return True only for genuinely site-convened sessions.
 
-        return DuranceTrainingSite.objects.filter(
-            officiant=session.initiator, is_active=True
-        ).exists()
+        A site-convened session carries ``session_kwargs["site_convened"] == "1"`` stamped
+        by ``convene_durance_at_site`` at draft time.  A live-officiant ceremony drafted via
+        ``ritual draft`` (where the officiant fires manually) does **not** set that key, so
+        this returns False even when the officiant happens to be a ``DuranceTrainingSite``
+        trainer-of-record at another room.
+        """
+        return bool(session.session_kwargs.get("site_convened"))
 
 
 # ---------------------------------------------------------------------------

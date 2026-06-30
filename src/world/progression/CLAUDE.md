@@ -165,9 +165,11 @@ Registered on the `advance_class_level_via_session` service path. Translates:
 
 - `parse_join`: `testament=<oration>` → `participant_kwargs["testament"]`;
   `path=<name>` → `participant_kwargs["path_id"]` via `resolve_advanced_path_by_name`.
-- `should_auto_fire`: returns `True` when the session's initiator is bound to an active
-  `DuranceTrainingSite` (site-convened); `False` for a live-officiant ceremony (the
-  initiator fires manually with `ritual fire <id>`).
+- `should_auto_fire`: returns `True` when `session.session_kwargs["site_convened"] == "1"` —
+  the marker set by `convene_durance_at_site` at draft time. Returns `False` for any session
+  opened via plain `ritual draft`, including sessions where the officiant also happens to be a
+  `DuranceTrainingSite` trainer-of-record at another room. The check is on the session-level
+  marker only; no `DuranceTrainingSite` DB query is made here.
 - `parse_draft`: no-op (base `RitualDraftAdapter` behaviour — the officiant supplies
   nothing extra at draft time).
 

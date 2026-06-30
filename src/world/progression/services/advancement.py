@@ -318,7 +318,7 @@ def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -
             ritual=ritual,
             initiator=site.officiant,
             proposed_terms="",
-            session_kwargs={},
+            session_kwargs={"site_convened": "1"},
             invitee_sheets=[inductee_sheet],
             session_references=[],
             initiator_participant_kwargs={},

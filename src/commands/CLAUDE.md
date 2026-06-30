@@ -100,9 +100,12 @@ actions, backends, and service functions.
   - `DuranceAdapter` — Ritual of the Durance (class-level advancement). `parse_join`:
     `testament=<oration>` → `participant_kwargs["testament"]`; `path=<name>` → path pk via
     `resolve_advanced_path_by_name` (for the level-3 POTENTIAL semi-crossing). `should_auto_fire`:
-    True when the session's initiator is a `DuranceTrainingSite` trainer-of-record (site-convened
-    path — auto-fires on inductee join); False for a live-officiant ceremony (initiator fires
-    manually). `parse_draft`: no-op (officiant supplies nothing extra at draft time).
+    True when `session.session_kwargs["site_convened"] == "1"` — a marker stamped by
+    `convene_durance_at_site` at draft time; False for any session drafted via plain `ritual draft`
+    (the officiant fires manually with `ritual fire <id>`). The check is on the session-level marker
+    only — NOT on whether the initiator is a `DuranceTrainingSite` trainer-of-record anywhere; that
+    older check over-triggered a live witnessed ceremony if the officiant also held a trainer role at
+    any site. `parse_draft`: no-op (officiant supplies nothing extra at draft time).
   Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
   before adapters were introduced). `get_adapter(ritual)` is the public entry point.
 - **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
