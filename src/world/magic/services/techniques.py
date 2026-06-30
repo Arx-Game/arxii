@@ -403,6 +403,13 @@ def get_runtime_technique_stats(
             control=technique.control,
         )
 
+    # #1581: gift techniques resolve to their resonance-specific variant once the
+    # gift-thread crosses unlock_thread_level. _ResolvedTechnique transparently
+    # exposes variant-adjusted intensity/control; all other reads pass through.
+    from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
+
+    technique = resolve_specialized_variant(entity=technique, character=character)
+
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
