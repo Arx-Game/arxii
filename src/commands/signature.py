@@ -42,18 +42,29 @@ _BONUS_KWARG = "bonus"
 def _parse_kwargs(args: str) -> dict[str, str]:
     """Parse ``key=value`` tokens from *args*, left to right.
 
-    Tokens without ``=`` are accumulated under the ``_positional`` key
-    (space-joined).  Unknown keys are silently kept so error handling can
-    surface a usage message.
+    A value runs from the ``=`` to the start of the next ``key=`` token (or end
+    of string), so multi-word values like ``technique=Flame Strike`` are captured
+    whole.  Tokens that precede the first ``key=`` are accumulated under the
+    ``_positional`` key (space-joined).  Unknown keys are silently kept so error
+    handling can surface a usage message.
     """
     out: dict[str, str] = {}
     positional: list[str] = []
-    for token in args.split():
+    tokens = args.split()
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
         if "=" in token:
-            key, _, value = token.partition("=")
-            out[key] = value
+            key, _, first_val = token.partition("=")
+            value_parts: list[str] = [first_val] if first_val else []
+            i += 1
+            while i < len(tokens) and "=" not in tokens[i]:
+                value_parts.append(tokens[i])
+                i += 1
+            out[key] = " ".join(value_parts)
         else:
             positional.append(token)
+            i += 1
     if positional:
         out["_positional"] = " ".join(positional)
     return out
@@ -181,7 +192,7 @@ class CmdSignature(DispatchCommand):
             raise CommandError(msg)
         bonus_name = parsed.get(_BONUS_KWARG, "").strip()
         if not bonus_name:
-            msg = "Usage: signature set technique=<name> bonus=<name>."
+            msg = "Specify a bonus: bonus=<name>."
             raise CommandError(msg)
         thread = self._require_technique_thread(technique_name)
         bonus = self._require_bonus(bonus_name)

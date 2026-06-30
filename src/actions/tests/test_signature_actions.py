@@ -126,6 +126,17 @@ class SignatureClearActionTests(TestCase):
             result = action.execute(object(), thread=thread)
         self.assertIn("Winter Thread", result.message)
 
+    def test_clear_not_a_technique_thread_returns_failure_not_raise(self):
+        """Important 1: NotATechniqueThread must return a failure ActionResult, not raise."""
+        from world.magic.exceptions import NotATechniqueThread
+
+        action = sig_actions.SignatureClearAction()
+        thread = _make_thread()
+        with patch(_CLEAR_SVC, side_effect=NotATechniqueThread):
+            result = action.execute(object(), thread=thread)
+        self.assertFalse(result.success)
+        self.assertIn("technique thread", result.message)
+
 
 # ---------------------------------------------------------------------------
 # SignatureListAction
@@ -213,3 +224,41 @@ class BuildListMessageTests(TestCase):
         msg = sig_actions._build_list_message([bonus], [thread])
         self.assertIn("Searing Touch", msg)
         self.assertIn("Smite", msg)
+
+
+# ---------------------------------------------------------------------------
+# _parse_kwargs — multi-word value parsing (Important 2)
+# ---------------------------------------------------------------------------
+
+
+class ParseKwargsTests(TestCase):
+    """Verify that _parse_kwargs handles multi-word values correctly."""
+
+    def _parse(self, args: str) -> dict:
+        from commands.signature import _parse_kwargs
+
+        return _parse_kwargs(args)
+
+    def test_single_word_values_unchanged(self):
+        result = self._parse("technique=Fireball bonus=Scorching")
+        self.assertEqual(result["technique"], "Fireball")
+        self.assertEqual(result["bonus"], "Scorching")
+
+    def test_multi_word_technique_and_bonus(self):
+        """Important 2: 'technique=Flame Strike bonus=Searing Touch' must not truncate."""
+        result = self._parse("technique=Flame Strike bonus=Searing Touch")
+        self.assertEqual(result["technique"], "Flame Strike")
+        self.assertEqual(result["bonus"], "Searing Touch")
+
+    def test_multi_word_technique_only(self):
+        result = self._parse("technique=Flame Strike")
+        self.assertEqual(result["technique"], "Flame Strike")
+
+    def test_positional_tokens_before_kwargs(self):
+        result = self._parse("set technique=Fireball")
+        self.assertEqual(result["technique"], "Fireball")
+        self.assertIn("set", result.get("_positional", ""))
+
+    def test_empty_string(self):
+        result = self._parse("")
+        self.assertEqual(result, {})

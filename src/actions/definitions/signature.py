@@ -111,7 +111,10 @@ class SignatureClearAction(SignatureActionBase):
         from world.magic.services.signature import clear_signature_bonus  # noqa: PLC0415
 
         thread = kwargs["thread"]
-        clear_signature_bonus(thread)
+        try:
+            clear_signature_bonus(thread)
+        except _SIGNATURE_SET_EXCEPTIONS as exc:
+            return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         return ActionResult(
             success=True,
             message=f"Signature bonus cleared from {thread.name}.",
@@ -171,15 +174,16 @@ def _build_list_message(available: list, technique_threads: list) -> str:
         if not available
         else [f"  {b.name}" for b in available]
     )
-    thread_lines: list[str] = (
-        ["  (no active technique threads)"]
-        if not technique_threads
-        else [
-            f"  {t.target_technique.name if t.target_technique else 'unknown'}"
-            f" — signature: {t.signature_bonus.name if t.signature_bonus else 'none'}"
-            for t in technique_threads
-        ]
-    )
+    if not technique_threads:
+        thread_lines: list[str] = ["  (no active technique threads)"]
+    else:
+        thread_lines = []
+        for t in technique_threads:
+            tech = t.target_technique
+            bon = t.signature_bonus
+            thread_lines.append(
+                f"  {tech.name if tech else 'unknown'} — signature: {bon.name if bon else 'none'}"
+            )
     sections = [
         "|wAvailable signature bonuses:|n",
         *bonus_lines,
