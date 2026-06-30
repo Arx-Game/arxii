@@ -256,7 +256,7 @@ class CombatTechniqueResolverApplyConditionsTests(TestCase):
     def test_apply_conditions_stub_returns_empty_list(self) -> None:
         resolver = _build_resolver()
         check = MagicMock(success_level=2)
-        results = resolver._apply_conditions(check, eff_intensity=0)
+        results, _removed = resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
 
@@ -293,7 +293,7 @@ class ApplyConditionsTests(TestCase):
     def test_returns_empty_when_no_rows(self) -> None:
         """Technique with no condition_applications rows returns []."""
         check = MagicMock(success_level=2)
-        results = self.resolver._apply_conditions(check, eff_intensity=0)
+        results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
         self.assertEqual(results, [])
 
     def test_skips_condition_below_minimum_sl(self) -> None:
@@ -315,7 +315,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         # Only one row passed the SL gate → bulk called with one application
         self.assertEqual(len(results), 1)
@@ -337,7 +337,7 @@ class ApplyConditionsTests(TestCase):
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         result = results[0]
@@ -360,7 +360,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         call_args = mock_bulk.call_args[0][0]
@@ -393,7 +393,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         call_args = mock_bulk.call_args[0][0]
@@ -412,7 +412,7 @@ class ApplyConditionsTests(TestCase):
 
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])
@@ -435,7 +435,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check, eff_intensity=5)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=5)
 
         # base_severity=2, effective_power=5 * multiplier=1.0 = 5, total = 7
         call_args = mock_bulk.call_args[0][0]
@@ -458,7 +458,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=True)]
             check = MagicMock(success_level=1)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         call_args = mock_bulk.call_args[0][0]
         # cond_a.default_duration_value=2
@@ -478,7 +478,7 @@ class ApplyConditionsTests(TestCase):
 
             mock_bulk.return_value = [ApplyConditionResult(success=False)]
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         self.assertEqual(len(results), 1)
         self.assertFalse(results[0].success)
@@ -495,7 +495,7 @@ class ApplyConditionsTests(TestCase):
 
         with patch("world.magic.services.condition_application.bulk_apply_conditions") as mock_bulk:
             check = MagicMock(success_level=2)
-            results = self.resolver._apply_conditions(check, eff_intensity=0)
+            results, _removed = self.resolver._apply_conditions(check, eff_intensity=0)
 
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])

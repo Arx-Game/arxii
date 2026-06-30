@@ -46,6 +46,7 @@ from world.magic.services.technique_draft import (
     add_draft_applied_condition,
     add_draft_capability_grant,
     add_draft_damage_profile,
+    add_draft_removed_condition,
     add_draft_restriction,
     discard_draft,
     draft_to_design,
@@ -54,11 +55,12 @@ from world.magic.services.technique_draft import (
     remove_draft_applied_condition,
     remove_draft_capability_grant,
     remove_draft_damage_profile,
+    remove_draft_removed_condition,
     remove_draft_restriction,
     set_draft_fields,
     start_technique_draft,
 )
-from world.magic.types.technique_builder import TechniqueDesignInput
+from world.magic.types.technique_builder import RemovedConditionSpec, TechniqueDesignInput
 
 
 def _minimal_design(**override) -> TechniqueDesignInput:
@@ -268,6 +270,34 @@ class DraftToDesignTests(TestCase):
         assert design.intensity == 3
         assert design.control == 2
         assert design.anima_cost == 2
+
+    def test_removed_condition_round_trips_through_design(self) -> None:
+        """A draft removed-condition row converts to a RemovedConditionSpec (#1585)."""
+        cond = ConditionTemplateFactory(name="DispellableCurse")
+        draft = self._make_complete_draft()
+        add_draft_removed_condition(
+            draft,
+            condition=cond,
+            target_kind="ally",
+            minimum_success_level=2,
+            remove_all_stacks=False,
+        )
+        design = draft_to_design(draft)
+        assert len(design.removed_conditions) == 1
+        spec = design.removed_conditions[0]
+        assert isinstance(spec, RemovedConditionSpec)
+        assert spec.condition_id == cond.pk
+        assert spec.target_kind == "ally"
+        assert spec.minimum_success_level == 2
+        assert spec.remove_all_stacks is False
+
+    def test_remove_draft_removed_condition_deletes_row(self) -> None:
+        """remove_draft_removed_condition deletes the row by pk."""
+        cond = ConditionTemplateFactory(name="DispellableCurse2")
+        draft = self._make_complete_draft()
+        row = add_draft_removed_condition(draft, condition=cond)
+        remove_draft_removed_condition(row.pk)
+        assert draft.removed_conditions.count() == 0
 
     def test_raises_incomplete_all_required_missing(self) -> None:
         """Blank draft (no name, no FK knobs, no tier) raises TechniqueDraftIncomplete."""

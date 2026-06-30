@@ -33,6 +33,7 @@ from world.magic.types.technique_builder import (
     AppliedConditionSpec,
     CapabilityGrantSpec,
     DamageProfileSpec,
+    RemovedConditionSpec,
     TechniqueDesignInput,
 )
 
@@ -114,6 +115,17 @@ class PriceDesignTests(TestCase):
         assert bd.gross_cost == 27
         assert bd.within_budget is False
 
+    def test_removed_condition_priced_at_payload_base(self):
+        """A removal (dispel) payload costs the flat payload base, no scaling (#1585)."""
+        cfg = get_technique_budget_config()
+        d = _design(
+            removed_conditions=(RemovedConditionSpec(condition_id=1, target_kind="ally"),),
+        )
+        bd = price_design(d, config=cfg, budget=20)
+        # intensity 3 + control 2 + payload_base 2 = 7
+        assert bd.gross_cost == 7
+        assert any(line.label == "Removed condition (dispel)" for line in bd.lines)
+
 
 class PolicyTests(TestCase):
     def test_staff_advisory_never_raises_but_returns_breakdown(self):
@@ -145,6 +157,36 @@ class BuildTechniqueTests(TestCase):
         assert tech.creator_id is None
         assert tech.level == 1
         assert not CharacterTechnique.objects.filter(technique=tech).exists()
+
+    def test_build_writes_removed_condition_rows(self):
+        """build_technique writes TechniqueRemovedCondition rows from the design (#1585)."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.models import TechniqueRemovedCondition
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        cond = ConditionTemplateFactory(name="DispelBuildTarget")
+        d = _design(
+            gift_id=gift.id,
+            style_id=TechniqueStyleFactory().id,
+            effect_type_id=EffectTypeFactory().id,
+            tier=1,
+            level=1,
+            removed_conditions=(
+                RemovedConditionSpec(
+                    condition_id=cond.id,
+                    target_kind="self",
+                    minimum_success_level=1,
+                    remove_all_stacks=False,
+                ),
+            ),
+        )
+        tech = build_technique(d, creator=None)
+        rows = list(TechniqueRemovedCondition.objects.filter(technique=tech))
+        assert len(rows) == 1
+        assert rows[0].condition_id == cond.id
+        assert rows[0].target_kind == "self"
+        assert rows[0].remove_all_stacks is False
 
 
 class WrapperTests(TestCase):

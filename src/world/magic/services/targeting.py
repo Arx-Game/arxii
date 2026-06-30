@@ -97,6 +97,9 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
         return ConditionTargetKind.ENEMY
     if technique.condition_applications.filter(target_kind=ConditionTargetKind.ALLY).exists():
         return ConditionTargetKind.ALLY
+    # Cleansing a condition off an ally (dispelling an ally's debuff) resolves ALLY (#1585).
+    if technique.removed_conditions.filter(target_kind=ConditionTargetKind.ALLY).exists():
+        return ConditionTargetKind.ALLY
     return ConditionTargetKind.SELF
 
 

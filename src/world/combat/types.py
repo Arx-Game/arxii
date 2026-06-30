@@ -24,7 +24,7 @@ if TYPE_CHECKING:
         ComboDefinition,
     )
     from world.conditions.models import DamageType
-    from world.conditions.types import AppliedConditionResult
+    from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
@@ -146,6 +146,7 @@ class CombatTechniqueResolution:
     pull_flat_bonus: int
     scaled_damage: int
     power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
+    removed_conditions: list[RemovedConditionResult] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,7 @@ class CombatTechniqueResult:
     technique_use_result: TechniqueUseResult
     power_ledger: PowerLedger = field(default_factory=lambda: _empty_ledger())
     fury_committed: FuryTier | None = None
+    removed_conditions: list[RemovedConditionResult] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -113,3 +113,65 @@ class IsTechniqueHostileTests(EvenniaTestCase):
         # effect_type branch alone determines the result.
         technique = TechniqueFactory(effect_type=effect_type, damage_profile=False)
         self.assertTrue(is_technique_hostile(technique))
+
+    # --- Dispel targeting/hostility (#1585) ---
+
+    def test_enemy_removed_condition_makes_technique_hostile(self):
+        """Stripping a condition off an ENEMY (dispelling an enemy buff) is hostile."""
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            TechniqueFactory,
+            TechniqueRemovedConditionFactory,
+        )
+        from world.magic.models.techniques import ConditionTargetKind
+        from world.magic.services.hostility import is_technique_hostile
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=technique,
+            target_kind=ConditionTargetKind.ENEMY,
+        )
+        self.assertTrue(is_technique_hostile(technique))
+
+    def test_ally_removed_condition_is_not_hostile(self):
+        """Cleansing a condition off an ALLY (dispelling an ally debuff) is not hostile."""
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            TechniqueFactory,
+            TechniqueRemovedConditionFactory,
+        )
+        from world.magic.models.techniques import ConditionTargetKind
+        from world.magic.services.hostility import is_technique_hostile
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=technique,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        self.assertFalse(is_technique_hostile(technique))
+
+    def test_self_removed_condition_is_not_hostile(self):
+        """A self-cleanse dispel technique is not hostile."""
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            TechniqueFactory,
+            TechniqueRemovedConditionFactory,
+        )
+        from world.magic.models.techniques import ConditionTargetKind
+        from world.magic.services.hostility import is_technique_hostile
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=technique,
+            target_kind=ConditionTargetKind.SELF,
+        )
+        self.assertFalse(is_technique_hostile(technique))

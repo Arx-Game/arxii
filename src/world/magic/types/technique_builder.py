@@ -27,6 +27,24 @@ class AppliedConditionSpec:
 
 
 @dataclass(frozen=True)
+class RemovedConditionSpec:
+    """A dispel/cleanse payload row for technique authoring (#1585).
+
+    Diverges from ``AppliedConditionSpec`` by carrying ``target_kind`` and
+    ``minimum_success_level`` as authored fields. The apply path hardcodes these
+    (ENEMY / 1 via model defaults) and does not expose them to authors, but a
+    dispel technique must support SELF (cleanse) and ALLY (ally-debuff-strip)
+    targeting, so removal authors them explicitly. The inert severity/duration
+    knobs are not present (removal neither applies severity nor duration).
+    """
+
+    condition_id: int
+    target_kind: str = "enemy"
+    minimum_success_level: int = 1
+    remove_all_stacks: bool = True
+
+
+@dataclass(frozen=True)
 class TechniqueDesignInput:
     name: str
     description: str
@@ -43,6 +61,7 @@ class TechniqueDesignInput:
     capability_grants: tuple[CapabilityGrantSpec, ...] = ()
     damage_profiles: tuple[DamageProfileSpec, ...] = ()
     applied_conditions: tuple[AppliedConditionSpec, ...] = ()
+    removed_conditions: tuple[RemovedConditionSpec, ...] = ()
 
 
 @dataclass(frozen=True)

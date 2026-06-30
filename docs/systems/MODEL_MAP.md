@@ -2216,6 +2216,7 @@
   - capability_requirements <- magic.TechniqueCapabilityRequirement
   - character_grants <- magic.CharacterTechnique
   - condition_applications <- magic.TechniqueAppliedCondition
+  - removed_conditions <- magic.TechniqueRemovedCondition (#1585)
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
@@ -2251,6 +2252,12 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - technique -> magic.Technique [FK]
+
+### TechniqueRemovedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - technique -> magic.Technique [FK]
+  *(#1585 dispel/cleanse payload; adds remove_all_stacks bool. See ADR-0064.)*
 
 ### TechniqueDamageProfile
 **Foreign Keys:**

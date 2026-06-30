@@ -29,4 +29,8 @@ def is_technique_hostile(technique: Technique) -> bool:
         return True
     if technique.damage_profiles.filter(base_damage__gt=0).exists():
         return True
-    return technique.condition_applications.filter(target_kind=ConditionTargetKind.ENEMY).exists()
+    if technique.condition_applications.filter(target_kind=ConditionTargetKind.ENEMY).exists():
+        return True
+    # Stripping a condition off an enemy (e.g. dispelling an enemy's buff) targets an
+    # adversary in a mechanical sense, so a removal row targeting ENEMY is hostile (#1585).
+    return technique.removed_conditions.filter(target_kind=ConditionTargetKind.ENEMY).exists()

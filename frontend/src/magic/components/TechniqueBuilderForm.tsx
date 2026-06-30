@@ -33,6 +33,7 @@ import {
   CapabilityGrantsEditor,
   DamageProfilesEditor,
   AppliedConditionsEditor,
+  RemovedConditionsEditor,
 } from './TechniquePayloadEditors';
 import type {
   CapabilityGrantRow,
@@ -40,6 +41,7 @@ import type {
   DamageProfileRow,
   DamageType,
   AppliedConditionRow,
+  RemovedConditionRow,
 } from './TechniquePayloadEditors';
 import { extractErrorMessage } from '@/lib/errors';
 
@@ -190,6 +192,7 @@ export function TechniqueBuilderForm({
   const [capabilityGrants, setCapabilityGrants] = useState<CapabilityGrantRow[]>([]);
   const [damageProfiles, setDamageProfiles] = useState<DamageProfileRow[]>([]);
   const [appliedConditions, setAppliedConditions] = useState<AppliedConditionRow[]>([]);
+  const [removedConditions, setRemovedConditions] = useState<RemovedConditionRow[]>([]);
 
   // Budget meter state
   const [breakdown, setBreakdown] = useState<TechniqueCostBreakdown | null>(null);
@@ -239,6 +242,12 @@ export function TechniqueBuilderForm({
             condition_id: r.condition_id,
             base_severity: r.base_severity,
             base_duration_rounds: r.base_duration_rounds,
+          })),
+          removed_conditions: removedConditions.map((r) => ({
+            condition_id: r.condition_id,
+            target_kind: r.target_kind,
+            minimum_success_level: r.minimum_success_level,
+            remove_all_stacks: r.remove_all_stacks,
           })),
           character_id: characterId,
         },
@@ -294,6 +303,7 @@ export function TechniqueBuilderForm({
         capability_grants: capabilityGrants,
         damage_profiles: damageProfiles,
         applied_conditions: appliedConditions,
+        removed_conditions: removedConditions,
         character_id: characterId,
       },
       {
@@ -512,6 +522,12 @@ export function TechniqueBuilderForm({
             conditions={conditions}
             disabled={isPending}
             onChange={setAppliedConditions}
+          />
+          <RemovedConditionsEditor
+            rows={removedConditions}
+            conditions={conditions}
+            disabled={isPending}
+            onChange={setRemovedConditions}
           />
         </CardContent>
       </Card>
