@@ -311,8 +311,8 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         from world.magic.constants import TargetKind
         from world.magic.models.threads import ThreadPullCost
 
-        # 3 universal + 3 GIFT-specific = 6 rows.
-        self.assertEqual(ThreadPullCost.objects.count(), 6)
+        # 3 universal + 1 GIFT (imbue-only) = 4 rows.
+        self.assertEqual(ThreadPullCost.objects.count(), 4)
         tier1 = ThreadPullCost.objects.get(tier=1, target_kind__isnull=True)
         tier2 = ThreadPullCost.objects.get(tier=2, target_kind__isnull=True)
         tier3 = ThreadPullCost.objects.get(tier=3, target_kind__isnull=True)
@@ -329,10 +329,10 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         self.assertEqual(tier3.anima_per_thread, 3)
         self.assertEqual(tier3.label, "hard")
 
-        # GIFT-specific rows (ADR-0051: costliest kind).
+        # GIFT tier-1 row: imbue-premium only (uniform pull cost; ADR-0051).
         gift_t1 = ThreadPullCost.objects.get(tier=1, target_kind=TargetKind.GIFT)
-        self.assertEqual(gift_t1.resonance_cost, 2)
-        self.assertEqual(gift_t1.anima_per_thread, 2)
+        self.assertEqual(gift_t1.resonance_cost, 1)
+        self.assertEqual(gift_t1.anima_per_thread, 1)
         self.assertEqual(gift_t1.imbue_cost_multiplier, 2)
 
         self.assertIn(1, self.result.pull_costs)
@@ -403,7 +403,7 @@ class TestSeedThreadPullCatalogIdempotency(TestCase):
 
     def test_row_counts_unchanged(self) -> None:
         counts = self._counts()
-        self.assertEqual(counts["pull_costs"], 6)  # 3 universal + 3 GIFT
+        self.assertEqual(counts["pull_costs"], 4)  # 3 universal + 1 GIFT (imbue-only)
         self.assertEqual(
             counts["pull_effects"],
             4,
@@ -812,8 +812,8 @@ class TestSeedMagicDev(TestCase):
         self.assertTrue(Ritual.objects.filter(name="Rite of Atonement").exists())
 
         # --- Task 1.3: thread pull catalog ---
-        # 3 universal + 3 GIFT-specific (ADR-0051) = 6.
-        self.assertEqual(ThreadPullCost.objects.count(), 6)
+        # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.
+        self.assertEqual(ThreadPullCost.objects.count(), 4)
         self.assertEqual(ThreadPullEffect.objects.count(), 4)
 
         # --- Task 1.8: cantrip catalog ---
