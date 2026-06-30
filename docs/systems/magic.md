@@ -412,7 +412,7 @@ at two cast seams so unlocked variants shape every cast automatically: (1)
 variant `intensity`/`control` deltas reach the power ledger. (2) `_resolve_and_pose_cast`
 (`world/scenes/cast_services.py`) — the non-combat standalone-cast path; variant form drives
 cost, narration, and outcome. Both seams are gated on `unlock_thread_level`: below the
-threshold the parent technique is returned unchanged. The dev seed (`seeds_magic.py`) authors
+threshold the parent technique is returned unchanged. The dev seed (`integration_tests/game_content/magic.py`) authors
 starter `TechniqueVariant` rows so a fresh dev environment has variants to exercise. The
 gift-thread confers the standard always-in-action thread bonus (passive `ThreadPullEffect`
 tier-0 rows; `_ALWAYS_IN_ACTION_KINDS` — already wired in #1580); cast-time variant

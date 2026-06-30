@@ -197,7 +197,7 @@ def compute_effective_cap(thread: Thread) -> int:
 
 
 # =============================================================================
-# Resonance Pivot Spec A — per-target-kind pull cost (ADR-0051)
+# Resonance Pivot Spec A — per-target-kind IMBUE premium (ADR-0051); pull cost is uniform
 # =============================================================================
 
 
