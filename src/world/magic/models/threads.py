@@ -516,7 +516,7 @@ class Thread(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="anchored_threads",
-        help_text="Set when target_kind=TECHNIQUE; null otherwise.",
+        help_text="Set when target_kind=TECHNIQUE (a signature thread); null otherwise.",
     )
     target_relationship_track = models.ForeignKey(
         "relationships.RelationshipTrackProgress",
@@ -598,6 +598,19 @@ class Thread(SharedMemoryModel):
                 fields=["owner", "resonance", "target_technique"],
                 condition=models.Q(target_kind=TargetKind.TECHNIQUE),
                 name="uniq_thread_technique",
+            ),
+            # One active signature (TECHNIQUE thread) per (owner, technique).
+            # Retired threads are excluded so a character can retire a signature
+            # and later weave a new one on the same technique at a different
+            # resonance (ADR-0056 — a signature may be discordant; switching
+            # resonance requires retiring the old thread first).
+            models.UniqueConstraint(
+                fields=["owner", "target_technique"],
+                condition=models.Q(
+                    target_kind=TargetKind.TECHNIQUE,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_technique_active",
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_relationship_track"],

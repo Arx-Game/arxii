@@ -28,12 +28,13 @@ class GiftResonancesReadSeamTests(TestCase):
         self.assertEqual([r.pk for r in result], [self.supported_a.pk])
 
     def test_power_terms_uses_thread_resonance(self) -> None:
-        # Smoke: power_terms.power_term_for_technique reads gift_resonances_for.
-        # A full cast fixture is heavy; assert the read seam is wired by checking
-        # the function imports + is called (mock gift_resonances_for if needed).
+        # Smoke: power_terms reads cast_resonances_for (the per-technique seam
+        # that accounts for signature overrides, ADR-0056/#1582). A full cast
+        # fixture is heavy; assert the read seam is wired by checking the
+        # function imports + is called (mock cast_resonances_for if needed).
         from world.magic.services import power_terms
 
         # The seam is verified end-to-end in the E2E (Task 11); here we assert
         # the module imports the helper.
         source = inspect.getsource(power_terms)
-        self.assertIn("gift_resonances_for", source)
+        self.assertIn("cast_resonances_for", source)

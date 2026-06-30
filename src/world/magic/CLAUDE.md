@@ -354,6 +354,20 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   Anchor cap = `sanctum.feature_instance.level × 10`. The thread is pull-applicable
   ("in-sanctum boost") while the character is inside the Sanctum's room.
   **Bare ROOM `target_kind` removed** — use SANCTUM for room-anchored threads.
+  **TECHNIQUE = signature (ADR-0056, #1582):** a `TargetKind.TECHNIQUE` thread
+  is a **signature** — optional extra depth and strength in a single chosen
+  technique above its gift baseline. It carries its own resonance, which usually
+  matches the gift but may deliberately diverge (a *discordant signature*),
+  letting one technique manifest as a different affinity. The per-technique
+  derive-on-read seam is `cast_resonances_for(character, technique)` (in
+  `specialization/services.py`), which returns the signature's resonance when
+  one exists, else falls back to `gift_resonances_for`. The four cast-pipeline
+  call sites (`techniques.py` ×2, `power_terms.py`, `resonance_environment.py`
+  ×2) call `cast_resonances_for` instead of `gift_resonances_for`. Variant
+  matching is cumulative: effective level = gift_thread.level + signature.level.
+  One active signature per technique (partial UniqueConstraint
+  `uniq_thread_technique_active`); retiring allows re-weaving at a different
+  resonance.
 - `ThreadLevelUnlock` - Per-thread XP-locked-boundary receipt. Unique per
   `(thread, unlocked_level)`. Records that a thread paid XP to cross a
   specific boundary (20, 30, ...).

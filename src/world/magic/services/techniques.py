@@ -169,9 +169,9 @@ def _build_resonance_involvements(
     thread_pull_resonance_spent sums CombatPull.resonance_spent for the
     character's active pulls per resonance.
     """
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonances_for  # noqa: PLC0415
 
-    resonances = list(gift_resonances_for(character, technique.gift))
+    resonances = list(cast_resonances_for(character, technique))
     if not resonances:
         return ()
 
@@ -227,9 +227,9 @@ def _partition_power_targets(
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
     if technique is not None:
-        from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+        from world.magic.specialization.services import cast_resonances_for  # noqa: PLC0415
 
-        technique_resonance_ids = {r.id for r in gift_resonances_for(character, technique.gift)}
+        technique_resonance_ids = {r.id for r in cast_resonances_for(character, technique)}
         technique_damage_type_ids = {
             p.damage_type_id
             for p in technique.damage_profiles.all()

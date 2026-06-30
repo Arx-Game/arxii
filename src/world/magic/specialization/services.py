@@ -1,8 +1,14 @@
-"""Specialization engine services (#1578, ADR-0055).
+"""Specialization engine services (#1578, ADR-0055; #1582, ADR-0056).
 
 - ``provision_latent_gift_thread`` — CG provisioning of the latent level-0 GIFT thread.
 - ``gift_resonances_for`` — the derive-on-read resonance seam (replaces
   ``technique.gift.resonances.all()`` at the four cast sites).
+- ``signature_thread_for_technique`` — look up an active TECHNIQUE-thread
+  (signature) on a specific technique for a character (#1582, ADR-0056).
+- ``cast_resonances_for`` — cast-time resonance override: returns the
+  signature thread's resonance when one exists, else falls back to
+  ``gift_resonances_for``. This is the per-technique seam that lets a
+  discordant signature manifest one technique as a different affinity.
 - ``resolve_specialized_variant`` — the single resolver (generalizes
   ``resolve_effective_role``).
 """
@@ -135,6 +141,60 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     return gift.cached_resonances
 
 
+def signature_thread_for_technique(character, technique: Technique) -> Thread | None:
+    """Return the active signature (TECHNIQUE) thread on ``technique``, or None.
+
+    A signature thread is a ``TargetKind.TECHNIQUE`` thread — optional extra
+    depth invested in a single technique above its gift baseline (ADR-0056).
+    It carries its own resonance, which usually matches the gift but may
+    deliberately diverge (a *discordant signature*).
+
+    Reads the thread through the cached ``character.threads`` handler (the same
+    cached queryset the GIFT-thread path reads), not a fresh
+    ``Thread.objects.filter()`` — per project cached-property rule. The
+    handler's list is already filtered to ``retired_at__isnull=True``.
+
+    A sheetless ``Character`` (e.g. an NPC) has no signature threads; the sheet
+    guard handles that precondition rather than catching the handler's raise.
+    """
+    from world.magic.services.techniques import (  # noqa: PLC0415
+        _get_character_sheet,
+    )
+
+    if _get_character_sheet(character) is None:
+        return None
+    return next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.TECHNIQUE and t.target_technique_id == technique.pk
+        ),
+        None,
+    )
+
+
+def cast_resonances_for(character, technique: Technique) -> list[Resonance]:
+    """Resonances a technique manifests as for this character at cast time.
+
+    The per-technique derive-on-read seam (ADR-0056). When the character has an
+    active signature (TECHNIQUE) thread on ``technique``, the signature's
+    resonance **overrides** the gift's for this one technique — letting a
+    single technique manifest as a different affinity than its gift (a
+    *discordant signature*). When no signature exists, falls back to
+    ``gift_resonances_for`` (the gift-thread resonance, or the gift's supported
+    set).
+
+    This is the function the cast pipeline should call instead of
+    ``gift_resonances_for(character, technique.gift)`` — it accounts for the
+    per-technique signature override that ``gift_resonances_for`` (which is
+    gift-scoped) cannot.
+    """
+    sig = signature_thread_for_technique(character, technique)
+    if sig is not None:
+        return [sig.resonance]
+    return gift_resonances_for(character, technique.gift)
+
+
 def resolve_specialized_variant(*, entity, character):
     """Return the resonance-specialized variant of ``entity`` for ``character``,
     else ``entity`` unchanged. Derive-on-read (ADR-0014).
@@ -161,17 +221,24 @@ def _resolve_technique_variant(technique: Technique, character) -> Technique | _
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
-    # Read the active GIFT thread through the cached ``character.threads``
-    # handler (the same cached queryset the covenant path reads), not a fresh
+    # Read threads through the cached ``character.threads`` handler (the same
+    # cached queryset the covenant path reads), not a fresh
     # ``Thread.objects.filter()`` — per project cached-property rule. A sheetless
-    # Character (e.g. an NPC) has no GIFT thread, so it gets the parent technique
+    # Character (e.g. an NPC) has no threads, so it gets the parent technique
     # unchanged; the sheet guard handles that precondition rather than catching
     # the handler's ``sheet_data`` raise. A non-Character object has no
     # ``.threads`` and is left to raise ``AttributeError``.
     if _get_character_sheet(character) is None:
         return technique
 
-    thread = next(
+    # A signature (TECHNIQUE) thread on *this* technique overrides the gift's
+    # resonance for variant matching (ADR-0056). The signature's resonance may
+    # deliberately diverge from the gift's (a *discordant signature*), and the
+    # effective variant-matching level is the gift baseline + signature depth
+    # ("gift baseline + optional signature delta").
+    sig_thread = signature_thread_for_technique(character, technique)
+
+    gift_thread = next(
         (
             t
             for t in character.threads.all()
@@ -179,13 +246,30 @@ def _resolve_technique_variant(technique: Technique, character) -> Technique | _
         ),
         None,
     )
-    if thread is None:
+
+    if sig_thread is not None:
+        # Signature overrides: match variant on the signature's resonance, using
+        # cumulative level (gift baseline + signature delta). A gift thread at
+        # level 0 (latent) contributes nothing; the signature alone drives the
+        # variant unlock in that case.
+        effective_level = (gift_thread.level if gift_thread is not None else 0) + sig_thread.level
+        variant = TechniqueVariant.matching_variant(
+            technique,
+            resonance=sig_thread.resonance,
+            thread_level=effective_level,
+        )
+        if variant is None:
+            return _ResolvedTechnique(technique, variant=None)
+        return _ResolvedTechnique(technique, variant=variant)
+
+    # No signature — fall back to gift-thread specialization (existing path).
+    if gift_thread is None:
         return technique
 
     variant = TechniqueVariant.matching_variant(
         technique,
-        resonance=thread.resonance,
-        thread_level=thread.level,
+        resonance=gift_thread.resonance,
+        thread_level=gift_thread.level,
     )
     if variant is None:
         return technique

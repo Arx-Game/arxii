@@ -149,9 +149,9 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     if config is None or ctx.technique is None:
         return 0
 
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonances_for  # noqa: PLC0415
 
-    resonances = list(gift_resonances_for(ctx.sheet.character, ctx.technique.gift))
+    resonances = list(cast_resonances_for(ctx.sheet.character, ctx.technique))
     if not resonances:
         return 0
 

@@ -47,7 +47,10 @@ class ThreadWeavingUnlock(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="thread_weaving_unlocks",
-        help_text="Set when target_kind=TECHNIQUE; covers all techniques under Gift.",
+        help_text=(
+            "Set when target_kind=TECHNIQUE; grants the ability to weave "
+            "signature threads on any technique under this Gift (ADR-0056)."
+        ),
     )
     unlock_track = models.ForeignKey(
         "relationships.RelationshipTrack",

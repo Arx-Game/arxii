@@ -209,11 +209,11 @@ def _working_affinities_for_raw(
     """
     if technique is None:
         return [working_affinity]
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonances_for  # noqa: PLC0415
 
     seen: set[int] = set()
     result: list[Affinity] = []
-    for r in gift_resonances_for(caster, technique.gift):
+    for r in cast_resonances_for(caster, technique):
         if r.affinity.pk not in seen:
             seen.add(r.affinity.pk)
             result.append(r.affinity)
@@ -267,9 +267,9 @@ def _working_affinity_cast_time(
     no interactions are found.
     """
     # Collect distinct affinities from the character's GIFT-thread resonance
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonances_for  # noqa: PLC0415
 
-    gift_resonances = list(gift_resonances_for(caster, technique.gift))
+    gift_resonances = list(cast_resonances_for(caster, technique))
     seen_affinity_pks: set[int] = set()
     affinities: list[Affinity] = []
     for r in gift_resonances:
