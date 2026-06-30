@@ -498,6 +498,78 @@
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
+## world.battles
+
+### Battle
+**Foreign Keys:**
+  - scene -> scenes.Scene [OneToOne]
+  - campaign_story -> stories.Story [FK] (nullable)
+**Pointed to by:**
+  - sides <- battles.BattleSide
+  - places <- battles.BattlePlace
+  - units <- battles.BattleUnit
+  - rounds <- battles.BattleRound
+  - participants <- battles.BattleParticipant
+
+### BattleSide
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+**Pointed to by:**
+  - units <- battles.BattleUnit
+  - participants <- battles.BattleParticipant
+
+### BattlePlace
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - combat_encounter -> combat.CombatEncounter [FK] (nullable)
+**Pointed to by:**
+  - units <- battles.BattleUnit
+  - participants <- battles.BattleParticipant
+
+### BattleUnit
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - side -> battles.BattleSide [FK]
+  - place -> battles.BattlePlace [FK] (nullable)
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+
+### BattleRound
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+
+### BattleParticipant
+**Foreign Keys:**
+  - battle -> battles.Battle [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - side -> battles.BattleSide [FK]
+  - place -> battles.BattlePlace [FK] (nullable)
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
+  - support_declarations <- battles.BattleActionDeclaration
+
+### BattleActionDeclaration
+**Foreign Keys:**
+  - battle_round -> battles.BattleRound [FK]
+  - participant -> battles.BattleParticipant [FK]
+  - target_unit -> battles.BattleUnit [FK] (nullable)
+  - target_ally -> battles.BattleParticipant [FK] (nullable)
+
+### Service Functions
+- `add_place(*, battle: 'Battle', name: 'str') -> 'BattlePlace' — Add a named front/zone to a battle.`
+- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
+- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', unit_type: 'str', strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
+- `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
+- `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
+- `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+
+
 ## world.buildings
 
 ### BuildingKind
@@ -879,6 +951,7 @@
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - duel_challenges_issued <- combat.DuelChallenge
   - duel_challenges_received <- combat.DuelChallenge
+  - battle_participations <- battles.BattleParticipant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - detected_traps <- room_features.Trap
 
@@ -3916,6 +3989,7 @@
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - combat_encounters <- combat.CombatEncounter
+  - battle <- battles.Battle
 
 ### SceneParticipation
 **Foreign Keys:**
@@ -4557,6 +4631,7 @@
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
+  - battles <- battles.Battle
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute

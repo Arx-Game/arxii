@@ -97,6 +97,7 @@ INSTALLED_APPS += [
     "world.covenants.apps.CovenantsConfig",
     "world.vitals.apps.VitalsConfig",
     "world.combat.apps.CombatConfig",
+    "world.battles.apps.BattlesConfig",
     "world.gm.apps.GmConfig",
     "world.narrative.apps.NarrativeConfig",
     "world.predicates.apps.PredicatesConfig",

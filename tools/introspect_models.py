@@ -22,6 +22,7 @@ TARGET_APPS = [
     "typeclasses",
     "world.areas",
     "world.attempts",
+    "world.battles",
     "world.buildings",
     "world.captivity",
     "world.character_creation",

@@ -1711,6 +1711,54 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `docs/architecture/damage-scaling.md`,
   `docs/architecture/combat-conditions.md`
 
+### Battles (#1592)
+Large-scale battle scenes (war covenant engagements, sieges, pitched fields) resolved
+through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scenes.Scene`.
+
+- **Models:** `Battle` (O2O Scene, `campaign_story` FK, `round_limit`, `outcome` / `concluded_at`;
+  `is_concluded` property; `current_round` property), `BattleSide` (`role` ATTACKER/DEFENDER,
+  `victory_points`, `victory_threshold`; unique `(battle, role)`), `BattlePlace` (named front;
+  `combat_encounter` FK bridge seam), `BattleUnit` (`unit_type`, `strength`, `status`;
+  attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
+  constraint: one active round per battle), `BattleParticipant` (`character_sheet` FK,
+  `side`, `place`, `status`; unique `(battle, character_sheet)`),
+  `BattleActionDeclaration` (`action_kind` STRIKE/SUPPORT, `target_unit`, `target_ally`,
+  `resolved`, `success_level`; unique `(battle_round, participant)`)
+- **Key Services (`world.battles.services`):**
+  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`
+  - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
+    `declare_battle_action` (update_or_create; raises `RoundNotOpenError`)
+  - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
+    `conclude_battle` (sets outcome + ends scene; **no `complete_story` call** — #1716),
+    `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
+- **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
+  `BattleRoundResult` — rolls `perform_check` per declaration; STRIKE success attrites unit
+  + awards VP; failure debits PC health + `process_damage_consequences`. Returns
+  `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+- **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
+  wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`
+  finds the character's ACTIVE participant in an active-scene battle.
+- **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
+  `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`)
+- **Telnet:** `battle [declare strike <unit>|declare support <ally>|round|resolve|conclude]`
+- **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
+  `BattleActionKind`, `BattleOutcome`
+- **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
+  `RoundNotOpenError`, `NotAParticipantError`
+- **#1716 dependency:** `Battle.campaign_story` FK stores the parent Story; outcome →
+  campaign-stakes propagation + win-gated Legend is explicitly deferred to #1716.
+- **Deferred follow-ups:** peril/rescue (#1710), AFK knobs (#1711), battle writeup page
+  (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/aerial/siege (#1715),
+  campaign propagation (#1716).
+- **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
+  E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
+- **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals
+  (damage consequences), checks (`perform_check` with "Battle Action" CheckType), combat
+  (`BattlePlace.combat_encounter` bridge; shared `RoundStatus` / `AbstractRound`),
+  stories (`campaign_story` FK → #1716), actions (REGISTRY + `get_active_round_context` seam)
+- **Source:** `src/world/battles/`
+- **Details:** [battles.md](battles.md)
+
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
 combat, poison, spells, exhaustion, and any damage source.

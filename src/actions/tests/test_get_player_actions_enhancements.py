@@ -131,11 +131,12 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # get_active_round_context (#520) adds one SceneRoundParticipant lookup per resolution.
         # Task 5 (#520) dedupes the three round-context resolutions into one in get_player_actions,
         # reducing the cost from 16 → 12 (one combat + one scene-round lookup instead of three
-        # pairs). Cap set at 12 to give margin without masking regressions. Raise only with a
-        # documented justification — the goal remains a single-digit cost.
+        # pairs). The BattleRoundContext resolver (#1592) adds one BattleParticipant lookup in
+        # get_active_round_context, raising the cap to 13. Raise only with a documented
+        # justification — the goal remains a single-digit cost.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            12,
+            13,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

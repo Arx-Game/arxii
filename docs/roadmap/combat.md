@@ -32,7 +32,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
 - **Roles grant techniques** via the one specialization engine (ADR-0055; reverses bonuses-only).
-- **War / battle system** — war covenants exist with nowhere to resolve into.
+- **War / battle system** — spine landed (#1592): `Battle` (1:1 Scene extension),
+  abstract unit attrition + VP accumulation, `BattleRoundContext` seam, GM + player REGISTRY
+  actions, `CmdBattle` telnet namespace, E2E `test_battle_telnet_e2e.py`. Deferred:
+  peril/rescue (#1710), AFK knobs (#1711), battle writeup page (#1712), Audere weighting
+  (#1713), rich type-matchups (#1714), naval/aerial/siege (#1715), campaign-stakes
+  propagation + win-gated Legend (#1716).
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 
 ## Reserved term: "clash"
