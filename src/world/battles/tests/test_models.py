@@ -7,6 +7,7 @@ from world.battles.factories import (
     BattleSideFactory,
     BattleUnitFactory,
 )
+from world.magic.factories import TechniqueFactory
 
 
 class BattleModelTests(TestCase):
@@ -36,3 +37,12 @@ class BattleModelTests(TestCase):
     def test_unit_factory_side_matches_battle(self) -> None:
         unit = BattleUnitFactory()
         self.assertEqual(unit.battle_id, unit.side.battle_id)
+
+
+class BattleActionDeclarationTechniqueTests(TestCase):
+    def test_declaration_requires_technique(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+
+        technique = TechniqueFactory()
+        declaration = BattleActionDeclarationFactory(technique=technique)
+        self.assertEqual(declaration.technique, technique)
