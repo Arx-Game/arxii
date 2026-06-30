@@ -198,6 +198,12 @@ Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default
 or switch-sides flips an existing `ENEMY`. One `CombatOpponent` model covers both cases
 (ADR-0059). _Avoid_: faction, team (as model-attribute names).
 
+**Court Pact**:
+The per-(Court covenant, servant) sworn-fealty bond carrying the master's `granted_pull_cap`; the
+cap bounds the servant's Court-role thread pull level. The grant is the gate: no active pact → cap
+0 → cannot pull. See the covenants per-app glossary for the full entry and `_Avoid_` terms.
+Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 **Summon** (in-combat):
 An `ALLY` `CombatOpponent` conjured during combat by a technique
 (`CombatOpponent.allegiance=ALLY`, `summoned_by` FK → `CharacterSheet`,
