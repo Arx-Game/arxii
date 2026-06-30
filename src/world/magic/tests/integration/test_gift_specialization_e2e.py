@@ -5,13 +5,18 @@ provisioned with a latent GIFT thread at CG resolves to the base technique; once
 thread advances past the variant's unlock threshold the resolver derives the variant
 (derive-on-read, no regeneration) and the discovery beat fires (achievement + codex).
 
-NOTE: the thread is advanced past ``unlock_thread_level=3`` by setting ``level``
-directly, NOT via ``spend_resonance_for_imbuing``. The GIFT anchor cap
-(``compute_anchor_cap``) has no GIFT case and returns 0, so the cap-gated imbue path
-raises ``AnchorCapExceeded`` on a fresh GIFT thread. The GIFT anchor cap is a
-deliberately deferred needs-design follow-up (see the #1578 PR notes); until it lands,
-the E2E advances the level directly and calls the discovery ceremony explicitly — the
-same ceremony-direct pattern proven in ``test_gift_variant_discovery.py``.
+The GIFT anchor cap (``compute_anchor_cap``) is now handled: for a fresh character with
+no path history ``_current_path_stage`` returns 1, giving an effective cap of 10 (1
+stage × ANCHOR_CAP_GIFT_PER_STAGE=10), so ``spend_resonance_for_imbuing`` can advance
+a GIFT thread to level 3 without hitting the cap. The journey therefore exercises two
+paths:
+
+- ``test_full_journey`` / ``test_base_form_resolves_without_thread``: direct
+  level-setting + explicit ``fire_variant_discoveries`` ceremony (ceremony-direct pattern).
+- ``test_imbuing_to_unlock_fires_discovery``: real ``spend_resonance_for_imbuing`` path
+  (internally calls ``fire_variant_discoveries``).
+- ``test_variant_takes_effect_at_cast``: runtime-stat read via ``get_runtime_technique_stats``
+  proves variant deltas reach the cast power seam.
 """
 
 from typing import ClassVar
@@ -27,7 +32,8 @@ from world.codex.models import CodexEntry
 from world.covenants.discovery import fire_variant_discoveries
 from world.magic.constants import TargetKind
 from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
-from world.magic.models import Gift, Resonance, Technique, Thread
+from world.magic.models import CharacterResonance, Gift, Resonance, Technique, Thread
+from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import (
     gift_resonances_for,
@@ -135,3 +141,83 @@ class GiftSpecializationE2ETest(TestCase):
             entity=self.technique, character=other_sheet.character
         )
         self.assertEqual(resolved.name, self.technique.name)
+
+    def test_variant_takes_effect_at_cast(self) -> None:
+        """Variant intensity/control deltas are visible through the cast-power seam.
+
+        Uses the delta between a level-0 (base-form) read and a level-3 (variant)
+        read to isolate the variant contribution from social-safety, identity
+        modifier, and IntensityTier noise — the difference must equal the authored
+        ``intensity_delta=5`` and ``control_delta=2`` on the variant.
+        """
+        from world.magic.services.techniques import get_runtime_technique_stats
+
+        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        thread = next(
+            t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
+        )
+
+        # Read base-form stats (thread at level 0 — below the variant's unlock_thread_level=3).
+        base_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
+
+        # Advance to level 3 to unlock the variant; invalidate the cached handler.
+        thread.level = 3
+        thread.save(update_fields=["level"])
+        self.sheet.character.threads.invalidate()
+
+        # Read again — the resolver should now return the variant form.
+        variant_stats = get_runtime_technique_stats(self.technique, self.sheet.character)
+
+        # The delta must match the variant's authored deltas exactly, regardless of any
+        # constant modifier streams (social-safety, identity modifiers, IntensityTier).
+        self.assertEqual(
+            variant_stats.intensity - base_stats.intensity,
+            self.variant.intensity_delta,
+            "intensity delta should equal variant.intensity_delta",
+        )
+        self.assertEqual(
+            variant_stats.control - base_stats.control,
+            self.variant.control_delta,
+            "control delta should equal variant.control_delta",
+        )
+
+    def test_imbuing_to_unlock_fires_discovery(self) -> None:
+        """Real imbue path: spending resonance to level 3 fires the discovery ceremony.
+
+        ``spend_resonance_for_imbuing(character_sheet, thread, amount)`` advances the
+        thread greedily by spending ``amount`` developed-points.  Sub-10 levels each
+        cost 1 dp, so ``amount=3`` carries the thread from 0 → 3 (crossing
+        ``unlock_thread_level=3``).  The function internally calls
+        ``fire_variant_discoveries``, so the achievement should be granted without any
+        explicit ceremony call in this test.
+
+        The GIFT anchor cap for a fresh character with no path history is
+        ``_current_path_stage() × ANCHOR_CAP_GIFT_PER_STAGE = 1 × 10 = 10``, so the
+        cap does not block advancement to level 3.
+        """
+        provision_latent_gift_thread(self.sheet, self.gift, resonance=self.resonance)
+        thread = next(
+            t for t in self.sheet.character.threads.all() if t.target_kind == TargetKind.GIFT
+        )
+
+        # Ensure the CharacterResonance row exists and has sufficient balance.
+        # ``provision_latent_gift_thread`` does not create this row; the imbue
+        # service requires it to debit the resonance currency bucket.
+        cr, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        cr.balance = 9999
+        cr.save(update_fields=["balance"])
+
+        # Spend 3 dp: levels 0→1, 1→2, 2→3 each cost 1 dp (sub-10 formula).
+        spend_resonance_for_imbuing(self.sheet, thread, 3)
+
+        # The discovery ceremony fires internally; achievement must now exist.
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet,
+                achievement=self.achievement,
+            ).exists(),
+            "discovery achievement should be granted after imbuing across level 3",
+        )
