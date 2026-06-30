@@ -1450,10 +1450,48 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
             break
     if candidate_participant is None or chosen_role is None:
         raise RequiredReferenceMissingError
-    return add_member(
+    membership = add_member(
         covenant=target_covenant,
         character_sheet=candidate_participant.character_sheet,
         role=chosen_role,
+    )
+
+    # COURT post-step (#1589): swearing into a Court is a fealty ceremony — the
+    # induction also binds a CourtPact whose pull-cap the master grants (read
+    # from the candidate participant's kwargs, mirroring mentorship's role read),
+    # then a servant-centred fealty narration is emitted.
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    if target_covenant.covenant_type == CovenantType.COURT:
+        servant_sheet = candidate_participant.character_sheet
+        granted_pull_cap = candidate_participant.participant_kwargs.get("granted_pull_cap", 0)
+        swear_court_pact(
+            covenant=target_covenant,
+            servant_sheet=servant_sheet,
+            granted_pull_cap=granted_pull_cap,
+        )
+        _emit_court_fealty_message(target_covenant, servant_sheet)
+
+    return membership
+
+
+def _emit_court_fealty_message(covenant: Covenant, servant_sheet: CharacterSheet) -> None:
+    """Fire one servant-centred NarrativeMessage when a servant swears fealty.
+
+    The SERVANT's act is the focal beat — they are the grammatical subject —
+    while the Court (and its master) is the backdrop they swear to (#1589).
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    recipients = covenant.member_roster.active_character_sheets
+    if not recipients:
+        return
+    servant_name = servant_sheet.character.db_key
+    send_narrative_message(
+        recipients=recipients,
+        body=f"{servant_name} kneels and swears fealty to the Court of {covenant.name}.",
+        category=NarrativeCategory.COVENANT,
     )
 
 
