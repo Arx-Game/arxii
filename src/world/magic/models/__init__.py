@@ -83,6 +83,12 @@ from world.magic.models.endorsement import (
 )
 from world.magic.models.fury import FuryConfig, FuryTier
 from world.magic.models.gain_config import ResonanceGainConfig
+from world.magic.models.gift_unlocks import (
+    CharacterGiftUnlock,
+    GiftAcquisitionConfig,
+    GiftUnlock,
+    TechniqueTeachingOffer,
+)
 from world.magic.models.gifts import (
     CharacterGift,
     CharacterTradition,
@@ -216,6 +222,7 @@ __all__ = [
     "CharacterAura",
     # gifts
     "CharacterGift",
+    "CharacterGiftUnlock",
     "CharacterResonance",
     # knowledge layer (Anima Ritual UI spec §Decision 6)
     "CharacterRitualKnowledge",
@@ -241,7 +248,9 @@ __all__ = [
     "FuryConfig",
     "FuryTier",
     "Gift",
+    "GiftAcquisitionConfig",
     "GiftManager",
+    "GiftUnlock",
     # rituals
     "ImbuingProseTemplate",
     "IntensityTier",
@@ -330,6 +339,7 @@ __all__ = [
     "TechniqueRemovedCondition",
     "TechniqueStyle",
     "TechniqueStyleManager",
+    "TechniqueTeachingOffer",
     "TechniqueTierBudget",
     # gift-technique specialization variants (#1578)
     "TechniqueVariant",
