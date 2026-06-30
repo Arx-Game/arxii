@@ -278,6 +278,11 @@ class Character(ObjectParent, DefaultCharacter):
 
         catch_up_character_stories(self)
 
+        # Friends watch list (#1727): alert online players who friended this character.
+        from world.scenes.friend_services import notify_friends_of_status
+
+        notify_friends_of_status(self, online=True)
+
         # Execute look command to send room state to frontend via flow system
         self.execute_cmd("look")
 
@@ -431,3 +436,8 @@ class Character(ObjectParent, DefaultCharacter):
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
             clear_resonance_alignment(character_sheet=self.sheet_data)
+
+        # Friends watch list (#1727): alert online players who friended this character.
+        from world.scenes.friend_services import notify_friends_of_status
+
+        notify_friends_of_status(self, online=False)

@@ -59,3 +59,39 @@ class FriendServicesTests(TestCase):
         )
         self.assertEqual(touched, 2)
         self.assertEqual(Friendship.objects.filter(friend_tenure=self.friend_tenure).count(), 2)
+
+
+class WatchListNotifyTests(TestCase):
+    def test_no_friends_is_a_silent_noop(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterEntryFactory
+        from world.scenes.friend_services import notify_friends_of_status
+
+        sheet = CharacterSheetFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry)
+        notify_friends_of_status(sheet.character, online=True)  # must not raise
+
+    def test_online_friender_gets_an_alert(self) -> None:
+        from unittest.mock import MagicMock
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterEntryFactory
+        from world.scenes.friend_services import add_friend, notify_friends_of_status
+
+        # The friended character + its active tenure.
+        friended_sheet = CharacterSheetFactory()
+        friended_entry = RosterEntryFactory(character_sheet=friended_sheet)
+        friended_tenure = RosterTenureFactory(roster_entry=friended_entry)
+
+        # A player who friended that character and is online.
+        account = AccountFactory()
+        player, _ = PlayerData.objects.get_or_create(account=account)
+        friender_tenure = RosterTenureFactory(player_data=player)
+        add_friend(friender_tenure=friender_tenure, friend_tenure=friended_tenure)
+
+        account.msg = MagicMock()
+
+        notify_friends_of_status(friended_sheet.character, online=True)
+        account.msg.assert_called_once()
+        self.assertIn("come online", account.msg.call_args.args[0])

@@ -13,6 +13,7 @@ from world.scenes.models import Friendship
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import PlayerData
     from world.roster.models import RosterTenure
@@ -64,3 +65,41 @@ def friended_tenures_for(friender_tenure: RosterTenure) -> QuerySet[RosterTenure
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
     return RosterTenure.objects.filter(friendships_received__friender_tenure=friender_tenure)
+
+
+def notify_friends_of_status(character: ObjectDB, *, online: bool) -> None:
+    """Alert online frienders that this character has come online / gone offline — the watch list.
+
+    A friend watches a specific **character** (its current tenure). On puppet/unpuppet we notify the
+    *players* who friended that tenure — OOC, to their account (``msg`` to an offline account is a
+    harmless no-op, so offline frienders simply don't see it). Only **active** friender tenures
+    count (a friender who re-rostered away no longer watches). Best-effort: a notification failure
+    must never break login/logout.
+    """
+    from evennia.utils.logger import log_err  # noqa: PLC0415
+
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    try:
+        entry = character.sheet_data.roster_entry
+        tenure = entry.current_tenure if entry is not None else None
+        if tenure is None:
+            return
+        verb = "has come online" if online else "has gone offline"
+        message = f"|w[Friends]|n {character.key} {verb}."
+        friender_tenures = (
+            RosterTenure.objects.filter(
+                friendships_made__friend_tenure=tenure, end_date__isnull=True
+            )
+            .select_related("player_data__account")
+            .distinct()
+        )
+        seen: set[int] = set()
+        for friender in friender_tenures:
+            account = friender.player_data.account
+            if account is None or account.pk in seen:
+                continue
+            seen.add(account.pk)
+            account.msg(message)
+    except Exception:  # noqa: BLE001 — best-effort watch alert; never break the login hook (#1164)
+        log_err(f"friend watch-alert failed for {character}")
