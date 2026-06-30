@@ -410,8 +410,13 @@ def _compute_difficulty_override_for_primary(
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import compute_resist_increment  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+    from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
 
-    base = DIFFICULTY_VALUES[action_request.difficulty_choice]
+    base = resolved_base_difficulty(
+        action_request=action_request,
+        difficulty_choice=action_request.difficulty_choice,
+        target_sheet=action_request.target_persona.character_sheet,
+    )
     if resist_effort:
         increment = compute_resist_increment(
             action_request.target_persona.character_sheet.character,
@@ -736,7 +741,13 @@ def respond_to_action_target(
             if difficulty is not None:
                 action_target.difficulty_choice = difficulty
             action_target.resist_effort_level = resist_effort
-            base = DIFFICULTY_VALUES[action_target.difficulty_choice]
+            from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
+
+            base = resolved_base_difficulty(
+                action_request=action_request,
+                difficulty_choice=action_target.difficulty_choice,
+                target_sheet=action_target.target_persona.character_sheet,
+            )
             if resist_effort:
                 from actions.constants import ActionCategory  # noqa: PLC0415
                 from world.checks.services import compute_resist_increment  # noqa: PLC0415

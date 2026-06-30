@@ -62,6 +62,27 @@ class SocialActionSeedTests(TestCase):
             ).exists()
         )
 
+    def test_seduce_is_harder_and_sets_attraction_plus_smitten(self) -> None:
+        from actions.models import ActionTemplate
+
+        seduce = ActionTemplate.objects.get(name="Seduce")
+        self.assertEqual(seduce.difficulty_tier_modifier, 1)  # one tier harder than Flirt
+        success = seduce.consequence_pool.entries.get(
+            consequence__outcome_tier__name="Success"
+        ).consequence
+        rel_names = set(
+            ConsequenceEffect.objects.filter(
+                consequence=success, effect_type=EffectType.SET_RELATIONSHIP_CONDITION
+            ).values_list("relationship_condition__name", flat=True)
+        )
+        self.assertEqual(rel_names, {ATTRACTED_CONDITION_NAME, VERY_ATTRACTED_CONDITION_NAME})
+        # Seduce ALSO applies the Smitten condition (Flirt does not).
+        self.assertTrue(
+            ConsequenceEffect.objects.filter(
+                consequence=success, effect_type=EffectType.APPLY_CONDITION
+            ).exists()
+        )
+
     def test_idempotent(self) -> None:
         seed_social_action_content()
         seed_social_action_content()

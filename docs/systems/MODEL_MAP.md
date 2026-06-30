@@ -157,10 +157,12 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
+  - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -1309,10 +1311,12 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
+  - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
+  - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -2305,7 +2309,7 @@
   - capability_requirements <- magic.TechniqueCapabilityRequirement
   - character_grants <- magic.CharacterTechnique
   - condition_applications <- magic.TechniqueAppliedCondition
-  - removed_conditions <- magic.TechniqueRemovedCondition (#1585)
+  - removed_conditions <- magic.TechniqueRemovedCondition
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
@@ -2346,7 +2350,6 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - technique -> magic.Technique [FK]
-  *(#1585 dispel/cleanse payload; adds remove_all_stacks bool. See ADR-0064.)*
 
 ### TechniqueDamageProfile
 **Foreign Keys:**
@@ -2788,6 +2791,7 @@
   - capability_grants <- magic.TechniqueDraftCapabilityGrant
   - damage_profiles <- magic.TechniqueDraftDamageProfile
   - applied_conditions <- magic.TechniqueDraftAppliedCondition
+  - removed_conditions <- magic.TechniqueDraftRemovedCondition
 
 ### TechniqueDraftCapabilityGrant
 **Foreign Keys:**
@@ -2800,6 +2804,11 @@
   - draft -> magic.TechniqueDraft [FK]
 
 ### TechniqueDraftAppliedCondition
+**Foreign Keys:**
+  - condition -> conditions.ConditionTemplate [FK]
+  - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueDraftRemovedCondition
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - draft -> magic.TechniqueDraft [FK]
@@ -3830,6 +3839,7 @@
 - `add_relationship_condition(*, source: 'CharacterSheet', target: 'CharacterSheet', condition: 'RelationshipCondition', duration: 'timedelta | None' = None) -> 'None' — Add a ``RelationshipCondition`` to the directed ``source → target`` relationship (#1697).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
+- `clear_very_attracted(sheets) -> 'None' — Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' — Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' — Add permanent (developed) points to a track, up to capacity.`
 - `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' — Create a pending relationship with an initial update and track progress.`

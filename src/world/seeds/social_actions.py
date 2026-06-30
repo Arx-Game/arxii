@@ -20,14 +20,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# (template_name, check_type_name, target_type, icon) — ports checks/factories' social spec.
+# (template_name, check_type_name, target_type, icon, difficulty_tier_modifier).
+# Seduce reuses the Seduction check but rolls one tier harder than Flirt (#1697).
 _SOCIAL_ACTION_TEMPLATES = [
-    ("Intimidate", "Intimidation", "single", "skull"),
-    ("Persuade", "Persuasion", "single", "handshake"),
-    ("Deceive", "Deception", "single", "mask"),
-    ("Flirt", "Seduction", "single", "heart"),
-    ("Perform", "Performance", "area", "music"),
-    ("Entrance", "Presence", "area", "sparkles"),
+    ("Intimidate", "Intimidation", "single", "skull", 0),
+    ("Persuade", "Persuasion", "single", "handshake", 0),
+    ("Deceive", "Deception", "single", "mask", 0),
+    ("Flirt", "Seduction", "single", "heart", 0),
+    ("Seduce", "Seduction", "single", "flame", 1),
+    ("Perform", "Performance", "area", "music", 0),
+    ("Entrance", "Presence", "area", "sparkles", 0),
 ]
 _ENTRANCE_TEMPLATE_NAME = "Entrance"
 _POOL_PREFIX = "Social"
@@ -53,6 +55,11 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Failure", "Advance rebuffed", 1),
         ("Partial Success", "Interest piqued but guarded", 2),
         ("Success", "Charm lands completely", 1),
+    ],
+    "Seduce": [
+        ("Failure", "Seduction rebuffed", 1),
+        ("Partial Success", "Tempted but resistant", 2),
+        ("Success", "Swept off their feet", 1),
     ],
     "Perform": [
         ("Failure", "Performance falls flat", 1),
@@ -103,7 +110,7 @@ def ensure_social_action_templates() -> dict[str, object]:
     from world.checks.models import CheckType  # noqa: PLC0415
 
     templates: dict[str, object] = {}
-    for name, check_type_name, target_type, icon in _SOCIAL_ACTION_TEMPLATES:
+    for name, check_type_name, target_type, icon, tier_modifier in _SOCIAL_ACTION_TEMPLATES:
         check_type = CheckType.objects.filter(name=check_type_name).first()
         if check_type is None:
             # The check isn't seeded — "Presence" (Entrance) is a deliberate placeholder the
@@ -125,13 +132,21 @@ def ensure_social_action_templates() -> dict[str, object]:
                 "icon": icon,
                 "category": "social",
                 "grants_entry_flourish": name == _ENTRANCE_TEMPLATE_NAME,
+                "difficulty_tier_modifier": tier_modifier,
             },
         )
-        # get_or_create won't update an existing row's pool/check_type — keep them wired.
-        if template.consequence_pool_id != pool.pk or template.check_type_id != check_type.pk:
+        # get_or_create won't update an existing row — keep pool/check_type/tier wired.
+        if (
+            template.consequence_pool_id != pool.pk
+            or template.check_type_id != check_type.pk
+            or template.difficulty_tier_modifier != tier_modifier
+        ):
             template.consequence_pool = pool
             template.check_type = check_type
-            template.save(update_fields=["consequence_pool", "check_type"])
+            template.difficulty_tier_modifier = tier_modifier
+            template.save(
+                update_fields=["consequence_pool", "check_type", "difficulty_tier_modifier"]
+            )
         templates[name] = template
     return templates
 
@@ -206,7 +221,11 @@ def _attach_attraction_effects(consequence, *, include_smitten: bool) -> None:
 
 
 def seed_social_action_content() -> None:
-    """Cluster entry — seed social ActionTemplates + pools, and wire Flirt's attraction effects."""
+    """Cluster entry — seed social ActionTemplates + pools + Flirt/Seduce attraction effects."""
     ensure_social_action_templates()
     _, flirt_success = _success_consequence("Flirt")
     _attach_attraction_effects(flirt_success, include_smitten=False)
+    # Seduce: same attraction, plus the Smitten condition (a deeper hold) — and it rolls one tier
+    # harder than Flirt (difficulty_tier_modifier=1, set on the template above).
+    _, seduce_success = _success_consequence("Seduce")
+    _attach_attraction_effects(seduce_success, include_smitten=True)
