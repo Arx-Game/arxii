@@ -230,31 +230,6 @@ def get_pull_cost(tier: int, target_kind: str | None) -> ThreadPullCost:
     return ThreadPullCost.objects.get(tier=tier, target_kind__isnull=True)
 
 
-def resolve_pull_cost_for_threads(tier: int, threads: list[Thread]) -> ThreadPullCost:
-    """Resolve the effective pull cost across a list of threads (ADR-0051).
-
-    A pull is per-resonance and includes all in-action threads matching that
-    resonance. Because GIFT threads are always-in-action
-    (``_ALWAYS_IN_ACTION_KINDS``), a GIFT thread and a non-GIFT thread can
-    share a resonance and appear in the same pull. The cost is the
-    **maximum** (by resonance_cost, tie-broken on anima_per_thread) among the
-    kinds of all pulled threads — never the first thread's kind. This honors
-    ADR-0051's "gift is the costliest kind" deterministically.
-
-    Args:
-        tier: Pull intensity tier (1, 2, or 3).
-        threads: Non-empty list of threads being pulled.
-
-    Returns:
-        The ``ThreadPullCost`` row with the highest cost among the threads' kinds.
-    """
-    kinds = {t.target_kind for t in threads}
-    return max(
-        (get_pull_cost(tier, k) for k in kinds),
-        key=lambda c: (c.resonance_cost, c.anima_per_thread),
-    )
-
-
 def get_imbue_cost_multiplier(target_kind: str | None) -> int:
     """Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).
 

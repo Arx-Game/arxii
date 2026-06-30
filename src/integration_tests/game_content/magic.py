@@ -1674,15 +1674,6 @@ _PULL_COST_TIERS: list[tuple[int, int, int, str]] = [
     (3, 6, 3, "hard"),
 ]
 
-#: GIFT-specific pull cost rows (ADR-0051: gift-threads are the costliest kind).
-#: Values are tuning placeholders — roughly double the universal default.
-#: (tier, resonance_cost, anima_per_thread, imbue_cost_multiplier, label)
-_PULL_COST_TIERS_GIFT: list[tuple[int, int, int, int, str]] = [
-    (1, 2, 2, 2, "gift-soft"),
-    (2, 6, 4, 2, "gift-medium"),
-    (3, 12, 6, 2, "gift-hard"),
-]
-
 #: Canonical capability name for CAPABILITY_GRANT effect.
 _CATALOG_CAPABILITY_NAME: str = "endurance"
 
@@ -1741,16 +1732,17 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         )
         pull_costs[tier] = cost
 
-    # --- ThreadPullCost rows (GIFT-specific; ADR-0051 costliest kind) ---
-    for tier, resonance_cost, anima_per_thread, imbue_mult, label in _PULL_COST_TIERS_GIFT:
-        ThreadPullCostFactory(
-            tier=tier,
-            target_kind=TargetKind.GIFT,
-            resonance_cost=resonance_cost,
-            anima_per_thread=anima_per_thread,
-            imbue_cost_multiplier=imbue_mult,
-            label=label,
-        )
+    # --- ThreadPullCost row (GIFT imbue premium only; #1581: pull cost is uniform) ---
+    # GIFT carries an IMBUE premium only (no pull-cost premium; #1581). One tier-1
+    # GIFT row carries imbue_cost_multiplier; its pull-cost fields mirror universal.
+    ThreadPullCostFactory(
+        tier=1,
+        target_kind=TargetKind.GIFT,
+        resonance_cost=_PULL_COST_TIERS[0][1],  # == universal tier-1 resonance_cost
+        anima_per_thread=_PULL_COST_TIERS[0][2],  # == universal tier-1 anima_per_thread
+        imbue_cost_multiplier=2,
+        label="gift-imbue",
+    )
 
     # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
     affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)

@@ -30,8 +30,8 @@ from world.magic.services.threads import (
     compute_effective_cap,
     compute_path_cap,
     get_imbue_cost_multiplier,
+    get_pull_cost,
     recompute_max_health_with_threads,
-    resolve_pull_cost_for_threads,
 )
 from world.magic.types import (
     PullPreviewResult,
@@ -516,7 +516,7 @@ def preview_resonance_pull(
             msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
 
-    cost = resolve_pull_cost_for_threads(tier, threads)
+    cost = get_pull_cost(tier, None)
     n_threads = len(threads)
     anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
 
@@ -651,7 +651,7 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    cost = resolve_pull_cost_for_threads(tier, threads)
+    cost = get_pull_cost(tier, None)
     n_threads = len(threads)
 
     for t in threads:
