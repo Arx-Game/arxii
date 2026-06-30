@@ -1,5 +1,6 @@
 ---
 name: sharedmemory-model
+compatibility: polytoken
 description: Use when adding or working with Django models in this repo, resolving an apparent N+1, optimizing queries, caching, or walking foreign-key relationships — and before writing any resolve_/batch_fetch_ helper or flushing the identity map.
 ---
 

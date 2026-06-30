@@ -1,5 +1,6 @@
 ---
 name: running-tests
+compatibility: polytoken
 description: Use when running or writing tests in this repo — choosing the SQLite fast tier vs Postgres parity tier, the just test recipes, @tag("postgres") decisions, --keepdb pitfalls, or diagnosing SQLite-vs-PG test failures.
 ---
 

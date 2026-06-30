@@ -7,6 +7,12 @@
 docs/superpowers/*
 !docs/superpowers/specs/
 
+# polytoken: .polytoken/subagents/ is committed authored content, but
+# .polytoken/skills/ is a generated mirror of tools/skills/ (see
+# tools/skills/sync-polytoken-skills.sh) and permissions.local.yaml is local state.
+.polytoken/skills/
+.polytoken/permissions.local.yaml
+
 # Packages
 *.egg
 *.egg-info
