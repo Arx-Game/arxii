@@ -1,6 +1,6 @@
 """FactoryBoy factories for covenant models."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import factory
 from factory import django as factory_django
@@ -16,6 +16,7 @@ from world.covenants.constants import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CourtPact,
     Covenant,
     CovenantLevelBonus,
     CovenantLevelThreshold,
@@ -34,7 +35,7 @@ CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactor
 
 if TYPE_CHECKING:
     from world.conditions.models import CapabilityType
-    from world.magic.models import Resonance
+    from world.magic.models import Resonance, ThreadPullEffect
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -243,6 +244,31 @@ class MentorBondFactory(factory_django.DjangoModelFactory):
     sidekick_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
     adjusted_party = MentorBondAdjusted.SIDEKICK
     dissolved_at = None
+
+
+class CourtPactFactory(factory_django.DjangoModelFactory):
+    """Factory for CourtPact — a sworn-fealty bond between a Court and a servant (#1589).
+
+    Builds a *valid* active pact: the covenant defaults to a COURT type with its
+    own leader (Court covenants require a leader), and the servant is a distinct
+    sheet from that leader. ``granted_pull_cap=0`` means no master-set cap override.
+
+    No django_get_or_create — the model's unique constraint is partial (active
+    only), so get_or_create would silently return a released pact. Tests needing
+    lookup-or-create semantics should query directly.
+    """
+
+    class Meta:
+        model = CourtPact
+
+    covenant = factory.SubFactory(
+        CovenantFactory,
+        covenant_type=CovenantType.COURT,
+        leader=factory.SubFactory(CHARACTER_SHEET_FACTORY),
+    )
+    servant_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
+    granted_pull_cap = 0
+    released_at = None
 
 
 def seed_resonance_subrole_slice(
@@ -749,6 +775,132 @@ def wire_covenant_role_powers_catalog() -> "tuple[CovenantRole, list[CapabilityT
     return role, [cap_ember, cap_keening]
 
 
+def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffect]]":
+    """Idempotent seed: a themed COURT role-powers catalog (#1589 Task 8).
+
+    The COURT analog of :func:`wire_covenant_role_powers_catalog`. Authors ONE
+    COURT-scoped Sword (offense) ``CovenantRole`` — the Court's drawn blade —
+    plus the rows that make the role mechanically real for a servant who has
+    woven their Court-role thread:
+
+    - A **``CovenantRoleBonus``** scaling on the *holder's own* level (so a
+      higher-level servant draws a larger passive bonus from the role).
+    - Per authored resonance, a **tier-1 ``FLAT_BONUS`` ``ThreadPullEffect``**
+      (target_kind=COVENANT_ROLE) — the paid in-the-moment surge a servant pulls
+      from their Court-role thread for a combat bonus.
+
+    Mirrors the Battle catalog's structure but stays minimal: just the passive
+    bonus + the active FLAT_BONUS pull (no tier-0 capability leg). Doubles as
+    integration-test setUp AND staff/seed data — every create is a
+    ``get_or_create`` keyed on its natural key, so a second call is a no-op.
+
+    Returns ``(role, [flat_for_res_a, flat_for_res_b])`` — the FLAT_BONUS pull
+    rows, so the E2E can drive a pull through the seeded resonances.
+    """
+    from world.magic.constants import EffectKind, TargetKind
+    from world.magic.models import Affinity, Resonance, ThreadPullEffect
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+
+    # ------------------------------------------------------------------
+    # The Court's Sword (offense) role — PRIMARY (no parent_role/resonance).
+    # ------------------------------------------------------------------
+    role, _ = CovenantRole.objects.get_or_create(
+        slug="court-shadowblade",
+        defaults={
+            "name": "Shadowblade",
+            "covenant_type": CovenantType.COURT,
+            "archetype": RoleArchetype.SWORD,
+            "speed_rank": 2,
+            "description": (
+                "The Court's drawn blade — the servant who answers the master's "
+                "business in the killing dark."
+            ),
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # A CovenantRoleBonus scaling on the holder's own level.
+    # ------------------------------------------------------------------
+    stat_cat, _ = ModifierCategory.objects.get_or_create(
+        name="stat",
+        defaults={"description": "Primary character statistics.", "display_order": 10},
+    )
+    bonus_target, _ = ModifierTarget.objects.get_or_create(
+        category=stat_cat,
+        name="presence",
+        defaults={
+            "description": "Presence stat modifier target.",
+            "is_active": True,
+        },
+    )
+    CovenantRoleBonus.objects.get_or_create(
+        covenant_role=role,
+        modifier_target=bonus_target,
+        defaults={"bonus_per_level": 1},
+    )
+
+    # ------------------------------------------------------------------
+    # Two authored court-themed resonances (each needs an Affinity FK).
+    # ------------------------------------------------------------------
+    affinity, _ = Affinity.objects.get_or_create(
+        name="Abyssal",
+        defaults={"description": "The deep, hidden source of magical power."},
+    )
+    res_whisper, _ = Resonance.objects.get_or_create(
+        name="Whispered Malice",
+        defaults={
+            "description": (
+                "A resonance of patient, poisoned intent — the knife that smiles before it turns."
+            ),
+            "affinity": affinity,
+        },
+    )
+    res_garrote, _ = Resonance.objects.get_or_create(
+        name="Velvet Garrote",
+        defaults={
+            "description": (
+                "A resonance of silken, sudden ending — the embrace that does not let go."
+            ),
+            "affinity": affinity,
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # Per resonance: a tier-1 FLAT_BONUS pull. Keyed (target_kind, resonance,
+    # tier, min_thread_level) — the unique lookup.
+    # ------------------------------------------------------------------
+    flat_effects: list[ThreadPullEffect] = []
+    pulls = (
+        (
+            res_whisper,
+            3,
+            "You pull on the Court's whispered malice and it answers — a borrowed "
+            "edge of cultivated cruelty behind the strike.",
+        ),
+        (
+            res_garrote,
+            3,
+            "You draw the velvet garrote taut and it answers — the soft, final "
+            "pressure of the Court at your back.",
+        ),
+    )
+    for resonance, amount, snippet in pulls:
+        effect, _ = ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=resonance,
+            tier=1,
+            min_thread_level=0,
+            defaults={
+                "effect_kind": EffectKind.FLAT_BONUS,
+                "flat_bonus_amount": amount,
+                "narrative_snippet": snippet,
+            },
+        )
+        flat_effects.append(effect)
+
+    return role, flat_effects
+
+
 def seed_mentor_bond_defaults() -> MentorBondConfig:
     """Seed the MentorBondConfig pk=1 singleton with authored defaults (#1165).
 
@@ -793,3 +945,122 @@ def make_engaged_member(
     )
     set_engaged_membership(membership=membership)
     return membership
+
+
+class CourtSeed(NamedTuple):
+    """Result of :func:`make_court_with_mission` — a complete themed Court.
+
+    A NamedTuple so callers may unpack it positionally
+    ``(covenant, master_sheet, servant_sheet, mission_instance)`` OR read the
+    named fields. ``themed_role`` and ``service_offer`` are carried along for
+    tests/E2E that want to drive a pull or a second mission off the same seed.
+    """
+
+    covenant: Covenant
+    master_sheet: object
+    servant_sheet: object
+    mission_instance: object
+    themed_role: CovenantRole
+    service_offer: object
+
+
+def make_court_with_mission(
+    *,
+    master_level: int = 11,
+    servant_level: int = 1,
+) -> CourtSeed:
+    """Seed a complete themed Court with a servant on an active master-org mission.
+
+    Builds, in one call, everything the #1589 engagement loop needs:
+
+    - ``master_sheet`` — an account-less NPC ``CharacterSheet`` at ``master_level``
+      (default 11 → tier 3), high enough that the servant (default level 1 → tier 1)
+      sits ≥1 tier below (the fealty gulf).
+    - ``covenant`` — a convened COURT covenant with the master as its ``leader`` and
+      an ``is_leader`` founder; its backing Organization is auto-created in
+      ``Covenant.save()`` and reachable via ``covenant.organization``.
+    - The servant seated as a member holding the themed COURT role from
+      :func:`wire_court_role_powers_catalog` (with its CovenantRoleBonus + tier-1
+      FLAT_BONUS thread-pull rows).
+    - An ``NPCRole`` fronting the Court's Organization, carrying a MISSION
+      ``NPCServiceOffer``.
+    - An **ACTIVE** ``MissionInstance`` whose ``source_offer`` is that offer, with
+      the servant as a ``MissionParticipant`` — so
+      ``has_active_court_mission(character_sheet=servant_sheet, covenant=covenant)``
+      is True.
+
+    Returns a :class:`CourtSeed`.
+    """
+    from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+    from world.covenants.services import create_covenant
+    from world.covenants.types import CovenantFounder
+    from world.missions.constants import MissionStatus
+    from world.missions.factories import MissionInstanceFactory, MissionParticipantFactory
+    from world.npc_services.constants import OfferKind
+    from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
+
+    def _set_primary_level(sheet: object, level: int) -> None:
+        CharacterClassLevelFactory(
+            character=sheet.character,
+            character_class=CharacterClassFactory(),
+            level=level,
+            is_primary=True,
+        )
+        sheet.invalidate_class_level_cache()
+
+    themed_role, _ = wire_court_role_powers_catalog()
+
+    master_sheet = CharacterSheetFactory()
+    servant_sheet = CharacterSheetFactory()
+    _set_primary_level(master_sheet, master_level)
+    _set_primary_level(servant_sheet, servant_level)
+
+    # The master is both the puissant the Court is sworn to (the `leader` FK) and
+    # its founding member; the servant is a member holding the themed COURT role.
+    # create_covenant convenes the rank ladder and auto-creates the backing org.
+    master_role, _ = CovenantRole.objects.get_or_create(
+        slug="court-sovereign",
+        defaults={
+            "name": "Sovereign",
+            "covenant_type": CovenantType.COURT,
+            "archetype": RoleArchetype.CROWN,
+            "speed_rank": 1,
+            "description": "The puissant master a Court is sworn to.",
+        },
+    )
+    covenant = create_covenant(
+        name=f"Court of Shadows {master_sheet.pk}",
+        covenant_type=CovenantType.COURT,
+        sworn_objective="Sworn to serve the master's hidden will.",
+        leader=master_sheet,
+        founders=[
+            CovenantFounder(character_sheet=master_sheet, role=master_role, is_leader=True),
+            CovenantFounder(character_sheet=servant_sheet, role=themed_role, is_leader=False),
+        ],
+    )
+
+    # The master's NPCRole fronts the Court's Organization; a MISSION offer on it
+    # is what makes a resulting MissionInstance a *Court* mission (the predicate
+    # matches source_offer.role.faction_affiliation against covenant.organization).
+    npc_role = NPCRoleFactory(
+        name=f"Court Steward {covenant.pk}",
+        faction_affiliation=covenant.organization,
+    )
+    offer = NPCServiceOfferFactory(role=npc_role, kind=OfferKind.MISSION)
+
+    mission = MissionInstanceFactory(source_offer=offer, status=MissionStatus.ACTIVE)
+    # MissionParticipant.character FKs to ObjectDB — use the servant's character.
+    MissionParticipantFactory(
+        instance=mission,
+        character=servant_sheet.character,
+        is_contract_holder=True,
+    )
+
+    return CourtSeed(
+        covenant=covenant,
+        master_sheet=master_sheet,
+        servant_sheet=servant_sheet,
+        mission_instance=mission,
+        themed_role=themed_role,
+        service_offer=offer,
+    )
