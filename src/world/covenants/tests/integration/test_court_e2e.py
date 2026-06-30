@@ -12,10 +12,13 @@ systems (no mocking the system under test):
      directions, via ``can_engage_membership`` + ``evaluate_scene_engagement``).
   3. **Capped pull changes the outcome** — the servant weaves a COVENANT_ROLE thread,
      and (a) the thread's effective cap is BOUNDED by ``CourtPact.granted_pull_cap``
-     (imbuing past it raises ``AnchorCapExceeded``); (b) committing the pull in combat
-     debits resonance; (c) its FLAT_BONUS surfaces on the combat offense read-path
-     (``_sum_active_flat_bonuses``) — the value fed straight into the offense check as
-     ``extra_modifiers`` — comparing with-pull vs without.
+     (imbuing past it raises ``AnchorCapExceeded``); (b) committing the (two-thread) pull
+     in combat debits BOTH resonance AND anima; (c) its FLAT_BONUS surfaces on the combat
+     offense read-path (``_sum_active_flat_bonuses``) — the value fed into the offense
+     check; (d) driving the REAL offense-check resolver (``CombatTechniqueResolver
+     ._roll_check``) WITH the committed pull vs WITHOUT it yields a strictly higher
+     resolved ``CheckResult.total_points`` (the graded roll target) — the outcome, not
+     just the input.
   4. **Auto-dissolve** — when the last servant leaves and only the master remains, the
      Court auto-dissolves (``dissolved_at`` set; ADR-0042 two-member floor).
 
@@ -33,25 +36,34 @@ Wiring notes (documented per the task brief):
   ``CastTechniqueAction.round_declaration`` calls — so it persists a real ``CombatPull``,
   debits resonance/anima, and writes the resolved-effect snapshots the read-path consumes.
 
-SQLite tier: passes cleanly. No ``apply_condition`` / ``DISTINCT ON`` paths are touched,
-so this is not a ``@tag("postgres")`` test.
+The resolved-outcome drive (step 3d) routes through ``collect_check_modifiers`` +
+``perform_check`` with a fixed die; the resolver's ``offense_check_fn`` injection seam is
+left at ``None`` so production ``perform_check`` runs for real (nothing under test is
+mocked). If this path ever pulls in a PG-only ``DISTINCT ON`` dependency it should move to
+a ``@tag("postgres")`` method; at authoring time it runs cleanly on the SQLite fast tier.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper import models as idmapper_models
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
-from world.combat.constants import ParticipantStatus
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
+from world.combat.constants import ActionCategory, ParticipantStatus
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatParticipantFactory,
+    CombatRoundActionFactory,
+)
 from world.combat.models import CombatPull
 from world.combat.pull_helpers import commit_combat_pull
-from world.combat.services import _sum_active_flat_bonuses
+from world.combat.services import CombatTechniqueResolver, _sum_active_flat_bonuses
 from world.covenants.factories import make_court_with_mission, wire_court_role_powers_catalog
 from world.covenants.handlers import can_engage_membership
 from world.covenants.models import CharacterCovenantRole
@@ -68,9 +80,10 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
     RitualFactory,
+    ThreadFactory,
     ThreadPullCostFactory,
 )
-from world.magic.models import CharacterResonance, Thread
+from world.magic.models import CharacterAnima, CharacterResonance, Thread
 from world.magic.models.sessions import (
     RitualSession,
     RitualSessionParticipant,
@@ -82,6 +95,7 @@ from world.magic.types.pull import CastPullDeclaration
 from world.missions.constants import MissionStatus
 from world.narrative.models import NarrativeMessage
 from world.scenes.constants import RoundStatus
+from world.traits.factories import CheckSystemSetupFactory
 
 
 def _set_primary_level(sheet: object, level: int) -> None:
@@ -258,7 +272,9 @@ class CourtJourneyEndToEndTests(TestCase):
             balance=20,
         )
         CharacterAnimaFactory(character=self.servant.character, current=10, maximum=20)
-        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        # anima_per_thread=1 so a multi-thread pull actually debits anima
+        # (cost = anima_per_thread × max(0, n_threads - 1); a lone thread is free).
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=1)
 
         thread = Thread.objects.create(
             owner=self.servant,
@@ -268,6 +284,13 @@ class CourtJourneyEndToEndTests(TestCase):
             level=0,
             developed_points=0,
             name="Cord of the Shadowblade",
+        )
+        # A second, always-in-action thread on the same resonance so the pull
+        # carries two threads — the anima cost (1 × (2 - 1) = 1) actually fires.
+        companion_thread = ThreadFactory(
+            owner=self.servant,
+            resonance=self.resonance,
+            as_track_thread=True,
         )
 
         # (3a) The effective cap is BOUNDED by the master's granted cap.
@@ -308,15 +331,16 @@ class CourtJourneyEndToEndTests(TestCase):
             character_sheet=self.servant,
             resonance=self.resonance,
         ).balance
+        anima_before = CharacterAnima.objects.get(character=self.servant.character).current
 
         cast_pull = CastPullDeclaration(
             resonance=self.resonance,
             tier=1,
-            threads=(thread,),
+            threads=(thread, companion_thread),
         )
         commit_combat_pull(cast_pull, participant, encounter, technique_id=0)
 
-        # (3b) The pull pays resonance.
+        # (3b) The pull pays resonance AND anima.
         balance_after = CharacterResonance.objects.get(
             character_sheet=self.servant,
             resonance=self.resonance,
@@ -325,6 +349,13 @@ class CourtJourneyEndToEndTests(TestCase):
             balance_after,
             balance_before,
             "Committing the Court-role pull must debit resonance.",
+        )
+        anima_after = CharacterAnima.objects.get(character=self.servant.character).current
+        self.assertLess(
+            anima_after,
+            anima_before,
+            "Committing a multi-thread Court-role pull must debit anima "
+            "(anima_per_thread=1 × (2 threads - 1) = 1).",
         )
         self.assertTrue(
             CombatPull.objects.filter(participant=participant, round_number=1).exists(),
@@ -341,6 +372,50 @@ class CourtJourneyEndToEndTests(TestCase):
             0,
             "After the Court-role pull, the offense flat-bonus must be positive "
             "(the FLAT_BONUS changes the offense-check extra_modifiers).",
+        )
+
+        # (3c-outcome) Prove the OUTCOME, not just the read-path input. Drive the
+        # ACTUAL offense check resolution combat performs at round resolution —
+        # CombatTechniqueResolver._roll_check, which folds the committed pull's
+        # FLAT_BONUS through the collect_check_modifiers seam into the rolled
+        # modifier total — WITH the committed pull's bonus vs WITHOUT it, and assert
+        # the RESOLVED CheckResult differs: total_points (the value the offense roll
+        # is graded against) is higher by exactly the pull bonus, and the resolved
+        # rank gap is no worse. The resolver and its modifier seam run for real; only
+        # the die is fixed (a controlled roll), so the resolved outcome is stable.
+        CheckSystemSetupFactory.create()
+        offense_check_type = CheckTypeFactory()
+        round_action = CombatRoundActionFactory(participant=participant, round_number=1)
+
+        def _resolve_offense(pull_flat_bonus: int):
+            resolver = CombatTechniqueResolver(
+                participant=participant,
+                action=round_action,
+                pull_flat_bonus=pull_flat_bonus,
+                fatigue_category=ActionCategory.PHYSICAL,
+                offense_check_type=offense_check_type,
+                offense_check_fn=None,
+            )
+            with patch("world.checks.services.random.randint", return_value=50):
+                return resolver._roll_check()
+
+        resolved_without = _resolve_offense(0)
+        resolved_with = _resolve_offense(with_pull)
+        self.assertEqual(
+            resolved_with.total_points - resolved_without.total_points,
+            with_pull,
+            "The committed pull's FLAT_BONUS must raise the resolved offense-check "
+            "total_points by exactly the pull bonus (it survives collect_check_modifiers).",
+        )
+        self.assertGreater(
+            resolved_with.total_points,
+            resolved_without.total_points,
+            "The resolved offense check must grade against a strictly higher total with the pull.",
+        )
+        self.assertGreaterEqual(
+            resolved_with.rank_difference,
+            resolved_without.rank_difference,
+            "The pull must never worsen the resolved rank gap (monotonic in total_points).",
         )
 
         # ==============================================================
