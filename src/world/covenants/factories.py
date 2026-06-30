@@ -251,7 +251,10 @@ class CourtPactFactory(factory_django.DjangoModelFactory):
 
     Builds a *valid* active pact: the covenant defaults to a COURT type with its
     own leader (Court covenants require a leader), and the servant is a distinct
-    sheet from that leader. ``granted_pull_cap=0`` means no master-set cap override.
+    sheet from that leader. ``granted_pull_cap`` defaults to 2 — a servant the
+    master HAS empowered to pull (the ergonomic default); a grant of 0 would mean
+    the master granted nothing, so the servant could not pull their Court-role
+    thread at all. Override per-test when a specific cap is under test.
 
     No django_get_or_create — the model's unique constraint is partial (active
     only), so get_or_create would silently return a released pact. Tests needing
@@ -267,7 +270,7 @@ class CourtPactFactory(factory_django.DjangoModelFactory):
         leader=factory.SubFactory(CHARACTER_SHEET_FACTORY),
     )
     servant_sheet = factory.SubFactory(CHARACTER_SHEET_FACTORY)
-    granted_pull_cap = 0
+    granted_pull_cap = 2
     released_at = None
 
 
@@ -866,8 +869,12 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     )
 
     # ------------------------------------------------------------------
-    # Per resonance: a tier-1 FLAT_BONUS pull. Keyed (target_kind, resonance,
-    # tier, min_thread_level) — the unique lookup.
+    # Per resonance: a tier-1 FLAT_BONUS pull, authored at min_thread_level=1
+    # so the PACT is the real gate (#1589 final review). A servant with no
+    # active pact gets granted cap 0 → their Court-role thread cannot imbue
+    # above level 0 → this min-level-1 effect does NOT apply → the pull yields
+    # no Court bonus. Keyed (target_kind, resonance, tier, min_thread_level) —
+    # the unique lookup.
     #
     # FLAT_BONUS effects carry NO narrative_snippet: the combat-commit snapshot
     # (CombatPullResolvedEffect's flat_bonus_payload CheckConstraint) requires
@@ -885,7 +892,7 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
             target_kind=TargetKind.COVENANT_ROLE,
             resonance=resonance,
             tier=1,
-            min_thread_level=0,
+            min_thread_level=1,
             defaults={
                 "effect_kind": EffectKind.FLAT_BONUS,
                 "flat_bonus_amount": amount,

@@ -962,7 +962,8 @@ class CourtPact(SharedMemoryModel):
     are unconstrained and serve as an audit trail.
 
     granted_pull_cap is a master-set ceiling on the servant's Court-role thread level;
-    0 means no cap override is in effect (the system default applies).
+    0 means the master has granted nothing — the effective cap is 0, so the servant
+    cannot pull their Court-role thread.
     """
 
     covenant = models.ForeignKey(

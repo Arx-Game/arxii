@@ -382,6 +382,11 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
         membership.left_at = timezone.now()
         membership.save(update_fields=["engaged", "left_at"])
         affected_sheet_ids.add(membership.character_sheet_id)
+    # Release every active CourtPact for the covenant (#1589) — a dissolved Court
+    # must leave no dangling active pacts (would block re-induction if revived).
+    CourtPact.objects.filter(covenant=covenant, released_at__isnull=True).update(
+        released_at=timezone.now()
+    )
     covenant.dissolved_at = timezone.now()
     covenant.save(update_fields=["dissolved_at"])
     for sheet_id in affected_sheet_ids:
@@ -456,6 +461,7 @@ def leave_covenant(*, membership: CharacterCovenantRole) -> None:
     if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
+    _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=False)
 
@@ -494,6 +500,7 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
     if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
+    _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=True)
 
@@ -1715,6 +1722,22 @@ def release_court_pact(*, pact: CourtPact) -> None:
     """Soft-release an active CourtPact by setting released_at to now."""
     pact.released_at = timezone.now()
     pact.save(update_fields=["released_at"])
+
+
+def _release_court_pact_on_departure(*, covenant: Covenant, servant_sheet: CharacterSheet) -> None:
+    """Release a departing servant's active CourtPact, if any (#1589).
+
+    No-op unless the covenant is a COURT and the servant holds an active pact.
+    Releasing on departure lets a returning servant be re-inducted (re-sworn)
+    without tripping ``CourtPactExistsError`` against a stale active pact.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    if covenant.covenant_type != CovenantType.COURT:
+        return
+    pact = active_court_pact_for(covenant=covenant, servant_sheet=servant_sheet)
+    if pact is not None:
+        release_court_pact(pact=pact)
 
 
 def active_court_pact_for(

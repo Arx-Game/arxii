@@ -8,9 +8,19 @@ from django.utils import timezone
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
 from world.covenants.exceptions import CourtPactExistsError
-from world.covenants.factories import CovenantFactory
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+)
 from world.covenants.models import CourtPact
-from world.covenants.services import active_court_pact_for, release_court_pact, swear_court_pact
+from world.covenants.services import (
+    active_court_pact_for,
+    dissolve_covenant,
+    leave_covenant,
+    release_court_pact,
+    swear_court_pact,
+)
 
 
 class SwearCourtPactTests(TestCase):
@@ -159,3 +169,80 @@ class ActiveCourtPactForTests(TestCase):
         pact2 = swear_court_pact(covenant=covenant, servant_sheet=servant, granted_pull_cap=3)
         found = active_court_pact_for(covenant=covenant, servant_sheet=servant)
         self.assertEqual(found, pact2)
+
+
+class CourtPactLifecycleReleaseTests(TestCase):
+    """Departure and dissolution release active CourtPacts (#1589 final review).
+
+    Active pacts must not outlive a servant's membership: a departed (or kicked)
+    servant's pact is released so re-induction can re-swear without tripping
+    ``CourtPactExistsError``; a dissolved Court leaves no dangling active pacts.
+    """
+
+    def _court_member(self, covenant):
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.COURT)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=covenant, covenant_role=role
+        )
+        return sheet, membership
+
+    def test_leave_releases_servant_pact_and_allows_reswear(self):
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT)
+        servant, membership = self._court_member(covenant)
+        # Two more members so leaving does NOT auto-dissolve the Court.
+        self._court_member(covenant)
+        self._court_member(covenant)
+        swear_court_pact(covenant=covenant, servant_sheet=servant, granted_pull_cap=3)
+
+        leave_covenant(membership=membership)
+
+        self.assertIsNone(
+            active_court_pact_for(covenant=covenant, servant_sheet=servant),
+            "Leaving a Court must release the departing servant's active pact.",
+        )
+        # Re-swearing for the same (covenant, servant) now succeeds (no stale pact).
+        repact = swear_court_pact(covenant=covenant, servant_sheet=servant, granted_pull_cap=2)
+        self.assertIsNone(repact.released_at)
+        self.assertEqual(repact.granted_pull_cap, 2)
+
+    def test_leave_non_court_does_not_touch_pacts(self):
+        # A BATTLE covenant has no pact concept; departure must be a clean no-op.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=covenant, covenant_role=role
+        )
+        self._battle_filler(covenant)
+        self._battle_filler(covenant)
+
+        # Must not raise (covenant_type guard short-circuits before any pact query).
+        leave_covenant(membership=membership)
+        membership.refresh_from_db()
+        self.assertIsNotNone(membership.left_at)
+
+    def _battle_filler(self, covenant):
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        return CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=covenant, covenant_role=role
+        )
+
+    def test_dissolve_releases_all_active_pacts(self):
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT)
+        servant_a, _ = self._court_member(covenant)
+        servant_b, _ = self._court_member(covenant)
+        pact_a = swear_court_pact(covenant=covenant, servant_sheet=servant_a, granted_pull_cap=3)
+        pact_b = swear_court_pact(covenant=covenant, servant_sheet=servant_b, granted_pull_cap=4)
+
+        dissolve_covenant(covenant=covenant)
+
+        self.assertEqual(
+            CourtPact.objects.filter(covenant=covenant, released_at__isnull=True).count(),
+            0,
+            "Dissolving a Court must release every active pact.",
+        )
+        # Rows are preserved (soft-release), only released_at is stamped.
+        self.assertTrue(CourtPact.objects.filter(pk=pact_a.pk).exists())
+        self.assertTrue(CourtPact.objects.filter(pk=pact_b.pk).exists())

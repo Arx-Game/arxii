@@ -18,11 +18,13 @@ from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
     CovenantRoleFactory,
+    wire_court_role_powers_catalog,
 )
 from world.covenants.services import release_court_pact, swear_court_pact
-from world.magic.constants import TargetKind
+from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import ThreadFactory
 from world.magic.services import compute_anchor_cap
+from world.magic.services.resonance import resolve_pull_effects
 
 
 class CourtPullCapTests(TestCase):
@@ -90,3 +92,57 @@ class CourtPullCapTests(TestCase):
         )
         # base covenant_component only (level 3 → 30); no pact involvement at all.
         self.assertEqual(compute_anchor_cap(thread), 30)
+
+
+class CourtPullEffectGateTests(TestCase):
+    """The pact is the REAL gate on the Court active pull (#1589 final review).
+
+    The seeded Court active-pull effects are authored at ``min_thread_level=1``.
+    A no-pact servant gets granted cap 0 → their Court-role thread cannot imbue
+    above level 0 → ``resolve_pull_effects`` selects no FLAT_BONUS (the pull yields
+    no Court bonus). A servant whose pact lifted the cap (thread level ≥ 1) DOES
+    get the FLAT_BONUS. This makes "no pact → cannot pull" structurally true, not
+    merely cap-cosmetic.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.role, cls.flat_effects = wire_court_role_powers_catalog()
+        cls.resonance = cls.flat_effects[0].resonance
+        # The seeded active pull is authored above level 0 — the pact gate.
+        for effect in cls.flat_effects:
+            assert effect.min_thread_level == 1
+
+    def _court_thread(self, level: int) -> object:
+        servant = CharacterSheetFactory()
+        return ThreadFactory(
+            owner=servant,
+            resonance=self.resonance,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=self.role,
+            target_trait=None,
+            level=level,
+        )
+
+    def _flat_bonuses(self, thread: object) -> list:
+        resolved = resolve_pull_effects([thread], tier=1, in_combat=True)
+        return [e for e in resolved if e.kind == EffectKind.FLAT_BONUS]
+
+    def test_level_zero_thread_yields_no_court_flat_bonus(self) -> None:
+        """No pact (cap 0 → thread stuck at level 0) → the pull yields NO FLAT_BONUS."""
+        thread = self._court_thread(0)
+        self.assertEqual(
+            self._flat_bonuses(thread),
+            [],
+            "A level-0 Court-role thread must pull no FLAT_BONUS — the pact is the gate.",
+        )
+
+    def test_level_one_thread_yields_court_flat_bonus(self) -> None:
+        """With a pact lifting the cap (thread level ≥ 1) the FLAT_BONUS applies."""
+        thread = self._court_thread(1)
+        flat = self._flat_bonuses(thread)
+        self.assertTrue(
+            flat,
+            "A level-1 Court-role thread must pull the seeded FLAT_BONUS.",
+        )
+        self.assertGreater(flat[0].scaled_value, 0)
