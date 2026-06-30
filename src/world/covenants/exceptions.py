@@ -110,6 +110,28 @@ class CampaignStoryNotAllowedError(CovenantFormationError):
     )
 
 
+class CourtLeaderRequiredError(CovenantFormationError):
+    """Raised when a COURT covenant is created without specifying a leader."""
+
+    user_message = "A Court covenant must specify a leader."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A Court covenant must specify a leader.",
+        }
+    )
+
+
+class CourtLeaderNotAllowedError(CovenantFormationError):
+    """Raised when a non-COURT covenant is created with a leader set."""
+
+    user_message = "Only Court covenants may set a leader."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only Court covenants may set a leader.",
+        }
+    )
+
+
 class CovenantEngagementPrerequisiteNotMetError(CovenantError):
     """Raised when attempting scene engagement without members present."""
 

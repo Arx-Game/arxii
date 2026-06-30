@@ -117,6 +117,16 @@ class Covenant(SharedMemoryModel):
             "cascade-delete the covenant. Empty for STANDING/DURANCE covenants."
         ),
     )
+    leader = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="led_courts",
+        help_text=(
+            "Court covenants only: the puissant this Court is sworn to. Empty for other types."
+        ),
+    )
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.organization_id is None:
@@ -172,6 +182,11 @@ class Covenant(SharedMemoryModel):
             raise ValidationError(
                 {"campaign_story": "Only CAMPAIGN battle covenants may set campaign_story."}
             )
+        if self.covenant_type == CovenantType.COURT:
+            if self.leader_id is None:
+                raise ValidationError({"leader": "Court covenants require a leader."})
+        elif self.leader_id is not None:
+            raise ValidationError({"leader": "Only Court covenants may set a leader."})
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:
