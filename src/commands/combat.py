@@ -58,6 +58,8 @@ if TYPE_CHECKING:
 _EFFORT_PREFIX = "effort="
 # Standalone keyword that declares the technique as a passive secondary action.
 _SECONDARY_KEYWORD = "secondary"
+# Standalone keyword that opts out of gift-technique variant resolution (#1581 Task 8).
+_BASE_KEYWORD = "base"
 # Keyword prefix used to parse strain=<n> from clash command args.
 _STRAIN_PREFIX = "strain="
 # Keyword prefixes used to parse fury=<tier> anchor=<name> from cast command args.
@@ -151,7 +153,7 @@ class _CombatCommandMixin:
         return (
             any(lower.startswith(k + "=") for k in pull_keys)
             or lower.startswith((_EFFORT_PREFIX, _FURY_PREFIX, _ANCHOR_PREFIX))
-            or lower == _SECONDARY_KEYWORD
+            or lower in (_SECONDARY_KEYWORD, _BASE_KEYWORD)
         )
 
     @staticmethod
@@ -346,6 +348,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     # Fury-related parsed state (None means no fury declared).
     _fury_str: str | None = None
     _anchor_str: str | None = None
+    # Base-form opt-out (#1581 Task 8).
+    _use_base_form: bool = False
 
     # --------------------------------------------------------------------------
 
@@ -396,17 +400,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
-        # Strip a standalone trailing "secondary" keyword (case-insensitive, whole
-        # word). Plain string ops avoid a backtracking-prone regex (ReDoS). Must come
-        # after effort= stripping so the remaining raw is clean.
-        secondary = False
-        stripped = raw.rstrip()
-        kw = _SECONDARY_KEYWORD
-        if stripped.lower().endswith(kw) and (
-            len(stripped) == len(kw) or stripped[-len(kw) - 1].isspace()
-        ):
-            raw = stripped[: -len(kw)].rstrip()
-            secondary = True
+        # Strip standalone trailing "secondary" and "base" keywords (case-insensitive,
+        # whole word).  Must come after effort= stripping so the remaining raw is
+        # clean.  Both keywords can coexist on the same command line in any order.
+        raw, secondary, use_base_form = self._strip_cast_mode_keywords(raw)
 
         # Split on the first " at " (case-insensitive) to separate technique from
         # the optional target. A literal search avoids a backtracking-prone regex.
@@ -424,12 +421,53 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         self._effort = effort_str
         self._secondary = secondary
+        self._use_base_form = use_base_form
         self._pull_thread_str = pull_thread_str
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
         self._fury_str = fury_str
         self._anchor_str = anchor_str
         self._parsed = True
+
+    @staticmethod
+    def _strip_trailing_keyword(raw: str, kw: str) -> tuple[str, bool]:
+        """Strip a standalone trailing *kw* from *raw* (case-insensitive, whole word).
+
+        Returns ``(remainder, found)`` where *remainder* is the raw string with the
+        keyword removed (and trailing whitespace stripped), and *found* is True when
+        the keyword was present.  Plain string ops avoid a backtracking-prone regex.
+        """
+        stripped = raw.rstrip()
+        if stripped.lower().endswith(kw) and (
+            len(stripped) == len(kw) or stripped[-len(kw) - 1].isspace()
+        ):
+            return stripped[: -len(kw)].rstrip(), True
+        return raw, False
+
+    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool]:
+        """Strip trailing ``secondary`` and ``base`` keywords in any order.
+
+        Both keywords are standalone trailing tokens (case-insensitive, whole
+        word).  Loops until neither is the trailing token so that ``secondary
+        base`` and ``base secondary`` both yield the correct flags — fixing the
+        fixed-order stripping bug (#1581 Task 9).
+
+        Returns ``(remainder, secondary, use_base_form)``.
+        """
+        secondary = False
+        use_base_form = False
+        changed = True
+        while changed:
+            changed = False
+            raw, found = self._strip_trailing_keyword(raw, _SECONDARY_KEYWORD)
+            if found:
+                secondary = True
+                changed = True
+            raw, found = self._strip_trailing_keyword(raw, _BASE_KEYWORD)
+            if found:
+                use_base_form = True
+                changed = True
+        return raw, secondary, use_base_form
 
     @staticmethod
     def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
@@ -733,6 +771,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # combat/clash lever; round_declaration forwards these into the
         # CombatRoundAction, where resolve_combat_technique consumes them.
         self._inject_fury_kwargs(kwargs)
+
+        # Base-form opt-out: only inject when explicitly declared to keep the
+        # default (variant applied) from polluting kwargs unnecessarily.
+        if self._use_base_form:
+            kwargs["use_base_form"] = True
 
         if self._target_name:
             self._inject_target_kwargs(kwargs)

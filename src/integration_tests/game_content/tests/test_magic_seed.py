@@ -308,12 +308,14 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         cls.result: ThreadPullCatalogResult = seed_thread_pull_catalog()
 
     def test_pull_costs_created(self) -> None:
+        from world.magic.constants import TargetKind
         from world.magic.models.threads import ThreadPullCost
 
-        self.assertEqual(ThreadPullCost.objects.count(), 3)
-        tier1 = ThreadPullCost.objects.get(tier=1)
-        tier2 = ThreadPullCost.objects.get(tier=2)
-        tier3 = ThreadPullCost.objects.get(tier=3)
+        # 3 universal + 1 GIFT (imbue-only) = 4 rows.
+        self.assertEqual(ThreadPullCost.objects.count(), 4)
+        tier1 = ThreadPullCost.objects.get(tier=1, target_kind__isnull=True)
+        tier2 = ThreadPullCost.objects.get(tier=2, target_kind__isnull=True)
+        tier3 = ThreadPullCost.objects.get(tier=3, target_kind__isnull=True)
 
         self.assertEqual(tier1.resonance_cost, 1)
         self.assertEqual(tier1.anima_per_thread, 1)
@@ -326,6 +328,12 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         self.assertEqual(tier3.resonance_cost, 6)
         self.assertEqual(tier3.anima_per_thread, 3)
         self.assertEqual(tier3.label, "hard")
+
+        # GIFT tier-1 row: imbue-premium only (uniform pull cost; ADR-0051).
+        gift_t1 = ThreadPullCost.objects.get(tier=1, target_kind=TargetKind.GIFT)
+        self.assertEqual(gift_t1.resonance_cost, 1)
+        self.assertEqual(gift_t1.anima_per_thread, 1)
+        self.assertEqual(gift_t1.imbue_cost_multiplier, 2)
 
         self.assertIn(1, self.result.pull_costs)
         self.assertIn(2, self.result.pull_costs)
@@ -395,7 +403,7 @@ class TestSeedThreadPullCatalogIdempotency(TestCase):
 
     def test_row_counts_unchanged(self) -> None:
         counts = self._counts()
-        self.assertEqual(counts["pull_costs"], 3)
+        self.assertEqual(counts["pull_costs"], 4)  # 3 universal + 1 GIFT (imbue-only)
         self.assertEqual(
             counts["pull_effects"],
             4,
@@ -804,7 +812,8 @@ class TestSeedMagicDev(TestCase):
         self.assertTrue(Ritual.objects.filter(name="Rite of Atonement").exists())
 
         # --- Task 1.3: thread pull catalog ---
-        self.assertEqual(ThreadPullCost.objects.count(), 3)
+        # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.
+        self.assertEqual(ThreadPullCost.objects.count(), 4)
         self.assertEqual(ThreadPullEffect.objects.count(), 4)
 
         # --- Task 1.8: cantrip catalog ---
@@ -1888,3 +1897,23 @@ class SeedMagicDevMagicChecksTests(TestCase):
         self.assertEqual(len(result.magic_checks.check_types), 5)
         self.assertEqual(len(result.magic_checks.skills), 3)
         self.assertEqual(len(result.magic_checks.configs), 5)
+
+
+class TestSeedMagicDevVariants(TestCase):
+    """seed_magic_dev authors starter gift-technique variants (#1581)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.seed = seed_magic_dev()
+
+    def test_seed_authors_gift_technique_variants(self):
+        from world.magic.specialization.models import TechniqueVariant
+
+        variants = TechniqueVariant.objects.all()
+        self.assertTrue(variants.exists(), "dev seed authored no gift technique variants")
+        for v in variants:
+            self.assertGreaterEqual(v.unlock_thread_level, 3)
+            self.assertEqual(
+                v.parent_technique.gift.resonances.filter(id=v.resonance_id).count(),
+                1,
+            )

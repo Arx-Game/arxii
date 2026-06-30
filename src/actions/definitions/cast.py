@@ -59,6 +59,7 @@ class CastTechniqueAction(Action):
         target_persona_id: int | None = None,
         confirm_soulfray_risk: bool = False,
         cast_pull: CastPullDeclaration | None = None,
+        use_base_form: bool = False,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
@@ -106,6 +107,7 @@ class CastTechniqueAction(Action):
                 technique=technique,
                 confirm_soulfray_risk=confirm_soulfray_risk,
                 cast_pull=cast_pull,
+                use_base_form=use_base_form,
             )
         except Exception as exc:
             # Surface magic-layer exceptions (e.g. MagicError subclasses for
