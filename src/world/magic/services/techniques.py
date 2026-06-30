@@ -390,12 +390,18 @@ def _derive_power(
 def get_runtime_technique_stats(
     technique: Technique,
     character: ObjectDB | None,
+    *,
+    apply_variant: bool = True,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
     Combines base values with identity modifiers (from CharacterModifier),
     process modifiers (from CharacterEngagement), social safety bonus
     (when not engaged), and IntensityTier control modifier.
+
+    ``apply_variant`` (default ``True``) controls whether the gift-technique
+    variant is resolved.  Pass ``apply_variant=False`` to obtain the raw
+    base-form stats, e.g. for cost-clamping in ``use_technique`` (#1581 Task 7).
     """
     if character is None:
         return RuntimeTechniqueStats(
@@ -406,9 +412,10 @@ def get_runtime_technique_stats(
     # #1581: gift techniques resolve to their resonance-specific variant once the
     # gift-thread crosses unlock_thread_level. _ResolvedTechnique transparently
     # exposes variant-adjusted intensity/control; all other reads pass through.
-    from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
+    if apply_variant:
+        from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
-    technique = resolve_specialized_variant(entity=technique, character=character)
+        technique = resolve_specialized_variant(entity=technique, character=character)
 
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
@@ -919,6 +926,21 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         strain_commitment=strain_commitment,
         lethal=lethal,
     )
+
+    # #1581 strict bonus: a variant must never cost more anima than the base form.
+    base_stats = get_runtime_technique_stats(technique, character, apply_variant=False)
+    if control_penalty:
+        base_stats = replace(base_stats, control=max(base_stats.control - control_penalty, 0))
+    base_cost = calculate_effective_anima_cost(
+        base_cost=technique.anima_cost,
+        runtime_intensity=base_stats.intensity,
+        runtime_control=base_stats.control,
+        current_anima=anima.current,
+        strain_commitment=strain_commitment,
+        lethal=lethal,
+    )
+    if base_cost.effective_cost < cost.effective_cost:
+        cost = base_cost
 
     # Step 3: Safety checkpoint (Soulfray stage-driven)
     soulfray_warning = get_soulfray_warning(character)
