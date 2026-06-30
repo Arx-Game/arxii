@@ -420,3 +420,10 @@ class UnknownGift(UnknownTechniqueVocab):
 
 class GiftNotOwned(MagicError):
     user_message = "You do not know that gift."
+
+
+class TechniqueNotOwned(MagicError):
+    """Raised when weaving a signature (TECHNIQUE) thread on a technique the
+    character does not know (no CharacterTechnique row)."""
+
+    user_message = "You do not know this technique."
