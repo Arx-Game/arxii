@@ -185,6 +185,19 @@ class ResolveBattleRoundActionTests(BattleActionTestBase):
         result = ResolveBattleRoundAction().run(self.gm_actor)
         self.assertFalse(result.success)
 
+    def test_auto_concludes_when_side_hits_threshold(self) -> None:
+        # Pre-load the defender side to the victory threshold so check_victory fires.
+        self.defender_side.victory_points = self.defender_side.victory_threshold
+        self.defender_side.save(update_fields=["victory_points"])
+        with patch(
+            "world.battles.resolution.perform_check",
+            return_value=self._mock_check(2),
+        ):
+            result = ResolveBattleRoundAction().run(self.gm_actor)
+        self.assertTrue(result.success, result.message)
+        self.battle.refresh_from_db()
+        self.assertTrue(self.battle.is_concluded)
+
     def test_resolve_with_failure_applies_damage(self) -> None:
         from world.vitals.factories import CharacterVitalsFactory
 
@@ -212,16 +225,13 @@ class ConcludeBattleActionTests(BattleActionTestBase):
         self.assertEqual(self.battle.outcome, BattleOutcome.DEFENDER_MARGINAL)
 
     def test_concludes_with_natural_winner(self) -> None:
-        # Push defender past threshold.
+        # Push defender 10 VP past threshold; margin 10 < DECISIVE_MARGIN 50 → MARGINAL.
         self.defender_side.victory_points = self.defender_side.victory_threshold + 10
         self.defender_side.save(update_fields=["victory_points"])
         result = ConcludeBattleAction().run(self.gm_actor)
         self.assertTrue(result.success, result.message)
         self.battle.refresh_from_db()
-        self.assertIn(
-            self.battle.outcome,
-            [BattleOutcome.DEFENDER_MARGINAL, BattleOutcome.DEFENDER_DECISIVE],
-        )
+        self.assertEqual(self.battle.outcome, BattleOutcome.DEFENDER_MARGINAL)
 
     def test_non_gm_denied(self) -> None:
         result = ConcludeBattleAction().run(self.player_char)
@@ -231,9 +241,11 @@ class ConcludeBattleActionTests(BattleActionTestBase):
 
     def test_already_concluded_returns_failure(self) -> None:
         conclude_battle(battle=self.battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
-        # The battle is now concluded — the action should fail.
+        # The battle is now concluded — _active_battle_in_room filters it out, so the
+        # action must fail with the "no active battle" message (not an in-execute guard).
         result = ConcludeBattleAction().run(self.gm_actor)
         self.assertFalse(result.success)
+        self.assertIn("no active battle", result.message.lower())
 
 
 class DeclareBattleActionActionTests(BattleActionTestBase):
@@ -317,11 +329,12 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
 
     def test_redeclare_updates_existing(self) -> None:
         # First declaration: STRIKE.
-        DeclareBattleActionAction().run(
+        result1 = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.STRIKE,
             target_unit=self.unit,
         )
+        self.assertTrue(result1.success, result1.message)
         # Second declaration: SUPPORT (should update, not create a second row).
         ally_char = CharacterFactory(db_key="battle_ally2", location=self.room)
         ally_sheet = CharacterSheetFactory(character=ally_char)
@@ -330,11 +343,12 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
             side=self.defender_side,
             character_sheet=ally_sheet,
         )
-        DeclareBattleActionAction().run(
+        result2 = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.SUPPORT,
             target_ally=ally_participant,
         )
+        self.assertTrue(result2.success, result2.message)
         count = BattleActionDeclaration.objects.filter(
             battle_round=self.battle_round,
             participant=self.participant,

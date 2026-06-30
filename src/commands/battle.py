@@ -23,6 +23,7 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
+    from actions.types import ActionResult
     from world.battles.models import BattleParticipant, BattleUnit
 
 
@@ -142,7 +143,7 @@ class CmdBattle(ArxCommand):
             raise CommandError(msg)
         return ally
 
-    def _send(self, result: object) -> None:
+    def _send(self, result: ActionResult) -> None:
         if result.message:
             self.msg(result.message)
 

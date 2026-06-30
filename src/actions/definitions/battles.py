@@ -184,9 +184,6 @@ class ConcludeBattleAction(Action):
         if error:
             return error
 
-        if battle.is_concluded:
-            return ActionResult(success=False, message="This battle has already concluded.")
-
         # 1. Natural win condition.
         outcome = check_victory(battle=battle)
         if outcome is not None:
