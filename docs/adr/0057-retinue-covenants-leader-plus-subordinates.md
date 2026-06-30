@@ -21,4 +21,49 @@ a covenant-of-one exception. Role/rank orthogonality (ADR-0043) is what makes it
 holds high role power *and* top rank authority while servants hold lesser roles — and no
 `is_leadership` flag returns.
 
-> Status: accepted · Source: design discussion 2026-06-27 · Confidence: verify against code — new `CovenantType.COURT`; reuses `CovenantRank` + `resolve_effective_role` (`world/covenants`)
+> Status: accepted · amended 2026-06-30 (#1589) — verified against code · Source: design discussion 2026-06-27 · Confidence: high — `CovenantType.COURT`, `Covenant.leader`, `CourtPact`, `swear_court_pact`, `power_tier_for_level`, `has_active_court_mission` all in `world/covenants/`
+
+## Amendment (2026-06-30, #1589 implementation)
+
+All claims below were verified against `src/world/covenants/` on this branch before writing.
+
+**`leader` FK binding:** `Covenant` now carries a `leader` FK → `character_sheets.CharacterSheet`
+(`null=True`, `on_delete=SET_NULL`, `related_name="led_courts"`), validated in `Covenant.clean()`
+(required for COURT; forbidden for other types). This is the structural analogue of `campaign_story`
+on Battle covenants — a per-instance binding that names the master. `create_covenant(leader=...)`
+is the creation path. An NPC master is an account-less `CharacterSheet` seated as the `is_leader`
+founder; the min-2 floor stands and the Court auto-dissolves when the last servant leaves.
+
+**`CourtPact` model (new) — grant axis, SUPERSEDES "peer-independent" framing:** A new `CourtPact`
+model (`world/covenants/models.py`) records the per-(Court, servant) sworn-fealty bond. Active =
+`released_at IS NULL`; partial-unique on `(covenant, servant_sheet)` when active; released pacts
+are retained as an audit trail. Key field: `granted_pull_cap` (PositiveSmallIntegerField) — a
+master-set ceiling on the servant's Court-role thread pull level. **This supersedes the original
+ADR framing that "role power is peer-independent / not a level-clamp"**: a Court servant's effective
+combat pull is now bounded by what the master granted, so the servant's power is "own level PLUS
+what the master grants via the cap." It is still NOT `MentorBond`'s level-clamp — it is a separate
+grant axis on the thread-pull cap rather than a level adjustment, and the master remains
+never-level-adjacent. The grant is the gate: a servant with no active pact has an effective cap of 0
+(there is no `CourtPact` row to read) and cannot pull their Court-role thread. Services: `swear_court_pact(*, covenant, servant_sheet,
+granted_pull_cap) -> CourtPact`, `release_court_pact(*, pact) -> None`, `active_court_pact_for(*,
+covenant, servant_sheet) -> CourtPact | None`. The cap is enforced inside `compute_anchor_cap`
+(`world/magic/services/threads.py`) via `_bound_covenant_role_cap_by_court_grant`.
+
+**≥1-tier gulf now ENFORCED:** The ≥1 power-tier gulf is no longer purely narrative — it is
+enforced at join by the COURT arm of `assert_membership_level_allowed`
+(`world/covenants/mentorship.py`). The helper `power_tier_for_level(level) -> int`
+(`world/covenants/power_tier.py`) maps levels 1–5 → tier 1, 6–10 → tier 2, 11–15 → tier 3, etc.
+(band width = `TIER_ONE_MAX_LEVEL` = 5). `CourtGulfViolationError` is raised if
+`power_tier_for_level(servant) >= power_tier_for_level(leader)`.
+
+**Mission-driven engagement (new machinery):** The COURT arm of `can_engage_membership`
+(`world/covenants/handlers.py`) gates engagement on `has_active_court_mission(character_sheet,
+covenant)` (`world/covenants/court_missions.py`) — True iff the character participates in an ACTIVE
+`MissionInstance` whose `source_offer.role.faction_affiliation_id` matches
+`covenant.organization_id`. The mission (not co-presence) is the engagement gate. This is new
+context-gate machinery, not a mirror of Battle covenants, whose engagement gate is simply
+`not is_dormant`.
+
+**Fealty ceremony extended:** `induct_member_via_session` (fire-handler) was extended to swear the
+`CourtPact` for COURT covenants, reading `granted_pull_cap` from `participant_kwargs`, and emits
+a servant-spotlight narration alongside the induction message.

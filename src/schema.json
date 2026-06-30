@@ -5614,12 +5614,14 @@ paths:
           type: string
           enum:
           - battle
+          - court
           - durance
         description: |-
           Restrict to this covenant type; blank = any.
 
           * `durance` - Covenant of the Durance
           * `battle` - Covenant of Battle
+          * `court` - Covenant of the Court
       - name: page
         required: false
         in: query
@@ -5679,12 +5681,14 @@ paths:
           type: string
           enum:
           - battle
+          - court
           - durance
         description: |-
           Which covenant type this role belongs to.
 
           * `durance` - Covenant of the Durance
           * `battle` - Covenant of Battle
+          * `court` - Covenant of the Court
       - in: query
         name: parent_role
         schema:
@@ -27879,6 +27883,7 @@ components:
 
             * `durance` - Covenant of the Durance
             * `battle` - Covenant of Battle
+            * `court` - Covenant of the Court
         covenant_type_display:
           type: string
           readOnly: true
@@ -27944,6 +27949,7 @@ components:
 
             * `durance` - Covenant of the Durance
             * `battle` - Covenant of Battle
+            * `court` - Covenant of the Court
         covenant_type_display:
           type: string
           readOnly: true
@@ -27999,10 +28005,12 @@ components:
       enum:
       - durance
       - battle
+      - court
       type: string
       description: |-
         * `durance` - Covenant of the Durance
         * `battle` - Covenant of Battle
+        * `court` - Covenant of the Court
     CraftingQuote:
       type: object
       description: 'Read-only quote: costs, affordability, max quality tier, failure

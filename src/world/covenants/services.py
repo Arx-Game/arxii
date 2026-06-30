@@ -13,6 +13,7 @@ from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
     CannotTransferToDepartedMemberError,
+    CourtPactExistsError,
     CovenantLevelTooLowError,
     CovenantNameConflictError,
     CovenantRiteError,
@@ -29,6 +30,7 @@ from world.covenants.exceptions import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CourtPact,
     Covenant,
     CovenantRank,
     CovenantRite,
@@ -139,7 +141,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
 
 
 @transaction.atomic
-def create_covenant(  # noqa: PLR0913
+def create_covenant(  # noqa: PLR0913, C901, PLR0912
     *,
     name: str,
     covenant_type: str,
@@ -147,6 +149,7 @@ def create_covenant(  # noqa: PLR0913
     founders: Sequence[CovenantFounder],
     battle_binding: str = "",
     campaign_story: Story | None = None,
+    leader: CharacterSheet | None = None,
     flat: bool = False,
 ) -> Covenant:
     """Create a covenant with its initial set of founder memberships. Atomic.
@@ -175,6 +178,8 @@ def create_covenant(  # noqa: PLR0913
         BattleBindingNotAllowedError,
         BattleBindingRequiredError,
         CampaignStoryNotAllowedError,
+        CourtLeaderNotAllowedError,
+        CourtLeaderRequiredError,
     )
 
     if covenant_type == CovenantType.BATTLE:
@@ -186,12 +191,19 @@ def create_covenant(  # noqa: PLR0913
     if campaign_story is not None and battle_binding != BattleBinding.CAMPAIGN:
         raise CampaignStoryNotAllowedError
 
+    if covenant_type == CovenantType.COURT:
+        if leader is None:
+            raise CourtLeaderRequiredError
+    elif leader is not None:
+        raise CourtLeaderNotAllowedError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
         battle_binding=battle_binding,
         campaign_story=campaign_story,
+        leader=leader,
     )
 
     # Build rank ladder and determine which rank each founder gets.
@@ -370,6 +382,11 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
         membership.left_at = timezone.now()
         membership.save(update_fields=["engaged", "left_at"])
         affected_sheet_ids.add(membership.character_sheet_id)
+    # Release every active CourtPact for the covenant (#1589) — a dissolved Court
+    # must leave no dangling active pacts (would block re-induction if revived).
+    CourtPact.objects.filter(covenant=covenant, released_at__isnull=True).update(
+        released_at=timezone.now()
+    )
     covenant.dissolved_at = timezone.now()
     covenant.save(update_fields=["dissolved_at"])
     for sheet_id in affected_sheet_ids:
@@ -444,6 +461,7 @@ def leave_covenant(*, membership: CharacterCovenantRole) -> None:
     if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
+    _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=False)
 
@@ -482,6 +500,7 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
     if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
+    _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
     if not _maybe_dissolve(covenant=covenant):
         _emit_departure_message(covenant, departed_sheet, kicked=True)
 
@@ -1138,11 +1157,13 @@ def evaluate_scene_engagement(
     """Auto-engage a Durance covenant if co-presence prerequisites met, then
     fold the arriving character into any active rite in the room.
 
-    Calls _auto_engage_durance first (which may set the engaged membership),
-    then fold_arrival_into_active_rites so both newly-engaged and already-engaged
-    characters trigger the rite buff rescale on arrival.
+    Calls _auto_engage_durance + _auto_engage_court first (which may set the
+    engaged membership), then fold_arrival_into_active_rites so both
+    newly-engaged and already-engaged characters trigger the rite buff rescale
+    on arrival.
     """
     _auto_engage_durance(character_sheet=character_sheet, room=room)
+    _auto_engage_court(character_sheet=character_sheet)
     fold_arrival_into_active_rites(character_sheet=character_sheet, room=room)
 
 
@@ -1178,6 +1199,39 @@ def _auto_engage_durance(
     # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
     candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
     set_engaged_membership(membership=candidates[0][0])
+
+
+def _auto_engage_court(
+    *,
+    character_sheet: CharacterSheet,
+) -> None:
+    """Auto-engage a Court covenant the servant is "on the master's business" for.
+
+    Unlike Durance, the gate is the active mission (see can_engage_membership),
+    not co-presence — so no room ranking. Manual engagement sticks: this no-ops
+    if the character is already engaged for the COURT type. Among multiple
+    eligible Court memberships only one can be engaged per type (Slice A
+    invariant); the lowest covenant_id wins for deterministic behaviour.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
+
+    if (
+        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.COURT)
+        is not None
+    ):
+        return  # manual sticks; auto never overrides
+    eligible = [
+        membership
+        for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
+            CovenantType.COURT
+        )
+        if can_engage_membership(membership)
+    ]
+    if not eligible:
+        return
+    eligible.sort(key=lambda m: m.covenant_id)
+    set_engaged_membership(membership=eligible[0])
 
 
 def _rescale_other_participants(
@@ -1403,10 +1457,48 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
             break
     if candidate_participant is None or chosen_role is None:
         raise RequiredReferenceMissingError
-    return add_member(
+    membership = add_member(
         covenant=target_covenant,
         character_sheet=candidate_participant.character_sheet,
         role=chosen_role,
+    )
+
+    # COURT post-step (#1589): swearing into a Court is a fealty ceremony — the
+    # induction also binds a CourtPact whose pull-cap the master grants (read
+    # from the candidate participant's kwargs, mirroring mentorship's role read),
+    # then a servant-centred fealty narration is emitted.
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    if target_covenant.covenant_type == CovenantType.COURT:
+        servant_sheet = candidate_participant.character_sheet
+        granted_pull_cap = candidate_participant.participant_kwargs.get("granted_pull_cap", 0)
+        swear_court_pact(
+            covenant=target_covenant,
+            servant_sheet=servant_sheet,
+            granted_pull_cap=granted_pull_cap,
+        )
+        _emit_court_fealty_message(target_covenant, servant_sheet)
+
+    return membership
+
+
+def _emit_court_fealty_message(covenant: Covenant, servant_sheet: CharacterSheet) -> None:
+    """Fire one servant-centred NarrativeMessage when a servant swears fealty.
+
+    The SERVANT's act is the focal beat — they are the grammatical subject —
+    while the Court (and its master) is the backdrop they swear to (#1589).
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    recipients = covenant.member_roster.active_character_sheets
+    if not recipients:
+        return
+    servant_name = servant_sheet.character.db_key
+    send_narrative_message(
+        recipients=recipients,
+        body=f"{servant_name} kneels and swears fealty to the Court of {covenant.name}.",
+        category=NarrativeCategory.COVENANT,
     )
 
 
@@ -1589,3 +1681,73 @@ def establish_mentor_bond_via_session(*, session: RitualSession) -> MentorBond:
         sidekick_sheet=sidekick_sheet,
     )
     return bond
+
+
+# =============================================================================
+# Court Pact services (#1589)
+# =============================================================================
+
+
+@transaction.atomic
+def swear_court_pact(
+    *,
+    covenant: Covenant,
+    servant_sheet: CharacterSheet,
+    granted_pull_cap: int,
+) -> CourtPact:
+    """Create an active CourtPact binding servant_sheet to covenant.
+
+    Raises CourtPactExistsError if an active pact already exists for the pair.
+    The pre-check is a fast path; the DB constraint ``uniq_court_pact_active``
+    acts as a race-safe backstop via IntegrityError catch.
+    """
+    if CourtPact.objects.filter(
+        covenant=covenant,
+        servant_sheet=servant_sheet,
+        released_at__isnull=True,
+    ).exists():
+        raise CourtPactExistsError
+    try:
+        with transaction.atomic():
+            return CourtPact.objects.create(
+                covenant=covenant,
+                servant_sheet=servant_sheet,
+                granted_pull_cap=granted_pull_cap,
+            )
+    except IntegrityError as exc:
+        raise CourtPactExistsError from exc
+
+
+def release_court_pact(*, pact: CourtPact) -> None:
+    """Soft-release an active CourtPact by setting released_at to now."""
+    pact.released_at = timezone.now()
+    pact.save(update_fields=["released_at"])
+
+
+def _release_court_pact_on_departure(*, covenant: Covenant, servant_sheet: CharacterSheet) -> None:
+    """Release a departing servant's active CourtPact, if any (#1589).
+
+    No-op unless the covenant is a COURT and the servant holds an active pact.
+    Releasing on departure lets a returning servant be re-inducted (re-sworn)
+    without tripping ``CourtPactExistsError`` against a stale active pact.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    if covenant.covenant_type != CovenantType.COURT:
+        return
+    pact = active_court_pact_for(covenant=covenant, servant_sheet=servant_sheet)
+    if pact is not None:
+        release_court_pact(pact=pact)
+
+
+def active_court_pact_for(
+    *,
+    covenant: Covenant,
+    servant_sheet: CharacterSheet,
+) -> CourtPact | None:
+    """Return the single active CourtPact for (covenant, servant_sheet), or None."""
+    return CourtPact.objects.filter(
+        covenant=covenant,
+        servant_sheet=servant_sheet,
+        released_at__isnull=True,
+    ).first()

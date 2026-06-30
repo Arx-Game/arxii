@@ -16003,6 +16003,7 @@ export interface components {
        *
        *     * `durance` - Covenant of the Durance
        *     * `battle` - Covenant of Battle
+       *     * `court` - Covenant of the Court
        */
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
       readonly covenant_type_display: string;
@@ -16027,6 +16028,7 @@ export interface components {
        *
        *     * `durance` - Covenant of the Durance
        *     * `battle` - Covenant of Battle
+       *     * `court` - Covenant of the Court
        * @default durance
        */
       readonly covenant_type: components['schemas']['CovenantTypeEnum'];
@@ -16057,9 +16059,10 @@ export interface components {
     /**
      * @description * `durance` - Covenant of the Durance
      *     * `battle` - Covenant of Battle
+     *     * `court` - Covenant of the Court
      * @enum {string}
      */
-    CovenantTypeEnum: 'durance' | 'battle';
+    CovenantTypeEnum: 'durance' | 'battle' | 'court';
     /** @description Read-only quote: costs, affordability, max quality tier, failure risks. */
     CraftingQuote: {
       costs: components['schemas']['CraftingQuoteCost'];
@@ -31535,8 +31538,9 @@ export interface operations {
          *
          *     * `durance` - Covenant of the Durance
          *     * `battle` - Covenant of Battle
+         *     * `court` - Covenant of the Court
          */
-        covenant_type?: 'battle' | 'durance';
+        covenant_type?: 'battle' | 'court' | 'durance';
         /** @description A page number within the paginated result set. */
         page?: number;
       };
@@ -31586,8 +31590,9 @@ export interface operations {
          *
          *     * `durance` - Covenant of the Durance
          *     * `battle` - Covenant of Battle
+         *     * `court` - Covenant of the Court
          */
-        covenant_type?: 'battle' | 'durance';
+        covenant_type?: 'battle' | 'court' | 'durance';
         parent_role?: number;
       };
       header?: never;

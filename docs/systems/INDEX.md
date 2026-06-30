@@ -1428,7 +1428,8 @@ crafting framework and check-driven facet/style attachment.
 
 ### Covenants
 Magically-empowered group oaths with roles, gear compatibility, a per-covenant rank
-ladder, and a Mentor's Vow bond system for level-mismatched parties (#1165).
+ladder, a Mentor's Vow bond system for level-mismatched parties (#1165), and a Covenant
+of the Court type for master/servant pacts (#1589).
 
 **Standing invariant:** `CovenantRole` = combat power (archetype, speed_rank,
 Thread pulls). `CovenantRank` = administrative authority (invite/kick/manage).
@@ -1452,6 +1453,14 @@ These two axes are orthogonal — never re-merge them.
     Fields: `covenant` FK, `name`, `tier` (1 = top authority), `description`,
     `can_invite`, `can_kick`, `can_manage_ranks`. Unique `(covenant, tier)` and
     `(covenant, name)`.
+  - **`Covenant.leader`** (#1589) — FK → `character_sheets.CharacterSheet`
+    (`null=True`, `on_delete=SET_NULL`). Required for COURT covenants, forbidden for others.
+    Identifies the master character.
+  - **`CourtPact`** (#1589) — per-(Court covenant, servant) sworn-fealty bond. Fields:
+    `covenant` FK (PROTECT), `servant_sheet` FK → `CharacterSheet` (PROTECT),
+    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling),
+    `sworn_at` (auto), `released_at` (null = active). Partial-unique on
+    `(covenant, servant_sheet)` when active. Custom queryset: `.active()`.
   - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
     `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
     Staff-tunable in Django admin.
@@ -1509,9 +1518,25 @@ These two axes are orthogonal — never re-merge them.
     - `is_bond_graduated(bond) -> bool` — True when adjusted party is now in band.
     - `assert_membership_level_allowed(*, covenant, character_sheet) -> None` — **Vow gate**:
       raises `VowGateError` if character is out-of-band and has no active bond in this
-      covenant. Called by `add_member`; `create_covenant` is ungated.
+      covenant (for non-COURT types); raises `CourtGulfViolationError` if the servant's
+      power tier is not strictly below the leader's (for COURT). Called by `add_member`;
+      `create_covenant` is ungated.
     - `establish_mentor_bond_via_session(*, session) -> MentorBond` — service function
       wired to `MentorsVowRitualFactory` (consensual BILATERAL_SERVICE ritual).
+  - **Court services** (`world.covenants.services`, #1589):
+    - `swear_court_pact(*, covenant, servant_sheet, granted_pull_cap) -> CourtPact` —
+      creates an active pact; raises `CourtPactExistsError` if one already exists.
+    - `release_court_pact(*, pact) -> None` — sets `released_at = now()`.
+    - `active_court_pact_for(*, covenant, servant_sheet) -> CourtPact | None`
+  - **Court engagement** (`world.covenants.court_missions`, #1589):
+    - `has_active_court_mission(*, character_sheet, covenant) -> bool` — True iff
+      the character participates in an ACTIVE `MissionInstance` whose
+      `source_offer.role.faction_affiliation_id == covenant.organization_id`. Single
+      `.exists()` query; lazy-imports `world.missions` to avoid circular deps.
+  - **Court gulf helper** (`world.covenants.power_tier`, #1589):
+    - `power_tier_for_level(level: int) -> int` — maps levels 1–5 → tier 1,
+      6–10 → tier 2, 11–15 → tier 3, etc. (`ceil(level / TIER_ONE_MAX_LEVEL)`).
+      Used by the COURT gulf check in `assert_membership_level_allowed`.
 - **Combat seams (#985, #1174, #1165):** `apply_equipped_armor_soak` splits worn armor into
   role-compatible vs incompatible buckets; final soak = `compat_physical +
   max(incompat_physical, resonant_pool)` where the resonant pool =
@@ -1532,7 +1557,9 @@ These two axes are orthogonal — never re-merge them.
   `CrossCovenantRankError`, `IncompleteRankReorderError`,
   `CannotTransferToDepartedMemberError` (rank management, #1027),
   `NotAuthorizedToInviteError` (induction draft gate, #1231),
-  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate)
+  `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate),
+  `CourtGulfViolationError` (servant tier not below leader's, #1589),
+  `CourtPactExistsError` (duplicate active pact for pair, #1589)
 - **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
   `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
   `transfer_covenant_top_rank`, `stand_down_battle_covenant`

@@ -110,7 +110,7 @@ in-fiction trigger is plausible.
 | **Resonance differentiates your magic** (gift affinity + technique form) | ✅ PROVEN | **ADR-0052** (gift affinity = thread resonance) + **ADR-0055** (derive-on-read); `gift_resonances_for` feeds the four cast sites; `test_gift_specialization_e2e.py` | done |
 | **Signature technique** (one technique deepened, own resonance, may diverge) | ❌ → DESIGNED | **ADR-0056** (re-scope `TargetKind.TECHNIQUE`) | soon |
 | **Fall / Redemption** resonance conversion (asymmetric) | ❌ → DESIGNED | **ADR-0054** (new conversion service; respect monotonic `lifetime_earned`) | soon |
-| **Covenant of the Court** lets a peerless puissant hold a role | ❌ → DESIGNED | **ADR-0057** (new `CovenantType.COURT`, reuses covenant substrate) | soon |
+| **Covenant of the Court** lets a peerless puissant hold a role | ✅ PROVEN | **ADR-0057** (amended 2026-06-30, #1589) — `CovenantType.COURT` + `Covenant.leader` FK + `CourtPact` (grant cap) + gulf enforcement (`power_tier_for_level`) + mission-driven engagement (`has_active_court_mission`) + fealty ceremony; proven by `world/covenants/tests/integration/test_court_e2e.py` | done |
 | Multi-PC group combos `(effect-type × resonance)` | ✅ PROVEN | `ComboDefinition`/`ComboSlot` (group, not personal) | done |
 
 ---
@@ -127,7 +127,7 @@ A large build program; this ledger makes it **sequenceable and honest**. Five fl
 ### Build-new (ABSENT / substrate — build to the ADR, or greenfield)
 - **Identity (ADR-0050):** species abilities / lineage / khati / vampire / lycan as Minor Gifts — the infrastructure is built (#1580: `SpeciesGiftGrant` + `provision_species_gifts` + RESISTANCE substrate); pending: seed real species Minor Gift data. Broad immunity/vulnerability framework + environmental triggers → #1588 (ADR-0062).
 - **Gift/resonance economy (ADR-0050–0056):** Minor-Gift acquisition; GIFT thread anchor + per-target-kind cost (0051); gift-resonance-from-thread refactor (0052); the specialization engine (0055); signature re-scope of `TargetKind.TECHNIQUE` (0056); fall/redemption conversion service (0054).
-- **Covenants:** `CovenantType.COURT` + Court roles (ADR-0057).
+- **Covenants:** `CovenantType.COURT` + Court roles (ADR-0057) — **SHIPPED #1589** (see PROVEN row above).
 - **Effects:** the effect palette — **SHIPPED #1584** (9 effects: summon/reflect [Mirror Ward]/
   incorporeal [Ghostform]/sink [Earthmeld]/telekinesis [Force Grip]/teleport [Phase Jump]/
   obstacle [Barricade]/force-field [Aegis Field]/blink [Phase Step]; allegiance-aware summon
