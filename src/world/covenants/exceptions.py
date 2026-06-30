@@ -360,3 +360,14 @@ class MentorBondError(CovenantError):
             "The Mentor's Vow bond cannot be established.",
         }
     )
+
+
+class CourtPactExistsError(CovenantError):
+    """Raised when swearing a Court pact that already exists (active pact for the same pair)."""
+
+    user_message = "An active Court pact already exists for this servant in this covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "An active Court pact already exists for this servant in this covenant.",
+        }
+    )

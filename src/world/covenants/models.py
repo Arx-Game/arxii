@@ -938,3 +938,66 @@ class MentorBond(SharedMemoryModel):
         return (
             f"MentorBond({self.mentor_sheet} → {self.sidekick_sheet} in {self.covenant}, {state})"
         )
+
+
+# =============================================================================
+# CourtPact — sworn-fealty bond between a Court covenant and a servant (#1589)
+# =============================================================================
+
+
+class CourtPactQuerySet(models.QuerySet):
+    """Custom queryset for CourtPact."""
+
+    def active(self) -> CourtPactQuerySet:
+        """Return only pacts where released_at IS NULL (i.e. currently active)."""
+        return self.filter(released_at__isnull=True)
+
+
+class CourtPact(SharedMemoryModel):
+    """A single sworn-fealty bond between a Court covenant and a servant character (#1589).
+
+    Active = released_at IS NULL. Releasing sets released_at to a timestamp.
+    The partial unique constraint ``uniq_court_pact_active`` allows at most
+    one active pact per (covenant, servant_sheet) pair; historical released pacts
+    are unconstrained and serve as an audit trail.
+
+    granted_pull_cap is a master-set ceiling on the servant's Court-role thread level;
+    0 means no cap override is in effect (the system default applies).
+    """
+
+    covenant = models.ForeignKey(
+        COVENANT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="court_pacts",
+    )
+    servant_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="court_pacts",
+    )
+    granted_pull_cap = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Master-set ceiling on the servant's Court-role thread level.",
+    )
+    sworn_at = models.DateTimeField(auto_now_add=True)
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when the pact is released; null means currently active.",
+    )
+
+    objects = CourtPactQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["covenant", "servant_sheet"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant", "servant_sheet"],
+                condition=models.Q(released_at__isnull=True),
+                name="uniq_court_pact_active",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        state = "active" if self.released_at is None else "released"
+        return f"CourtPact({self.servant_sheet} → {self.covenant}, {state})"

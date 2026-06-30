@@ -13,6 +13,7 @@ from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
     CannotTransferToDepartedMemberError,
+    CourtPactExistsError,
     CovenantLevelTooLowError,
     CovenantNameConflictError,
     CovenantRiteError,
@@ -29,6 +30,7 @@ from world.covenants.exceptions import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CourtPact,
     Covenant,
     CovenantRank,
     CovenantRite,
@@ -1599,3 +1601,51 @@ def establish_mentor_bond_via_session(*, session: RitualSession) -> MentorBond:
         sidekick_sheet=sidekick_sheet,
     )
     return bond
+
+
+# =============================================================================
+# Court Pact services (#1589)
+# =============================================================================
+
+
+def swear_court_pact(
+    *,
+    covenant: Covenant,
+    servant_sheet: CharacterSheet,
+    granted_pull_cap: int,
+) -> CourtPact:
+    """Create an active CourtPact binding servant_sheet to covenant.
+
+    Raises CourtPactExistsError if an active pact already exists for the pair.
+    The DB constraint ``uniq_court_pact_active`` acts as a backstop.
+    """
+    if CourtPact.objects.filter(
+        covenant=covenant,
+        servant_sheet=servant_sheet,
+        released_at__isnull=True,
+    ).exists():
+        raise CourtPactExistsError
+    return CourtPact.objects.create(
+        covenant=covenant,
+        servant_sheet=servant_sheet,
+        granted_pull_cap=granted_pull_cap,
+    )
+
+
+def release_court_pact(*, pact: CourtPact) -> None:
+    """Soft-release an active CourtPact by setting released_at to now."""
+    pact.released_at = timezone.now()
+    pact.save(update_fields=["released_at"])
+
+
+def active_court_pact_for(
+    *,
+    covenant: Covenant,
+    servant_sheet: CharacterSheet,
+) -> CourtPact | None:
+    """Return the single active CourtPact for (covenant, servant_sheet), or None."""
+    return CourtPact.objects.filter(
+        covenant=covenant,
+        servant_sheet=servant_sheet,
+        released_at__isnull=True,
+    ).first()
