@@ -68,7 +68,12 @@ class SignatureCastMixin(CastScenarioMixin):
     """Fixture helper: grant + sign a benign castable technique on the caster."""
 
     def _sign_technique(
-        self, *, condition=None, target_kind=ConditionTargetKind.SELF, flat_intensity_delta=0
+        self,
+        *,
+        condition=None,
+        target_kind=ConditionTargetKind.SELF,
+        flat_intensity_delta=0,
+        narrative_snippet="",
     ):
         technique = make_benign_castable_technique()
         grant_technique(self.caster, technique)
@@ -85,6 +90,7 @@ class SignatureCastMixin(CastScenarioMixin):
             name="Signed Strike",
             required_facet=facet,
             flat_intensity_delta=flat_intensity_delta,
+            narrative_snippet=narrative_snippet,
         )
         if condition is not None:
             SignatureMotifBonusAppliedCondition.objects.create(
@@ -170,3 +176,54 @@ class SignatureCastFastTests(SignatureCastMixin):
 
         self.assertTrue(mock_use.called)
         self.assertEqual(mock_use.call_args.kwargs["power_intensity_bonus"], 7)
+
+
+class SignatureCastNarrationTests(SignatureCastMixin):
+    """Cosmetic signature narration on the cast outcome pose (SQLite-fast, deterministic)."""
+
+    def test_signed_technique_narration_contains_snippet(self):
+        """The cast outcome pose text contains the bonus's narrative_snippet."""
+        technique, _bonus = self._sign_technique(
+            narrative_snippet="spectral webs shimmer through the air"
+        )
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=technique,
+        )
+        self.assertIsNotNone(cast.outcome_interaction)
+        self.assertIn(
+            "spectral webs shimmer through the air",
+            cast.outcome_interaction.content,
+            "The outcome pose must contain the bonus's narrative_snippet.",
+        )
+
+    def test_signed_technique_narration_fallback_facet_name(self):
+        """When narrative_snippet is blank the outcome pose contains the primary facet name."""
+        technique, _bonus = self._sign_technique(narrative_snippet="")
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=technique,
+        )
+        self.assertIsNotNone(cast.outcome_interaction)
+        self.assertIn(
+            "Sig Cast Facet",
+            cast.outcome_interaction.content,
+            "When narrative_snippet is blank the facet name must appear in the pose.",
+        )
+
+    def test_unsigned_technique_has_no_signature_snippet_in_pose(self):
+        """An unsigned cast does not contain any signature snippet in the outcome pose."""
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            technique=technique,
+        )
+        self.assertIsNotNone(cast.outcome_interaction)
+        # Neither the well-known snippet text nor the facet name used by _sign_technique
+        # should appear in the pose for an unsigned technique.
+        self.assertNotIn("spectral webs shimmer", cast.outcome_interaction.content)
+        self.assertNotIn("Sig Cast Facet", cast.outcome_interaction.content)

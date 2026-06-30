@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import FuryTier, Technique
+    from world.magic.models.signature import SignatureMotifBonus
     from world.magic.services.fury import FuryResolution
     from world.magic.types.power_ledger import PowerLedger
     from world.magic.types.pull import CastPullDeclaration
@@ -188,6 +189,35 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     return result, power_ledger, fury_res
 
 
+def _resolve_signature_snippet(
+    bonus: SignatureMotifBonus | None, character_sheet: CharacterSheet
+) -> str | None:
+    """Resolve the cosmetic narration snippet for a signed technique's bonus.
+
+    Prefers ``bonus.narrative_snippet`` (staff-authored prose). When blank, falls
+    back to the first facet name found in the character's Motif
+    (``MotifResonanceAssociation.facet.name``).  Returns ``None`` when no bonus is
+    set or no fallback facet is available.
+
+    Args:
+        bonus: The active ``SignatureMotifBonus`` (or ``None`` — early-return).
+        character_sheet: The caster's ``CharacterSheet`` (used for the Motif lookup).
+    """
+    if bonus is None:
+        return None
+    if bonus.narrative_snippet:
+        return bonus.narrative_snippet
+    # Fallback: primary Motif facet name (first MotifResonanceAssociation on record).
+    from world.magic.models.motifs import MotifResonanceAssociation  # noqa: PLC0415
+
+    first_assoc = (
+        MotifResonanceAssociation.objects.filter(motif_resonance__motif__character=character_sheet)
+        .select_related("facet")
+        .first()
+    )
+    return first_assoc.facet.name if first_assoc is not None else None
+
+
 def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; cohesive
     *,
     scene: Scene,
@@ -209,6 +239,13 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     outcome_label = check_result.outcome_name if check_result is not None else "Unknown"
     success_level = check_result.success_level if check_result is not None else 0
 
+    # Signature-motif cosmetic (#1582): append the signed bonus's narrative snippet
+    # (or primary Motif facet name as fallback) to the cast-outcome narration.
+    from world.magic.services.signature import signature_bonus_for  # noqa: PLC0415
+
+    sig_bonus = signature_bonus_for(caster_persona.character_sheet.character, technique)
+    signature_snippet = _resolve_signature_snippet(sig_bonus, caster_persona.character_sheet)
+
     narration = render_cast_outcome_narration(
         actor_label=caster_persona.name,
         technique_name=technique.name,
@@ -217,6 +254,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         success_level=success_level,
         power_ledger=power_ledger,
         fizzle_note=fizzle_note,
+        signature_snippet=signature_snippet,
     )
 
     return create_interaction(
