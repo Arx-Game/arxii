@@ -967,12 +967,12 @@ class CourtPact(SharedMemoryModel):
 
     covenant = models.ForeignKey(
         COVENANT_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="court_pacts",
     )
     servant_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="court_pacts",
     )
     granted_pull_cap = models.PositiveSmallIntegerField(

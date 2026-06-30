@@ -1608,6 +1608,7 @@ def establish_mentor_bond_via_session(*, session: RitualSession) -> MentorBond:
 # =============================================================================
 
 
+@transaction.atomic
 def swear_court_pact(
     *,
     covenant: Covenant,
@@ -1617,7 +1618,8 @@ def swear_court_pact(
     """Create an active CourtPact binding servant_sheet to covenant.
 
     Raises CourtPactExistsError if an active pact already exists for the pair.
-    The DB constraint ``uniq_court_pact_active`` acts as a backstop.
+    The pre-check is a fast path; the DB constraint ``uniq_court_pact_active``
+    acts as a race-safe backstop via IntegrityError catch.
     """
     if CourtPact.objects.filter(
         covenant=covenant,
@@ -1625,11 +1627,14 @@ def swear_court_pact(
         released_at__isnull=True,
     ).exists():
         raise CourtPactExistsError
-    return CourtPact.objects.create(
-        covenant=covenant,
-        servant_sheet=servant_sheet,
-        granted_pull_cap=granted_pull_cap,
-    )
+    try:
+        return CourtPact.objects.create(
+            covenant=covenant,
+            servant_sheet=servant_sheet,
+            granted_pull_cap=granted_pull_cap,
+        )
+    except IntegrityError as exc:
+        raise CourtPactExistsError from exc
 
 
 def release_court_pact(*, pact: CourtPact) -> None:
