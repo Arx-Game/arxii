@@ -13,6 +13,7 @@ from unittest import mock
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory, PathFactory
 from world.classes.models import PathStage
 from world.magic.factories import RitualOfTheDuranceFactory
@@ -51,7 +52,7 @@ class DuranceWitnessTests(TestCase):
         self.friend.character.save()
         self.scene = SceneFactory(location=self.inductee.character.location, is_active=True)
 
-    def _interact(self, sheet) -> None:
+    def _interact(self, sheet: CharacterSheet) -> None:
         # Minimal Interaction so scene_witness_personas counts the friend's persona.
         from world.scenes.models import Interaction
 
@@ -64,6 +65,7 @@ class DuranceWitnessTests(TestCase):
 
     def test_scene_attendee_recorded_as_witness(self) -> None:
         self._interact(self.friend)
+        self._interact(self.inductee)
         session = draft_session(
             ritual=RitualOfTheDuranceFactory(),
             initiator=self.officiant,
