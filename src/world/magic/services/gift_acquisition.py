@@ -20,6 +20,7 @@ from world.magic.models import (
 )
 from world.magic.services.alterations import enforce_advancement_gate
 from world.progression.models import XPTransaction
+from world.progression.selectors import current_path_for_character
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import ProgressionReason
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         CharacterTechnique,
         Gift,
         GiftUnlock,
+        Technique,
         TechniqueTeachingOffer,
     )
 
@@ -37,6 +39,29 @@ def get_gift_acquisition_config() -> GiftAcquisitionConfig:
     """Lazily create and return the singleton GiftAcquisitionConfig (pk=1)."""
     config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
     return config
+
+
+def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
+    """True if the learner's current path permits this technique's style.
+
+    Checks ``technique.style.allowed_paths`` (M2M, blank = all paths)
+    against the learner's current path. A character with no path
+    history (pre-awakening / NPCs) is unrestricted.
+
+    Args:
+        learner: The character sheet wanting to learn the technique.
+        technique: The technique being learned.
+
+    Returns:
+        True if the technique's style is permitted for the learner's path.
+    """
+    path = current_path_for_character(learner.character)
+    if path is None:
+        return True
+    allowed = technique.style.cached_allowed_paths
+    if not allowed:
+        return True
+    return path in allowed
 
 
 # ---------------------------------------------------------------------------
