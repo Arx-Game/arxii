@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from actions.base import Action
 from actions.definitions.alterations import ResolveAlterationAction
+from actions.definitions.battles import (
+    BeginBattleRoundAction,
+    ConcludeBattleAction,
+    DeclareBattleActionAction,
+    ResolveBattleRoundAction,
+)
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
@@ -337,6 +343,11 @@ _ALL_ACTIONS: list[Action] = [
     SanctumDissolveAction(),
     SanctumAbsorbAction(),
     SanctumSeverAction(),
+    # #1592 — battle system lifecycle: GM verbs + player declare.
+    BeginBattleRoundAction(),
+    ResolveBattleRoundAction(),
+    ConcludeBattleAction(),
+    DeclareBattleActionAction(),
 ]
 
 # Lookup by key
