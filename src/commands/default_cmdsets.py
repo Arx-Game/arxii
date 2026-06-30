@@ -99,6 +99,7 @@ from commands.social.blocking import (
     CmdUnmute,
 )
 from commands.social.entrance_flourish import CmdEnter, CmdFlourish
+from commands.social.gossip import CmdGossip
 from commands.social.grievance import CmdGrievance
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
@@ -215,6 +216,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGrievance,
             # #1450 — the pull/browse face of the public-reaction tidings feed.
             CmdTidings,
+            # #1572 — work the rumor mill at a social hub (plant/seek/suppress gossip).
+            CmdGossip,
             # #1463 — public presence/navigation: who's about, in coloured area paths.
             CmdWhere,
             # #1463 — online roster: who's online, by active persona, coarse idle.

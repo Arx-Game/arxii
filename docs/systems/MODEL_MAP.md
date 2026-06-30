@@ -426,6 +426,7 @@
   - dominant_society -> societies.Society [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
@@ -4178,6 +4179,7 @@
   - victims <- secrets.SecretVictim
   - grievances <- secrets.SecretGrievance
   - known_by <- secrets.SecretKnowledge
+  - gossip_heat <- secrets.SecretGossip
 
 ### SecretVictim
 **Foreign Keys:**
@@ -4195,6 +4197,11 @@
 **Foreign Keys:**
   - roster_entry -> roster.RosterEntry [FK]
   - secret -> secrets.Secret [FK]
+
+### SecretGossip
+**Foreign Keys:**
+  - secret -> secrets.Secret [FK]
+  - region -> areas.Area [FK]
 
 ### Service Functions
 - `author_player_flavor_secret(*, subject_sheet: 'CharacterSheet', author_persona: 'Persona', content: 'str', category: 'SecretCategory | None' = None) -> 'Secret' — Author a Level-1 player-flavor secret (the only tier a player may free-write).`

@@ -223,6 +223,31 @@ society-level exposure — the gossip slice), enforcement (wanted/blood-feud con
 hostile-territory consequences), and propaganda (granular re-framing of the diffuse reading) are
 **later slices** of the #1429 sub-epic.
 
+## Gossip — the casual, regional tier (#1572)
+
+The **lowest** tier of the discovery ladder: a Level-1 secret can spread as **gossip** without the
+full clue loop. Distinct from `tidings` (#1450, which surfaces *formally* `expose_secret`'d
+scandals) — gossip is the **pre-exposure, skill-gated** tier, modelled as a **decaying regional
+"heat"** (`SecretGossip`, per `(secret, region)` where region is the `Area` at `AreaLevel.REGION`).
+
+- **Gate:** the Gossip *specialization* (≥1) drives the check (charm + Persuasion + Gossip, the
+  seeded `Gossip` CheckType — needs #1688's spec-in-checks engine) and you must stand in a
+  **`RoomProfile.is_social_hub`** room (the #1572 hub flag; owner-upgradeable amplifiers are #1694).
+- **Three actions** (`world/secrets/gossip.py`, all Gossip checks): **`plant_gossip`** (a holder
+  spreads a secret → `heat += 2` special / `+1` regular, by anyone, no cap), **`seek_gossip`** (roll
+  to surface a `heat ≥ 1` secret you don't hold, weighted by heat → **fact-only** grant),
+  **`suppress_gossip`** (lower heat — the only path back to 0). `heat = 0` = not findable; once
+  gossiped it lingers at the floor.
+- **Decay:** `gossip_decay_tick` (daily `game_clock` task) drops heat by 1 toward `GOSSIP_DECAY_FLOOR`.
+- **Authoring guardrail:** you spread only secrets you **hold** (or that are **about you**) — no
+  authoring gossip about others.
+- **Public threshold:** at `heat ≥ GOSSIP_PUBLIC_THRESHOLD` the gossip goes **public** (one-shot):
+  ambient **room-arrival echo** at the region's hubs (`Room._echo_public_gossip`) **and**
+  `expose_secret` to the **societies matching the region** — bridging this casual tier into the
+  formal reputation/`tidings` engine. All magnitudes are PLACEHOLDER.
+- **Telnet:** `gossip` (`commands/social/gossip.py`) — `gossip` (list), `gossip seek`, `gossip plant
+  <#>`, `gossip suppress <#>`. The reserved `gossip` verb.
+
 ## Boundary with Codex
 
 Cut on **authorship**, not topic. **Codex** = canon lore (subjects, history, world) authored

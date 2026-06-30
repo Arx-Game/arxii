@@ -54,6 +54,7 @@ Tasks registered in `tasks.py` via `register_all_tasks()`, called at server star
 | Condition expiration cleanup | hourly | conditions |
 | Block finalize (lifted-block clear) | hourly | scenes (#1278) |
 | Weather roll + echo | 2h real (≈6 IC h) | weather (#1522) |
+| Gossip heat decay | 24h real | secrets (#1572) |
 
 ## API Endpoints
 

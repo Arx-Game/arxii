@@ -380,6 +380,14 @@ class RoomProfile(SharedMemoryModel):
         default=True,
         help_text="Whether this room appears in public room listings",
     )
+    is_social_hub = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this room is a social hub where gossip is planted/sought (#1572). "
+            "Staff- or owner-designated; the foundation for the owner-upgradeable amplifier "
+            "layer (#1694)."
+        ),
+    )
     is_outdoor = models.BooleanField(
         default=False,
         help_text=(

@@ -107,6 +107,21 @@ class Room(ObjectParent, DefaultRoom):
         """
         super().at_object_receive(obj, source_location, **kwargs)
         self._broadcast_room_state(exclude=obj)
+        self._echo_public_gossip(obj)
+
+    def _echo_public_gossip(self, obj) -> None:
+        """Let a character arriving at a social hub overhear its public gossip (#1572).
+
+        No-op for non-characters and non-hub rooms (the latter short-circuits cheaply, so this
+        never touches the region closure on ordinary moves).
+        """
+        if not obj.is_typeclass("typeclasses.characters.Character", exact=False):
+            return
+        from world.secrets.gossip import public_gossip_lines
+
+        lines = public_gossip_lines(self)
+        if lines:
+            obj.msg("\n".join(lines))
 
     def at_object_leave(self, obj, target_location, **kwargs):
         """Notify occupants when an object leaves.
