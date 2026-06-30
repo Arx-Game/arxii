@@ -202,6 +202,25 @@ class BeginBattleRoundTests(TestCase):
         with self.assertRaises(BattleConcludedError):
             begin_battle_round(battle=self.battle)
 
+    def test_begin_round_after_resolve_increments_number(self) -> None:
+        """After a round is externally set to COMPLETED (simulating resolution),
+        begin_battle_round must still derive the correct next number from the
+        last round in the DB — not default back to 1.
+        """
+        from world.battles.services import begin_battle_round
+
+        first_round = begin_battle_round(battle=self.battle)
+        self.assertEqual(first_round.round_number, 1)
+
+        # Simulate external resolution: mark the round COMPLETED directly.
+        first_round.status = RoundStatus.COMPLETED
+        first_round.save(update_fields=["status"])
+
+        second_round = begin_battle_round(battle=self.battle)
+
+        self.assertEqual(second_round.round_number, 2)
+        self.assertEqual(second_round.status, RoundStatus.DECLARING)
+
     def test_current_round_property(self) -> None:
         from world.battles.services import begin_battle_round
 

@@ -158,6 +158,10 @@ class ConcludeBattleAction(Action):
 
     Derives the outcome from the natural win condition first, then the timer
     rule, then defaults to DEFENDER_MARGINAL when neither applies.
+
+    Note: When neither condition fires ("defenders hold" fallback), the outcome
+    is DEFENDER_MARGINAL regardless of VP totals — check VP via check_victory first
+    if a more precise outcome is needed before calling this action.
     """
 
     key: str = "conclude_battle"

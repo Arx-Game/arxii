@@ -18,7 +18,7 @@ from typing import Any
 
 from actions.round_context import RoundContext
 from world.battles.constants import BattleActionKind, BattleParticipantStatus
-from world.battles.models import BattleActionDeclaration, BattleParticipant
+from world.battles.models import BattleParticipant
 from world.character_sheets.models import CharacterSheet
 from world.scenes.constants import RoundStatus
 
@@ -67,21 +67,21 @@ class BattleRoundContext(RoundContext):
         self,
         character: CharacterSheet,  # noqa: ARG002
         player_action: Any,  # noqa: ARG002
-        kwargs: dict[str, Any],  # noqa: ARG002
+        kwargs: dict[str, Any],
     ) -> None:
-        """Minimal inline write of a BattleActionDeclaration.
+        """Record a battle action declaration via the ``declare_battle_action`` service.
 
-        Task 6 replaces this with the full ``declare_battle_action`` service.
+        Passes ``action_kind``, ``target_unit``, and ``target_ally`` through from
+        *kwargs* with sensible defaults. Raises ``RoundNotOpenError`` (a
+        ``BattleError``) when the battle has no DECLARING round.
         """
-        from actions.errors import ActionDispatchError  # noqa: PLC0415
+        from world.battles.services import declare_battle_action  # noqa: PLC0415
 
-        current_round = self._battle.current_round
-        if current_round is None or current_round.status != RoundStatus.DECLARING:
-            raise ActionDispatchError(ActionDispatchError.ROUND_DECLARATION_CLOSED)
-        BattleActionDeclaration.objects.update_or_create(
-            battle_round=current_round,
+        declare_battle_action(
             participant=self._participant,
-            defaults={"action_kind": BattleActionKind.STRIKE},
+            action_kind=kwargs.get("action_kind", BattleActionKind.STRIKE),
+            target_unit=kwargs.get("target_unit"),
+            target_ally=kwargs.get("target_ally"),
         )
 
 

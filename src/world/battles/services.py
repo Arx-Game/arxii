@@ -188,7 +188,8 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         prior.save(update_fields=["status", "completed_at"])
         next_number = prior.round_number + 1
     else:
-        next_number = 1
+        last = battle.rounds.order_by("-round_number").first()
+        next_number = (last.round_number + 1) if last is not None else 1
 
     return BattleRound.objects.create(
         battle=battle,
