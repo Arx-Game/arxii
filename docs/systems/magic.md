@@ -418,6 +418,32 @@ gift-thread confers the standard always-in-action thread bonus (passive `ThreadP
 tier-0 rows; `_ALWAYS_IN_ACTION_KINDS` — already wired in #1580); cast-time variant
 resolution is the new addition in #1581.
 
+**`apply_variant` flag on `get_runtime_technique_stats` (#1581 Task 7):** the function
+signature is `get_runtime_technique_stats(technique, character, *, apply_variant: bool = True)`.
+Pass `apply_variant=False` to obtain the raw base-form `RuntimeTechniqueStats` (no variant
+delta applied), used internally by `use_technique` for the strict-bonus cost clamp (see below).
+All external callers use the default (`apply_variant=True`).
+
+**Strict-bonus cost clamp in `use_technique` (#1581 Task 7):** a gift-technique variant is
+always a benefit at cast time, never a penalty. After computing `variant_cost` (with
+`apply_variant=True`), `use_technique` computes `base_form_cost` (with `apply_variant=False`)
+and applies `cost = min(variant_cost, base_form_cost)`. This enforces "never punish
+achievement": a character pays no more anima for the variant than they would for the plain
+base form, regardless of the variant's `intensity_delta`.
+
+**Base-form opt-out (#1581 Task 8):** the variant is the **default** at cast time, but a
+player may cast the base form explicitly when the resonance-tied character of the variant is
+situationally unwanted. Surfaces:
+
+- `request_technique_cast(..., use_base_form: bool = False)` — the primary seam in
+  `world/scenes/cast_services.py`; passes `apply_variant=False` to both
+  `_resolve_and_pose_cast` and `use_technique` when `True`.
+- Telnet: `cast <technique> base` — the `base` standalone trailing keyword in
+  `CmdDeclareTechnique` (`src/commands/combat.py`); sets `use_base_form=True` in
+  the dispatch kwargs forwarded to `CastTechniqueAction`.
+- Web cast payload: `use_base_form` boolean field on the cast request body.
+- Combat opt-out and a React toggle UI are deferred follow-ups.
+
 **Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
 (`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
 dispatch on `thread.target_kind` — `COVENANT_ROLE` → the single parent role;

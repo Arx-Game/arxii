@@ -421,6 +421,65 @@ class CmdDeclareTechniqueTargetResolverTests(TestCase):
             cmd._resolve_target_persona_id()
 
 
+class CmdDeclareTechniqueKeywordOrderTests(TestCase):
+    """Keyword-ordering tests for trailing 'secondary' and 'base' flags (#1581 Task 9).
+
+    Both flags must be recognised regardless of which appears last in the command
+    string.  The technique name must never carry either keyword as a suffix.
+    """
+
+    def _parse(self, args: str) -> CmdDeclareTechnique:
+        cmd = _make_cmd(args)
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd._parse_args()
+        return cmd
+
+    def test_secondary_then_base(self) -> None:
+        """'cast Firebolt secondary base' yields secondary=True, use_base_form=True."""
+        cmd = self._parse("Firebolt secondary base")
+        self.assertTrue(cmd._secondary)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_base_then_secondary(self) -> None:
+        """'cast Firebolt base secondary' yields secondary=True, use_base_form=True."""
+        cmd = self._parse("Firebolt base secondary")
+        self.assertTrue(cmd._secondary)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_secondary_alone(self) -> None:
+        """'cast Firebolt secondary' leaves use_base_form=False."""
+        cmd = self._parse("Firebolt secondary")
+        self.assertTrue(cmd._secondary)
+        self.assertFalse(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_base_alone(self) -> None:
+        """'cast Firebolt base' leaves secondary=False."""
+        cmd = self._parse("Firebolt base")
+        self.assertFalse(cmd._secondary)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_neither_flag(self) -> None:
+        """'cast Firebolt' leaves both flags False."""
+        cmd = self._parse("Firebolt")
+        self.assertFalse(cmd._secondary)
+        self.assertFalse(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_secondary_base_with_target(self) -> None:
+        """Flags coexist with 'at <target>' and the technique name is still clean."""
+        cmd = _make_cmd("Firebolt at Aria secondary base")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd._parse_args()
+        self.assertTrue(cmd._secondary)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+        self.assertEqual(cmd._target_name, "Aria")
+
+
 class CmdsetRegistrationTests(TestCase):
     def test_cast_command_registered(self) -> None:
         from commands.default_cmdsets import CharacterCmdSet

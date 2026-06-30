@@ -402,10 +402,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         # Strip standalone trailing "secondary" and "base" keywords (case-insensitive,
         # whole word).  Must come after effort= stripping so the remaining raw is
-        # clean.  Both keywords can coexist on the same command line.
-        raw, secondary = self._strip_trailing_keyword(raw, _SECONDARY_KEYWORD)
-        # "base" opts out of gift-technique variant resolution (#1581 Task 8).
-        raw, use_base_form = self._strip_trailing_keyword(raw, _BASE_KEYWORD)
+        # clean.  Both keywords can coexist on the same command line in any order.
+        raw, secondary, use_base_form = self._strip_cast_mode_keywords(raw)
 
         # Split on the first " at " (case-insensitive) to separate technique from
         # the optional target. A literal search avoids a backtracking-prone regex.
@@ -445,6 +443,31 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         ):
             return stripped[: -len(kw)].rstrip(), True
         return raw, False
+
+    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool]:
+        """Strip trailing ``secondary`` and ``base`` keywords in any order.
+
+        Both keywords are standalone trailing tokens (case-insensitive, whole
+        word).  Loops until neither is the trailing token so that ``secondary
+        base`` and ``base secondary`` both yield the correct flags — fixing the
+        fixed-order stripping bug (#1581 Task 9).
+
+        Returns ``(remainder, secondary, use_base_form)``.
+        """
+        secondary = False
+        use_base_form = False
+        changed = True
+        while changed:
+            changed = False
+            raw, found = self._strip_trailing_keyword(raw, _SECONDARY_KEYWORD)
+            if found:
+                secondary = True
+                changed = True
+            raw, found = self._strip_trailing_keyword(raw, _BASE_KEYWORD)
+            if found:
+                use_base_form = True
+                changed = True
+        return raw, secondary, use_base_form
 
     @staticmethod
     def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
