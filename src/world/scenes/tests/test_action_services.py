@@ -1,6 +1,7 @@
 """Tests for scene action services: create_action_request and respond_to_action_request."""
 
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -1655,3 +1656,63 @@ class TestNPCAndAreaFallbackDifficulty(TestCase):
             DIFFICULTY_VALUES[DifficultyChoice.HARD],
             "Area action must resolve at the authored HARD difficulty (60), not NORMAL",
         )
+
+
+class SocialModifierSeamTests(TestCase):
+    """The social/scene action path funnels its check through ``collect_check_modifiers`` (#1696).
+
+    Combat / challenge / vitals already honor the modifier seam; the social path did not, so no
+    condition / rollmod / scene / equipment / CHARACTER / fashion (and, once scoped, allure)
+    modifier reached a social check. These tests pin the wiring: the initiator's breakdown total
+    is folded into ``extra_modifiers`` for plain (non-technique) actions, scene-scoped.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
+
+    def _make_request(self) -> "SceneActionTarget":
+        from world.scenes.action_models import SceneActionRequest
+
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            action_key="intimidate",
+            status=ActionRequestStatus.PENDING,
+        )
+        SceneActionRequest.objects.filter(pk=request.pk).update(
+            action_template=self.action_template
+        )
+        request.action_template = self.action_template
+        return SceneActionTargetFactory(action_request=request)
+
+    @patch("world.checks.services.collect_check_modifiers")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_breakdown_total_folded_into_extra_modifiers(
+        self, mock_resolve: MagicMock, mock_collect: MagicMock
+    ) -> None:
+        from world.fatigue.constants import EFFORT_CHECK_MODIFIER
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+        mock_collect.return_value = SimpleNamespace(total=7)
+
+        row = self._make_request()
+        request = row.action_request
+        respond_to_action_target(action_target=row, decision=ConsentDecision.ACCEPT)
+
+        # collect_check_modifiers is asked for the initiator's sheet + the action's check type,
+        # scene-scoped so the perception-relative fashion bonus can resolve.
+        mock_collect.assert_called_once_with(
+            request.initiator_persona.character_sheet,
+            request.action_template.check_type,
+            scene=request.scene,
+        )
+        expected = EFFORT_CHECK_MODIFIER.get(request.effort_level, 0) + 7
+        self.assertEqual(mock_resolve.call_args.kwargs["extra_modifiers"], expected)
