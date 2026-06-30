@@ -8,6 +8,7 @@ class EffectType(models.TextChoices):
 
     APPLY_CONDITION = "apply_condition", "Apply Condition"
     REMOVE_CONDITION = "remove_condition", "Remove Condition"
+    SET_RELATIONSHIP_CONDITION = "set_relationship_condition", "Set Relationship Condition"
     ADD_PROPERTY = "add_property", "Add Property"
     REMOVE_PROPERTY = "remove_property", "Remove Property"
     DEAL_DAMAGE = "deal_damage", "Deal Damage"

@@ -955,3 +955,41 @@ class WriteupComplaint(WriteupFeedbackBase):
     )
     reason = models.TextField(help_text="Complainant's free-text rationale for staff review.")
     resolved = models.BooleanField(default=False, help_text="Staff triage flag.")
+
+
+class TemporaryRelationshipCondition(SharedMemoryModel):
+    """A time-limited :class:`RelationshipCondition` on a directed relationship (#1697).
+
+    Permanent conditions ("Attracted To") live on ``CharacterRelationship.conditions`` (the M2M).
+    Temporary ones ("Very Attracted" from a flirt) live here with an ``expires_at``, so they drop
+    off while the permanent condition persists. The allure engine
+    (``relationship_gated_contributions``) unions the active (non-expired) rows here with the
+    permanent M2M — counting allure once per gating condition, so an active Very Attracted is the
+    second (doubling) allure application. Pruned by a game_clock cron.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="temporary_conditions",
+    )
+    condition = models.ForeignKey(
+        RelationshipCondition,
+        on_delete=models.CASCADE,
+        related_name="temporary_applications",
+    )
+    expires_at = models.DateTimeField(help_text="When this temporary condition lapses.")
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "condition"], name="uniq_temp_relationship_condition"
+            )
+        ]
+        # Prune query is (relationship, expires_at); the unique constraint already indexes
+        # (relationship, condition), so no duplicate index there.
+        indexes = [models.Index(fields=["relationship", "expires_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.condition.name} on {self.relationship} (until {self.expires_at:%Y-%m-%d})"

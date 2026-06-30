@@ -12,6 +12,7 @@ class TestClusterRegistry(TestCase):
                 "checks",
                 "social",
                 "investigation",
+                "social_relationships",
                 "magic",
                 "items",
                 "combat",
