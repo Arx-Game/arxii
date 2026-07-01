@@ -37,6 +37,7 @@ from world.missions.constants import (
     NodeLocationMode,
     OptionKind,
     OptionSource,
+    ReportStyle,
     RewardGroupRule,
 )
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
@@ -120,6 +121,20 @@ class MissionTemplate(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="Arc association — the era this mission was authored for.",
+    )
+    report_to_role = models.ForeignKey(
+        "npc_services.NPCRole",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="missions_reported_to",
+        help_text=(
+            "The NPC role a player reports this mission's outcome to (#1753) — a "
+            "Functionary of this role, possibly different from the giver (e.g. a "
+            "guildmaster). Null → report to the giver's role (source_offer.role); if "
+            "there is no NPC giver either, the mission ends at resolution (legend "
+            "spreads, no monetary reward)."
+        ),
     )
     arc_scope = models.CharField(
         max_length=10,
@@ -1039,6 +1054,17 @@ class MissionInstance(SharedMemoryModel):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # #1753 — the after-action report (RESOLVED → COMPLETE). Set when the player
+    # reports the outcome to the report-to Functionary; the chosen style drives the
+    # money / fame-prestige / resonance deltas.
+    reported_at = models.DateTimeField(null=True, blank=True)
+    report_style = models.CharField(
+        max_length=20,
+        choices=ReportStyle.choices,
+        blank=True,
+        default="",
+        help_text="How the player reported this run's outcome (#1753). Blank until reported.",
+    )
     # Phase 5b.3: runtime side of the stories-missions seam. When set, this
     # instance was launched as the resolver of a specific Beat; the Phase-3
     # terminal helper notifies the seam (see

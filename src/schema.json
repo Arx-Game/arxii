@@ -12062,6 +12062,7 @@ paths:
           enum:
           - DRAMATIC_MOMENT
           - ENTRY_FLOURISH
+          - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
           - POSE_ENDORSEMENT
@@ -12089,6 +12090,7 @@ paths:
           * `DRAMATIC_MOMENT` - Dramatic moment
           * `STYLE_PRESENTATION` - Style presentation
           * `MISSION_REWARD` - Mission reward
+          * `MISSION_REPORT` - Mission report style
       tags:
       - magic
       security:
@@ -14709,6 +14711,24 @@ paths:
           description: Voting not open / option not surfaced / not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/{id}/report/:
+    post:
+      operationId: missions_journal_report_create
+      description: '#1753 — report a RESOLVED run''s outcome to its report-to Functionary,
+        by style.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/missions/journal/{id}/resolve/:
     post:
       operationId: missions_journal_resolve_create
@@ -34136,12 +34156,14 @@ components:
     MissionInstanceStatusEnum:
       enum:
       - active
+      - resolved
       - complete
       - abandoned
       - expired
       type: string
       description: |-
         * `active` - Active
+        * `resolved` - Resolved (awaiting report)
         * `complete` - Complete
         * `abandoned` - Abandoned
         * `expired` - Expired
@@ -43569,6 +43591,7 @@ components:
             * `DRAMATIC_MOMENT` - Dramatic moment
             * `STYLE_PRESENTATION` - Style presentation
             * `MISSION_REWARD` - Mission reward
+            * `MISSION_REPORT` - Mission report style
         granted_at:
           type: string
           format: date-time
@@ -45814,6 +45837,7 @@ components:
       - DRAMATIC_MOMENT
       - STYLE_PRESENTATION
       - MISSION_REWARD
+      - MISSION_REPORT
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -45829,6 +45853,7 @@ components:
         * `DRAMATIC_MOMENT` - Dramatic moment
         * `STYLE_PRESENTATION` - Style presentation
         * `MISSION_REWARD` - Mission reward
+        * `MISSION_REPORT` - Mission report style
     Specialization:
       type: object
       description: Serializer for Specialization model.

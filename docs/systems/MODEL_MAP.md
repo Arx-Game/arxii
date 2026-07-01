@@ -3261,6 +3261,7 @@
 ### MissionTemplate
 **Foreign Keys:**
   - created_in_era -> stories.Era [FK] (nullable)
+  - report_to_role -> npc_services.NPCRole [FK] (nullable)
   - categories -> missions.MissionCategory [M2M]
 **Pointed to by:**
   - clues <- clues.Clue
@@ -3395,7 +3396,7 @@
   - line -> missions.MissionDeedRewardLine [FK]
 
 ### Service Functions
-- `apply_deed_rewards(deed: 'MissionDeedRecord') -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
+- `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
 - `beat_for(instance: 'MissionInstance', character: 'ObjectDB') -> 'BeatView | None' — The current beat as ``character`` sees it; None when the run is done.`
 - `build_group_option_list(instance: 'MissionInstance', node: 'MissionNode') -> 'list[PresentedOption]' — Union of every participant's Phase-3 option list at ``node``.`
@@ -3470,6 +3471,7 @@
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
+  - missions_reported_to <- missions.MissionTemplate
   - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown

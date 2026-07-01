@@ -194,6 +194,9 @@ class GainSource(models.TextChoices):
     STYLE_PRESENTATION = "STYLE_PRESENTATION", "Style presentation"
     # #1737 — missions deed rewards
     MISSION_REWARD = "MISSION_REWARD", "Mission reward"
+    # #1753 — resonance granted by a mission-report style (humble → Bene, embellish →
+    # Insidia). No typed source FK (like STAFF_GRANT); the run is recorded on the instance.
+    MISSION_REPORT = "MISSION_REPORT", "Mission report style"
 
 
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).

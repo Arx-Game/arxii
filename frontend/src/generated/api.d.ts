@@ -9385,6 +9385,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/report/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #1753 — report a RESOLVED run's outcome to its report-to Functionary, by style. */
+    post: operations['missions_journal_report_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/{id}/resolve/': {
     parameters: {
       query?: never;
@@ -18996,12 +19013,13 @@ export interface components {
     };
     /**
      * @description * `active` - Active
+     *     * `resolved` - Resolved (awaiting report)
      *     * `complete` - Complete
      *     * `abandoned` - Abandoned
      *     * `expired` - Expired
      * @enum {string}
      */
-    MissionInstanceStatusEnum: 'active' | 'complete' | 'abandoned' | 'expired';
+    MissionInstanceStatusEnum: 'active' | 'resolved' | 'complete' | 'abandoned' | 'expired';
     /**
      * @description Editor CRUD for MissionNode rows.
      *
@@ -24222,6 +24240,7 @@ export interface components {
        *     * `DRAMATIC_MOMENT` - Dramatic moment
        *     * `STYLE_PRESENTATION` - Style presentation
        *     * `MISSION_REWARD` - Mission reward
+       *     * `MISSION_REPORT` - Mission report style
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -25273,6 +25292,7 @@ export interface components {
      *     * `DRAMATIC_MOMENT` - Dramatic moment
      *     * `STYLE_PRESENTATION` - Style presentation
      *     * `MISSION_REWARD` - Mission reward
+     *     * `MISSION_REPORT` - Mission report style
      * @enum {string}
      */
     SourceEnum:
@@ -25288,7 +25308,8 @@ export interface components {
       | 'ENTRY_FLOURISH'
       | 'DRAMATIC_MOMENT'
       | 'STYLE_PRESENTATION'
-      | 'MISSION_REWARD';
+      | 'MISSION_REWARD'
+      | 'MISSION_REPORT';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -37350,10 +37371,12 @@ export interface operations {
          *     * `DRAMATIC_MOMENT` - Dramatic moment
          *     * `STYLE_PRESENTATION` - Style presentation
          *     * `MISSION_REWARD` - Mission reward
+         *     * `MISSION_REPORT` - Mission report style
          */
         source?:
           | 'DRAMATIC_MOMENT'
           | 'ENTRY_FLOURISH'
+          | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
@@ -39508,6 +39531,26 @@ export interface operations {
       };
       /** @description Not a participant / no such mission. */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_report_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
         headers: {
           [name: string]: unknown;
         };
