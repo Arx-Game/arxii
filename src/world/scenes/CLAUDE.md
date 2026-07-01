@@ -81,7 +81,9 @@ Scene-round Succor challenge-binding (#1744) — the scene-round equivalent of c
 - `ensure_succor_challenges_for_round(scene_round)`: binds a Succor `ChallengeInstance` to each
   protected ally declared this round; called from `resolve_scene_round` right before
   `_resolve_scene_declarations`, so the challenge exists in time for `get_available_actions` to
-  surface it when the declared Succor action itself resolves in initiative order.
+  surface it when the declared Succor action itself resolves in initiative order. Logs
+  `logger.warning` and no-ops when the Succor `ChallengeTemplate` isn't seeded (mirrors
+  `world.combat.services._ensure_succor_challenges`'s equivalent branch).
 
 ### `round_services.py`
 Key service functions for scene round lifecycle:
@@ -96,7 +98,14 @@ Key service functions for scene round lifecycle:
 - `resolve_scene_round(scene_round)`: Unconditional resolver — binds this round's Succor challenges
   (`ensure_succor_challenges_for_round`, #1744), runs declared CHALLENGE actions in
   initiative order, fires the end-round tick (which advances acute conditions — DoTs, bleed-out, plummet),
-  then either advances to the next round or **auto-ends** (a `start_reason==DANGER` round COMPLETES once
+  then either advances to the next round or **auto-ends**. **Succor declarations are excluded from
+  `_resolve_scene_declarations`'s generic challenge-resolution sweep and its end-of-sweep delete**
+  (#1744 bugfix) — a pending Succor row has `challenge_instance=None` (identified instead by
+  `succor_target`), so feeding it into the CHALLENGE sweep would crash on
+  `req.challenge_instance.location`, and deleting it early would erase
+  `SceneActionDeclaration.succor_resolution`'s cache before `get_cover_for` (called from the END
+  tick) can ever read it. A leftover Succor row from a past round is harmless — `round_number`
+  advances every round and `get_cover_for` only matches the current one. (a `start_reason==DANGER` round COMPLETES once
   `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition). **AFK
   own-peril skip (#1480):** a present `can_act` participant who did NOT declare this round (swept as an
   implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute

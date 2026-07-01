@@ -730,12 +730,28 @@ def resolve_challenge_declarations(
 def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     """Resolve declared CHALLENGE actions for the round in initiative order, re-validating
     eligibility via get_available_actions (mirrors combat _resolve_declared_challenges),
-    then delete ALL bridge rows for the round. Pass rows resolve to nothing."""
+    then delete the round's CHALLENGE bridge rows. Pass rows resolve to nothing.
+
+    Succor declarations (``challenge_instance is None``; identified instead by
+    ``succor_target``) are excluded from both the generic challenge-resolution sweep
+    and the delete below (#1744 bugfix): they are resolved reactively by
+    ``SceneRoundContext.get_cover_for`` (called from the END tick, AFTER this
+    function runs), which caches its result on the same row's ``succor_resolution``
+    field. Deleting them here would both crash the generic sweep (which
+    unconditionally dereferences ``challenge_instance.location``) and erase the
+    cache before it can ever be read. They are naturally scoped by
+    ``(scene_round, round_number, participant)`` — round_number advances every
+    round, so a leftover Succor row from a past round is simply never matched
+    again by ``get_cover_for``'s current-round filter; no extra cleanup is needed.
+    """
     from world.scenes.interaction_services import broadcast_scene_outcome  # noqa: PLC0415
 
     declarations = list(
         scene_round.action_declarations.filter(
-            round_number=scene_round.round_number, is_pass=False, is_immediate=False
+            round_number=scene_round.round_number,
+            is_pass=False,
+            is_immediate=False,
+            challenge_instance__isnull=False,
         )
         .select_related(
             "participant",
@@ -762,4 +778,6 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
             scene_round=scene_round, narration=narration
         ),
     )
-    scene_round.action_declarations.filter(round_number=scene_round.round_number).delete()
+    scene_round.action_declarations.filter(round_number=scene_round.round_number).exclude(
+        succor_target__isnull=False
+    ).delete()

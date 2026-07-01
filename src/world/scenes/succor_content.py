@@ -9,6 +9,7 @@ SceneActionDeclaration.succor_target instead.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from world.mechanics.models import ChallengeInstance, ChallengeTemplate
@@ -16,6 +17,8 @@ from world.mechanics.succor_shared import SUCCOR_CHALLENGE_NAME
 
 if TYPE_CHECKING:
     from world.scenes.models import SceneRound
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_succor_challenges_for_round(scene_round: SceneRound) -> None:
@@ -36,6 +39,10 @@ def ensure_succor_challenges_for_round(scene_round: SceneRound) -> None:
     try:
         template = ChallengeTemplate.objects.get(name=SUCCOR_CHALLENGE_NAME)
     except ChallengeTemplate.DoesNotExist:
+        logger.warning(
+            "Succor ChallengeTemplate not seeded; skipping challenge binding for scene round %s.",
+            scene_round.pk,
+        )
         return
 
     room = scene_round.room
