@@ -24101,6 +24101,7 @@ export interface components {
        *     * `ENTRY_FLOURISH` - Entry flourishing
        *     * `DRAMATIC_MOMENT` - Dramatic moment
        *     * `STYLE_PRESENTATION` - Style presentation
+       *     * `MISSION_REWARD` - Mission reward
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -25110,6 +25111,7 @@ export interface components {
      *     * `ENTRY_FLOURISH` - Entry flourishing
      *     * `DRAMATIC_MOMENT` - Dramatic moment
      *     * `STYLE_PRESENTATION` - Style presentation
+     *     * `MISSION_REWARD` - Mission reward
      * @enum {string}
      */
     SourceEnum:
@@ -25124,7 +25126,8 @@ export interface components {
       | 'SANCTUM_DISSOLUTION_RECOVERY'
       | 'ENTRY_FLOURISH'
       | 'DRAMATIC_MOMENT'
-      | 'STYLE_PRESENTATION';
+      | 'STYLE_PRESENTATION'
+      | 'MISSION_REWARD';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -37043,10 +37046,12 @@ export interface operations {
          *     * `ENTRY_FLOURISH` - Entry flourishing
          *     * `DRAMATIC_MOMENT` - Dramatic moment
          *     * `STYLE_PRESENTATION` - Style presentation
+         *     * `MISSION_REWARD` - Mission reward
          */
         source?:
           | 'DRAMATIC_MOMENT'
           | 'ENTRY_FLOURISH'
+          | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
           | 'PROJECT_CONTRIBUTION'
