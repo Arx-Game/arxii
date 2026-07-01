@@ -10,6 +10,17 @@ Iterates all unresolved BattleActionDeclarations for a round, rolls
 
 The ``BattleRoundResult`` dataclass carries per-side VP totals, routed/
 destroyed unit lists, and a casualty list for the caller to display or log.
+
+This module also provides ``BattleTechniqueResolver`` and
+``resolve_battle_technique``, which cast a declaration's ``technique`` through
+the real magic envelope (``use_technique``). Routing through ``use_technique``
+(rather than a generic shared check) means the check is sourced from the
+player's actual technique (``technique.action_template.check_type``),
+anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
+fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
+separate call site is needed here). These are not yet wired into
+``resolve_battle_round`` — that's a follow-up task; ``resolve_battle_round``
+still uses the generic ``get_battle_check_type()`` check below.
 """
 
 from __future__ import annotations
@@ -35,8 +46,79 @@ from world.checks.services import perform_check
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.battles.models import BattleActionDeclaration
     from world.checks.models import CheckType
+    from world.checks.types import CheckResult
+    from world.magic.models import Technique
+    from world.magic.types.power_ledger import PowerLedger
+
+
+@dataclass
+class BattleTechniqueResolution:
+    """Adapts ``use_technique``'s resolve_fn contract — exposes ``.check_result``
+    for ``_resolve_check_result`` (``world/magic/services/techniques.py``)."""
+
+    check_result: CheckResult
+
+
+@dataclass
+class BattleTechniqueResolver:
+    """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
+    own check. Battle has no damage-profile/condition application of its own —
+    that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    """
+
+    character: ObjectDB
+    technique: Technique
+
+    def __call__(
+        self,
+        *,
+        power: int,  # noqa: ARG002 — battle doesn't scale effects off cast power
+        ledger: PowerLedger,  # noqa: ARG002 — battle doesn't use the power ledger
+        extra_modifiers: int = 0,
+    ) -> BattleTechniqueResolution:
+        check_type = self.technique.action_template.check_type
+        check_result = perform_check(self.character, check_type, extra_modifiers=extra_modifiers)
+        return BattleTechniqueResolution(check_result=check_result)
+
+
+def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:
+    """Cast ``declaration.technique`` through the real magic envelope.
+
+    Routes through ``use_technique`` so anima cost, Soulfray accumulation, and —
+    critically — the Audere/Audere Majora escalation hook (Step 8c, fires
+    unconditionally inside ``use_technique`` for every caller) all apply exactly
+    as they would for any other cast. ``confirm_soulfray_risk=True`` because a
+    batch round resolve cannot pause mid-batch for one participant's consent
+    prompt — same reasoning ``resolve_accepted_cast`` uses for its consent-accept
+    path.
+
+    Args:
+        declaration: A ``BattleActionDeclaration`` with ``technique`` set.
+
+    Returns:
+        The resolved ``CheckResult``, or ``None`` if the cast was interrupted
+        before resolution (e.g. a reactive PRE_CAST cancellation) — the caller
+        treats ``None`` as success_level 0 (failure).
+    """
+    from world.magic.services import use_technique  # noqa: PLC0415
+
+    character = declaration.participant.character_sheet.character
+    technique = declaration.technique
+    resolver = BattleTechniqueResolver(character=character, technique=technique)
+
+    result = use_technique(
+        character=character,
+        technique=technique,
+        resolve_fn=resolver,
+        confirm_soulfray_risk=True,
+    )
+    if not result.confirmed or result.resolution_result is None:
+        return None
+    return result.resolution_result.check_result
 
 
 @dataclass

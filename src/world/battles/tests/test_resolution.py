@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
     BATTLE_CHECK_TYPE_NAME,
@@ -23,6 +24,12 @@ from world.battles.constants import (
 from world.battles.services import add_side, add_unit, begin_battle_round, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.types import CheckResult
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterTechniqueFactory,
+    TechniqueFactory,
+)
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory
 
@@ -35,6 +42,52 @@ def _success_result(level: int = 5) -> types.SimpleNamespace:
 def _failure_result(level: int = -3) -> types.SimpleNamespace:
     """Stub CheckResult with a non-positive success_level (fail)."""
     return types.SimpleNamespace(success_level=level)
+
+
+class BattleTechniqueResolverTests(TestCase):
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_resolve_battle_technique_returns_check_result(self) -> None:
+        from world.battles.resolution import resolve_battle_technique
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Resolver Unit Test Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        fake_result = CheckResult(
+            check_type=self.technique.action_template.check_type,
+            outcome=None,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        with patch("world.battles.resolution.perform_check", return_value=fake_result):
+            check_result = resolve_battle_technique(declaration=declaration)
+
+        self.assertIs(check_result, fake_result)
 
 
 class DeclareBattleActionTests(TestCase):
