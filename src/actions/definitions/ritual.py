@@ -141,13 +141,17 @@ class PerformRitualAction(Action):
 
         Convention: the service functions take ``character_sheet=`` as their
         first kwarg (e.g. ``spend_resonance_for_imbuing``), not ``actor=``.
+        The ``ritual`` instance is also forwarded so service functions that
+        need to resolve authored data linked to the ritual (e.g. a
+        ``TechniqueGrant``) can do so. Service functions should accept
+        ``**kwargs`` to absorb parameters they don't use.
         """
         import importlib  # noqa: PLC0415
 
         module_path, func_name = ritual.service_function_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
         func = getattr(module, func_name)
-        return func(character_sheet=sheet, **kwargs)
+        return func(character_sheet=sheet, ritual=ritual, **kwargs)
 
     def _begin_ceremony(self, ritual: Any, sheet: Any) -> Any:
         """Create a PendingRitualEffect for a CEREMONY-kind ritual.
