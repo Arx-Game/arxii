@@ -137,6 +137,71 @@ class NPCRole(SharedMemoryModel):
         return self.name
 
 
+class Functionary(SharedMemoryModel):
+    """A **class-1** NPC placed in a room — the abstracted, non-piloted anchor for a room's
+    gameplay loops: mission-giving, permit approval, mission-reporting, and future services
+    (#1766).
+
+    A Functionary is a *placement* of an :class:`NPCRole` in a specific room. Because it has
+    no ObjectDB and no ``scenes.Persona`` (those are the class-2 **Standing NPC** / class-3-4
+    **Story NPC** rungs), it carries its own ``room`` FK so the world knows where it stands —
+    where a player must be to interact with it. One role has many Functionary placements (a
+    Builders Guild Clerk in every guild hall). Promotion of a Functionary into a named, owned
+    **asset** (class-1 → class-2) is the Asset/Companion system's job (#672); a Functionary is
+    the rung-1 base that promotion stands on, and it deliberately carries no owner here.
+    """
+
+    role = models.ForeignKey(
+        NPCRole,
+        on_delete=models.CASCADE,
+        related_name="functionaries",
+        help_text="The NPC role this placement fronts (its offers, faction, rapport default).",
+    )
+    room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="functionaries",
+        help_text="The room this Functionary serves — where a player must be to interact.",
+    )
+    name_override = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Optional placement-specific name shown instead of the role name (e.g. "
+            "'Old Marta' for a Barkeep role). Blank → the role's name."
+        ),
+    )
+    description_override = models.TextField(
+        blank=True,
+        help_text=(
+            "Optional placement-specific flavor shown instead of the role's "
+            "default_description_template. Blank → the role default."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this placement is currently present. False hides it without deleting.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "room"],
+                name="unique_functionary_role_room",
+            ),
+        ]
+        verbose_name = "Functionary"
+        verbose_name_plural = "Functionaries"
+
+    @property
+    def display_name(self) -> str:
+        """The name shown to players — the placement override, else the role name."""
+        return self.name_override or self.role.name
+
+    def __str__(self) -> str:
+        return f"{self.display_name} @ room {self.room_id}"
+
+
 class NPCServiceOffer(SharedMemoryModel):
     """One offerable thing on an NPC role, of a specific kind.
 

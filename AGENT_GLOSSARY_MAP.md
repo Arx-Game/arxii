@@ -25,6 +25,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [stories](src/world/stories/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
+- [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
 - [currency](src/world/currency/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)

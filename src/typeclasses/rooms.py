@@ -33,6 +33,22 @@ class Room(ObjectParent, DefaultRoom):
         super().at_object_creation()
         RoomProfile.objects.get_or_create(objectdb=self)
 
+    def return_appearance(self, looker, **kwargs):
+        """Standard room appearance plus the Functionaries standing here (#1766).
+
+        Functionaries are abstracted (object-less) NPCs, so they never appear in
+        ``self.contents`` — surface them explicitly so a placed room-feature NPC is
+        actually visible (and hint that you can ``hire`` them).
+        """
+        text = super().return_appearance(looker, **kwargs) or ""
+        from world.areas.services import get_room_profile
+        from world.npc_services.functionaries import functionaries_in_room
+
+        names = [f.display_name for f in functionaries_in_room(get_room_profile(self))]
+        if names:
+            text = f"{text}\n|wHere you can speak with:|n {', '.join(names)}"
+        return text
+
     @cached_property
     def item_data(self):
         """Room-specific item data handler."""

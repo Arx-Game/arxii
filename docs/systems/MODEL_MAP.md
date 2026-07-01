@@ -363,6 +363,7 @@
   - tenancy_records <- locations.LocationTenancy
   - placed_items <- items.RoomItem
   - events <- events.Event
+  - functionaries <- npc_services.Functionary
   - polish_by_category <- buildings.RoomPolish
   - decorations <- buildings.RoomDecoration
   - feature_instance <- room_features.RoomFeatureInstance
@@ -3469,9 +3470,15 @@
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
+  - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown
   - permits_issued <- buildings.BuildingPermitDetails
+
+### Functionary
+**Foreign Keys:**
+  - role -> npc_services.NPCRole [FK]
+  - room -> evennia_extensions.RoomProfile [FK]
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -4996,9 +5003,9 @@
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence
+  - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
-  - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
 
 ### ResultChart
 **Pointed to by:**

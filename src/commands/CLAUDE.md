@@ -339,7 +339,15 @@ actions, backends, and service functions.
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral
   `InteractionSession` on `caller.session.ndb` between operations; delegates to the same registry
-  Actions as the web `InteractionViewSet`.
+  Actions as the web `InteractionViewSet`. `hire <name>` prefers a co-located **Functionary**
+  (#1766) standing in the caller's room, falling back to a global role lookup.
+- **`functionary.py`**: `CmdFunctionary` (`functionary`, #1766) — list/place/remove the class-1
+  Functionaries standing in the caller's current room. Bare `functionary`/`functionary list`
+  lists them (open); `functionary place <role>[=<name>]` and `functionary remove <role>` are
+  staff-only (`check_permstring("Builder")`). Thin over `world.npc_services.functionaries`
+  (`place_functionary`/`remove_functionary`/`functionaries_in_room`); the room the caller stands
+  in is resolved via `areas.services.get_room_profile`. Functionaries also surface on `look`
+  (`Room.return_appearance` appends them, since they are object-less and never in `contents`).
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`
