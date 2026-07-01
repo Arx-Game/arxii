@@ -25,7 +25,6 @@ class BuildingKindFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"building-kind-{n}")
     description = ""
-    rooms_per_size_tier = 20
     is_residential = True
     is_commercial = False
     is_fortified = False
@@ -45,7 +44,7 @@ class BuildingFactory(DjangoModelFactory):
     kind = factory.SubFactory(BuildingKindFactory)
     target_size = 5
     target_grandeur = 5
-    max_rooms = factory.LazyAttribute(lambda obj: obj.kind.rooms_per_size_tier * obj.target_size)
+    space_budget = 1250  # PLACEHOLDER tier-5 (Estate) value; tests override as needed.
     constructed_by_persona = factory.SubFactory(_PERSONA_FACTORY)
     source_project = None
 

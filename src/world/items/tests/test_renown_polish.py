@@ -26,6 +26,20 @@ def _make_primary_persona():
     return sheet.primary_persona
 
 
+def _home_in(room, persona) -> None:
+    """Give ``persona`` a primary-home tenancy in ``room`` (#670 home-anchored prestige)."""
+    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.models import LocationTenancy
+
+    LocationTenancy.objects.create(
+        parent_type=LocationParentType.ROOM,
+        room_profile=room,
+        tenant_type=HolderType.PERSONA,
+        tenant_persona=persona,
+        is_primary_home=True,
+    )
+
+
 def _make_decorative_template(polish_value: int, category: PolishCategory):
     return ItemTemplateFactory(polish_value=polish_value, polish_category=category)
 
@@ -34,8 +48,7 @@ class PlaceItemInRoomTests(TestCase):
     def test_place_adds_room_polish(self) -> None:
         tenant = _make_primary_persona()
         room = RoomProfileFactory()
-        room.tenant_persona = tenant
-        room.save(update_fields=["tenant_persona"])
+        _home_in(room, tenant)
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=15, category=cat)
         instance = ItemInstanceFactory(template=template)
@@ -101,8 +114,7 @@ class RemoveItemFromRoomTests(TestCase):
     def test_remove_subtracts_polish(self) -> None:
         tenant = _make_primary_persona()
         room = RoomProfileFactory()
-        room.tenant_persona = tenant
-        room.save(update_fields=["tenant_persona"])
+        _home_in(room, tenant)
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=12, category=cat)
         instance = ItemInstanceFactory(template=template)
@@ -192,8 +204,7 @@ class RoomItemRollUpTests(TestCase):
         area = AreaFactory(level=10)
         BuildingFactory(area=area, owner_persona=owner)
         room = RoomProfileFactory(area=area)
-        room.tenant_persona = tenant
-        room.save(update_fields=["tenant_persona"])
+        _home_in(room, tenant)
         cat = PolishCategory.objects.create(name="Elegance")
         template = _make_decorative_template(polish_value=50, category=cat)
         instance = ItemInstanceFactory(template=template)
@@ -202,9 +213,10 @@ class RoomItemRollUpTests(TestCase):
 
         owner.refresh_from_db()
         tenant.refresh_from_db()
-        # Both tenant and owner credited via apply_room_polish_delta.
+        # Home-anchored (#670): the room is the tenant's home, so they're credited;
+        # the owner's home isn't here, so the room polish is not theirs.
         self.assertEqual(tenant.prestige_from_dwellings, 50)
-        self.assertEqual(owner.prestige_from_dwellings, 50)
+        self.assertEqual(owner.prestige_from_dwellings, 0)
         # BuildingPolish aggregate NOT touched by item placement directly —
         # item polish is room polish, not building polish.
         self.assertFalse(BuildingPolish.objects.exists())

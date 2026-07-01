@@ -500,7 +500,11 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Models:** `LocationValueOverride` (absolute claim, most-specific wins), `LocationValueModifier`
   (additive, `change_per_day` decay/growth), `LocationOwnership` (deed/title, cascades
   most-specific-wins), `LocationTenancy` (granted use right, ALL applicable rows collected, not
-  most-specific-wins)
+  most-specific-wins; **the one tenancy model** — #670 removed the old
+  `RoomProfile.tenant_persona` pointer — with `is_primary_home` (the Arx-1
+  `addhome`; one active per persona via partial unique constraint; drives
+  home-anchored `prestige_from_dwellings` and syncs the #1514 Evennia-`home`
+  residence))
 - **Enums:** `StatKey` (CRIME/ORDER/LIGHTING/NOISE/AMENITY/COLD/HEAT/WET/WIND/DRY/…),
   `LocationParentType` (AREA/ROOM), `key_type` discriminator (STAT/RESONANCE/DAMAGE_TYPE — selects
   `stat_key` CharField vs `resonance` FK (`magic.Resonance`) vs `damage_type` FK
@@ -515,7 +519,9 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
   cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
-  `is_tenant()` (ownership/tenancy lookups)
+  `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
+  `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or
+  designates home; syncs the #1514 residence + recomputes prestige)
 - **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
   readout, tenure-gated
 - **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
@@ -1196,14 +1202,20 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
 `BUILDING_CONSTRUCTION` Projects with materials snapshotted onto the building.
 
 - **Models:** `BuildingKind` (open catalog with 9 non-exclusive flags: residential/
-  commercial/fortified/occult/maritime/agrarian/aerial/subterranean/secret +
-  `rooms_per_size_tier` multiplier), `Building` (decorates an Area at level
-  BUILDING; `target_size`, `target_grandeur`, `max_rooms` mutable), `BuildingMaterial`
+  commercial/fortified/occult/maritime/agrarian/aerial/subterranean/secret),
+  `BuildingSizeTier` (#670: `tier` → `space_budget` lookup, PLACEHOLDER seeded
+  Hut 50 → Citadel 5000), `Building` (decorates an Area at level BUILDING;
+  `target_size`, `target_grandeur`, `space_budget`, `entry_room` FK →
+  RoomProfile), `BuildingMaterial`
   (per-building snapshot of materials used at construction), `MaterialLoreEffect`
   (per-template special properties — godswar stone → resonance_amp etc.; zero
   rows shipped, content-authored), `BuildingPermitDetails` (persona-scoped permit
   holder, building_kind + approved_wards M2M), `BuildingConstructionDetails`
-  (Project per-kind payload for BUILDING_CONSTRUCTION).
+  (Project per-kind payload for BUILDING_CONSTRUCTION),
+  `BuildingExtensionDetails` (#670: BUILDING_EXTENSION payload — `added_budget`,
+  `applied_at` idempotency marker), `InteriorDesignDetails` (#670:
+  INTERIOR_DESIGN payload — `template` FK ProjectTemplate, `building`, nullable
+  `room` target, `applied_at`).
 - **Key functions** (`world.buildings.services`):
   - `issue_permit(offer, persona) -> EffectResult` — real PERMIT effect handler
     (replaces Plan 2's stub; registered via `BuildingsConfig.ready()`)
@@ -1216,9 +1228,35 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
-- **Formula:** `Building.max_rooms = BuildingKind.rooms_per_size_tier × Project.target_size`.
-  House at `rooms_per_size_tier=20` gives Size-1=20, Size-5=100, Size-10=200 rooms.
-- **Action:** `ActivatePermitAction` (in `src/actions/definitions/items.py`).
+- **Space budget (#670, ADR-0071):** `Building.space_budget` snapshots
+  `BuildingSizeTier[target_size]` at construction; rooms spend their
+  `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
+  `max_rooms = rooms_per_size_tier × target_size` flat count — rooms trade
+  count for grandeur freely. Rooms within budget are instant/free;
+  `BUILDING_EXTENSION` grows the budget via the contribution pipe.
+- **Room Builder** (`world.buildings.room_services`, #670):
+  - `dig_room(persona, from_room, direction, name, description="", like=None, size=None)`
+    — stub creation (direction + name only), exit pair with standard aliases,
+    cosmetic grid coords (never block creation), `like=` exemplar copy
+  - `resize_room(persona, room, size)` / `remove_room(persona, room)` (guards:
+    entry room, installed feature, active design project, graph connectivity;
+    evicts tenants + contents to `entry_room`)
+  - `link_rooms` / `unlink_rooms` (connectivity-guarded) / `rename_exit`
+  - `space_used(building)` / `space_remaining(building)` / `building_for_room(room)`
+  - `start_building_extension(persona, building, added_budget)` +
+    `complete_building_extension` handler; `commission_decoration(persona,
+    building, template, room=None)` + `complete_interior_design` handler —
+    finally drives the polish machinery (`apply_project_completion` /
+    `apply_room_polish_delta`)
+  - `render_building_map(building, floor=0)` (`world.buildings.map_render`) —
+    telnet ASCII floor map (budget header, connectors, unplaced list)
+- **Actions:** `ActivatePermitAction` (in `src/actions/definitions/items.py`);
+  the #670 builder family in `src/actions/definitions/locations.py` —
+  `dig_room`, `resize_room`, `remove_room`, `link_rooms`, `unlink_rooms`,
+  `rename_exit`, `assign_room_tenant`, `end_room_tenancy`, `set_primary_home`,
+  `commission_decoration`, `start_building_extension` — owner-gated
+  (`IsRoomOwnerPrerequisite`) except home (`IsRoomTenantPrerequisite`)/tenancy-end.
+  Telnet: the `room` family (`CmdRoom`, aliases `build`/`manageroom`).
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.
@@ -1227,9 +1265,8 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   Builders Guild Clerk PERMIT offers). NOT a committed fixture (per #683).
 - **Out of scope, filed as followups:** BuildingKind catalog expansion (#694),
   MaterialLoreEffect content authoring (#695), Building → Neighborhood → Domain
-  progression (#696), BUILDING_RENOVATION / BUILDING_EXTENSION / BUILDING_UPGRADE
-  project kinds (#673), placeholder room generation upgrade (#670 Room Builder
-  Tool).
+  progression (#696), BUILDING_RENOVATION / BUILDING_UPGRADE project kinds
+  (#673; EXTENSION + INTERIOR_DESIGN shipped with #670).
 - **Cross-app dependencies:** `world.areas` (Area + AreaClosure + ward fields),
   `world.items` (ItemTemplate + ItemInstance + OwnershipEvent + `lore_value`),
   `world.projects` (Project + Contribution), `world.npc_services` (NPCRole +

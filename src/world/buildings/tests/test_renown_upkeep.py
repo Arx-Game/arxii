@@ -211,8 +211,22 @@ class RestorationTests(TestCase):
         self.assertFalse(flipped)
 
     def test_mass_restoration_refills_decayed_instances(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.models import LocationTenancy
+
         owner = _make_persona_with_wallet(gold=0)
         building = _make_building(owner)
+        # Home-anchored prestige (#670): the owner's re-credit only shows when
+        # their primary home is in this building.
+        home = RoomProfileFactory(area=building.area)
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=home,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=owner,
+            is_primary_home=True,
+        )
         cat = PolishCategory.objects.create(name="Opulence")
         template = _make_template("Hall", [(cat, 1500)], weekly_upkeep_cost=10)
         instance = apply_project_completion(building, template)

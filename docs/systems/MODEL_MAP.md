@@ -343,11 +343,15 @@
   - owner -> evennia_extensions.PlayerData [FK]
   - allowed_player -> evennia_extensions.PlayerData [FK]
 
+### RoomSizeTier
+**Pointed to by:**
+  - rooms <- evennia_extensions.RoomProfile
+
 ### RoomProfile
 **Foreign Keys:**
   - objectdb -> objects.ObjectDB [OneToOne]
   - area -> areas.Area [FK] (nullable)
-  - tenant_persona -> scenes.Persona [FK] (nullable)
+  - size -> evennia_extensions.RoomSizeTier [FK] (nullable)
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
@@ -364,6 +368,8 @@
   - placed_items <- items.RoomItem
   - events <- events.Event
   - functionaries <- npc_services.Functionary
+  - entry_for_buildings <- buildings.Building
+  - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.RoomPolish
   - decorations <- buildings.RoomDecoration
   - feature_instance <- room_features.RoomFeatureInstance
@@ -591,6 +597,8 @@
   - permits <- buildings.BuildingPermitDetails
   - installable_features <- room_features.RoomFeatureKind
 
+### BuildingSizeTier
+
 ### MaterialLoreEffect
 **Foreign Keys:**
   - template -> items.ItemTemplate [FK]
@@ -601,10 +609,13 @@
   - owner_persona -> scenes.Persona [FK] (nullable)
   - kind -> buildings.BuildingKind [FK]
   - architectural_style -> buildings.ArchitecturalStyle [FK] (nullable)
+  - entry_room -> evennia_extensions.RoomProfile [FK] (nullable)
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
   - materials_used <- buildings.BuildingMaterial
+  - extension_details <- buildings.BuildingExtensionDetails
+  - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
 
@@ -624,6 +635,18 @@
   - approved_wards -> areas.Area [M2M]
 **Pointed to by:**
   - construction_projects <- buildings.BuildingConstructionDetails
+
+### BuildingExtensionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
+
+### InteriorDesignDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - template -> buildings.ProjectTemplate [FK]
+  - building -> buildings.Building [FK]
+  - room -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### BuildingConstructionDetails
 **Foreign Keys:**
@@ -661,6 +684,7 @@
 **Foreign Keys:**
   - tier_prerequisites -> buildings.TierThreshold [M2M]
 **Pointed to by:**
+  - design_details <- buildings.InteriorDesignDetails
   - polish_increment_rows <- buildings.ProjectTemplatePolishIncrement
   - instances <- buildings.BuildingProjectInstance
 
@@ -2138,6 +2162,7 @@
 
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' — The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
+- `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
 - `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
 - `comfort_level(room: 'DefaultObject', *, comfort_offset: 'int' = 0) -> 'int' — A room's comfort level (1–10) for an occupant (#1514).`
@@ -2151,6 +2176,7 @@
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' — Bulk-resolve stats for many rooms in one pass.`
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' — Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' — Bulk-resolve cascade values across many rooms for one axis.`
+- `end_room_tenancy(*, persona: 'Persona', tenancy: 'LocationTenancy') -> 'LocationTenancy' — End a room tenancy (#670): the room's owner (eviction) or the tenant (departure).`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' — End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
@@ -2163,6 +2189,7 @@
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
 - `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
+- `set_primary_home(*, persona: 'Persona', room: 'DefaultObject') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
 - `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
@@ -3774,6 +3801,8 @@
   - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
+  - building_extension_details <- buildings.BuildingExtensionDetails
+  - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance
   - room_feature_progression_details <- room_features.RoomFeatureProgressionDetails
@@ -4199,7 +4228,6 @@
   - materials_contributed <- buildings.BuildingMaterial
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
-  - tenanted_rooms <- evennia_extensions.RoomProfile
 
 ### PersonaDiscovery
 **Foreign Keys:**

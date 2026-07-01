@@ -1,7 +1,32 @@
 # Rooms, Buildings & Estates
 
-**Status:** skeleton
+**Status:** in progress — Room Builder backend shipped (#670 PR1)
 **Depends on:** Areas (data layer), Items (containers, ownership), Roster (character ownership)
+
+## Built (2026-07-01, #670 PR1 — Room Builder backend)
+
+- **Space-budget model (ADR-0071):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
+  PLACEHOLDER) → `Building.space_budget`; rooms carry `RoomSizeTier` units
+  (Micro 2 → Expanse 2500 — the shared ladder the future creature-size stat
+  reads) and spend from the pool. Replaced `max_rooms`.
+- **The builder:** owner-gated dig (stub: direction + name, `like=` exemplar
+  copy), resize, remove (evicts to `Building.entry_room`, connectivity-guarded),
+  exit link/unlink/rename; cosmetic grid coords + telnet ASCII `room/map`.
+- **Project kinds:** `BUILDING_EXTENSION` (grow the budget through the funded
+  contribution pipe) and `INTERIOR_DESIGN` (commission an admin-authored polish
+  `ProjectTemplate` against building or room — finally wires the #676 polish
+  machinery to a player verb).
+- **Tenancy + primary home:** owner assigns/ends room tenancies
+  (`LocationTenancy` is the one tenancy model now); tenants designate a
+  primary home (Arx-1 `addhome`) that anchors `prestige_from_dwellings`
+  (home room polish + building polish iff you own the home's building —
+  replaced the portfolio-sum/double-count) and syncs the #1514 residence.
+- **Telnet:** the `room` family (`room/dig`, `/desc`, `/name`, `/size`,
+  `/public`, `/addexit`, `/removeexit`, `/renameexit`, `/drop confirm`,
+  `/map`, `/home`, `/tenant`, `/evict`, `/extend`, `/decorate`), aliases
+  `build` + legacy `manageroom`.
+- **Next (PR2):** building-manager read API + the web map canvas (the
+  builder's primary surface), grown from the #1470 `RoomEditorPanel`.
 
 ## Overview
 

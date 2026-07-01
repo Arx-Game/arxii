@@ -16,6 +16,7 @@ from evennia_extensions.models import (
     PlayerData,
     PlayerMedia,
     RoomProfile,
+    RoomSizeTier,
 )
 
 
@@ -230,7 +231,13 @@ class EmailAddressAdmin(admin.ModelAdmin):
 
 @admin.register(RoomProfile)
 class RoomProfileAdmin(admin.ModelAdmin):
-    list_display: ClassVar[list[str]] = ["objectdb", "area", "is_outdoor", "is_public"]
-    list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public"]
+    list_display: ClassVar[list[str]] = ["objectdb", "area", "size", "is_outdoor", "is_public"]
+    list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public", "size"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
     autocomplete_fields: ClassVar[list[str]] = ["area"]
+
+
+@admin.register(RoomSizeTier)
+class RoomSizeTierAdmin(admin.ModelAdmin):
+    list_display: ClassVar[list[str]] = ["name", "units"]
+    ordering: ClassVar[list[str]] = ["units"]

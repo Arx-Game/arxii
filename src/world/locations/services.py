@@ -1122,6 +1122,83 @@ def maybe_default_residence(persona: Persona | None, room_profile: RoomProfile |
         set_residence(character=character, room=room_profile.objectdb)
 
 
+def assign_room_tenant(
+    *,
+    persona: Persona,
+    room: DefaultObject,
+    tenant_persona: Persona,
+    ends_at: datetime | None = None,
+    notes: str = "",
+) -> LocationTenancy:
+    """Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.
+
+    Re-checks ownership as a hard boundary (action prerequisites are the
+    primary UX gate).
+    """
+    if not is_owner(persona, room):
+        msg = "Only the building's owner can assign tenants."
+        raise RoomEditError(msg)
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist as exc:
+        msg = "This room can't hold tenants."
+        raise RoomEditError(msg) from exc
+    return grant_tenancy(
+        room_profile=profile, tenant_persona=tenant_persona, ends_at=ends_at, notes=notes
+    )
+
+
+def end_room_tenancy(*, persona: Persona, tenancy: LocationTenancy) -> LocationTenancy:
+    """End a room tenancy (#670): the room's owner (eviction) or the tenant (departure)."""
+    room = tenancy.room_profile.objectdb if tenancy.room_profile else None
+    is_self = tenancy.tenant_persona_id == persona.pk
+    if not is_self and (room is None or not is_owner(persona, room)):
+        msg = "Only the room's owner or the tenant can end this tenancy."
+        raise RoomEditError(msg)
+    return end_tenancy(tenancy)
+
+
+def set_primary_home(*, persona: Persona, room: DefaultObject) -> LocationTenancy:
+    """Designate one of the persona's active room tenancies as their home (#670).
+
+    The Arx-1 ``addhome``: one active primary home per persona (partial unique
+    constraint); drives prestige-from-dwellings. Requires a *direct* persona
+    tenancy on the room — org/area standing isn't a home. Also syncs the
+    character-level residence (#1514 Evennia ``home``: recall + comfort regen)
+    so "home" stays one concept with two consumers.
+    """
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist as exc:
+        msg = "That isn't a room you could live in."
+        raise RoomEditError(msg) from exc
+    now = timezone.now()
+    tenancy = (
+        LocationTenancy.objects.filter(tenant_persona=persona, room_profile=profile)
+        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+        .order_by("started_at")
+        .first()
+    )
+    if tenancy is None:
+        msg = "You'd need a tenancy here first — this room isn't yours to live in."
+        raise RoomEditError(msg)
+    with transaction.atomic():
+        LocationTenancy.objects.filter(tenant_persona=persona, is_primary_home=True).update(
+            is_primary_home=False
+        )
+        tenancy.is_primary_home = True
+        tenancy.save(update_fields=["is_primary_home"])
+    character = _character_for_persona(persona)
+    if character is not None:
+        set_residence(character=character, room=room)
+    from world.buildings.polish_services import (  # noqa: PLC0415
+        recompute_persona_prestige_from_dwellings,
+    )
+
+    recompute_persona_prestige_from_dwellings(persona)
+    return tenancy
+
+
 def end_tenancy(
     tenancy: LocationTenancy,
     *,

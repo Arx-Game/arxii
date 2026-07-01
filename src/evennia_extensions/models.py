@@ -344,6 +344,24 @@ class PlayerAllowList(SharedMemoryModel):
 # by the #1271 privacy tiers.
 
 
+class RoomSizeTier(SharedMemoryModel):
+    """A rung on the shared room-size unit ladder (#670; PLACEHOLDER magnitudes).
+
+    Rooms spend these units from their building's space budget. The unit
+    ladder is also the shared contract for the future creature-size stat
+    (entry gating, combat range) — coordinate changes with that work.
+    """
+
+    name = models.CharField(max_length=40, unique=True)
+    units = models.PositiveIntegerField(unique=True)
+
+    class Meta:
+        ordering = ["units"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.units} units)"
+
+
 def room_is_publicly_listed(room: ObjectDB) -> bool:
     """Whether a room appears in public listings. Missing RoomProfile -> not public.
 
@@ -395,6 +413,35 @@ class RoomProfile(SharedMemoryModel):
             "(weather, sky, etc.). Most rooms are indoor."
         ),
     )
+    size = models.ForeignKey(
+        "evennia_extensions.RoomSizeTier",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="rooms",
+        help_text=(
+            "Mechanical room size on the shared unit ladder (#670); spends from the "
+            "building's space budget. NULL = unsized (wilderness / rooms outside the "
+            "budget system)."
+        ),
+    )
+    grid_x = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Building-local map column (#670). Cosmetic layout only — never gates "
+            "creation or movement. NULL (with grid_y) = unplaced on the map."
+        ),
+    )
+    grid_y = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Building-local map row (#670). See grid_x; north renders as +y.",
+    )
+    floor = models.SmallIntegerField(
+        default=0,
+        help_text="Vertical level within the building (#670); 0 = ground, negative = below.",
+    )
     enclosure = models.CharField(
         max_length=20,
         choices=RoomEnclosure.choices,
@@ -405,23 +452,9 @@ class RoomProfile(SharedMemoryModel):
             "normal indoor room; set OPEN_AIR/ROOFED for verandas and open courts."
         ),
     )
-    # #676 Phase D: tenant_persona credits room polish into
-    # prestige_from_dwellings on the tenant + ALSO rolls up to the
-    # building owner (per-spec intentional double-count for head-of-house
-    # tenanting their own grandest suite). Nullable for common rooms
-    # without a designated tenant.
-    tenant_persona = models.ForeignKey(
-        "scenes.Persona",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="tenanted_rooms",
-        help_text=(
-            "Persona credited for this room's polish (Renown system). "
-            "Room polish flows into tenant.prestige_from_dwellings AND "
-            "rolls up to the room's building owner."
-        ),
-    )
+    # NOTE (#670): the old #676 ``tenant_persona`` pointer was removed —
+    # ``locations.LocationTenancy`` is the one tenancy model (with
+    # ``is_primary_home`` driving prestige_from_dwellings).
     default_blueprint = models.ForeignKey(
         "areas.PositionBlueprint",
         null=True,

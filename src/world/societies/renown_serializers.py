@@ -485,25 +485,32 @@ def _serialize_owned_building(building, tier_resolver) -> dict:
 
 
 def _build_tenanted_rooms(persona: Persona, tier_resolver) -> list[dict]:
-    """#742 — Rooms the persona tenants, with polish breakdown.
+    """#742 — Rooms the persona actively tenants, with polish breakdown.
 
     Spec symmetry with ``owned_dwellings``: a persona credited with
-    ``prestige_from_dwellings`` via room tenancy needs the corresponding
+    ``prestige_from_dwellings`` via their home needs the corresponding
     per-room visibility. Upkeep / dormancy live on the containing
     building, not the room, so this surface stays polish-only.
 
-    Includes rooms that the persona tenants *in their own building* —
-    those rooms double-count in ``prestige_from_dwellings`` (the spec's
-    intentional owner-tenant double-count), and surfacing them here
-    matches that mental model.
+    Reads ``LocationTenancy`` (the one tenancy model, #670 — the old
+    ``RoomProfile.tenant_persona`` pointer is gone). Prestige counts only
+    the primary home; the card still lists every active room tenancy.
     """
-    from django.db.models import Prefetch  # noqa: PLC0415
+    from django.db.models import Prefetch, Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
 
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.buildings.models import RoomPolish  # noqa: PLC0415
 
+    now = timezone.now()
+    # Single .filter() call so both conditions bind to the SAME tenancy row
+    # (chained .filter() on a multi-valued relation would join twice).
     rooms = (
-        RoomProfile.objects.filter(tenant_persona=persona)
+        RoomProfile.objects.filter(
+            Q(tenancy_records__tenant_persona=persona)
+            & (Q(tenancy_records__ends_at__isnull=True) | Q(tenancy_records__ends_at__gt=now))
+        )
+        .distinct()
         .select_related("objectdb")
         .prefetch_related(
             Prefetch(  # noqa: PREFETCH_STRING — see _build_owned_dwellings re identity-map.

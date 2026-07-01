@@ -506,6 +506,16 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         blank=True,
         help_text="When the tenancy ends. NULL = indefinite, revocable.",
     )
+    is_primary_home = models.BooleanField(
+        default=False,
+        help_text=(
+            "This room tenancy is the persona's designated home (#670) — the "
+            "Arx-1 addhome. One per persona (partial unique below; the "
+            "constraint covers ends_at IS NULL, the service layer the "
+            "future-dated rest). Drives prestige_from_dwellings; persona "
+            "tenancies on rooms only."
+        ),
+    )
     notes = models.CharField(
         max_length=200,
         blank=True,
@@ -524,6 +534,14 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         indexes = [
             models.Index(fields=["area", "ends_at"]),
             models.Index(fields=["room_profile", "ends_at"]),
+        ]
+        constraints = [
+            # Partial unique IS the index — no duplicate Meta.indexes entry.
+            models.UniqueConstraint(
+                fields=["tenant_persona"],
+                condition=models.Q(is_primary_home=True, ends_at__isnull=True),
+                name="one_active_primary_home_per_persona",
+            ),
         ]
 
     def clean(self) -> None:

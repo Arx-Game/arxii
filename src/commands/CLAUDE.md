@@ -244,11 +244,18 @@ actions, backends, and service functions.
   escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
   `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
   `IsAdminUser`). No business logic in the command.
-- **`locations.py`**: `CmdManageRoom` (`manageroom`, #1470) — owner-gated room editor.
-  Thin over `RoomEditAction` (key `edit_room`): `manageroom/name <name>`,
-  `manageroom/desc <text>`, `manageroom/public <yes|no>`. Edits the room the caller
-  is standing in; ownership is gated by `IsRoomOwnerPrerequisite`, writes live in
-  `world.locations.services.set_room_display_data`. No business logic in the command.
+- **`locations.py`**: `CmdRoom` (`room`, aliases `build` + legacy `manageroom`; #1470 editor +
+  #670 Room Builder) — the room family. Switch-routed, one small verb per switch (the ratified
+  incremental rhythm): `room/name|desc|public` → `RoomEditAction`; `room/dig <dir>=<name>
+  [like=<room>] [size=<tier>]` → `DigRoomAction`; `room/size <tier>` → `ResizeRoomAction`;
+  `room/drop confirm` → `RemoveRoomAction`; `room/addexit <room>=<there>,<back>` /
+  `room/removeexit <exit>` / `room/renameexit <exit>=<name>` → the exit actions;
+  `room/home` → `SetPrimaryHomeAction` (tenant-gated); `room/tenant <char>` /
+  `room/evict <char>` → tenancy actions; `room/extend <units>` → `StartExtensionAction`;
+  `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/map [floor]` —
+  read-only ASCII floor map (`world.buildings.map_render`). Permissions by relationship
+  (owner structural / tenant redescribe+home), gated in actions + services. No business
+  logic in the command.
 - **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +
   contribution surface. `+project <id>` shows a project's status (progress/target, remaining
   coin to fund); `project/donate <id>=<amount>` dispatches `DonateToProjectAction` (key

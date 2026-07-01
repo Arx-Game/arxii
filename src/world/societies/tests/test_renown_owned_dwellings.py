@@ -142,6 +142,20 @@ class DormancyTests(TestCase):
         self.assertIsNotNone(entry["dormant_since"])
 
 
+def _tenancy_in(room, persona, *, is_primary_home=False) -> None:
+    """Active room tenancy for ``persona`` (#670 — LocationTenancy is the one model)."""
+    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.models import LocationTenancy
+
+    LocationTenancy.objects.create(
+        parent_type=LocationParentType.ROOM,
+        room_profile=room,
+        tenant_type=HolderType.PERSONA,
+        tenant_persona=persona,
+        is_primary_home=is_primary_home,
+    )
+
+
 class TenantedRoomsTests(TestCase):
     def test_persona_with_no_tenanted_rooms_yields_empty_list(self) -> None:
         persona = _make_primary_persona()
@@ -154,8 +168,7 @@ class TenantedRoomsTests(TestCase):
 
         tenant = _make_primary_persona()
         room = RoomProfileFactory()
-        room.tenant_persona = tenant
-        room.save(update_fields=["tenant_persona"])
+        _tenancy_in(room, tenant)
         cat = PolishCategory.objects.create(name="Elegance")
         TierThreshold.objects.create(category=cat, tier_name="Notable", min_value=200)
         RoomPolish.objects.create(room=room, category=cat, value=500)
@@ -176,11 +189,9 @@ class TenantedRoomsTests(TestCase):
         tenant = _make_primary_persona()
         other = _make_primary_persona()
         mine = RoomProfileFactory()
-        mine.tenant_persona = tenant
-        mine.save(update_fields=["tenant_persona"])
+        _tenancy_in(mine, tenant)
         theirs = RoomProfileFactory()
-        theirs.tenant_persona = other
-        theirs.save(update_fields=["tenant_persona"])
+        _tenancy_in(theirs, other)
 
         payload = build_renown_payload(tenant)
 

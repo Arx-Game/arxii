@@ -78,7 +78,7 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.journals import CmdJournal
-from commands.locations import CmdManageRoom
+from commands.locations import CmdRoom
 from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
@@ -270,7 +270,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1500 — staff: demand a crowdfundable ransom for a held captive.
             CmdDemandRansom,
             # #1470 — owner-gated room editor (name/description/public-private).
-            CmdManageRoom,
+            CmdRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
             CmdSetStage,
             # #1514 — in-room comfort/weather readout (the mechanical surface).

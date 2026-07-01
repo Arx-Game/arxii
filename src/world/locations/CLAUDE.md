@@ -513,6 +513,20 @@ player-facing write over `RoomProfile` / `ObjectDisplayData`. It:
   listing → `RoomProfile.is_public`; idempotent, only supplied fields change.
 
 Callers: `actions.definitions.locations.RoomEditAction` (key `edit_room`), gated by
-`actions.prerequisites.IsRoomOwnerPrerequisite`. Faces: telnet `CmdManageRoom`
-(`manageroom/name|desc|public`) and the web action-dispatch endpoint. The React
-room-editor panel is a follow-up (needs a room-management host page).
+`actions.prerequisites.IsRoomOwnerPrerequisite`. Faces: the telnet `room` family
+(`CmdRoom`, aliases `build`/`manageroom` — `room/name|desc|public` plus the #670
+builder verbs), the web action-dispatch endpoint, and the React `RoomEditorPanel`.
+
+## Player tenancy seam + primary home (#670)
+
+- `assign_room_tenant(*, persona, room, tenant_persona, ends_at=None, notes="")` —
+  owner-gated wrapper over `grant_tenancy` (raises `RoomEditError`).
+- `end_room_tenancy(*, persona, tenancy)` — the room's owner (eviction) or the
+  tenant (departure).
+- `set_primary_home(*, persona, room)` — flags the caller's own active room
+  tenancy as `is_primary_home` (one active per persona; partial unique
+  constraint). Also syncs the character-level residence (`set_residence`, #1514
+  Evennia `home`) and recomputes `prestige_from_dwellings` (home-anchored rule,
+  see `world.buildings.polish_services`).
+- `LocationTenancy` is the **one** tenancy model — #670 removed the old
+  `RoomProfile.tenant_persona` pointer.
