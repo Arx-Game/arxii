@@ -492,6 +492,41 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
+### Locations (Ambient Value Cascade)
+Authored substrate for room/area values that cascade through the `Area`/`AreaClosure` hierarchy:
+ambient stats (crime, order, lighting, climate-driven exposure), magical resonance magnitudes, and
+(#1744) per-hazard damage-type shelter — plus deed/tenancy ownership tracking.
+
+- **Models:** `LocationValueOverride` (absolute claim, most-specific wins), `LocationValueModifier`
+  (additive, `change_per_day` decay/growth), `LocationOwnership` (deed/title, cascades
+  most-specific-wins), `LocationTenancy` (granted use right, ALL applicable rows collected, not
+  most-specific-wins)
+- **Enums:** `StatKey` (CRIME/ORDER/LIGHTING/NOISE/AMENITY/COLD/HEAT/WET/WIND/DRY/…),
+  `LocationParentType` (AREA/ROOM), `key_type` discriminator (STAT/RESONANCE/DAMAGE_TYPE — selects
+  `stat_key` CharField vs `resonance` FK (`magic.Resonance`) vs `damage_type` FK
+  (`conditions.DamageType`)), `HolderType` (PERSONA/ORGANIZATION)
+- **Damage-type axis (#1744):** hazard shelter per room, generic across any `conditions.DamageType`
+  row — adding a new hazard needs zero new discriminator code, only new `LocationValueModifier`/
+  `LocationValueOverride` rows. `hazard_is_covered(room, damage_type, *, threshold=1)` is the
+  read-side hard boolean gate ("does the hazard reach this place at all"), distinct from
+  `ConditionResistanceModifier` arithmetic ("how much damage gets through") — see ADR-0069.
+- **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
+  polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
+  `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
+  cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
+  readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
+  `is_tenant()` (ownership/tenancy lookups)
+- **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
+  readout, tenure-gated
+- **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
+- **Integrates with:** areas (`AreaClosure` cascade walk), magic (resonance axis feeds Sanctum
+  income, `world/magic/CLAUDE.md`), conditions (`DamageType` FK for the hazard-shelter axis),
+  weather (`Climate` folds into exposure axes, `world/weather/CLAUDE.md`), items
+  (`GarmentMitigation` feeds per-character comfort mitigation), mechanics (`CharacterModifier`
+  comfort-mitigation targets)
+- **Source:** `src/world/locations/`
+- **Details:** `src/world/locations/CLAUDE.md`
+
 ### Positioning (#530 + #1017 + #1018)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
 occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
