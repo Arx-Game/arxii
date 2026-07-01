@@ -93,17 +93,19 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
                 "world.checks.consequence_resolution.perform_check",
                 return_value=MagicMock(outcome=failure_outcome, success_level=-1),
             ),
-            # The PC declared this round, so _advance_surrounded_participants ticks
-            # their brand-new stage-1 instance in this SAME resolve call (declaring
-            # gates the tick regardless of afk_peril_override — see
-            # _advance_surrounded_participants). Without this patch that resist
-            # check would hit the real, unmocked dice roll and could nondeterministically
-            # advance past stage 1 before this assertion runs. A non-negative
-            # success_level keeps the stage held at 1 (advance only fires on failure).
-            patch("world.vitals.services.perform_check", return_value=_stub_check(1)),
+            # A participant only reaches _resolve_failure by declaring, so without an
+            # explicit exclusion _advance_surrounded_participants would tick this
+            # brand-new stage-1 instance in this SAME resolve call (final-review
+            # finding, fixed via resolve_battle_round's newly_surrounded_participant_ids
+            # exclusion). Assert this mock is never called — proves the exclusion holds,
+            # not just that the stage happens to still read 1.
+            patch(
+                "world.vitals.services.perform_check", return_value=_stub_check(-999)
+            ) as escalation_check_mock,
         ):
             _run(self.gm_char, "resolve")
 
+        escalation_check_mock.assert_not_called()
         instance = get_active_conditions(self.pc_char, condition=self.content["condition"]).first()
         self.assertIsNotNone(instance, "Isolated failure should have applied Surrounded.")
         self.assertEqual(instance.current_stage.stage_order, 1)

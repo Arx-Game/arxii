@@ -99,7 +99,7 @@ def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
 
 def select_surrounded_terminal_pool(
     *, battle: Battle, participant: BattleParticipant
-) -> ConsequencePool:
+) -> ConsequencePool | None:
     """Route the Surrounded terminal resolution to the enemy or PvP-safe pool (#1733).
 
     Death is permitted by default (``surrounded_terminal_enemy`` — the isolating side is
@@ -108,6 +108,12 @@ def select_surrounded_terminal_pool(
     ADR-0023 (PvP non-lethal) applies, so ``surrounded_terminal_pvp`` (no death row at
     all) is used instead. This replaces ``select_abandonment_pool``'s ``ObjectDB``
     source-character routing, which doesn't apply here (see Task 2).
+
+    Returns ``None`` on a seeding gap (the named pool doesn't exist) rather than raising
+    — matches the "never crash the round, hold the victim" convention the sibling
+    ``_resolve_terminal_bleed_out`` already follows (final-review finding: this runs
+    inside ``resolve_battle_round``'s ``@transaction.atomic``, so raising here would
+    abort the GM's entire round resolution, not just this one victim's outcome).
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
@@ -129,7 +135,7 @@ def select_surrounded_terminal_pool(
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY
     )
-    return ConsequencePool.objects.get(name=pool_name)
+    return ConsequencePool.objects.filter(name=pool_name).first()
 
 
 def resolve_surrounded_terminal(
@@ -143,8 +149,8 @@ def resolve_surrounded_terminal(
     protects the victim regardless of who/what surrounded them), then dispatches through
     the shared ``_resolve_peril_via_pool`` core (Task 2).
 
-    A missing ``BattleParticipant`` (shouldn't happen — the caller always has one) holds
-    the victim rather than crashing.
+    A missing ``BattleParticipant`` (shouldn't happen — the caller always has one) or a
+    missing terminal pool (seeding gap) holds the victim rather than crashing.
     """
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
     from world.conditions.services import has_death_deferred  # noqa: PLC0415
@@ -159,6 +165,8 @@ def resolve_surrounded_terminal(
         return False
 
     pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+    if pool is None:
+        return False
     death_permitted = not has_death_deferred(character_sheet.character)
 
     died = _resolve_peril_via_pool(character_sheet, instance, pool, death_permitted=death_permitted)
@@ -319,13 +327,20 @@ def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
         remove_condition(character, template)
 
 
-def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
+def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
     """Roll the surrounded_entry pool for an isolated declaration failure (#1733).
 
     Isolation and mobility are objective, code-computed signals fed as extra_modifiers
     into the entry check — the pool's authored rows decide the actual odds (never a
     hardcoded gate; see Decision 3 of the #1733 spec). No-op when the pool/condition
     content isn't seeded (degrades gracefully, same convention as the abandonment pools).
+
+    Returns True iff Surrounded was newly applied this call — the caller propagates
+    this so ``resolve_battle_round`` can exclude a participant from this same round's
+    escalation tick (final-review finding: a participant always declared to reach this
+    failure branch, so without the exclusion a freshly-Surrounded participant would
+    immediately roll their first escalation check in the very round they entered,
+    rather than getting one round before their peril first escalates).
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.battles.constants import (  # noqa: PLC0415
@@ -343,7 +358,7 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
 
     participant = declaration.participant
     if not _is_isolated(participant):
-        return
+        return False
 
     pool = ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).first()
     template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
@@ -353,7 +368,7 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
         else None
     )
     if pool is None or template is None or entry_stage is None:
-        return
+        return False
 
     extra_modifiers = SURROUNDED_ENTRY_ISOLATED_MODIFIER
     if _has_unimpaired_mobility(participant.character_sheet):
@@ -373,18 +388,23 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
         # auto-initializes current_stage to stage_order=1 (== entry_stage) via
         # _build_bulk_context (world/conditions/services.py:483).
         apply_condition(target=character, condition=template)
+        return True
+    return False
 
 
 def _resolve_failure(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
-) -> None:
+) -> bool:
     """Apply check failure: debit PC health, route through damage consequences, and
     roll the surrounded_entry pool if the participant is isolated (#1733).
 
     Damage is non-progressive (damage_type=None, source_character=None) so
     the SQLite fast tier can handle it without DISTINCT ON queries.
+
+    Returns True iff Surrounded was newly applied this call (propagated from
+    ``_maybe_apply_surrounded`` — see its docstring for why the caller needs this).
     """
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
     from world.vitals.services import process_damage_consequences  # noqa: PLC0415
@@ -394,7 +414,7 @@ def _resolve_failure(
         vitals = sheet.vitals
     except CharacterVitals.DoesNotExist:
         result.casualties.append(declaration.participant.pk)
-        return
+        return False
 
     dmg = BASE_FAILURE_DAMAGE + abs(success_level)
     vitals.health -= dmg
@@ -406,17 +426,28 @@ def _resolve_failure(
         damage_type=None,
         source_character=None,
     )
-    _maybe_apply_surrounded(declaration)
+    newly_surrounded = _maybe_apply_surrounded(declaration)
     result.casualties.append(declaration.participant.pk)
+    return newly_surrounded
 
 
-def _advance_surrounded_participants(battle: Battle, declared_participant_ids: set[int]) -> None:
+def _advance_surrounded_participants(
+    battle: Battle,
+    declared_participant_ids: set[int],
+    newly_surrounded_participant_ids: set[int],
+) -> None:
     """Tick every ACTIVE Surrounded participant's peril once for this round (#1733).
 
     A participant advances if they declared this round, OR ``battle.afk_peril_override``
     is True (the narrow, explicit ADR-0004 exception — see ADR-0069). Otherwise their
     peril holds unchanged this round — mirroring the intent of the room-based #1480
     own-peril skip without depending on SceneRound (Decision 1 of the #1733 spec).
+
+    ``newly_surrounded_participant_ids`` are always excluded regardless of the above —
+    a participant only reaches this tier by declaring (isolated + failed), so without
+    this exclusion a freshly-Surrounded participant would immediately roll their first
+    escalation check in the very round they entered Surrounded, rather than getting one
+    round before their peril first escalates (final-review finding).
     """
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
@@ -433,6 +464,8 @@ def _advance_surrounded_participants(battle: Battle, declared_participant_ids: s
     ).select_related("character_sheet__character")
 
     for participant in participants:
+        if participant.pk in newly_surrounded_participant_ids:
+            continue
         if not (battle.afk_peril_override or participant.pk in declared_participant_ids):
             continue
         sheet = participant.character_sheet
@@ -470,6 +503,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         )
     )
 
+    newly_surrounded_participant_ids: set[int] = set()
     for declaration in declarations:
         check_result = resolve_battle_technique(declaration=declaration)
         sl = check_result.success_level if check_result is not None else 0
@@ -481,15 +515,17 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
                 _resolve_rescue_success(declaration)
             else:
                 _resolve_support_success(declaration, result)
-        else:
-            _resolve_failure(declaration, result, sl)
+        elif _resolve_failure(declaration, result, sl):
+            newly_surrounded_participant_ids.add(declaration.participant_id)
 
         declaration.resolved = True
         declaration.success_level = sl
         declaration.save(update_fields=["resolved", "success_level"])
 
     declared_participant_ids = {d.participant_id for d in declarations}
-    _advance_surrounded_participants(battle_round.battle, declared_participant_ids)
+    _advance_surrounded_participants(
+        battle_round.battle, declared_participant_ids, newly_surrounded_participant_ids
+    )
 
     battle_round.status = RoundStatus.COMPLETED
     battle_round.completed_at = timezone.now()
