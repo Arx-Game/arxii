@@ -909,11 +909,7 @@ def advance_surrounded(character_sheet: CharacterSheet | None, *, battle: Battle
 
     Returns True if the character died during this call, else False.
     """
-    # resolve_surrounded_terminal lands in Task 5 of #1733's plan; ty flags the
-    # forward reference until it exists — suppressed, not worked around.
-    from world.battles.resolution import (  # noqa: PLC0415
-        resolve_surrounded_terminal,  # ty: ignore[unresolved-import]
-    )
+    from world.battles.resolution import resolve_surrounded_terminal  # noqa: PLC0415
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
 
     def _terminal(sheet: CharacterSheet, instance: ConditionInstance) -> bool:

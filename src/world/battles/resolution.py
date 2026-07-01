@@ -40,17 +40,132 @@ from world.battles.constants import (
     BattleActionKind,
     BattleUnitStatus,
 )
-from world.battles.models import BattleRound
+from world.battles.models import BattleParticipant, BattleRound
 from world.checks.services import perform_check
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.battles.models import BattleActionDeclaration
+    from actions.models import ConsequencePool
+    from world.battles.models import Battle, BattleActionDeclaration
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionInstance
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
+
+
+def _is_isolated(participant: BattleParticipant) -> bool:
+    """True when no other ACTIVE participant on the same side shares this participant's place.
+
+    A participant with no ``place`` assigned (front-agnostic) is never counted as
+    isolated — isolation is specifically about being alone at a front, not merely
+    unassigned.
+    """
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+
+    if participant.place_id is None:
+        return False
+    return (
+        not BattleParticipant.objects.filter(
+            battle_id=participant.battle_id,
+            side_id=participant.side_id,
+            place_id=participant.place_id,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+        .exclude(pk=participant.pk)
+        .exists()
+    )
+
+
+def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
+    """True when the character's MOVEMENT capability is currently unimpaired.
+
+    Resolved the same way ``can_act`` resolves AWARENESS — via
+    ``get_effective_capability_value`` — rather than the room-based positioning-graph
+    ``blocks_flight``/``elevation_anchor`` fields, which don't apply to location-less
+    battles (see the #1733 spec's anti-reinvention ledger).
+    """
+    from world.conditions.constants import FoundationalCapability  # noqa: PLC0415
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+    movement = CapabilityType.objects.filter(name=FoundationalCapability.MOVEMENT).first()
+    if movement is None:
+        return False
+    return get_effective_capability_value(character_sheet, movement) > 0
+
+
+def select_surrounded_terminal_pool(
+    *, battle: Battle, participant: BattleParticipant
+) -> ConsequencePool:
+    """Route the Surrounded terminal resolution to the enemy or PvP-safe pool (#1733).
+
+    Death is permitted by default (``surrounded_terminal_enemy`` — the isolating side is
+    normally an abstract, non-PC ``BattleUnit``) UNLESS the opposing ``BattleSide`` has an
+    active PC participant at the same ``place`` — an actual PC opponent present means
+    ADR-0023 (PvP non-lethal) applies, so ``surrounded_terminal_pvp`` (no death row at
+    all) is used instead. This replaces ``select_abandonment_pool``'s ``ObjectDB``
+    source-character routing, which doesn't apply here (see Task 2).
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.vitals.constants import (  # noqa: PLC0415
+        POOL_SURROUNDED_TERMINAL_ENEMY,
+        POOL_SURROUNDED_TERMINAL_PVP,
+    )
+
+    opposing_pc_present = (
+        BattleParticipant.objects.filter(
+            battle_id=battle.pk,
+            place_id=participant.place_id,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+        .exclude(side_id=participant.side_id)
+        .filter(character_sheet__character__db_account__isnull=False)
+        .exists()
+    )
+    pool_name = (
+        POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY
+    )
+    return ConsequencePool.objects.get(name=pool_name)
+
+
+def resolve_surrounded_terminal(
+    *, character_sheet: CharacterSheet, instance: ConditionInstance, battle: Battle
+) -> bool:
+    """Resolve a terminal-stage Surrounded instance through the routed, guarded pool.
+
+    Finds the character's ``BattleParticipant`` for ``battle`` to route via
+    ``select_surrounded_terminal_pool``, checks ``has_death_deferred`` explicitly (the
+    part of ``death_is_permitted`` that's still relevant — a deferred-death condition
+    protects the victim regardless of who/what surrounded them), then dispatches through
+    the shared ``_resolve_peril_via_pool`` core (Task 2).
+
+    A missing ``BattleParticipant`` (shouldn't happen — the caller always has one) holds
+    the victim rather than crashing.
+    """
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.conditions.services import has_death_deferred  # noqa: PLC0415
+    from world.vitals.services import _resolve_peril_via_pool  # noqa: PLC0415
+
+    participant = BattleParticipant.objects.filter(
+        battle=battle,
+        character_sheet=character_sheet,
+        status=BattleParticipantStatus.ACTIVE,
+    ).first()
+    if participant is None:
+        return False
+
+    pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+    death_permitted = not has_death_deferred(character_sheet.character)
+
+    died = _resolve_peril_via_pool(character_sheet, instance, pool, death_permitted=death_permitted)
+    if died:
+        participant.status = BattleParticipantStatus.INCAPACITATED
+        participant.save(update_fields=["status"])
+    return died
 
 
 @dataclass

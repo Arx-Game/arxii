@@ -474,3 +474,79 @@ class BattleRoundAudereWiringTests(TestCase):
         called_character, called_intensity = mock_audere.call_args[0]
         self.assertEqual(called_character, self.sheet.character)
         self.assertEqual(called_intensity, self.technique.intensity)
+
+
+class IsolationAndMobilityTests(TestCase):
+    def test_is_isolated_true_with_no_ally_at_place(self) -> None:
+        from world.battles.resolution import _is_isolated
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Isolation Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        sheet = CharacterSheetFactory()
+        participant = enlist_participant(
+            battle=battle, character_sheet=sheet, side=side, place=place
+        )
+        assert _is_isolated(participant) is True
+
+    def test_is_isolated_false_with_ally_at_same_place(self) -> None:
+        from world.battles.resolution import _is_isolated
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Isolation Test 2")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        p1 = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=side, place=place
+        )
+        enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=side, place=place
+        )
+        assert _is_isolated(p1) is False
+
+
+class SelectSurroundedTerminalPoolTests(TestCase):
+    def test_routes_to_enemy_pool_when_no_pc_opposes_at_place(self) -> None:
+        from world.battles.resolution import select_surrounded_terminal_pool
+        from world.battles.services import add_place, create_battle
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        battle = create_battle(name="Routing Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
+        )
+        pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+        assert pool == content["pools"]["surrounded_terminal_enemy"]
+
+    def test_routes_to_pvp_pool_when_opposing_pc_present_at_place(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.battles.resolution import select_surrounded_terminal_pool
+        from world.battles.services import add_place, create_battle
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        battle = create_battle(name="Routing Test 2")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
+        )
+        # A bare CharacterSheetFactory() character has db_account=None (NPC by
+        # convention — see world/vitals/peril_resolution.py:is_pc_source); attach a
+        # real account so this participant is classified as an opposing PC.
+        pc_character = CharacterFactory()
+        pc_character.db_account = AccountFactory()
+        pc_character.save()
+        enlist_participant(
+            battle=battle,
+            character_sheet=CharacterSheetFactory(character=pc_character),
+            side=defender,
+            place=place,
+        )
+        pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+        assert pool == content["pools"]["surrounded_terminal_pvp"]
