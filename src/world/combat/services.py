@@ -4278,6 +4278,9 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
         _apply_opponent_aftermath_pools(encounter, outcome)
         _increment_completion_counters(encounter, outcome)
 
+    from world.combat.beat_wiring import install_encounter_beat_trigger  # noqa: PLC0415
+
+    install_encounter_beat_trigger(encounter)
     _emit_encounter_completed(encounter, outcome)
     cleanup_completed_encounter(encounter)
     _hand_off_acute_peril_to_scene_round(encounter)

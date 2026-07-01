@@ -1,1 +1,1 @@
-0011_conditioncategory_grants_intangibility_and_more
+0012_conditiontemplate_resist_check_type_and_more

@@ -34,6 +34,16 @@ All models use `NaturalKeyMixin` (fixture support). `Species` and `Language` use
 |-------|---------|------------|
 | `SpeciesStatBonus` | Permanent stat modifier for a species | `species` (FK), `stat` (PrimaryStat choices), `value` (SmallInt) |
 
+### Species Gift Grants (models.Model)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `SpeciesGiftGrant` | A Minor Gift (and optional drawback/benefit) a species grants its members (ADR-0050) | `species` (FK), `gift` (FK to `magic.Gift`, must be `kind=MINOR`), `drawback_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent negative condition applied at CG finalize, e.g. sunlight vulnerability), `benefit_condition` (FK to `conditions.ConditionTemplate`, nullable — permanent beneficial condition applied at CG finalize, e.g. a resist-check bonus, #1738) |
+
+`provision_species_gifts` (`world.species.services`) mints the gift and applies both
+`drawback_condition` and `benefit_condition` idempotently at CG finalization —
+see `docs/adr/0062-species-gift-drawbacks-mitigated-by-gift-thread.md`.
+
 ### Hierarchy Design
 
 Species uses a single-level parent/child hierarchy:

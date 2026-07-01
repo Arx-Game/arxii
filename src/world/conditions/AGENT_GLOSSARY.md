@@ -28,8 +28,19 @@ _Avoid_: ability modifier, stat effect
 The condition effect that modifies check rolls (`ConditionCheckModifier`: per-check-type modifier value, optionally scaling with severity), folded into a check's extra modifiers by the modifier seam.
 _Avoid_: roll bonus, skill modifier
 
+**Resist-check gate**:
+The apply-time gate (`ConditionTemplate.resist_check_type` / `resist_difficulty`)
+that lets a target roll to resist a condition being applied at all, distinct from
+the damage-axis `ConditionResistanceModifier`. The target's own check (folded
+through the existing check-modifier seam, so a permanent `ConditionCheckModifier`
+from a species/gift/item can make resistance effectively total) beats the
+difficulty to resist; `resist_check_type=None` (the default) means unconditional
+application, unchanged from every pre-existing condition. Mirrors the removal-side
+`cure_check_type` gate in shape.
+_Avoid_: immunity flag, is_immune, saving throw
+
 **Resistance effect channel**:
-The condition effect that modifies damage resistance (`ConditionResistanceModifier`: per-damage-type modifier, null = all types). Resistance is math, not binary immunity — intensity minus resistance gives the net value.
+The condition effect that modifies damage resistance (`ConditionResistanceModifier`: per-damage-type modifier, null = all types). Resistance is math, not binary immunity — intensity minus resistance gives the net value. Distinct from the **Resist-check gate**, which resists condition *application* via a check, not damage via a flat modifier — both express "math, not boolean" but on different mechanisms.
 _Avoid_: armor, immunity, soak
 
 **TreatmentTemplate**:

@@ -235,13 +235,14 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
 _OUTLIER_SUCCESS_LEVEL_THRESHOLD = 8
 
 
-def record_outcome_tier_completion(
+def record_outcome_tier_completion(  # noqa: PLR0913
     *,
     progress: AnyStoryProgress,
     beat: Beat,
-    outcome_tier: CheckOutcome,
+    outcome_tier: CheckOutcome | None = None,
     participants: list[Persona] | None = None,
     gm_notes: str = "",
+    force_outcome: BeatOutcome | None = None,
 ) -> BeatCompletion:
     """Record a machine-graded outcome on an OUTCOME_TIER beat.
 
@@ -261,10 +262,18 @@ def record_outcome_tier_completion(
     later resolved via the existing record_gm_marked_outcome, same as any other
     PENDING_GM_REVIEW beat).
 
+    ``force_outcome`` — when set to PENDING_GM_REVIEW, skips the success_level
+        derivation entirely and resolves the beat to PENDING_GM_REVIEW without
+        firing a consequence pool. Used by the combat auto-wire for
+        fled/abandoned encounters (machine-detected non-success/failure terminal
+        outcomes that need a GM's adjudication). Only PENDING_GM_REVIEW is
+        accepted here; any other value raises ValueError. When ``force_outcome``
+        is set, ``outcome_tier`` is ignored (and may be omitted).
+
     ``participants`` — same semantics as record_gm_marked_outcome: explicit Persona
         list for GROUP-scope LEGEND_AWARD pools.
 
-    Defensive assertion (programmer error — callers own building the right
+    Defensive assertions (programmer error — callers own building the right
     outcome_tier for their domain; there is no user-facing serializer for this path
     since it's machine-driven, not authored):
         - beat.predicate_type == OUTCOME_TIER
@@ -279,6 +288,42 @@ def record_outcome_tier_completion(
         raise ValueError(msg)
 
     scope = progress.story.scope
+
+    # Forced-review path: a machine-detected non-success/failure terminal outcome
+    # (e.g. a fled/abandoned encounter). Skips success_level derivation; fires no
+    # consequence pool — the beat sits in PENDING_GM_REVIEW for a GM to adjudicate.
+    if force_outcome is not None:
+        if force_outcome != BeatOutcome.PENDING_GM_REVIEW:
+            msg = (
+                f"force_outcome {force_outcome!r} is not valid; only "
+                "PENDING_GM_REVIEW is accepted by the machine-driven path."
+            )
+            raise ValueError(msg)
+        completion_kwargs = _scope_completion_kwargs(
+            beat=beat,
+            outcome=BeatOutcome.PENDING_GM_REVIEW,
+            era=Era.objects.get_active(),
+            gm_notes=gm_notes,
+            progress=progress,
+            scope=scope,
+            outcome_tier=None,
+        )
+        return _create_completion_and_fire_pool(
+            beat=beat,
+            outcome=BeatOutcome.PENDING_GM_REVIEW,
+            completion_kwargs=completion_kwargs,
+            progress=progress,
+            scope=scope,
+            explicit_participants=participants if scope == StoryScope.GROUP else None,
+            outcome_tier=None,
+        )
+
+    if outcome_tier is None:
+        msg = (
+            f"Beat {beat.pk}: outcome_tier is required (or pass "
+            "force_outcome=PENDING_GM_REVIEW for a machine-detected review)."
+        )
+        raise ValueError(msg)
 
     outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
     is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD

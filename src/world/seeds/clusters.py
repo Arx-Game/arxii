@@ -19,12 +19,14 @@ def _seed_items() -> None:
 
 def _seed_combat() -> None:
     from integration_tests.game_content.combat import (  # noqa: PLC0415
+        seed_encounter_beat_wiring,
         seed_flee_check,
         seed_penetration_contest,
     )
 
     seed_penetration_contest()
     seed_flee_check()
+    seed_encounter_beat_wiring()
 
 
 def _seed_checks() -> None:

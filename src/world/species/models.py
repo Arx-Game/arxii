@@ -169,6 +169,15 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         related_name="species_gift_drawbacks",
         help_text="Optional drawback condition applied at finalize (frenzy/sunlight-vuln).",
     )
+    benefit_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="species_gift_benefits",
+        help_text="Optional permanent beneficial condition applied at finalize "
+        "(e.g. a resist-check bonus condition).",
+    )
 
     objects = NaturalKeyManager()
 
