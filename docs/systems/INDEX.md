@@ -1812,9 +1812,13 @@ combat, poison, spells, exhaustion, and any damage source.
     knockout check → death check → permanent wound check; each tier rolls the configured pool.
   - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
     `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
-  - `_resolve_peril_via_pool(sheet, instance, pool) -> bool` — shared death-gated core for ALL
-    acute-peril resolution: excludes `character_loss` candidates when `death_is_permitted` returns
-    False; clears the condition on both death and survival; single `_mark_dead` writer.
+  - `_resolve_peril_via_pool(sheet, instance, pool, *, death_permitted) -> bool` — shared
+    death-gated core for ALL acute-peril resolution: excludes `character_loss` candidates when
+    the caller-supplied `death_permitted` is False; clears the condition on both death and
+    survival; single `_mark_dead` writer. `death_permitted` is supplied by the caller
+    (bleed-out/abandonment via `death_is_permitted`; battle Surrounded via
+    `select_surrounded_terminal_pool` routing, #1733) rather than derived internally, since not
+    every peril source is an `ObjectDB` character.
   - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
     appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**
