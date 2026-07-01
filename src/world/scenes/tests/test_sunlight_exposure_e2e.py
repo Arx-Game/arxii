@@ -48,7 +48,7 @@ class SunlightExposureE2ETests(TestCase):
         # Mark the room outdoor via its RoomProfile.
         from evennia_extensions.models import RoomProfile
 
-        RoomProfile.objects.create(objectdb=self.room, is_outdoor=True)
+        RoomProfile.objects.update_or_create(objectdb=self.room, defaults={"is_outdoor": True})
 
         sheet = CharacterSheetFactory(species=self.species)
         CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
@@ -133,7 +133,7 @@ class SunlightExposureE2ETests(TestCase):
         from world.game_clock.constants import TimePhase
 
         apply_condition(self.vampire, self.template)
-        radiant = self.template.damageovertime_set.first().damage_type
+        radiant = self.template.conditiondamageovertime_set.first().damage_type
         ConditionResistanceModifierFactory(
             condition=self.template, damage_type=radiant, modifier_value=1000
         )
