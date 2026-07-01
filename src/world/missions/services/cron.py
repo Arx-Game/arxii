@@ -101,7 +101,10 @@ def _apply_one(row: MissionRewardQueue) -> str | None:
             line_pk=row.line_id,
         )
 
-    # Success path (unreachable in 5b.2 — both helpers above raise).
+    # Success path. RESONANCE grants now reach here and succeed (#1737).
+    # LEGEND_POINTS still always raises via _grant_legend_points's
+    # DESIGN §13.3 stub-seal (out of scope for #1737), so this path is
+    # LP-unreachable but RESONANCE-reachable.
     row.applied = True
     row.applied_at = timezone.now()
     row.failure_reason = ""
@@ -119,24 +122,42 @@ def apply_mission_reward_batch() -> RewardBatchResult:
     """Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.
 
     Each row is processed in its own savepoint (:func:`transaction.atomic`)
-    so a fault on row N does not corrupt rows N-1 or N+1. In Phase 5b.2
-    both ``_grant_legend_points`` and ``_grant_resonance`` raise
-    :class:`NotImplementedError` with a DESIGN §13.3 message — the cron
-    catches that, records the message on the row's ``failure_reason``, and
-    leaves ``applied=False``. Idempotency falls out automatically: rerunning
-    the batch touches the same set of rows and produces the same state.
+    so a fault on row N does not corrupt rows N-1 or N+1. ``_grant_legend_points``
+    still always raises :class:`NotImplementedError` with a DESIGN §13.3
+    message — the cron catches that, records the message on the row's
+    ``failure_reason``, and leaves ``applied=False``. ``_grant_resonance`` now
+    succeeds (#1737): it calls the atomic ``grant_resonance()``, and on return
+    this function flips the row to ``applied=True``.
+
+    Idempotency now works differently per sink. LEGEND_POINTS rows never
+    flip ``applied``, so rerunning the batch simply re-selects and re-fails
+    them the same way every time. RESONANCE rows hold because (1) the
+    ``applied=False`` filter below stops re-selecting a row once it
+    succeeds, and (2) ``grant_resonance()`` is itself wrapped in
+    :func:`transaction.atomic`, so a row can never end up applied without
+    the resonance grant having actually committed (or vice versa) — a crash
+    mid-grant leaves the row unapplied and safe to retry.
 
     Returns:
         A typed :class:`RewardBatchResult` carrying the queue rows that
-        succeeded (always empty in 5b.2) and the rows that failed (every
-        unapplied row in 5b.2).
+        succeeded (RESONANCE rows that granted cleanly, #1737) and the rows
+        that failed (LEGEND_POINTS rows, plus any RESONANCE row whose grant
+        raised).
     """
-    # No select_related: the cron only reads queue-row columns (kind, sink,
-    # line_id) and writes applied/applied_at/failure_reason. The queue row
-    # mirrors kind/sink from MissionDeedRewardLine specifically so the cron
-    # can filter cheaply without joining. When real LP/Resonance helpers
-    # land, add select_related("line", "line__recipient").
-    unapplied = list(MissionRewardQueue.objects.filter(applied=False).order_by("pk"))
+    # select_related: _grant_resonance dereferences row.line.recipient.sheet_data
+    # per row (#1737), which would otherwise be two extra queries per RESONANCE
+    # row. "line" and "line__recipient" are forward FKs off MissionRewardQueue
+    # and MissionDeedRewardLine respectively, so they select_related directly.
+    # "line__recipient__sheet_data" is a *reverse* OneToOne accessor
+    # (CharacterSheet.character -> ObjectDB, related_name="sheet_data") — Django
+    # supports select_related() across reverse OneToOne the same as forward FKs
+    # (LEFT OUTER JOIN, verified via .query), so it's included too rather than
+    # left as a per-row query.
+    unapplied = list(
+        MissionRewardQueue.objects.filter(applied=False)
+        .select_related("line", "line__recipient", "line__recipient__sheet_data")
+        .order_by("pk")
+    )
 
     applied: list[MissionRewardQueue] = []
     failed: list[MissionRewardQueue] = []

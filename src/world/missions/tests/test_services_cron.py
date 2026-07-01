@@ -1,24 +1,29 @@
 """Tests for ``apply_mission_reward_batch`` (Phase 5b.2).
 
 The cron walks unapplied :class:`MissionRewardQueue` rows and tries to grant
-each one downstream. Phase 5b.2 stub-seals both POST_CRON sinks:
+each one downstream. One POST_CRON sink remains stub-sealed; the other is
+now a real grant (#1737):
 
   * ``LEGEND_POINTS`` — the LP grant entry point requires a richer line
     shape (persona walk + LegendSourceType + title) than Phase 5b.1's queue
     rows carry; the helper raises ``NotImplementedError`` with a
     DESIGN §13.3 reference. Cron catches, populates ``failure_reason``,
-    leaves ``applied=False``.
-  * ``RESONANCE`` — the resonance grant requires a Resonance FK plus a
-    ``MISSION_REWARD`` ``GainSource`` value that does not yet exist; same
-    stub-seal pattern as LP.
+    leaves ``applied=False``. Still stub-sealed — out of scope for #1737.
+  * ``RESONANCE`` — implemented (#1737): resolves the line recipient's
+    ``CharacterSheet`` and calls the real ``grant_resonance()`` with
+    ``source=GainSource.MISSION_REWARD``. A row with a valid recipient +
+    resonance now succeeds and flips ``applied=True``.
 
 A defensive ``MissionRewardRoutingError`` arm catches any other
 ``(kind, sink)`` pair that shouldn't be on the queue at all (should never
 fire since ``apply_deed_rewards`` only enqueues the two POST_CRON sinks).
 
 Per-row :func:`transaction.atomic` keeps a fault on row N from corrupting
-row N-1's or row N+1's state. Idempotency holds because no row gets
-flipped to ``applied=True`` in 5b.2 — every run touches the same set.
+row N-1's or row N+1's state. Idempotency for LEGEND_POINTS still holds
+because no such row ever flips to ``applied=True``. Idempotency for
+RESONANCE holds because a granted row flips ``applied=True`` and the
+batch only ever selects ``applied=False`` rows, so a second run can't
+double-grant it.
 """
 
 from dataclasses import FrozenInstanceError
@@ -98,25 +103,40 @@ class ApplyMissionRewardBatchLegendPointsStubSealTests(TestCase):
 
 
 class ApplyMissionRewardBatchMixedQueueTests(TestCase):
-    """Mixed queue: applied rows are skipped; only unapplied rows are touched."""
+    """Mixed queue: applied rows are skipped; only unapplied rows are touched.
+
+    "Mixed" also covers mixed per-row *outcomes* now that RESONANCE grants
+    for real (#1737): the LP row fails (stub-sealed) while the RESONANCE
+    row — given a recipient with a linked CharacterSheet + a real Resonance
+    — succeeds. Both are still processed (i.e. "touched"); only the
+    pre-applied row is skipped.
+    """
 
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="MixedBatchActor")
+        from world.magic.factories import ResonanceFactory
+
+        sheet = CharacterSheetFactory(character__db_key="MixedBatchActor")
+        self.actor = sheet.character
         self.deed = MissionDeedRecordFactory(actor=self.actor)
         self.lp_line = MissionDeedRewardLineFactory(
             deed=self.deed,
+            recipient=self.actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=10,
         )
+        self.resonance = ResonanceFactory()
         self.resonance_line = MissionDeedRewardLineFactory(
             deed=self.deed,
+            recipient=self.actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.RESONANCE,
+            resonance=self.resonance,
             amount=2,
         )
         self.applied_line = MissionDeedRewardLineFactory(
             deed=self.deed,
+            recipient=self.actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=1,
@@ -133,8 +153,11 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
 
     def test_batch_touches_only_unapplied_rows(self) -> None:
         result = apply_mission_reward_batch()
-        failed_ids = {row.pk for row in result.failed}
-        self.assertEqual(failed_ids, {self.lp_row.pk, self.resonance_row.pk})
+        touched_ids = {row.pk for row in result.applied} | {row.pk for row in result.failed}
+        self.assertEqual(touched_ids, {self.lp_row.pk, self.resonance_row.pk})
+        # Per-row outcome: LP stub-seals (fails); RESONANCE grants for real.
+        self.assertEqual({row.pk for row in result.failed}, {self.lp_row.pk})
+        self.assertEqual({row.pk for row in result.applied}, {self.resonance_row.pk})
 
     def test_pre_applied_row_is_not_reprocessed(self) -> None:
         apply_mission_reward_batch()
@@ -147,42 +170,65 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
 class ApplyMissionRewardBatchIdempotencyTests(TestCase):
     """Running the batch twice produces the same state.
 
-    Since no row ever flips to ``applied=True`` in 5b.2, both runs touch
-    the same rows; ``applied`` stays False and ``failure_reason`` stays
-    populated. The state is stable across runs.
+    LEGEND_POINTS stays stub-sealed, so no LP row ever flips to
+    ``applied=True``; both runs re-select and re-fail it the same way.
+    RESONANCE now grants for real (#1737), so its idempotency guarantee is
+    different: the row flips to ``applied=True`` on the first run and the
+    ``applied=False`` filter then excludes it from the second run entirely
+    — it is not reprocessed and the resonance is not double-granted.
     """
 
     def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="IdempotentBatchActor")
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import CharacterResonance
+
+        self._CharacterResonance = CharacterResonance
+
+        sheet = CharacterSheetFactory(character__db_key="IdempotentBatchActor")
+        self.actor = sheet.character
         self.deed = MissionDeedRecordFactory(actor=self.actor)
         self.lp_line = MissionDeedRewardLineFactory(
             deed=self.deed,
+            recipient=self.actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
             amount=10,
         )
+        self.resonance = ResonanceFactory()
         self.resonance_line = MissionDeedRewardLineFactory(
             deed=self.deed,
+            recipient=self.actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.RESONANCE,
+            resonance=self.resonance,
             amount=2,
         )
         self.lp_row = MissionRewardQueueFactory(line=self.lp_line)
         self.resonance_row = MissionRewardQueueFactory(line=self.resonance_line)
 
-    def test_double_run_keeps_applied_false(self) -> None:
+    def test_double_run_keeps_lp_applied_false_and_resonance_applied_true(self) -> None:
         apply_mission_reward_batch()
         apply_mission_reward_batch()
         self.lp_row.refresh_from_db()
         self.resonance_row.refresh_from_db()
         self.assertFalse(self.lp_row.applied)
-        self.assertFalse(self.resonance_row.applied)
+        self.assertTrue(self.resonance_row.applied)
 
     def test_double_run_does_not_duplicate_rows(self) -> None:
         before = MissionRewardQueue.objects.count()
         apply_mission_reward_batch()
         apply_mission_reward_batch()
         self.assertEqual(MissionRewardQueue.objects.count(), before)
+
+    def test_double_run_does_not_double_grant_resonance(self) -> None:
+        apply_mission_reward_batch()
+        apply_mission_reward_batch()
+        cr = self._CharacterResonance.objects.get(
+            character_sheet=self.resonance_line.recipient.sheet_data,
+            resonance=self.resonance,
+        )
+        self.assertEqual(cr.balance, 2)
+        self.assertEqual(cr.lifetime_earned, 2)
 
 
 class ApplyMissionRewardBatchPerRowAtomicityTests(TestCase):
