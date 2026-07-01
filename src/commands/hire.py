@@ -106,11 +106,20 @@ class CmdHire(ArxCommand):
             self.msg("You already have an interaction in progress. Use 'hire end' first.")
             return
         role_query, persona_name = self._parse_start_args(args)
-        role = self.resolve_by_name_or_id(
-            self._role_model(),
-            role_query,
-            not_found_msg="No NPC role by that name or id.",
-        )
+        # Prefer a Functionary standing in this room (#1766) — that's the "walk up to the
+        # NPC who's here" path. Fall back to a global role lookup so staff/tests can still
+        # reach a role by name from anywhere.
+        functionary = self._functionary_here(role_query)
+        if functionary is not None:
+            role: NPCRole = functionary.role
+            display = functionary.display_name
+        else:
+            role = self.resolve_by_name_or_id(
+                self._role_model(),
+                role_query,
+                not_found_msg="No one like that is here, and no NPC role by that name or id.",
+            )
+            display = role.name
         try:
             npc_persona_id = self._resolve_persona_id(persona_name)
         except CommandError as err:
@@ -127,8 +136,20 @@ class CmdHire(ArxCommand):
             self.msg(result.message)
             return
         self._set_session(result.data["session"])
-        self.msg(f"You begin speaking with {role.name}.")
+        self.msg(f"You begin speaking with {display}.")
         self._show_offers(result.data["session"])
+
+    def _functionary_here(self, role_query: str) -> Any | None:
+        """Resolve a Functionary matching *role_query* standing in the caller's room (#1766)."""
+        from world.npc_services.functionaries import functionary_in_location  # noqa: PLC0415
+
+        return functionary_in_location(self.caller.location, role_query)
+
+    def _functionaries_here(self) -> list[str]:
+        """Display names of active functionaries standing in the caller's room (#1766)."""
+        from world.npc_services.functionaries import functionaries_in_location  # noqa: PLC0415
+
+        return [f.display_name for f in functionaries_in_location(self.caller.location)]
 
     def _do_offer(self, args: str) -> None:
         session = self._session()
@@ -170,7 +191,11 @@ class CmdHire(ArxCommand):
     def _show_status_hub(self) -> None:
         session = self._session()
         if session is None:
-            self.msg("No interaction in progress. Use 'hire <role>' to start one.")
+            lines = ["No interaction in progress. Use 'hire <name>' to start one."]
+            here = self._functionaries_here()
+            if here:
+                lines.append("|wHere:|n " + ", ".join(here))
+            self.msg("\n".join(lines))
             return
         self.msg(f"Speaking with {session.role.name} — rapport {session.current_rapport}.")
         self._show_offers(session)

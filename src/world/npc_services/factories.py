@@ -8,6 +8,7 @@ from factory.django import DjangoModelFactory
 
 from world.npc_services.constants import DrawMode, OfferKind
 from world.npc_services.models import (
+    Functionary,
     MissionOfferDetails,
     NPCRole,
     NPCRoleCooldown,
@@ -48,6 +49,19 @@ class NPCRoleFactory(DjangoModelFactory):
     default_description_template = ""
     default_rapport_starting_value = 0
     faction_affiliation = None
+
+
+class FunctionaryFactory(DjangoModelFactory):
+    """A class-1 NPC placed in a room (#1766)."""
+
+    class Meta:
+        model = Functionary
+
+    role = factory.SubFactory(NPCRoleFactory)
+    room = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+    name_override = ""
+    description_override = ""
+    is_active = True
 
 
 class NPCServiceOfferFactory(DjangoModelFactory):

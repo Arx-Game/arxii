@@ -1079,7 +1079,13 @@ register as additional kinds.
 
 - **Models:** `NPCRole`, `NPCServiceOffer` (kind discriminator + draw_mode + eligibility_rule),
   `PermitOfferDetails` (1:1 per-kind details; mirrors `ItemFacet` composition),
-  `NPCStanding` (per-(PC persona, NPC persona); relocated from `world.missions.MissionGiverStanding`)
+  `NPCStanding` (per-(PC persona, NPC persona); relocated from `world.missions.MissionGiverStanding`),
+  `Functionary` (#1766 — a class-1 NPC placement = `NPCRole` + `room` FK; the non-piloted room-feature
+  anchor for gameplay loops; see ADR-0070 for the Functionary/Standing NPC/Story NPC ontology)
+- **NPC ontology (ADR-0070):** **Functionary** (class-1, abstracted, room-anchored via its own FK) /
+  **Standing NPC** (class-2, named Persona + object) / **Story NPC** (class-3/4, object + sheet, piloted).
+  Presence: `functionaries_in_room` / `functionary_in_location` (`world.npc_services.functionaries`);
+  `hire <name>` prefers a co-located Functionary, falling back to a global role lookup.
 - **Constants:** `OfferKind` (PERMIT; future MISSION/LOAN/TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL)
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
   `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;

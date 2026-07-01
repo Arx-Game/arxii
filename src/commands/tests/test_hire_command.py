@@ -10,6 +10,8 @@ from actions.definitions.npc_services import (
     start_npc_interaction,
 )
 from commands.hire import CmdHire
+from evennia_extensions.factories import RoomProfileFactory
+from world.npc_services.factories import FunctionaryFactory, NPCRoleFactory
 from world.npc_services.models import NPCRole
 from world.scenes.models import Persona
 
@@ -72,6 +74,24 @@ class CmdHireRoutingTests(TestCase):
         cmd.caller.search.assert_called_once_with("Gerald")
         run.assert_called_once()
         run.assert_called_with(actor=cmd.caller, role_id=1, npc_persona_id=42)
+
+    def test_hire_prefers_co_located_functionary(self):
+        """`hire <name>` resolves a Functionary standing in the caller's room (#1766)."""
+        profile = RoomProfileFactory()
+        functionary = FunctionaryFactory(
+            role=NPCRoleFactory(name="Barkeep"), room=profile, name_override="Old Marta"
+        )
+        cmd = _make_cmd("Old Marta")
+        cmd.caller.location = profile.objectdb  # a real room ObjectDB
+        result = MagicMock(success=True, data={"session": MagicMock(role=functionary.role)})
+        with patch.object(start_npc_interaction, "run", return_value=result) as run:
+            with patch.object(cmd, "_show_offers"):
+                cmd.func()
+        run.assert_called_once_with(
+            actor=cmd.caller, role_id=functionary.role.pk, npc_persona_id=None
+        )
+        # Greeting uses the placement's display name.
+        self.assertIn("Old Marta", cmd.caller.msg.call_args.args[0])
 
     def test_offer_subverb_dispatches_resolve_action(self):
         session = MagicMock(closed=True)
