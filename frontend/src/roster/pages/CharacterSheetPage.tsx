@@ -14,6 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
+import { FriendButton } from '@/friends/components/FriendButton';
+import { FriendsTab } from '@/friends/components/FriendsTab';
 import { GossipPanel } from '@/secrets/components/GossipPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
@@ -47,6 +49,14 @@ export function CharacterSheetPage() {
           profilePicture={entry.profile_picture}
         />
         {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
+        {/* Friend this character — an OOC trusted-partner designation (#1727), only on others' sheets. */}
+        {!isMyCharacter && (
+          <FriendButton
+            viewerEntryId={viewerEntryId}
+            targetEntryId={entryId}
+            targetName={entry.character.name}
+          />
+        )}
       </div>
 
       <Tabs defaultValue="sheet" className="space-y-4">
@@ -58,6 +68,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -135,6 +146,14 @@ export function CharacterSheetPage() {
                 social hub (#1572) — so it's a self-only tab keyed on the active RosterEntry, not the
                 viewed subject. Radix unmounts inactive tabs, so the query only fires when opened. */}
             <GossipPanel viewerId={viewerEntryId} />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="friends" className="space-y-4">
+            {/* Your OOC friends list (#1727) — account-wide trusted partners, separate from IC
+                relationships. Add friends from other characters' sheets; this lists + removes. */}
+            <FriendsTab />
           </TabsContent>
         )}
       </Tabs>

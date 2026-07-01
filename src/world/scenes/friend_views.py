@@ -19,6 +19,8 @@ from world.scenes.friend_serializers import FriendshipCreateSerializer, Friendsh
 from world.scenes.friend_services import add_friend, add_friend_all_characters
 from world.scenes.models import Friendship
 
+_NO_ACTIVE_TENURE = "That character has no active tenure to friend."
+
 
 class FriendsPagination(PageNumberPagination):
     page_size = 100
@@ -48,11 +50,14 @@ class FriendshipViewSet(
         serializer = FriendshipCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        # Resolve each character (RosterEntry) to its current tenure — friendships are tenure-based.
+        friend_tenure = data["friend"].current_tenure
+        viewer_tenure = data["viewer"].current_tenure
+        if friend_tenure is None or viewer_tenure is None:
+            raise serializers.ValidationError(_NO_ACTIVE_TENURE)
         if data["all_characters"]:
             player_data, _ = PlayerData.objects.get_or_create(account=request.user)
-            add_friend_all_characters(player_data=player_data, friend_tenure=data["friend_tenure"])
+            add_friend_all_characters(player_data=player_data, friend_tenure=friend_tenure)
             return Response(status=status.HTTP_201_CREATED)
-        friendship = add_friend(
-            friender_tenure=data["friender_tenure"], friend_tenure=data["friend_tenure"]
-        )
+        friendship = add_friend(friender_tenure=viewer_tenure, friend_tenure=friend_tenure)
         return Response(FriendshipSerializer(friendship).data, status=status.HTTP_201_CREATED)

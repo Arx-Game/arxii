@@ -31138,7 +31138,8 @@ components:
         * `disguise` - Disguise
     Friendship:
       type: object
-      description: A friend row — the friended character's name + the tenures.
+      description: A friend row — the friended character's name + which of your characters
+        friended.
       properties:
         id:
           type: integer
@@ -31168,34 +31169,38 @@ components:
       - id
     FriendshipCreate:
       type: object
-      description: 'Add a friend: which of your characters friends (or all), and the
-        friended tenure.'
+      description: |-
+        Add a friend by character (web-friendly): the friending character + the target character.
+
+        ``viewer`` / ``friend`` are ``RosterEntry`` pks; the view resolves each to its current tenure.
       properties:
-        friender_tenure:
+        viewer:
           type: integer
-        friend_tenure:
+        friend:
           type: integer
         all_characters:
           type: boolean
           default: false
       required:
-      - friend_tenure
-      - friender_tenure
+      - friend
+      - viewer
     FriendshipCreateRequest:
       type: object
-      description: 'Add a friend: which of your characters friends (or all), and the
-        friended tenure.'
+      description: |-
+        Add a friend by character (web-friendly): the friending character + the target character.
+
+        ``viewer`` / ``friend`` are ``RosterEntry`` pks; the view resolves each to its current tenure.
       properties:
-        friender_tenure:
+        viewer:
           type: integer
-        friend_tenure:
+        friend:
           type: integer
         all_characters:
           type: boolean
           default: false
       required:
-      - friend_tenure
-      - friender_tenure
+      - friend
+      - viewer
     FuryTierOption:
       type: object
       description: Read-only representation of one selectable FuryTier (#1543).

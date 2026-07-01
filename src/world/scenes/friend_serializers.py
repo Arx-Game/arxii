@@ -4,27 +4,31 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from world.roster.models import RosterTenure
+from world.roster.models import RosterEntry
 from world.scenes.models import Friendship
 
 _NOT_YOUR_CHARACTER = "You can only friend as one of your own characters."
 
 
 class FriendshipCreateSerializer(serializers.Serializer):
-    """Add a friend: which of your characters friends (or all), and the friended tenure."""
+    """Add a friend by character (web-friendly): the friending character + the target character.
 
-    friender_tenure = serializers.PrimaryKeyRelatedField(queryset=RosterTenure.objects.all())
-    friend_tenure = serializers.PrimaryKeyRelatedField(queryset=RosterTenure.objects.all())
+    ``viewer`` / ``friend`` are ``RosterEntry`` pks; the view resolves each to its current tenure.
+    """
+
+    viewer = serializers.PrimaryKeyRelatedField(queryset=RosterEntry.objects.all())
+    friend = serializers.PrimaryKeyRelatedField(queryset=RosterEntry.objects.all())
     all_characters = serializers.BooleanField(default=False)
 
-    def validate_friender_tenure(self, value: RosterTenure) -> RosterTenure:
-        if value.player_data.account_id != self.context["request"].user.pk:
+    def validate_viewer(self, value: RosterEntry) -> RosterEntry:
+        owned = RosterEntry.objects.for_account(self.context["request"].user).filter(pk=value.pk)
+        if not owned.exists():
             raise serializers.ValidationError(_NOT_YOUR_CHARACTER)
         return value
 
 
 class FriendshipSerializer(serializers.ModelSerializer):
-    """A friend row — the friended character's name + the tenures."""
+    """A friend row — the friended character's name + which of your characters friended."""
 
     friend_name = serializers.SerializerMethodField()
 
