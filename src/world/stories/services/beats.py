@@ -140,24 +140,76 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         raise ValueError(msg)
 
     scope = progress.story.scope
-    era = Era.objects.get_active()
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=outcome,
+        era=Era.objects.get_active(),
+        gm_notes=gm_notes,
+        progress=progress,
+        scope=scope,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=outcome,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
+    )
 
-    completion_kwargs: dict = {
-        "beat": beat,
-        "outcome": outcome,
-        "era": era,
-        "gm_notes": gm_notes,
-    }
+
+def _scope_completion_kwargs(  # noqa: PLR0913
+    *,
+    beat: Beat,
+    outcome: BeatOutcome,
+    era: Era | None,
+    gm_notes: str,
+    progress: AnyStoryProgress,
+    scope: str,
+    outcome_tier: CheckOutcome | None = None,
+) -> dict:
+    """Build BeatCompletion.objects.create() kwargs for the given story scope.
+
+    Shared by record_gm_marked_outcome and record_outcome_tier_completion — both
+    write the same scope-aware FK shape (character_sheet+roster_entry for CHARACTER,
+    gm_table for GROUP, neither for GLOBAL); only the machine-driven path also
+    carries outcome_tier.
+    """
+    kwargs: dict = {"beat": beat, "outcome": outcome, "era": era, "gm_notes": gm_notes}
+    if outcome_tier is not None:
+        kwargs["outcome_tier"] = outcome_tier
     if scope == StoryScope.CHARACTER:
         sheet: CharacterSheet = progress.character_sheet
-        completion_kwargs["character_sheet"] = sheet
-        completion_kwargs["roster_entry"] = _current_roster_entry(sheet)
+        kwargs["character_sheet"] = sheet
+        kwargs["roster_entry"] = _current_roster_entry(sheet)
     elif scope == StoryScope.GROUP:
-        completion_kwargs["gm_table"] = progress.gm_table
+        kwargs["gm_table"] = progress.gm_table
     # GLOBAL: no scope-specific FK
+    return kwargs
+
+
+def _create_completion_and_fire_pool(  # noqa: PLR0913
+    *,
+    beat: Beat,
+    outcome: BeatOutcome,
+    completion_kwargs: dict,
+    progress: AnyStoryProgress,
+    scope: str,
+    explicit_participants: list[Persona] | None,
+    outcome_tier: CheckOutcome | None = None,
+) -> BeatCompletion:
+    """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
+
+    Shared atomic-transaction tail for record_gm_marked_outcome and
+    record_outcome_tier_completion: flips beat.outcome in-place, creates the
+    BeatCompletion row, fires the matching consequence pool (tier-aware when
+    outcome_tier is set), and opens a SessionRequest if the episode is now
+    ready-to-run. Notifies post-commit (outside the atomic block) so a
+    notify failure can't roll back the completion.
+    """
+    from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
 
     with transaction.atomic():
-        # Flip the outcome in-place and persist.
         beat.outcome = outcome
         beat.save(update_fields=["outcome", "updated_at"])
 
@@ -167,13 +219,12 @@ def record_gm_marked_outcome(  # noqa: PLR0913
             completion=completion,
             progress=progress,
             scope=scope,
-            explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
+            explicit_participants=explicit_participants,
+            outcome_tier=outcome_tier,
         )
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
-        from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
-
         maybe_create_session_request(progress)
 
     _notify_beat_completion(completion, progress)
@@ -228,7 +279,6 @@ def record_outcome_tier_completion(
         raise ValueError(msg)
 
     scope = progress.story.scope
-    era = Era.objects.get_active()
 
     outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
     is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
@@ -246,42 +296,24 @@ def record_outcome_tier_completion(
         if not has_authored_tier:
             outcome = BeatOutcome.PENDING_GM_REVIEW
 
-    completion_kwargs: dict = {
-        "beat": beat,
-        "outcome": outcome,
-        "outcome_tier": outcome_tier,
-        "era": era,
-        "gm_notes": gm_notes,
-    }
-    if scope == StoryScope.CHARACTER:
-        sheet: CharacterSheet = progress.character_sheet
-        completion_kwargs["character_sheet"] = sheet
-        completion_kwargs["roster_entry"] = _current_roster_entry(sheet)
-    elif scope == StoryScope.GROUP:
-        completion_kwargs["gm_table"] = progress.gm_table
-    # GLOBAL: no scope-specific FK
-
-    with transaction.atomic():
-        beat.outcome = outcome
-        beat.save(update_fields=["outcome", "updated_at"])
-
-        completion = BeatCompletion.objects.create(**completion_kwargs)
-
-        _maybe_fire_pool_on_completion(
-            completion=completion,
-            progress=progress,
-            scope=scope,
-            explicit_participants=participants if scope == StoryScope.GROUP else None,
-            outcome_tier=outcome_tier if outcome != BeatOutcome.PENDING_GM_REVIEW else None,
-        )
-
-        from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
-
-        maybe_create_session_request(progress)
-
-    _notify_beat_completion(completion, progress)
-
-    return completion
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=outcome,
+        era=Era.objects.get_active(),
+        gm_notes=gm_notes,
+        progress=progress,
+        scope=scope,
+        outcome_tier=outcome_tier,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=outcome,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=participants if scope == StoryScope.GROUP else None,
+        outcome_tier=outcome_tier if outcome != BeatOutcome.PENDING_GM_REVIEW else None,
+    )
 
 
 def record_aggregate_contribution(
