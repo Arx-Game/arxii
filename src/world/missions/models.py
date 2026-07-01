@@ -1517,6 +1517,14 @@ class MissionDeedRewardLine(SharedMemoryModel):
         blank=True,
         help_text="Numeric magnitude of the reward, when applicable.",
     )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Set when sink=RESONANCE: which Resonance this line grants.",
+    )
     ref = models.CharField(
         max_length=200,
         blank=True,
