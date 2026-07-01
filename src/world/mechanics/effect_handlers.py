@@ -241,11 +241,15 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
     damage_amount = effect.damage_amount
     if hasattr(target, "threads"):
         damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
+    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+    # Closes the asymmetry where traps ignored a character's damage-type resistance.
+    damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
     if damage_amount <= 0:
         return AppliedEffect(
             effect_type=EffectType.DEAL_DAMAGE,
