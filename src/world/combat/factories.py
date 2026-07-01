@@ -1109,6 +1109,47 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     base_filter_condition = None  # all filtering happens in the service function
 
 
+def _build_encounter_beat_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
+
+    The step calls ``encounter_completed_beat_handler`` with the ENCOUNTER_COMPLETED
+    payload. Drives the combat → story-beat auto-wire (#1746).
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+    from world.combat.beat_wiring import ENCOUNTER_BEAT_TRIGGER_NAME
+
+    flow, _ = FlowDefinition.objects.get_or_create(name=ENCOUNTER_BEAT_TRIGGER_NAME)
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.combat.beat_wiring.encounter_completed_beat_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class EncounterBeatTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the ENCOUNTER_COMPLETED → beat consumer (#1746).
+
+    Installed on encounter rooms by ``install_encounter_beat_trigger``;
+    dispatches the ENCOUNTER_COMPLETED event to ``encounter_completed_beat_handler``,
+    which resolves any linked OUTCOME_TIER beat.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "encounter_completed_beat_wiring"
+    event_name = "encounter_completed"
+    flow_definition = factory.LazyFunction(_build_encounter_beat_flow)
+    priority = 40
+    base_filter_condition = None
+
+
 def wire_weapon_damage_modifier_target():
     """Seed the equipment-relevant 'weapon_damage' ModifierTarget (#985).
 

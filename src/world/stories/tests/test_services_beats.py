@@ -1262,3 +1262,46 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
         event = LegendEvent.objects.order_by("-pk").first()
         assert event is not None
         assert event.base_value == 550
+
+    def test_force_outcome_pending_gm_review_no_pool(self) -> None:
+        """force_outcome=PENDING_GM_REVIEW resolves the beat without firing a pool.
+
+        Machine-detected non-success/failure terminal outcomes (a fled/abandoned
+        encounter) route here: the beat flips to PENDING_GM_REVIEW and no
+        consequence pool fires — a GM adjudicates later.
+        """
+        beat = BeatFactory(
+            episode=self.beat.episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        completion = record_outcome_tier_completion(
+            progress=self.progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
+        )
+        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert completion.outcome_tier_id is None
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_force_outcome_rejects_non_pending(self) -> None:
+        """force_outcome only accepts PENDING_GM_REVIEW in this PR."""
+        beat = BeatFactory(
+            episode=self.beat.episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        with self.assertRaises(ValueError):
+            record_outcome_tier_completion(
+                progress=self.progress, beat=beat, force_outcome=BeatOutcome.SUCCESS
+            )
+
+    def test_neither_outcome_tier_nor_force_outcome_raises(self) -> None:
+        """Without force_outcome, outcome_tier is still required."""
+        beat = BeatFactory(
+            episode=self.beat.episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        with self.assertRaises(ValueError):
+            record_outcome_tier_completion(progress=self.progress, beat=beat)

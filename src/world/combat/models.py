@@ -1578,6 +1578,42 @@ class EncounterAftermathRule(SharedMemoryModel):
         return f"AftermathRule({self.outcome} @ {self.risk_level})"
 
 
+class EncounterOutcomeMapping(SharedMemoryModel):
+    """Designer-tunable map from an encounter's (outcome, risk_level) to a graded CheckOutcome.
+
+    Used by ``classify_battle_outcome`` to select the CheckOutcome tier for beat
+    completion when an encounter resolves. VICTORY/DEFEAT rows map to
+    success/failure CheckOutcomes (``success_level`` sign drives the derived
+    BeatOutcome); a null ``check_outcome`` (or a missing row) signals the caller
+    to resolve the beat to ``PENDING_GM_REVIEW`` rather than firing a consequence
+    pool. Seeded with canonical tiers; GMs retune by editing rows.
+    """
+
+    outcome = models.CharField(max_length=20, choices=EncounterOutcome.choices)
+    risk_level = models.CharField(max_length=20, choices=RiskLevel.choices)
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="encounter_outcome_mappings",
+        help_text="CheckOutcome tier for this outcome×risk. Null = resolve to PENDING_GM_REVIEW.",
+    )
+
+    class Meta:
+        ordering = ["outcome", "risk_level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["outcome", "risk_level"],
+                name="unique_encounter_outcome_mapping",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        tier = str(self.check_outcome) if self.check_outcome_id else "(review)"
+        return f"{self.outcome} @ {self.risk_level} -> {tier}"
+
+
 # =============================================================================
 # Encounter scaling config models (#566)
 # =============================================================================
