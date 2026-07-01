@@ -183,6 +183,10 @@ class GiftAcquisitionConfig(SharedMemoryModel):
         default=3,
         help_text="AP cost multiplier for the first technique from a not-yet-acquired gift.",
     )
+    major_gift_ap_multiplier = models.PositiveIntegerField(
+        default=1,
+        help_text="AP cost multiplier for techniques from a MAJOR gift (1 = same as Minor).",
+    )
 
     class Meta:
         verbose_name = "Gift Acquisition Config"

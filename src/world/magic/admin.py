@@ -45,6 +45,7 @@ from world.magic.models import (
     StandingCapBand,
     Technique,
     TechniqueCapabilityGrant,
+    TechniqueGrant,
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
@@ -831,4 +832,12 @@ class GiftAcquisitionConfigAdmin(admin.ModelAdmin):
     list_display = [
         "techniques_per_thread_level",
         "first_technique_ap_multiplier",
+        "major_gift_ap_multiplier",
     ]
+
+
+@admin.register(TechniqueGrant)
+class TechniqueGrantAdmin(admin.ModelAdmin):
+    list_display = ["technique", "item_template", "ritual", "verb", "acquisition_ap_cost"]
+    list_filter = ["verb"]
+    autocomplete_fields = ["technique", "item_template", "ritual"]

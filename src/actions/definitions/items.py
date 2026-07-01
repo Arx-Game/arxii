@@ -354,6 +354,37 @@ class UseItemAction(Action):
         except ItemError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        # TechniqueGrant hook: if the item template has a grant, learn the technique.
+        from world.magic.models import TechniqueGrant  # noqa: PLC0415
+
+        grant = (
+            TechniqueGrant.objects.filter(item_template=item_instance.template)
+            .select_related("technique")
+            .first()
+        )
+        if grant is not None:
+            # Success predicate: check_result is None (no check) or success_level > 0.
+            check_ok = result.check_result is None or result.check_result.success_level > 0
+            if check_ok:
+                import contextlib  # noqa: PLC0415
+
+                from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+                from world.magic.exceptions import MagicError  # noqa: PLC0415
+                from world.magic.services.technique_acquisition import (  # noqa: PLC0415
+                    learn_technique,
+                )
+
+                # Partial-failure policy: item consumed, technique didn't take.
+                # The use still succeeded; the user_message is not surfaced here
+                # because the item's on-use effects already happened.
+                with contextlib.suppress(MagicError):
+                    learn_technique(
+                        actor.sheet_data,
+                        grant.technique,
+                        source=AccessChangeSource.TECHNIQUE_GRANT,
+                        ap_cost=grant.acquisition_ap_cost,
+                    )
+
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         item_state = ItemState(item_instance, context=sdm)

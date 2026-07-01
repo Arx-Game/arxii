@@ -163,6 +163,7 @@ from world.magic.models.technique_draft import (
     TechniqueDraftDamageProfile,
     TechniqueDraftRemovedCondition,
 )
+from world.magic.models.technique_grant import TechniqueGrant
 from world.magic.models.techniques import (
     CharacterTechnique,
     EffectType,
@@ -346,6 +347,7 @@ __all__ = [
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
     "TechniqueDraftRemovedCondition",
+    "TechniqueGrant",
     "TechniqueOutcomeModifier",
     "TechniqueRemovedCondition",
     "TechniqueStyle",
