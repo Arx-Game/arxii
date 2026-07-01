@@ -121,7 +121,7 @@ A participant's declared action for one round.
 |---|---|---|
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
-| `technique` | FK → `magic.Technique` | The technique cast for this declaration; required |
+| `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
 | `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target |
