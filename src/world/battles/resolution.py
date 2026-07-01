@@ -295,12 +295,69 @@ def _resolve_support_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + SUPPORT_VP
 
 
+def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
+    """Roll the surrounded_entry pool for an isolated declaration failure (#1733).
+
+    Isolation and mobility are objective, code-computed signals fed as extra_modifiers
+    into the entry check — the pool's authored rows decide the actual odds (never a
+    hardcoded gate; see Decision 3 of the #1733 spec). No-op when the pool/condition
+    content isn't seeded (degrades gracefully, same convention as the abandonment pools).
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.battles.constants import (  # noqa: PLC0415
+        SURROUNDED_ENTRY_ISOLATED_MODIFIER,
+        SURROUNDED_ENTRY_MOBILITY_MODIFIER,
+    )
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        resolve_pool_consequences,
+        select_consequence,
+    )
+    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.vitals.constants import POOL_SURROUNDED_ENTRY  # noqa: PLC0415
+
+    participant = declaration.participant
+    if not _is_isolated(participant):
+        return
+
+    pool = ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).first()
+    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
+    entry_stage = (
+        ConditionStage.objects.filter(condition=template, stage_order=1).first()
+        if template is not None
+        else None
+    )
+    if pool is None or template is None or entry_stage is None:
+        return
+
+    extra_modifiers = SURROUNDED_ENTRY_ISOLATED_MODIFIER
+    if _has_unimpaired_mobility(participant.character_sheet):
+        extra_modifiers += SURROUNDED_ENTRY_MOBILITY_MODIFIER
+
+    character = participant.character_sheet.character
+    candidates = resolve_pool_consequences(pool)
+    pending = select_consequence(
+        character,
+        entry_stage.resist_check_type,
+        entry_stage.resist_difficulty,
+        candidates,
+        extra_modifiers=extra_modifiers,
+    )
+    if pending.selected_consequence.label == "surrounded":  # noqa: STRING_LITERAL
+        # No `stage` kwarg on apply_condition — the has_progression=True template
+        # auto-initializes current_stage to stage_order=1 (== entry_stage) via
+        # _build_bulk_context (world/conditions/services.py:483).
+        apply_condition(target=character, condition=template)
+
+
 def _resolve_failure(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
 ) -> None:
-    """Apply check failure: debit PC health then route through damage consequences.
+    """Apply check failure: debit PC health, route through damage consequences, and
+    roll the surrounded_entry pool if the participant is isolated (#1733).
 
     Damage is non-progressive (damage_type=None, source_character=None) so
     the SQLite fast tier can handle it without DISTINCT ON queries.
@@ -325,6 +382,7 @@ def _resolve_failure(
         damage_type=None,
         source_character=None,
     )
+    _maybe_apply_surrounded(declaration)
     result.casualties.append(declaration.participant.pk)
 
 

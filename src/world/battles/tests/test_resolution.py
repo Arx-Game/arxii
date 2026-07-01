@@ -7,9 +7,9 @@ All tests run on the SQLite fast tier (no progressive conditions).
 from __future__ import annotations
 
 import types
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
@@ -29,7 +29,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.scenes.constants import RoundStatus
-from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
 
 def _success_result(level: int = 5) -> types.SimpleNamespace:
@@ -550,3 +550,87 @@ class SelectSurroundedTerminalPoolTests(TestCase):
         )
         pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
         assert pool == content["pools"]["surrounded_terminal_pvp"]
+
+
+class EntryRollTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    @tag("postgres")
+    def test_isolated_failure_can_apply_surrounded(self) -> None:
+        """With the check patched to force the Failure tier, an isolated STRIKE
+        failure applies Surrounded via the entry pool's 'surrounded' row.
+
+        PG-only (@tag("postgres")): this test exercises the real production
+        _maybe_apply_surrounded -> apply_condition path, which routes through
+        _build_bulk_context's PG-only DISTINCT ON query and errors on the SQLite
+        fast tier (same known trap Task 3's regression test and Task 7's
+        EscalationTickTests fixture route around — here the call is inside the
+        code under test, so it can't be avoided). Verify via
+        `just test-parity world.battles` or CI's Postgres shard, not
+        `just test-fast`.
+        """
+        from world.battles.constants import BattleActionKind, BattleSideRole
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.conditions.services import get_active_conditions
+
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=30)
+
+        battle = create_battle(name="Entry Roll Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        unit = add_unit(battle=battle, side=side, name="Foes", unit_type="infantry")
+        participant = enlist_participant(
+            battle=battle, character_sheet=sheet, side=side, place=place
+        )
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=technique,
+            target_unit=unit,
+        )
+
+        # Two DISTINCT perform_check call sites are involved and must be patched
+        # separately: (1) resolve_battle_technique's own STRIKE check (patched directly
+        # by replacing resolve_battle_technique itself, same as the existing
+        # test_resolution.py convention); (2) the entry roll's check, which runs through
+        # select_consequence -> world.checks.consequence_resolution.perform_check (a
+        # DIFFERENT imported name than world.battles.resolution.perform_check — patching
+        # the wrong one silently no-ops the entry roll). Force the entry roll's outcome
+        # tier to Failure so it lands in the pool's "surrounded" row.
+        from world.traits.models import CheckOutcome
+
+        failure_outcome = CheckOutcome.objects.get(name="Failure")
+        entry_check_result = MagicMock(outcome=failure_outcome, success_level=-1)
+
+        with (
+            patch(
+                "world.battles.resolution.resolve_battle_technique",
+                return_value=_failure_result(-10),
+            ),
+            patch(
+                "world.checks.consequence_resolution.perform_check",
+                return_value=entry_check_result,
+            ),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance is not None
+        assert instance.current_stage.stage_order == 1
