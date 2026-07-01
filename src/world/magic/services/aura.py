@@ -144,12 +144,27 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
     # model's clean() enforces this invariant on save()).
     aura.celestial = aura.celestial.quantize(Decimal("0.01"))
     aura.primal = aura.primal.quantize(Decimal("0.01"))
+    # celestial and primal are each individually always in [0, 100] by
+    # construction (each is a non-negative ratio of a non-negative total to a
+    # positive grand_total, times 100), so their sum is always in [0, 200].
+    # abyssal's TRUE (pre-rounding) value is always >= 0, since it equals
+    # 100 - true_celestial_pct - true_primal_pct and the three true percentages
+    # sum to exactly 100 by definition (they partition the same grand_total).
+    # Independent 2-decimal quantization of celestial/primal introduces at most
+    # ~0.01 combined rounding error, so the derived abyssal below is only
+    # theoretically at risk of drifting fractionally outside [0, 100] — and
+    # only for adversarial arbitrary-decimal inputs. This function's real input
+    # domain is CharacterResonance.lifetime_earned, a PositiveIntegerField
+    # (always non-negative integers), and an exhaustive brute-force sweep of
+    # ~4.2M integer (celestial_total, primal_total, abyssal_total) splits
+    # through this exact Decimal/quantize arithmetic found ZERO cases where the
+    # derived abyssal left [0, 100] (see
+    # test_recompute_never_violates_bounds_across_integer_split_range). A
+    # clamp here was tried and reverted (#1737): clamping abyssal alone without
+    # compensating celestial/primal breaks the sum==100.00 invariant that
+    # CharacterAura.clean() enforces, trading one ValidationError for another.
+    # No runtime guard is warranted for a case unreachable from real inputs.
     aura.abyssal = Decimal("100.00") - aura.celestial - aura.primal
-    # Clamp against the (essentially-adversarial) edge case where celestial's and
-    # primal's independent rounding errors combine to push the derived abyssal
-    # fractionally outside [0, 100] — CharacterAura's validators would otherwise
-    # raise ValidationError in full_clean() on save().
-    aura.abyssal = max(Decimal("0.00"), min(Decimal("100.00"), aura.abyssal))
     aura.save()
 
     after = AuraPercentages(

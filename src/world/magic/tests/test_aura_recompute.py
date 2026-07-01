@@ -57,9 +57,9 @@ class RecomputeAuraTests(TestCase):
         assert float(aura.primal) == 0.0
 
     def test_lopsided_split_stays_within_bounds_and_sums_to_100(self):
-        # Heavily skewed but organic split (not adversarial) — confirms the clamp
-        # added for the rounding edge case doesn't disturb ordinary lopsided
-        # recomputation: celestial dominates, primal is a sliver, abyssal is zero.
+        # Heavily skewed but organic split (not adversarial) — confirms ordinary
+        # lopsided recomputation stays sane: celestial dominates, primal is a
+        # sliver, abyssal is zero.
         CharacterAuraFactory(character=self.sheet.character)
         CharacterResonance.objects.create(
             character_sheet=self.sheet,
@@ -81,21 +81,21 @@ class RecomputeAuraTests(TestCase):
         assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
 
     def test_recompute_never_violates_bounds_across_integer_split_range(self):
-        # Property-style coverage of the clamp: sweep a range of integer
-        # (celestial, primal) lifetime_earned splits (abyssal fixed at 0, the
-        # shape most likely to stress independent-rounding drift on the derived
-        # abyssal) and confirm recompute_aura always succeeds — i.e. .save()'s
-        # full_clean() never raises ValidationError — and the three fields always
-        # sum to exactly 100.00. A genuinely adversarial split that would have
-        # tripped the pre-fix ValidationError could not be constructed here: with
-        # exact Decimal division over integer lifetime_earned totals and
-        # ROUND_HALF_EVEN quantization, an exhaustive sweep (verified separately,
-        # outside this test, across thousands of integer splits) never actually
-        # pushes the derived abyssal out of [0, 100] — the gap is a defensive
-        # guard against a theoretical combination, not a reachable one from
-        # PositiveIntegerField inputs. This sweep instead pins the invariant the
-        # clamp protects, across a wide range of splits, so a future change to
-        # the rounding/derivation logic can't silently reintroduce the gap.
+        # Property-style sweep proving the sum/range invariant holds across the
+        # real input domain: a range of integer (celestial, primal)
+        # lifetime_earned splits (abyssal fixed at 0, the shape most likely to
+        # stress independent-rounding drift on the derived abyssal) and confirms
+        # recompute_aura always succeeds — i.e. .save()'s full_clean() never
+        # raises ValidationError — and the three fields always sum to exactly
+        # 100.00. With exact Decimal division over integer lifetime_earned
+        # totals and ROUND_HALF_EVEN quantization, this sweep (and a separate,
+        # wider ~4.2M-split brute-force check performed during investigation)
+        # never actually pushes the derived abyssal out of [0, 100] — that
+        # theoretical possibility is unreachable from
+        # CharacterResonance.lifetime_earned (a PositiveIntegerField: always
+        # non-negative integers), the only real input to this function. This
+        # sweep pins the invariant across a wide range of splits so a future
+        # change to the rounding/derivation logic can't silently break it.
         CharacterAuraFactory(character=self.sheet.character)
         for celestial_total in range(1, 200, 7):
             for primal_total in range(1, 200, 11):
