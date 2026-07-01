@@ -1,1 +1,1 @@
-0002_alter_globalstoryprogress_status_and_more
+0003_alter_beat_risk
