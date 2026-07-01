@@ -466,24 +466,27 @@ def _teardown_spawned_room(instance: MissionInstance) -> None:
     complete_instanced_room(instance.spawned_room.objectdb)
 
 
-def _finish_terminal(instance: MissionInstance) -> None:
+def _finish_terminal(
+    instance: MissionInstance,
+    *,
+    route: MissionOptionRoute | None = None,
+) -> None:
     """Mark the run complete (terminal route reached).
 
-    Phase 5b.3: after the status write, notify the Mission→Beat seam. The
-    call is a cheap no-op when ``instance.source_beat_id is None`` (a free
-    run); when set, it appends one :class:`MissionBeatTriggerRecord` to the
-    seam's stub-record log. The actual Beat-completion engine is deferred —
-    see :mod:`world.missions.services.beat` for the three deferred
-    product-level design questions. JOINT terminals call ``_finish_terminal``
-    exactly once (Phase 4 invariant), so the seam fires exactly once per
-    instance termination.
+    After the status write, notify the Mission→Beat seam. The call is a cheap
+    no-op when ``instance.source_beat_id is None`` (a free run); when set, it
+    completes the linked ``Beat`` via ``on_mission_complete_for_beat``.
+    ``route`` is the terminal :class:`MissionOptionRoute` (or ``None`` for a
+    BRANCH terminal with no route object). JOINT terminals call
+    ``_finish_terminal`` exactly once (Phase 4 invariant), so the seam fires
+    exactly once per instance termination.
     """
     instance.status = MissionStatus.COMPLETE
     instance.completed_at = timezone.now()
     instance.current_node = None
     instance.save()
     _teardown_spawned_room(instance)
-    on_mission_complete_for_beat(instance)
+    on_mission_complete_for_beat(instance, route=route)
 
 
 def resolve_option(  # noqa: PLR0913
@@ -577,7 +580,7 @@ def resolve_option(  # noqa: PLR0913
     is_terminal = False
     if advance:
         if next_node is None:
-            _finish_terminal(instance)
+            _finish_terminal(instance, route=route)
             is_terminal = True
         else:
             instance.current_node = next_node
@@ -640,7 +643,7 @@ def _resolve_branch(
                 next_node = None
 
         if next_node is None:
-            _finish_terminal(instance)
+            _finish_terminal(instance, route=route)
             is_terminal = True
             terminal_route = route  # may be None when branch is terminal via
             # an option with neither branch_target nor a null-tier route.
