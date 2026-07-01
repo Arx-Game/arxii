@@ -98,6 +98,7 @@ export type BeatPredicateType = NonNullable<Beat['predicate_type']>;
 export type BeatOutcome = NonNullable<Beat['outcome']>;
 export type BeatVisibility = NonNullable<Beat['visibility']>;
 export type BeatKind = NonNullable<Beat['kind']>;
+export type BeatRisk = NonNullable<Beat['risk']>;
 export type StoryScope = NonNullable<Story['scope']>;
 export type StoryStatus = NonNullable<Story['status']>;
 export type StoryPrivacy = NonNullable<Story['privacy']>;
